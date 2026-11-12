@@ -758,6 +758,13 @@ export function inicializarDatastoreConcreto() {
   }
   if (data.concreto_silos.length === 0) {
     data.concreto_silos = SILOS_INSUMOS_INICIAIS.map(s => ({ ...s, empresaId: CONCRETO_EMPRESA_ID }));
+  } else if (data.concreto_silos.length < SILOS_INSUMOS_INICIAIS.length) {
+    const ids = new Set(data.concreto_silos.map(s => s.id));
+    for (const s of SILOS_INSUMOS_INICIAIS) {
+      if (Boolean(ids.has(s.id)) === false) {
+        data.concreto_silos.push({ ...s, empresaId: CONCRETO_EMPRESA_ID });
+      }
+    }
   }
   if (data.concreto_compras.length === 0) {
     data.concreto_compras = COMPRAS_INICIAIS.map(c => ({ ...c, empresaId: CONCRETO_EMPRESA_ID }));
@@ -916,10 +923,13 @@ export async function registrarRecebimentoPesagemCompra(pedidoId, dadosRecebimen
   const silo = (data.concreto_silos || []).find(s => s.id === pedido.siloDestinoId || s.codigo === pedido.siloDestinoId);
   if (silo) {
     const qtdEntrada = pedido.pesoBalançaEntradaTon || pedido.quantidade;
-    if (silo.estoqueAtualTon != null) {
-      silo.estoqueAtualTon = Math.min(silo.capacidadeTotalTon, +(silo.estoqueAtualTon + qtdEntrada).toFixed(2));
-      silo.nivelPercent = Math.round((silo.estoqueAtualTon / silo.capacidadeTotalTon) * 100);
-    } else if (silo.estoqueAtualM3 != null) {
+    const capTotal = silo.capacidadeTotalTon || silo.capacidadeToneladas || 96;
+    const estAtual = silo.estoqueAtualTon != null ? silo.estoqueAtualTon : (silo.nivelAtualToneladas || 0);
+    silo.estoqueAtualTon = Math.min(capTotal, +(estAtual + qtdEntrada).toFixed(2));
+    silo.nivelAtualToneladas = silo.estoqueAtualTon;
+    silo.nivelPercent = Math.round((silo.estoqueAtualTon / capTotal) * 100);
+    silo.nivelPercentual = silo.nivelPercent;
+    if (silo.estoqueAtualM3 != null) {
       silo.estoqueAtualM3 = Math.min(silo.capacidadeTotalM3, +(silo.estoqueAtualM3 + qtdEntrada).toFixed(2));
       silo.nivelPercent = Math.round((silo.estoqueAtualM3 / silo.capacidadeTotalM3) * 100);
     } else if (silo.estoqueAtualL != null) {

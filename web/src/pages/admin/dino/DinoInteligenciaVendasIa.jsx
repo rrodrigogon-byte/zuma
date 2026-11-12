@@ -425,7 +425,7 @@ export default function DinoInteligenciaVendasIa() {
               alignItems: 'center',
               gap: 5
             }}>
-              💈 Barbearia Dino · Visão Exclusiva (Guilherme Cunha)
+              💈 Barbearia Dino · Visão Exclusiva (Dino)
             </span>
           ) : ehSilvester ? (
             <span style={{

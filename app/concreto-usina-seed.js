@@ -174,6 +174,403 @@ export const CONCRETO_CARGAS_INICIAIS = [
   }
 ];
 
+
+export const CONCRETO_SILOS_INICIAIS = [
+  {
+    id: 'silo-01',
+    codigo: 'SILO-01',
+    nome: 'Silo 01 · Cimento CP II-F 32 (Uso Geral & Estrutural)',
+    material: 'Cimento Portland CP II-F 32',
+    fornecedor: 'Cimentos Votoran / Ciper MT',
+    capacidadeToneladas: 100,
+    capacidadeTotalTon: 100,
+    nivelAtualToneladas: 74.5,
+    estoqueAtualTon: 74.5,
+    nivelPercent: 74.5,
+    nivelPercentual: 74.5,
+    pressaoDespoeiramento: '2.4 bar',
+    filtroStatus: 'operacional',
+    valvulaDescarga: 'fechada_pronta',
+    temperaturaInterna: '34°C',
+    ultimaRecargaData: '11/11/2026 08:30',
+    ultimaRecargaQtd: '38.2 t (Bitrem Scania)',
+    alertaReposicao: false,
+    corBadge: '#F59E0B'
+  },
+  {
+    id: 'silo-02',
+    codigo: 'SILO-02',
+    nome: 'Silo 02 · Cimento CP V-ARI (Alta Resistência Inicial)',
+    material: 'Cimento Portland CP V-ARI',
+    fornecedor: 'Cimentos Votoran / Ciper MT',
+    capacidadeToneladas: 80,
+    capacidadeTotalTon: 80,
+    nivelAtualToneladas: 58.2,
+    estoqueAtualTon: 58.2,
+    nivelPercent: 72.8,
+    nivelPercentual: 72.8,
+    pressaoDespoeiramento: '2.2 bar',
+    filtroStatus: 'operacional',
+    valvulaDescarga: 'fechada_pronta',
+    temperaturaInterna: '36°C',
+    ultimaRecargaData: '10/11/2026 14:15',
+    ultimaRecargaQtd: '32.0 t (Carreta Volvo)',
+    alertaReposicao: false,
+    corBadge: '#3B82F6'
+  },
+  {
+    id: 'silo-03',
+    codigo: 'SILO-03',
+    nome: 'Silo 03 · Pozolana Ativa / Filler Calcário Micronizado',
+    material: 'Adição Mineral / Pozolana NBR 12653',
+    fornecedor: 'Calcário & Minerais Tangará',
+    capacidadeToneladas: 50,
+    capacidadeTotalTon: 50,
+    nivelAtualToneladas: 18.0,
+    estoqueAtualTon: 18.0,
+    nivelPercent: 36.0,
+    nivelPercentual: 36.0,
+    pressaoDespoeiramento: '1.9 bar',
+    filtroStatus: 'operacional',
+    valvulaDescarga: 'fechada_pronta',
+    temperaturaInterna: '29°C',
+    ultimaRecargaData: '05/11/2026 11:00',
+    ultimaRecargaQtd: '25.0 t (Carreta)',
+    alertaReposicao: true,
+    corBadge: '#8B5CF6'
+  },
+  {
+    id: 'patio-01',
+    codigo: 'PAT-AREIA-MED',
+    nome: 'Pátio de Areia Média Lavada',
+    material: 'Areia Média Lavada de Rio (Serrano Mineração)',
+    tipo: 'agregado_areia',
+    capacidadeToneladas: 650,
+    capacidadeTotalTon: 650,
+    capacidadeTotalM3: 800,
+    nivelAtualToneladas: 320,
+    estoqueAtualTon: 320,
+    estoqueAtualM3: 540,
+    nivelPercent: 67.5,
+    umidadeAtual: 4.8,
+    fornecedor: 'Serrano Mineração Própria',
+    alertaMinimoM3: 100
+  },
+  {
+    id: 'patio-02',
+    codigo: 'PAT-AREIA-GRO',
+    nome: 'Pátio de Areia Grossa de Dragagem',
+    material: 'Areia Grossa Selecionada (Serrano Mineração)',
+    tipo: 'agregado_areia',
+    capacidadeToneladas: 500,
+    capacidadeTotalTon: 500,
+    capacidadeTotalM3: 600,
+    nivelAtualToneladas: 240,
+    estoqueAtualTon: 240,
+    estoqueAtualM3: 390,
+    nivelPercent: 65.0,
+    umidadeAtual: 5.2,
+    fornecedor: 'Serrano Mineração Própria',
+    alertaMinimoM3: 80
+  },
+  {
+    id: 'patio-03',
+    codigo: 'PAT-BRITA-0',
+    nome: 'Box Brita 0 (Pedrisco Basáltico 4,8 a 9,5mm)',
+    material: 'Brita 0 / Pedrisco Selecionado',
+    tipo: 'agregado_brita',
+    capacidadeToneladas: 400,
+    capacidadeTotalTon: 400,
+    capacidadeTotalM3: 500,
+    nivelAtualToneladas: 190,
+    estoqueAtualTon: 190,
+    estoqueAtualM3: 310,
+    nivelPercent: 62.0,
+    fornecedor: 'Pedreira Serra dos Parecis',
+    alertaMinimoM3: 60
+  },
+  {
+    id: 'patio-04',
+    codigo: 'PAT-BRITA-1',
+    nome: 'Box Brita 1 (Granito Basalto 9,5 a 19mm)',
+    material: 'Brita 1 Estrutural Granítica',
+    tipo: 'agregado_brita',
+    capacidadeToneladas: 600,
+    capacidadeTotalTon: 600,
+    capacidadeTotalM3: 900,
+    nivelAtualToneladas: 285,
+    estoqueAtualTon: 285,
+    estoqueAtualM3: 620,
+    nivelPercent: 68.8,
+    fornecedor: 'Pedreira Serra dos Parecis',
+    alertaMinimoM3: 120
+  }
+];
+
+export const CONCRETO_BAIAS_INICIAIS = [
+  {
+    id: 'baia-01',
+    codigo: 'BAIA-01',
+    nome: 'Baia 01 · Areia Média Lavada de Rio (Sepotuba)',
+    material: 'Areia Média Lavada (NBR 7211)',
+    capacidadeToneladas: 300,
+    estoqueAtualToneladas: 215.0,
+    estoqueAtualM3: 143.3,
+    umidadePercentual: 4.5,
+    densidadeAparente: 1.50,
+    moduloFinura: 2.60,
+    fornecedor: 'Areial Rio Sepotuba / Tangará',
+    sensorUmidade: 'Sonda Capacitiva Online (Calibrada)',
+    aguaContidaLitros: 9675,
+    status: 'operacional',
+    corBadge: '#EAB308'
+  },
+  {
+    id: 'baia-02',
+    codigo: 'BAIA-02',
+    nome: 'Baia 02 · Areia Fina / Usinada (Quartzo)',
+    material: 'Areia Fina de Usina',
+    capacidadeToneladas: 200,
+    estoqueAtualToneladas: 140.0,
+    estoqueAtualM3: 96.5,
+    umidadePercentual: 3.8,
+    densidadeAparente: 1.45,
+    moduloFinura: 1.85,
+    fornecedor: 'Mineradora Serra Morena',
+    sensorUmidade: 'Sonda Capacitiva Online (Calibrada)',
+    aguaContidaLitros: 5320,
+    status: 'operacional',
+    corBadge: '#CA8A04'
+  },
+  {
+    id: 'baia-03',
+    codigo: 'BAIA-03',
+    nome: 'Baia 03 · Brita 0 / Pedrisco Limpo (4,8 a 9,5 mm)',
+    material: 'Pedrisco Brita 0 Basalto',
+    capacidadeToneladas: 250,
+    estoqueAtualToneladas: 185.0,
+    estoqueAtualM3: 132.1,
+    umidadePercentual: 1.2,
+    densidadeAparente: 1.40,
+    fornecedor: 'Pedreira Serra Bonita',
+    sensorUmidade: 'Aferição Laboratorial Diária',
+    status: 'operacional',
+    corBadge: '#94A3B8'
+  },
+  {
+    id: 'baia-04',
+    codigo: 'BAIA-04',
+    nome: 'Baia 04 · Brita 1 Granítica (9,5 a 19 mm)',
+    material: 'Brita 1 Granítica Estrutural',
+    capacidadeToneladas: 400,
+    estoqueAtualToneladas: 310.0,
+    estoqueAtualM3: 221.4,
+    umidadePercentual: 0.8,
+    densidadeAparente: 1.40,
+    fornecedor: 'Pedreira Serra Bonita',
+    sensorUmidade: 'Aferição Laboratorial Diária',
+    status: 'operacional',
+    corBadge: '#64748B'
+  },
+  {
+    id: 'baia-05',
+    codigo: 'BAIA-05',
+    nome: 'Baia 05 · Brita 2 Granítica (19 a 25 mm)',
+    material: 'Brita 2 Granítica para Pisos Pesados',
+    capacidadeToneladas: 250,
+    estoqueAtualToneladas: 165.0,
+    estoqueAtualM3: 117.8,
+    umidadePercentual: 0.5,
+    densidadeAparente: 1.40,
+    fornecedor: 'Pedreira Serra Bonita',
+    sensorUmidade: 'Aferição Laboratorial Diária',
+    status: 'operacional',
+    corBadge: '#475569'
+  }
+];
+
+export const CONCRETO_TANQUES_ADITIVOS = [
+  {
+    id: 'tanque-01',
+    codigo: 'TK-ADIT-01',
+    nome: 'Tanque A1 · Plastificante Polifuncional Tecflow 200',
+    produto: 'Tecflow 200 (Plastificante / Redutor de Água)',
+    capacidadeLitros: 3000,
+    nivelAtualLitros: 2250,
+    nivelPercentual: 75.0,
+    dosagemPadrao: '0.6% sobre peso de cimento',
+    fornecedor: 'Tecnologia em Aditivos do Brasil',
+    status: 'operacional',
+    corBadge: '#06B6D4'
+  },
+  {
+    id: 'tanque-02',
+    codigo: 'TK-ADIT-02',
+    nome: 'Tanque A2 · Superplastificante Policarboxilato Optima 1000',
+    produto: 'Optima 1000 (Superplastificante Alta Performance CAA)',
+    capacidadeLitros: 2000,
+    nivelAtualLitros: 1480,
+    nivelPercentual: 74.0,
+    dosagemPadrao: '0.9% sobre peso de cimento',
+    fornecedor: 'Química Industrial Estrutural',
+    status: 'operacional',
+    corBadge: '#0EA5E9'
+  },
+  {
+    id: 'tanque-03',
+    codigo: 'TK-ADIT-03',
+    nome: 'Tanque A3 · Retardador de Pega para Alta Temperatura',
+    produto: 'Retard-MT (Estabilizador de hidratação sob sol)',
+    capacidadeLitros: 2000,
+    nivelAtualLitros: 1650,
+    nivelPercentual: 82.5,
+    dosagemPadrao: '0.4% sobre peso de cimento',
+    fornecedor: 'Química Industrial Estrutural',
+    status: 'operacional',
+    corBadge: '#38BDF8'
+  },
+  {
+    id: 'tanque-04',
+    codigo: 'TK-AGUA-01',
+    nome: 'Reservatório Principal de Água Industrial + Chiller',
+    produto: 'Água Potável / Industrial Resfriada (18°C)',
+    capacidadeLitros: 60000,
+    nivelAtualLitros: 48500,
+    nivelPercentual: 80.8,
+    temperaturaAgua: '18.5°C',
+    pressaoRede: '4.2 bar',
+    status: 'operacional',
+    corBadge: '#0284C7'
+  }
+];
+
+export const CONCRETO_ENTRADAS_SUPRIMENTOS = [
+  {
+    id: 'ent-2026-001',
+    ticketBalança: 'TK-BAL-8841',
+    dataHora: '12/11/2026 09:15',
+    fornecedor: 'Cimentos Votoran / Ciper MT',
+    material: 'Cimento Portland CP II-F 32 a Granel',
+    destino: 'Silo 01 (SILO-CP2)',
+    placaCarreta: 'RBF-8A90',
+    motorista: 'Claudio Roberto Santana',
+    notaFiscal: 'NF-e 001.442.190',
+    pesoBruto: 56840,
+    tara: 18620,
+    pesoLiquido: 38220, // 38.22 toneladas
+    certificadoQualidade: 'Cert-CP2-2026-9022 (Aprovado)',
+    lacreFornecedor: 'LCR-99210-VOT',
+    operadorUsina: 'Eng. Tiago Alencar',
+    status: 'descarregado_concluido'
+  },
+  {
+    id: 'ent-2026-002',
+    ticketBalança: 'TK-BAL-8842',
+    dataHora: '12/11/2026 10:40',
+    fornecedor: 'Pedreira Serra Bonita',
+    material: 'Brita 1 Granítica Estrutural',
+    destino: 'Baia 04 (BAIA-BRITA-1)',
+    placaCarreta: 'NXC-5J11',
+    motorista: 'Marcos Vinicius Pereira',
+    notaFiscal: 'NF-e 089.123',
+    pesoBruto: 44300,
+    tara: 15100,
+    pesoLiquido: 29200, // 29.20 toneladas
+    certificadoQualidade: 'Abrasão Los Angeles: 22% (Aprovado)',
+    lacreFornecedor: 'LCR-PB-1102',
+    operadorUsina: 'Eng. Tiago Alencar',
+    status: 'descarregado_concluido'
+  },
+  {
+    id: 'ent-2026-003',
+    ticketBalança: 'TK-BAL-8843',
+    dataHora: '12/11/2026 13:20',
+    fornecedor: 'Areial Rio Sepotuba',
+    material: 'Areia Média Lavada de Rio',
+    destino: 'Baia 01 (BAIA-AREIA-MED)',
+    placaCarreta: 'QBY-9C44',
+    motorista: 'José Carlos Furtado',
+    notaFiscal: 'NF-e 012.774',
+    pesoBruto: 45800,
+    tara: 16200,
+    pesoLiquido: 29600, // 29.60 toneladas
+    umidadeAferidaBalança: '4.5%',
+    certificadoQualidade: 'Teor de Argila < 1.0% (Aprovado)',
+    operadorUsina: 'Eng. Tiago Alencar',
+    status: 'descarregado_concluido'
+  }
+];
+
+export const CONCRETO_BATELADAS_PROCESSO = [
+  {
+    id: 'bat-1001-01',
+    numeroTicket: 'BAT-2026-0841',
+    horario: '13:45',
+    cargaId: 'crg-1001',
+    cliente: 'Construtora Tangará Obras Civis',
+    obra: 'Edifício Residencial Belvedere Tower · Laje do 4º Pavimento',
+    betoneira: 'BT-01 (Mercedes-Benz 8m³)',
+    motorista: 'Carlos Eduardo Silva',
+    fck: 'FCK 30 MPa (Brita 1)',
+    slumpEspecificado: '14 ± 2 cm',
+    slumpMedidoUsina: '14.0 cm',
+    volumeBateladaM3: 8.0,
+    cimentoProgramadoKg: 2800,
+    cimentoPesadoKg: 2808,
+    desvioCimentoPct: '+0.28%',
+    areiaMediaSecaKg: 4480,
+    areiaMediaPesadaKg: 4682, // corrigida c/ 4.5% umidade
+    aguaAdicionadaAreiaKg: 202,
+    brita1ProgramadaKg: 6160,
+    brita1PesadaKg: 6140,
+    desvioBritaPct: '-0.32%',
+    aguaProgramadaLitros: 1260,
+    aguaRealAdicionadaLitros: 1058, // 1260 - 202L da areia
+    aditivoPlastificanteLitros: 19.6,
+    aditivoRetardadorLitros: 8.4,
+    fatorAcReal: 0.45,
+    tempoMisturaSegundos: 180,
+    rotacaoBalaoRPM: 16,
+    temperaturaConcreto: '28.5°C',
+    lacreBetoneira: 'LCR-CNC-8821',
+    conformidadeNBR7212: 'TOTALMENTE_CONFORME',
+    operadorBatcher: 'Marcio Fontes (Operador de Usina)'
+  },
+  {
+    id: 'bat-1002-01',
+    numeroTicket: 'BAT-2026-0842',
+    horario: '14:20',
+    cargaId: 'crg-1002',
+    cliente: 'AgroLog Transportes & Armazéns',
+    obra: 'Piso Industrial Reforçado com Fibras · Módulo 03',
+    betoneira: 'BT-02 (Volvo FMX 8m³)',
+    motorista: 'Adilson Silveira',
+    fck: 'FCK 35 MPa (Pisos Industriais)',
+    slumpEspecificado: '14 ± 2 cm',
+    slumpMedidoUsina: '13.5 cm',
+    volumeBateladaM3: 8.0,
+    cimentoProgramadoKg: 3120,
+    cimentoPesadoKg: 3130,
+    desvioCimentoPct: '+0.32%',
+    areiaMediaSecaKg: 4368,
+    areiaMediaPesadaKg: 4565,
+    brita1ProgramadaKg: 5928,
+    brita1PesadaKg: 5910,
+    desvioBritaPct: '-0.30%',
+    aguaProgramadaLitros: 1310,
+    aguaRealAdicionadaLitros: 1113,
+    aditivoPlastificanteLitros: 28.0,
+    fibrasPolipropilenoKg: 8.0,
+    fatorAcReal: 0.42,
+    tempoMisturaSegundos: 210,
+    rotacaoBalaoRPM: 16,
+    temperaturaConcreto: '29.0°C',
+    lacreBetoneira: 'LCR-CNC-8822',
+    conformidadeNBR7212: 'TOTALMENTE_CONFORME',
+    operadorBatcher: 'Marcio Fontes (Operador de Usina)'
+  }
+];
+
 export async function provisionarConcretoUsina() {
   const data = db();
   if (!Array.isArray(data.empresas)) data.empresas = [];
@@ -251,6 +648,31 @@ export async function provisionarConcretoUsina() {
   data.concreto_cargas = data.concreto_cargas.filter(c => c.empresaId !== CONCRETO_EMPRESA_ID);
   for (const c of CONCRETO_CARGAS_INICIAIS) {
     data.concreto_cargas.push({ ...c, empresaId: CONCRETO_EMPRESA_ID });
+  }
+
+  // 7. Silos de Cimento e Pozolana
+  if (!Array.isArray(data.concreto_silos) || data.concreto_silos.length === 0) {
+    data.concreto_silos = CONCRETO_SILOS_INICIAIS.map(s => ({ ...s, empresaId: CONCRETO_EMPRESA_ID }));
+  }
+
+  // 8. Baias de Agregados (Areias e Britas)
+  if (!Array.isArray(data.concreto_baias) || data.concreto_baias.length === 0) {
+    data.concreto_baias = CONCRETO_BAIAS_INICIAIS.map(b => ({ ...b, empresaId: CONCRETO_EMPRESA_ID }));
+  }
+
+  // 9. Tanques de Aditivos e Água
+  if (!Array.isArray(data.concreto_tanques) || data.concreto_tanques.length === 0) {
+    data.concreto_tanques = CONCRETO_TANQUES_ADITIVOS.map(t => ({ ...t, empresaId: CONCRETO_EMPRESA_ID }));
+  }
+
+  // 10. Entradas de Suprimentos na Balança
+  if (!Array.isArray(data.concreto_entradas_suprimentos) || data.concreto_entradas_suprimentos.length === 0) {
+    data.concreto_entradas_suprimentos = CONCRETO_ENTRADAS_SUPRIMENTOS.map(e => ({ ...e, empresaId: CONCRETO_EMPRESA_ID }));
+  }
+
+  // 11. Bateladas e Controle de Processo
+  if (!Array.isArray(data.concreto_bateladas) || data.concreto_bateladas.length === 0) {
+    data.concreto_bateladas = CONCRETO_BATELADAS_PROCESSO.map(b => ({ ...b, empresaId: CONCRETO_EMPRESA_ID }));
   }
 
   save();

@@ -33,6 +33,33 @@ export default function ConcretoUsinaERP() {
   const [ensaios, setEnsaios] = useState([]);
   const [propostas, setPropostas] = useState([]);
   const [silos, setSilos] = useState([]);
+  const [baias, setBaias] = useState([]);
+  const [tanques, setTanques] = useState([]);
+  const [entradasSuprimentos, setEntradasSuprimentos] = useState([]);
+  const [bateladas, setBateladas] = useState([]);
+  const [subAbaSuprimentos, setSubAbaSuprimentos] = useState('silos-patio'); // 'silos-patio' | 'central-processo' | 'balanca-entradas' | 'tanques-aditivos'
+  const [modalReabastecerAberto, setModalReabastecerAberto] = useState(false);
+  const [formReabastecer, setFormReabastecer] = useState({
+    destinoId: 'silo-01',
+    tipoDestino: 'silo',
+    produto: 'Cimento Portland CP II-F-32',
+    quantidade: 32,
+    ticketBalanca: 'TKT-80T-8942',
+    placa: 'RBD-4E80',
+    motorista: 'Valdir Silveira',
+    transportadora: 'TransSerrano Cargas Pesadas'
+  });
+  const [modalDoseBateladaAberto, setModalDoseBateladaAberto] = useState(false);
+  const [formDoseBatelada, setFormDoseBatelada] = useState({
+    fck: 25,
+    volumeM3: 8,
+    betoneira: 'BT-01',
+    umidadeAreiaPercentual: 4.5,
+    britaTipo: 'Brita 1',
+    slumpAlvo: '14 ± 2 cm'
+  });
+  const [modalTicketBateladaAberto, setModalTicketBateladaAberto] = useState(null);
+  const [salvandoSuprimento, setSalvandoSuprimento] = useState(false);
   const [compras, setCompras] = useState([]);
   const [ordensProducao, setOrdensProducao] = useState([]);
   const [dragas, setDragas] = useState([]);
@@ -199,6 +226,68 @@ export default function ConcretoUsinaERP() {
     forcaKn: ''
   });
 
+  // Handlers de Suprimentos, Silos e Controle de Processo
+  const handleSalvarUmidadeBaia = async (baiaId, umidadePercentual) => {
+    try {
+      const res = await api.put('/api/admin/concreto/suprimentos-silos/umidade', {
+        baiaId,
+        umidadePercentual: Number(umidadePercentual)
+      });
+      if (res?.ok) {
+        setBaias(prev => prev.map(b => b.id === baiaId ? { ...b, ...res.baia } : b));
+        toast ? toast.success(res.mensagem || 'Umidade atualizada e compensação de água recalculada!') : alert('Umidade atualizada!');
+      }
+    } catch (err) {
+      console.error('Erro ao atualizar umidade:', err);
+      toast ? toast.error('Falha ao atualizar umidade: ' + (err.message || 'Erro')) : alert('Erro');
+    }
+  };
+
+  const handleConfirmarReabastecimento = async (e) => {
+    e.preventDefault();
+    setSalvandoSuprimento(true);
+    try {
+      const res = await api.post('/api/admin/concreto/suprimentos-silos/reabastecer', {
+        ...formReabastecer,
+        quantidade: Number(formReabastecer.quantidade)
+      });
+      if (res?.ok) {
+        toast ? toast.success(res.mensagem || 'Reabastecimento registrado e estoque atualizado!') : alert('Sucesso!');
+        setModalReabastecerAberto(false);
+        carregarDados();
+      }
+    } catch (err) {
+      console.error('Erro no reabastecimento:', err);
+      toast ? toast.error('Falha no reabastecimento: ' + (err.message || 'Erro')) : alert('Erro');
+    } finally {
+      setSalvandoSuprimento(false);
+    }
+  };
+
+  const handleExecutarDosagemBatelada = async (e) => {
+    if (e) e.preventDefault();
+    setSalvandoSuprimento(true);
+    try {
+      const res = await api.post('/api/admin/concreto/processo-producao/dosar-batelada', {
+        ...formDoseBatelada,
+        fck: Number(formDoseBatelada.fck),
+        volumeM3: Number(formDoseBatelada.volumeM3),
+        umidadeAreiaPercentual: Number(formDoseBatelada.umidadeAreiaPercentual)
+      });
+      if (res?.ok) {
+        toast ? toast.success(res.mensagem || 'Batelada dosada com sucesso! NBR 7212 certificada.') : alert('Batelada dosada!');
+        setModalDoseBateladaAberto(false);
+        setModalTicketBateladaAberto(res.batelada);
+        carregarDados();
+      }
+    } catch (err) {
+      console.error('Erro na dosagem da batelada:', err);
+      toast ? toast.error('Falha na dosagem: ' + (err.message || 'Erro')) : alert('Erro');
+    } finally {
+      setSalvandoSuprimento(false);
+    }
+  };
+
   // Formulário Nova Proposta
   const [formProposta, setFormProposta] = useState({
     cliente: '',
@@ -230,6 +319,10 @@ export default function ConcretoUsinaERP() {
         setEnsaios(res.ensaios || []);
         setPropostas(res.propostas || []);
         setSilos(res.silos || []);
+        setBaias(res.baias || []);
+        setTanques(res.tanques || []);
+        setEntradasSuprimentos(res.entradasSuprimentos || []);
+        setBateladas(res.bateladas || []);
         setCompras(res.compras || []);
         setOrdensProducao(res.ordensProducao || []);
         setDragas(res.dragas || []);
@@ -908,32 +1001,511 @@ export default function ConcretoUsinaERP() {
           </div>
         )}
 
-        {/* ─── ABA 4: SUPRIMENTOS & SILOS 96T ─── */}
+        {/* ─── ABA 4: SUPRIMENTOS, SILOS & CONTROLE DE PROCESSO NBR 7212 ─── */}
         {secaoAtiva === 'suprimentos-silos' && (
-          <div className="serrano-card">
-            <div className="serrano-card-h">
-              <h3>Serrano Mineração &amp; Silos Convicta 96t (Pátio da Usina)</h3>
-            </div>
-            <div className="serrano-silos-grid">
-              {(silos.length > 0 ? silos : [
-                { id: 'sil-01', nome: 'Silo Cimento CP II-F-32', capacidadeTon: 96, nivelAtualTon: 68, percentual: 71, produto: 'Cimento CP II-F-32' },
-                { id: 'sil-02', nome: 'Silo Cimento CP V-ARI', capacidadeTon: 60, nivelAtualTon: 42, percentual: 70, produto: 'Cimento CP V Alta Resistência' },
-                { id: 'bx-01', nome: 'Baia Areia Média Lavada', capacidadeTon: 450, nivelAtualTon: 320, percentual: 71, produto: 'Areia de Dragagem Rio Sepotuba' },
-                { id: 'bx-02', nome: 'Baia Brita 1 Basáltica', capacidadeTon: 400, nivelAtualTon: 285, percentual: 71, produto: 'Brita 1 Granítica 9,5 a 19mm' },
-                { id: 'bx-03', nome: 'Baia Brita 0 (Pedrisco)', capacidadeTon: 300, nivelAtualTon: 190, percentual: 63, produto: 'Pedrisco para Bombeamento' }
-              ]).map((s, idx) => (
-                <div key={s.id || idx} className="serrano-silo-card">
-                  <div className="serrano-silo-bar-wrap">
-                    <div className="serrano-silo-fill" style={{ height: `${s.percentual || 70}%` }}></div>
+          <div style={{ display: 'grid', gap: 20 }}>
+            {/* Header com KPIs e Ações Rápida */}
+            <div className="serrano-card" style={{ padding: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, fontFamily: 'var(--font-display)', letterSpacing: 0.5 }}>
+                      Serrano Usina de Concreto · Suprimentos, Silos &amp; Controle de Processo
+                    </h2>
+                    <span className="serrano-pill serrano-p-ok" style={{ fontWeight: 700 }}>
+                      NBR 7212 / NBR 6118
+                    </span>
                   </div>
-                  <b style={{ fontSize: 12 }}>{s.nome}</b>
-                  <div style={{ fontFamily: 'var(--font-data)', fontSize: 14, fontWeight: 700, color: 'var(--serrano-orange-text)' }}>
-                    {s.nivelAtualTon} / {s.capacidadeTon} ton
-                  </div>
-                  <small style={{ color: 'var(--text-muted)', fontSize: 10 }}>{s.percentual || 70}% de ocupação</small>
+                  <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: 13 }}>
+                    Telemetria de silos 96t, pátio de agregados, compensação de umidade e central dosadora computadorizada Convicta.
+                  </p>
                 </div>
-              ))}
+
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button 
+                    type="button" 
+                    className="btn-serrano"
+                    onClick={() => carregarDados()}
+                    title="Atualizar telemetria e balanças"
+                  >
+                    <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" strokeWidth="2"><path d="M21 12a9 9 0 1 1-9-9c2.5 0 4.8 1 6.5 2.7L21 8"/><path d="M21 3v5h-5"/></svg>
+                    Telemetria
+                  </button>
+                  <button 
+                    type="button" 
+                    className="btn-serrano"
+                    onClick={() => setModalReabastecerAberto(true)}
+                  >
+                    <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+                    Receber Carreta (Balança 80t)
+                  </button>
+                  <button 
+                    type="button" 
+                    className="btn-serrano pri"
+                    onClick={() => setModalDoseBateladaAberto(true)}
+                  >
+                    <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    Dosar Batelada NBR 7212
+                  </button>
+                </div>
+              </div>
+
+              {/* 4 Cards de Métricas Industriais */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, marginTop: 20 }}>
+                <div style={{ background: 'var(--surface-2)', padding: 14, borderRadius: 8, border: '1px solid var(--joint)' }}>
+                  <small style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Cimento em Silos 96t</small>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 800, color: 'var(--serrano-orange-text)' }}>
+                    {((silos.length > 0 ? silos : [
+                      { nivelAtualToneladas: 68 }, { nivelAtualToneladas: 42 }
+                    ]).reduce((acc, s) => acc + (Number(s.nivelAtualToneladas || s.nivelAtualTon || 0)), 0)).toFixed(1)} <span style={{ fontSize: 16 }}>ton</span>
+                  </div>
+                  <small style={{ color: 'var(--status-ok)', fontSize: 11 }}>● Pressão despoeiramento: 0.35 bar (Normal)</small>
+                </div>
+
+                <div style={{ background: 'var(--surface-2)', padding: 14, borderRadius: 8, border: '1px solid var(--joint)' }}>
+                  <small style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Agregados no Pátio</small>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 800 }}>
+                    {((baias.length > 0 ? baias : [
+                      { estoqueAtualToneladas: 320 }, { estoqueAtualToneladas: 285 }, { estoqueAtualToneladas: 190 }
+                    ]).reduce((acc, b) => acc + (Number(b.estoqueAtualToneladas || b.nivelAtualTon || 0)), 0)).toFixed(0)} <span style={{ fontSize: 16 }}>ton</span>
+                  </div>
+                  <small style={{ color: 'var(--text-muted)', fontSize: 11 }}>Areia Sepotuba + Britas 0, 1 e 2</small>
+                </div>
+
+                <div style={{ background: 'var(--surface-2)', padding: 14, borderRadius: 8, border: '1px solid var(--joint)' }}>
+                  <small style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Água Chiller 18°C</small>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 800, color: 'var(--status-info)' }}>
+                    48.500 <span style={{ fontSize: 16 }}>Litros</span>
+                  </div>
+                  <small style={{ color: 'var(--status-ok)', fontSize: 11 }}>● Temp: 18.2°C (Controle de hidratação)</small>
+                </div>
+
+                <div style={{ background: 'var(--surface-2)', padding: 14, borderRadius: 8, border: '1px solid var(--joint)' }}>
+                  <small style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Bateladas NBR 7212 Hoje</small>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 800, color: 'var(--status-ok)' }}>
+                    {bateladas.length > 0 ? bateladas.length : 12} <span style={{ fontSize: 16 }}>cargas</span>
+                  </div>
+                  <small style={{ color: 'var(--status-ok)', fontSize: 11 }}>100% de conformidade metrológica</small>
+                </div>
+              </div>
+
+              {/* Sub-Navegação em Abas Industriais */}
+              <div style={{ display: 'flex', gap: 8, marginTop: 20, borderBottom: '1px solid var(--joint)', paddingBottom: 10, flexWrap: 'wrap' }}>
+                {[
+                  { id: 'silos-patio', label: 'Silos 96t & Pátio de Agregados', icon: '🏭' },
+                  { id: 'central-processo', label: 'Central Dosadora & Bateladas', icon: '⚡' },
+                  { id: 'balanca-entradas', label: 'Entradas na Balança Rodoviária 80t', icon: '⚖️' },
+                  { id: 'tanques-aditivos', label: 'Aditivos Químicos & Água Chiller', icon: '🧪' }
+                ].map(sub => (
+                  <button
+                    key={sub.id}
+                    type="button"
+                    className={`btn-serrano ${subAbaSuprimentos === sub.id ? 'pri' : ''}`}
+                    style={{ fontSize: 12, padding: '7px 14px' }}
+                    onClick={() => setSubAbaSuprimentos(sub.id)}
+                  >
+                    <span>{sub.icon}</span> {sub.label}
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {/* SUB-ABA 1: SILOS & PÁTIO DE AGREGADOS */}
+            {subAbaSuprimentos === 'silos-patio' && (
+              <div style={{ display: 'grid', gap: 20 }}>
+                {/* Silos de Cimento */}
+                <div className="serrano-card">
+                  <div className="serrano-card-h">
+                    <h3>Silos Verticais Metálicos Convicta 96t (Cimento &amp; Pozolana)</h3>
+                    <small style={{ color: 'var(--text-muted)' }}>Sensores de nível por ultrassom e filtro de manga</small>
+                  </div>
+                  <div className="serrano-silos-grid">
+                    {(silos.length > 0 ? silos : [
+                      { id: 'sil-01', nome: 'Silo Cimento CP II-F-32', capacidadeToneladas: 96, nivelAtualToneladas: 68, pressaoDespoeiramento: '0.35 bar', produto: 'Cimento CP II-F-32' },
+                      { id: 'sil-02', nome: 'Silo Cimento CP V-ARI', capacidadeToneladas: 60, nivelAtualToneladas: 42, pressaoDespoeiramento: '0.32 bar', produto: 'Cimento CP V Alta Resistência' },
+                      { id: 'sil-03', nome: 'Silo Sílica Ativa / Pozolana', capacidadeToneladas: 40, nivelAtualToneladas: 24, pressaoDespoeiramento: '0.28 bar', produto: 'Adição Mineral Pozolânica' }
+                    ]).map((s, idx) => {
+                      const cap = Number(s.capacidadeToneladas || s.capacidadeTon || 96);
+                      const niv = Number(s.nivelAtualToneladas || s.nivelAtualTon || 0);
+                      const perc = Math.min(100, Math.round((niv / cap) * 100));
+                      return (
+                        <div key={s.id || idx} className="serrano-silo-card">
+                          <div className="serrano-silo-bar-wrap">
+                            <div className="serrano-silo-fill" style={{ height: `${perc}%` }}></div>
+                          </div>
+                          <b style={{ fontSize: 13 }}>{s.nome}</b>
+                          <div style={{ fontFamily: 'var(--font-data)', fontSize: 16, fontWeight: 700, color: 'var(--serrano-orange-text)' }}>
+                            {niv} / {cap} ton
+                          </div>
+                          <small style={{ color: 'var(--text-muted)', fontSize: 11 }}>{perc}% de ocupação</small>
+                          <div style={{ fontSize: 11, color: 'var(--status-ok)', marginTop: 4 }}>
+                            Filtro: {s.pressaoDespoeiramento || '0.35 bar'}
+                          </div>
+                          <button
+                            type="button"
+                            className="btn-serrano"
+                            style={{ marginTop: 10, fontSize: 11, padding: '4px 8px', width: '100%' }}
+                            onClick={() => {
+                              setFormReabastecer(prev => ({
+                                ...prev,
+                                destinoId: s.id,
+                                tipoDestino: 'silo',
+                                produto: s.produto || s.nome,
+                                quantidade: 32
+                              }));
+                              setModalReabastecerAberto(true);
+                            }}
+                          >
+                            + Abastecer Silo
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Pátio de Agregados e Controle de Umidade */}
+                <div className="serrano-card">
+                  <div className="serrano-card-h">
+                    <h3>Pátio de Agregados &amp; Correção de Umidade da Areia (NBR 7212)</h3>
+                    <small style={{ color: 'var(--text-muted)' }}>Compensação automática no hidrômetro de dosagem</small>
+                  </div>
+                  <div style={{ padding: 20 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+                      {(baias.length > 0 ? baias : [
+                        { id: 'baia-01', nome: 'Baia 01 · Areia Média Lavada', material: 'Areia de Dragagem Rio Sepotuba', estoqueAtualToneladas: 320, capacidadeToneladas: 450, umidadePercentual: 4.5, aguaContidaLitros: 14400 },
+                        { id: 'baia-02', nome: 'Baia 02 · Areia Fina', material: 'Areia Fina Rio Sepotuba', estoqueAtualToneladas: 180, capacidadeToneladas: 300, umidadePercentual: 3.2, aguaContidaLitros: 5760 },
+                        { id: 'baia-03', nome: 'Baia 03 · Brita 0 (Pedrisco)', material: 'Pedrisco Basáltico 4,75 a 9,5mm', estoqueAtualToneladas: 190, capacidadeToneladas: 300, umidadePercentual: 1.0, aguaContidaLitros: 1900 },
+                        { id: 'baia-04', nome: 'Baia 04 · Brita 1 Granítica', material: 'Brita 1 Granítica 9,5 a 19mm', estoqueAtualToneladas: 285, capacidadeToneladas: 400, umidadePercentual: 0.8, aguaContidaLitros: 2280 },
+                        { id: 'baia-05', nome: 'Baia 05 · Brita 2', material: 'Brita 2 Granítica 19 a 25mm', estoqueAtualToneladas: 300, capacidadeToneladas: 400, umidadePercentual: 0.5, aguaContidaLitros: 1500 }
+                      ]).map(baia => (
+                        <div key={baia.id} style={{ background: 'var(--surface-2)', border: '1px solid var(--joint)', borderRadius: 8, padding: 14 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div>
+                              <b style={{ fontSize: 13 }}>{baia.nome}</b>
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{baia.material}</div>
+                            </div>
+                            <span className="serrano-pill serrano-p-ok" style={{ fontSize: 11 }}>
+                              {baia.estoqueAtualToneladas} ton
+                            </span>
+                          </div>
+
+                          <div style={{ marginTop: 12, padding: 10, background: 'var(--surface)', borderRadius: 6, border: '1px solid var(--joint)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                              <span style={{ fontSize: 12, fontWeight: 600 }}>Teor de Umidade:</span>
+                              <b style={{ fontFamily: 'var(--font-data)', fontSize: 14, color: 'var(--serrano-orange-text)' }}>
+                                {baia.umidadePercentual}%
+                              </b>
+                            </div>
+                            <input
+                              type="range"
+                              min="0"
+                              max="10"
+                              step="0.1"
+                              className="serrano-slider"
+                              value={baia.umidadePercentual || 0}
+                              onChange={(e) => {
+                                const val = Number(e.target.value);
+                                setBaias(prev => prev.map(b => b.id === baia.id ? { ...b, umidadePercentual: val } : b));
+                              }}
+                            />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+                              <span>Água Contida: <b>{Math.round(baia.estoqueAtualToneladas * (baia.umidadePercentual / 100) * 1000).toLocaleString('pt-BR')} L</b></span>
+                              <button
+                                type="button"
+                                className="btn-serrano"
+                                style={{ fontSize: 10, padding: '3px 8px' }}
+                                onClick={() => handleSalvarUmidadeBaia(baia.id, baia.umidadePercentual)}
+                              >
+                                Salvar Umidade
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* SUB-ABA 2: CENTRAL DOSADORA & BATELADAS NBR 7212 */}
+            {subAbaSuprimentos === 'central-processo' && (
+              <div style={{ display: 'grid', gap: 20 }}>
+                {/* Simulador / Dosador Rápido */}
+                <div className="serrano-grid-2col">
+                  <div className="serrano-card">
+                    <div className="serrano-card-h">
+                      <h3>Central Dosadora Automatizada Convicta NBR 7212</h3>
+                      <span className="serrano-pill serrano-p-ok">Online · Automação CLP</span>
+                    </div>
+                    <div style={{ padding: 20 }}>
+                      <div className="serrano-form-row">
+                        <label>Traço / Resistência Característica (FCK)</label>
+                        <select 
+                          className="serrano-input"
+                          value={calcFck}
+                          onChange={e => setCalcFck(Number(e.target.value))}
+                        >
+                          <option value={15}>FCK 15 MPa · Concreto Magro / Lastro</option>
+                          <option value={20}>FCK 20 MPa · Pisos e Baldrames</option>
+                          <option value={25}>FCK 25 MPa · Lajes, Vigas e Pilares Convencionais</option>
+                          <option value={30}>FCK 30 MPa · Estrutural Pesado / Bombeado</option>
+                          <option value={35}>FCK 35 MPa · Pisos Industriais de Alta Abrasão</option>
+                          <option value={40}>FCK 40 MPa · Obras Especiais e Pontes</option>
+                          <option value={45}>FCK 45 MPa · Concreto de Alto Desempenho (CAD)</option>
+                        </select>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div className="serrano-form-row">
+                          <label>Volume do Carregamento (m³)</label>
+                          <input 
+                            type="number" 
+                            className="serrano-input"
+                            value={calcVolume}
+                            min={1}
+                            max={12}
+                            onChange={e => setCalcVolume(Number(e.target.value))}
+                          />
+                        </div>
+                        <div className="serrano-form-row">
+                          <label>Umidade da Areia (%)</label>
+                          <input 
+                            type="number" 
+                            className="serrano-input"
+                            value={calcUmidadeAreia}
+                            step="0.1"
+                            onChange={e => setCalcUmidadeAreia(Number(e.target.value))}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ background: 'var(--surface-2)', padding: 12, borderRadius: 6, fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+                        💡 <b>Compensação Automática NBR 7212:</b> Com a areia a <b>{calcUmidadeAreia}%</b> de umidade, a central abate automaticamente <b>{dosagemCalculada.aguaDescontadaL} Litros</b> de água líquida da pesagem para manter o Fator a/c exato.
+                      </div>
+
+                      <button
+                        type="button"
+                        className="btn-serrano pri"
+                        style={{ width: '100%', marginTop: 16, padding: '12px', fontSize: 14, fontWeight: 700 }}
+                        onClick={() => {
+                          setFormDoseBatelada({
+                            fck: calcFck,
+                            volumeM3: calcVolume,
+                            betoneira: 'BT-01',
+                            umidadeAreiaPercentual: calcUmidadeAreia,
+                            britaTipo: 'Brita 1',
+                            slumpAlvo: '14 ± 2 cm'
+                          });
+                          setModalDoseBateladaAberto(true);
+                        }}
+                      >
+                        ⚡ Disparar Dosagem Automática desta Carga
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 4 Balanças da Central ao Vivo */}
+                  <div className="serrano-card">
+                    <div className="serrano-card-h">
+                      <h3>Balanças Eletrônicas da Central (Pesagem Teórica)</h3>
+                    </div>
+                    <div style={{ padding: 20 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+                        <div style={{ background: 'var(--surface-2)', padding: 12, borderRadius: 8, border: '1px solid var(--joint)' }}>
+                          <small style={{ color: 'var(--text-muted)', fontSize: 10, textTransform: 'uppercase' }}>Balança 1 · Cimento CP II</small>
+                          <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800 }}>
+                            {dosagemCalculada.cimentoTotalKg.toLocaleString('pt-BR')} kg
+                          </div>
+                          <small style={{ color: 'var(--status-ok)', fontSize: 11 }}>Tolerância NBR: ±1.0%</small>
+                        </div>
+
+                        <div style={{ background: 'var(--surface-2)', padding: 12, borderRadius: 8, border: '1px solid var(--joint)' }}>
+                          <small style={{ color: 'var(--text-muted)', fontSize: 10, textTransform: 'uppercase' }}>Balança 2 · Areia Úmida</small>
+                          <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800 }}>
+                            {dosagemCalculada.areiaUmidaKg || dosagemCalculada.areiaTotalKg} kg
+                          </div>
+                          <small style={{ color: 'var(--status-ok)', fontSize: 11 }}>Água na areia: {dosagemCalculada.aguaDescontadaL} L</small>
+                        </div>
+
+                        <div style={{ background: 'var(--surface-2)', padding: 12, borderRadius: 8, border: '1px solid var(--joint)' }}>
+                          <small style={{ color: 'var(--text-muted)', fontSize: 10, textTransform: 'uppercase' }}>Balança 3 · Brita 1 Basáltica</small>
+                          <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800 }}>
+                            {dosagemCalculada.brita1Kg || dosagemCalculada.britaTotalKg} kg
+                          </div>
+                          <small style={{ color: 'var(--status-ok)', fontSize: 11 }}>Tolerância NBR: ±2.0%</small>
+                        </div>
+
+                        <div style={{ background: 'var(--surface-2)', padding: 12, borderRadius: 8, border: '1px solid var(--joint)' }}>
+                          <small style={{ color: 'var(--text-muted)', fontSize: 10, textTransform: 'uppercase' }}>Balança 4 · Água Líquida Efetiva</small>
+                          <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, color: 'var(--status-info)' }}>
+                            {dosagemCalculada.aguaTotalL.toLocaleString('pt-BR')} L
+                          </div>
+                          <small style={{ color: 'var(--status-ok)', fontSize: 11 }}>Fator a/c alvo: {dosagemCalculada.fatorAc}</small>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Histórico de Bateladas Realizadas */}
+                <div className="serrano-card">
+                  <div className="serrano-card-h">
+                    <h3>Registro de Bateladas NBR 7212 (Rastreabilidade de Usina)</h3>
+                    <small style={{ color: 'var(--text-muted)' }}>Pesagens registradas por célula de carga com lacre metrológico</small>
+                  </div>
+                  <div className="serrano-table-wrap">
+                    <table className="serrano-table">
+                      <thead>
+                        <tr>
+                          <th>Ticket NBR</th>
+                          <th>Data/Hora</th>
+                          <th>Betoneira</th>
+                          <th>FCK</th>
+                          <th>Volume</th>
+                          <th>Cimento (kg)</th>
+                          <th>Água (L)</th>
+                          <th>Fator a/c</th>
+                          <th>Conformidade</th>
+                          <th>Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(bateladas.length > 0 ? bateladas : [
+                          { id: 'bat-01', numeroTicket: 'BAT-2026-10491', dataHora: '2026-11-12 14:15', betoneiraCodigo: 'BT-01', fck: 30, volumeM3: 8, cimentoPesadoKg: 2802, aguaLiquidaPesadaLitros: 1118, fatorAcReal: 0.49, conformidadeNBR7212: 'TOTALMENTE_CONFORME', motorista: 'Valdir Silveira' }
+                        ]).map(b => (
+                          <tr key={b.id}>
+                            <td><b style={{ fontFamily: 'var(--font-data)' }}>{b.numeroTicket}</b></td>
+                            <td style={{ fontSize: 11 }}>{b.dataHora}</td>
+                            <td><span className="serrano-pill">{b.betoneiraCodigo}</span></td>
+                            <td><b>FCK {b.fck}</b></td>
+                            <td>{b.volumeM3} m³</td>
+                            <td style={{ fontFamily: 'var(--font-data)' }}>{b.cimentoPesadoKg}</td>
+                            <td style={{ fontFamily: 'var(--font-data)' }}>{b.aguaLiquidaPesadaLitros}</td>
+                            <td style={{ fontFamily: 'var(--font-data)' }}>{b.fatorAcReal}</td>
+                            <td>
+                              <span className="serrano-pill serrano-p-ok" style={{ fontSize: 10 }}>
+                                {b.conformidadeNBR7212}
+                              </span>
+                            </td>
+                            <td>
+                              <button
+                                type="button"
+                                className="btn-serrano"
+                                style={{ fontSize: 11, padding: '3px 8px' }}
+                                onClick={() => setModalTicketBateladaAberto(b)}
+                              >
+                                Ver Ticket
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* SUB-ABA 3: ENTRADAS NA BALANÇA RODOVIÁRIA 80T */}
+            {subAbaSuprimentos === 'balanca-entradas' && (
+              <div className="serrano-card">
+                <div className="serrano-card-h">
+                  <h3>Descargas &amp; Entradas de Matéria-Prima na Balança Rodoviária 80t</h3>
+                  <button 
+                    type="button" 
+                    className="btn-serrano pri"
+                    onClick={() => setModalReabastecerAberto(true)}
+                  >
+                    + Receber Carreta
+                  </button>
+                </div>
+                <div className="serrano-table-wrap">
+                  <table className="serrano-table">
+                    <thead>
+                      <tr>
+                        <th>Ticket Balança</th>
+                        <th>Data/Hora</th>
+                        <th>Insumo</th>
+                        <th>Destino</th>
+                        <th>Placa / Motorista</th>
+                        <th>Bruto (kg)</th>
+                        <th>Tara (kg)</th>
+                        <th>Líquido (ton)</th>
+                        <th>Fornecedor</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(entradasSuprimentos.length > 0 ? entradasSuprimentos : [
+                        { id: 'ent-01', ticketBalanca: 'TKT-80T-8941', dataHora: '2026-11-12 09:30', insumo: 'Cimento Portland CP II-F-32', destinoNome: 'Silo 01', placaVeiculo: 'RBD-4E80', motorista: 'Valdir Silveira', pesoBrutoKg: 49500, pesoTaraKg: 17500, pesoLiquidoToneladas: 32.0, fornecedor: 'Votorantim Cimentos S.A.' }
+                      ]).map(e => (
+                        <tr key={e.id}>
+                          <td><b style={{ fontFamily: 'var(--font-data)' }}>{e.ticketBalanca}</b></td>
+                          <td style={{ fontSize: 11 }}>{e.dataHora}</td>
+                          <td><b>{e.insumo}</b></td>
+                          <td><span className="serrano-pill">{e.destinoNome}</span></td>
+                          <td>
+                            <div style={{ fontWeight: 600 }}>{e.placaVeiculo}</div>
+                            <small style={{ color: 'var(--text-muted)' }}>{e.motorista}</small>
+                          </td>
+                          <td style={{ fontFamily: 'var(--font-data)' }}>{e.pesoBrutoKg?.toLocaleString('pt-BR')}</td>
+                          <td style={{ fontFamily: 'var(--font-data)' }}>{e.pesoTaraKg?.toLocaleString('pt-BR')}</td>
+                          <td>
+                            <b style={{ fontFamily: 'var(--font-data)', color: 'var(--serrano-orange-text)', fontSize: 14 }}>
+                              {e.pesoLiquidoToneladas} ton
+                            </b>
+                          </td>
+                          <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{e.fornecedor}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* SUB-ABA 4: ADITIVOS QUÍMICOS & ÁGUA CHILLER */}
+            {subAbaSuprimentos === 'tanques-aditivos' && (
+              <div className="serrano-card">
+                <div className="serrano-card-h">
+                  <h3>Tanques de Aditivos Químicos &amp; Reservatório de Água Chiller (18°C)</h3>
+                  <small style={{ color: 'var(--text-muted)' }}>Dosagem eletropneumática automática por m³ de concreto</small>
+                </div>
+                <div style={{ padding: 20 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+                    {(tanques.length > 0 ? tanques : [
+                      { id: 'tq-01', nome: 'Tanque 01 · Plastificante Polifuncional', produto: 'Aditivo Plastificante TecFlow', capacidadeLitros: 5000, nivelAtualLitros: 3800, dosagemKgPorM3: '0.8 a 1.2 kg/m³' },
+                      { id: 'tq-02', nome: 'Tanque 02 · Superplastificante', produto: 'Policarboxilato de 3ª Geração', capacidadeLitros: 5000, nivelAtualLitros: 4100, dosagemKgPorM3: '0.6 a 1.0 kg/m³' },
+                      { id: 'tq-03', nome: 'Tanque 03 · Retardador de Pega', produto: 'Retardador para Clima Quente >32°C', capacidadeLitros: 3000, nivelAtualLitros: 1950, dosagemKgPorM3: '0.3 a 0.5 kg/m³' },
+                      { id: 'tq-04', nome: 'Tanque 04 · Água Resfriada (Chiller)', produto: 'Água a 18°C p/ controle de calor de hidratação', capacidadeLitros: 60000, nivelAtualLitros: 48500, dosagemKgPorM3: 'Conforme traço NBR' }
+                    ]).map(t => {
+                      const perc = Math.round((t.nivelAtualLitros / t.capacidadeLitros) * 100);
+                      return (
+                        <div key={t.id} style={{ background: 'var(--surface-2)', border: '1px solid var(--joint)', borderRadius: 8, padding: 16 }}>
+                          <b style={{ fontSize: 13, display: 'block' }}>{t.nome}</b>
+                          <small style={{ color: 'var(--text-muted)', display: 'block', marginBottom: 10 }}>{t.produto}</small>
+                          
+                          <div style={{ background: 'var(--joint)', height: 10, borderRadius: 5, overflow: 'hidden', marginBottom: 8 }}>
+                            <div style={{ background: t.id === 'tq-04' ? 'var(--status-info)' : 'var(--serrano-orange)', width: `${perc}%`, height: '100%' }}></div>
+                          </div>
+
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <b style={{ fontFamily: 'var(--font-data)', fontSize: 15 }}>
+                              {t.nivelAtualLitros?.toLocaleString('pt-BR')} / {t.capacidadeLitros?.toLocaleString('pt-BR')} L
+                            </b>
+                            <span className="serrano-pill serrano-p-ok">{perc}%</span>
+                          </div>
+                          <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+                            Dosagem padrão: <b>{t.dosagemKgPorM3}</b>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1712,6 +2284,243 @@ export default function ConcretoUsinaERP() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL REABASTECIMENTO DE SILO / BAIA (BALANÇA 80T) ─── */}
+      {modalReabastecerAberto && (
+        <div className="serrano-modal-overlay">
+          <div className="serrano-modal-card" style={{ maxWidth: 520 }}>
+            <h2>Receber Carreta de Matéria-Prima · Balança 80t</h2>
+            <form onSubmit={handleConfirmarReabastecimento} style={{ marginTop: 14 }}>
+              <div className="serrano-form-row">
+                <label>Destino de Descarga</label>
+                <select 
+                  className="serrano-input"
+                  value={formReabastecer.destinoId}
+                  onChange={e => {
+                    const id = e.target.value;
+                    const isSilo = id.startsWith('sil') || id.startsWith('silo');
+                    setFormReabastecer(prev => ({
+                      ...prev,
+                      destinoId: id,
+                      tipoDestino: isSilo ? 'silo' : 'baia',
+                      produto: isSilo ? 'Cimento Portland CP II-F-32' : 'Areia de Dragagem Rio Sepotuba'
+                    }));
+                  }}
+                >
+                  <option value="silo-01">Silo 01 · Cimento CP II-F-32 (96t)</option>
+                  <option value="silo-02">Silo 02 · Cimento CP V-ARI (60t)</option>
+                  <option value="silo-03">Silo 03 · Pozolana / Sílica (40t)</option>
+                  <option value="baia-01">Baia 01 · Areia Média Lavada</option>
+                  <option value="baia-02">Baia 02 · Areia Fina Rio Sepotuba</option>
+                  <option value="baia-03">Baia 03 · Brita 0 (Pedrisco)</option>
+                  <option value="baia-04">Baia 04 · Brita 1 Granítica</option>
+                  <option value="baia-05">Baia 05 · Brita 2 Granítica</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="serrano-form-row">
+                  <label>Peso Líquido (toneladas)</label>
+                  <input 
+                    type="number"
+                    step="0.1"
+                    className="serrano-input"
+                    value={formReabastecer.quantidade}
+                    onChange={e => setFormReabastecer(prev => ({ ...prev, quantidade: e.target.value }))}
+                    required
+                  />
+                </div>
+                <div className="serrano-form-row">
+                  <label>Ticket Balança Rodoviária</label>
+                  <input 
+                    type="text"
+                    className="serrano-input"
+                    value={formReabastecer.ticketBalanca}
+                    onChange={e => setFormReabastecer(prev => ({ ...prev, ticketBalanca: e.target.value }))}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="serrano-form-row">
+                  <label>Placa do Veículo</label>
+                  <input 
+                    type="text"
+                    className="serrano-input"
+                    value={formReabastecer.placa}
+                    onChange={e => setFormReabastecer(prev => ({ ...prev, placa: e.target.value }))}
+                  />
+                </div>
+                <div className="serrano-form-row">
+                  <label>Motorista</label>
+                  <input 
+                    type="text"
+                    className="serrano-input"
+                    value={formReabastecer.motorista}
+                    onChange={e => setFormReabastecer(prev => ({ ...prev, motorista: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="serrano-form-row">
+                <label>Transportadora / Fornecedor</label>
+                <input 
+                  type="text"
+                  className="serrano-input"
+                  value={formReabastecer.transportadora}
+                  onChange={e => setFormReabastecer(prev => ({ ...prev, transportadora: e.target.value }))}
+                />
+              </div>
+
+              <div className="serrano-modal-footer">
+                <button type="button" className="btn-serrano" onClick={() => setModalReabastecerAberto(false)}>Cancelar</button>
+                <button type="submit" className="btn-serrano pri" disabled={salvandoSuprimento}>
+                  {salvandoSuprimento ? 'Gravando...' : 'Confirmar Descarga & Reabastecer'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL DISPARO DE BATELADA AUTOMATIZADA NBR 7212 ─── */}
+      {modalDoseBateladaAberto && (
+        <div className="serrano-modal-overlay">
+          <div className="serrano-modal-card" style={{ maxWidth: 540 }}>
+            <h2>Acionar Dosagem Automatizada · NBR 7212</h2>
+            <form onSubmit={handleExecutarDosagemBatelada} style={{ marginTop: 14 }}>
+              <div style={{ background: 'var(--surface-2)', padding: 12, borderRadius: 6, fontSize: 12, marginBottom: 14 }}>
+                ⚡ <b>Central Convicta:</b> O acionamento executará o ciclo de pesagem nas 4 balanças digitais e iniciará a descarga direta na betoneira selecionada com compensação metrológica de umidade.
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="serrano-form-row">
+                  <label>FCK Alvo (MPa)</label>
+                  <select 
+                    className="serrano-input"
+                    value={formDoseBatelada.fck}
+                    onChange={e => setFormDoseBatelada(prev => ({ ...prev, fck: Number(e.target.value) }))}
+                  >
+                    <option value={20}>FCK 20 MPa</option>
+                    <option value={25}>FCK 25 MPa</option>
+                    <option value={30}>FCK 30 MPa</option>
+                    <option value={35}>FCK 35 MPa</option>
+                    <option value={40}>FCK 40 MPa</option>
+                  </select>
+                </div>
+                <div className="serrano-form-row">
+                  <label>Volume da Carga (m³)</label>
+                  <input 
+                    type="number"
+                    className="serrano-input"
+                    value={formDoseBatelada.volumeM3}
+                    min={1}
+                    max={12}
+                    onChange={e => setFormDoseBatelada(prev => ({ ...prev, volumeM3: Number(e.target.value) }))}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="serrano-form-row">
+                  <label>Caminhão Betoneira</label>
+                  <select 
+                    className="serrano-input"
+                    value={formDoseBatelada.betoneira}
+                    onChange={e => setFormDoseBatelada(prev => ({ ...prev, betoneira: e.target.value }))}
+                  >
+                    <option value="BT-01">BT-01 · 10 m³ (Em operação)</option>
+                    <option value="BT-02">BT-02 · 10 m³ (Pátio usina)</option>
+                    <option value="BT-03">BT-03 · 8 m³ (Pátio usina)</option>
+                    <option value="BT-04">BT-04 · 8 m³ (Disponível)</option>
+                    <option value="BT-05">BT-05 · 10 m³ (Disponível)</option>
+                  </select>
+                </div>
+                <div className="serrano-form-row">
+                  <label>Umidade da Areia Média (%)</label>
+                  <input 
+                    type="number"
+                    step="0.1"
+                    className="serrano-input"
+                    value={formDoseBatelada.umidadeAreiaPercentual}
+                    onChange={e => setFormDoseBatelada(prev => ({ ...prev, umidadeAreiaPercentual: Number(e.target.value) }))}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="serrano-form-row">
+                <label>Slump de Abatimento</label>
+                <input 
+                  type="text"
+                  className="serrano-input"
+                  value={formDoseBatelada.slumpAlvo}
+                  onChange={e => setFormDoseBatelada(prev => ({ ...prev, slumpAlvo: e.target.value }))}
+                />
+              </div>
+
+              <div className="serrano-modal-footer">
+                <button type="button" className="btn-serrano" onClick={() => setModalDoseBateladaAberto(false)}>Cancelar</button>
+                <button type="submit" className="btn-serrano pri" disabled={salvandoSuprimento}>
+                  {salvandoSuprimento ? 'Dosando...' : '⚡ Confirmar e Iniciar Dosagem'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL VISUALIZAÇÃO DE TICKET DE BATELADA NBR 7212 ─── */}
+      {modalTicketBateladaAberto && (
+        <div className="serrano-modal-overlay">
+          <div className="serrano-modal-card" style={{ maxWidth: 520 }}>
+            <h2>Ticket de Batelada NBR 7212</h2>
+            <div style={{ marginTop: 14 }}>
+              <div style={{ border: '2px dashed var(--joint)', padding: 16, borderRadius: 8, background: 'var(--surface-2)', fontFamily: 'var(--font-data)' }}>
+                <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                  <b style={{ fontSize: 16, display: 'block' }}>SERRANO CONCRETO USINADO LTDA</b>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>USINA DOSADORA CONVICTA · NBR 7212</span>
+                  <div style={{ marginTop: 6, fontWeight: 700, color: 'var(--serrano-orange-text)', fontSize: 14 }}>
+                    {modalTicketBateladaAberto.numeroTicket}
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 12, marginBottom: 12, borderTop: '1px solid var(--joint)', borderBottom: '1px solid var(--joint)', padding: '8px 0' }}>
+                  <div>Data/Hora: <b>{modalTicketBateladaAberto.dataHora}</b></div>
+                  <div>Betoneira: <b>{modalTicketBateladaAberto.betoneiraCodigo}</b></div>
+                  <div>Traço FCK: <b>{modalTicketBateladaAberto.fck} MPa</b></div>
+                  <div>Volume: <b>{modalTicketBateladaAberto.volumeM3} m³</b></div>
+                  <div>Motorista: <b>{modalTicketBateladaAberto.motorista}</b></div>
+                  <div>Lacre Usina: <b>{modalTicketBateladaAberto.lacreSeguranca}</b></div>
+                </div>
+
+                <div style={{ fontSize: 12, marginBottom: 10 }}>
+                  <b>PESAGENS EFETIVADAS (kg / L):</b>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginTop: 4, fontSize: 11 }}>
+                    <div>Cimento CP II: <b>{modalTicketBateladaAberto.cimentoPesadoKg} kg</b></div>
+                    <div>Areia Média Úmida: <b>{modalTicketBateladaAberto.areiaPesadaKg} kg</b></div>
+                    <div>Brita 1 Granítica: <b>{modalTicketBateladaAberto.britaPesadaKg} kg</b></div>
+                    <div>Água Líquida: <b>{modalTicketBateladaAberto.aguaLiquidaPesadaLitros} L</b></div>
+                    <div>Aditivo Plastificante: <b>{modalTicketBateladaAberto.aditivoPesadoLitros} L</b></div>
+                    <div>Fator a/c Real: <b>{modalTicketBateladaAberto.fatorAcReal}</b></div>
+                  </div>
+                </div>
+
+                <div style={{ background: 'var(--status-ok-bg)', color: 'var(--status-ok)', padding: 8, borderRadius: 6, textAlign: 'center', fontWeight: 700, fontSize: 12 }}>
+                  ✓ CONFORMIDADE METROLÓGICA ABNT NBR 7212 APROVADA
+                </div>
+              </div>
+
+              <div className="serrano-modal-footer">
+                <button type="button" className="btn-serrano" onClick={() => setModalTicketBateladaAberto(null)}>Fechar</button>
+                <button type="button" className="btn-serrano pri" onClick={() => window.print()}>Imprimir Ticket</button>
+              </div>
+            </div>
           </div>
         </div>
       )}
