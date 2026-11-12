@@ -53,7 +53,7 @@ function identidadePublica(slugRecebido) {
     let whatsappFinal = texto(configuracao.whatsappPublico || empresa?.telefone, 30);
     const ehDino = aliasDino || slugConfigurado === 'dino' || String(empresaId).toLowerCase().includes('dino') || String(empresaId) === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
     if (ehDino) {
-      const limpo = String(whatsappFinal || '\).replace(/\D/g, '');
+      const limpo = String(whatsappFinal || '').replace(/\D/g, '');
       if (!limpo || limpo.includes('993360000') || limpo.includes('93360000')) {
         whatsappFinal = '(65) 99672-2055';
       }
