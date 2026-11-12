@@ -38,6 +38,11 @@ import {
   listarMedicoesObras,
   criarMedicaoObra,
   atualizarStatusMedicao,
+  obterNotasFiscaisVendas,
+  emitirNotaFiscalConcreto,
+  entregarNotaFiscal,
+  gerarDanfeHtml,
+  obterTelemetriaCelulasToledo,
   INSUMOS_MATERIA_PRIMA,
   TRACOS_NORMATIZADOS
 } from './servico.js';
@@ -458,4 +463,66 @@ test('17. Configurações da Balança Rodoviária 80t: Consulta e Atualização 
   assert.equal(resSalvar.configuracoes.portaSerial, 'COM4');
   assert.equal(resSalvar.configuracoes.baudRate, 19200);
   assert.equal(resSalvar.configuracoes.tempoAberturaCancelaSegundos, 15);
+});
+
+test('18. Módulo de Vendas & Notas Fiscais: Emissão Integrada de Concreto e Agregados', async () => {
+  // 1. Listar notas fiscais existentes e verificar resumo
+  const resListar = await obterNotasFiscaisVendas(CONCRETO_EMPRESA_ID);
+  assert.equal(resListar.ok, true);
+  assert.ok(resListar.total >= 5);
+  assert.ok(resListar.resumo.faturamentoTotalHoje > 0);
+  assert.ok(resListar.resumo.volumeConcretoTotalM3 > 0);
+
+  // 2. Emitir nova NFS-e de Concretagem FCK 30 MPa com peso da balança 80t
+  const resEmitir = await emitirNotaFiscalConcreto({
+    cliente: 'Construtora Tangará Obras Civis',
+    cnpjCpfCliente: '19.450.810/0001-22',
+    enderecoCliente: 'Av. Brasil, 450 · Tangará da Serra/MT',
+    telefoneCliente: '(65) 99888-4455',
+    emailCliente: 'fiscal@tangaraobras.com.br',
+    obraDestino: 'Pavimentação e Lajes Galpão Comercial',
+    tipoOperacao: 'saida_servico_concreto',
+    tipoConcreto: 'Concreto Usinado Estrutural FCK 30 MPa',
+    densidadeKgM3: 2400,
+    pesoBrutoTotalKg: 33480,
+    taraTotalKg: 14280, // Líquido = 19.200 kg -> 8.0 m³
+    precoUnitarioM3: 465.00,
+    aliquotaIssqn: 3.0,
+    veiculoPlaca: 'BT-01 (RRA-4E80)',
+    ticketBalancaId: 'TK-2026-9999'
+  }, CONCRETO_EMPRESA_ID);
+
+  assert.equal(resEmitir.ok, true);
+  assert.equal(resEmitir.nota.modelo, 'NFS-e');
+  assert.equal(resEmitir.nota.pesoLiquidoTotalKg, 19200);
+  assert.equal(resEmitir.nota.volumeTotalM3, 8.0);
+  assert.equal(resEmitir.nota.valorTotalBruto, 3720.00); // 8 * 465
+  assert.equal(resEmitir.nota.valorDeducaoLegalMateriais, 2604.00); // 70% dedução materiais LC 116
+  assert.equal(resEmitir.nota.baseCalculoIssqn, 1116.00);
+  assert.equal(resEmitir.nota.valorIssqn, 33.48); // 3% sobre base
+  assert.ok(resEmitir.nota.chaveAcessoSefaz.length === 44);
+});
+
+test('19. Visualização do DANFE A4 em HTML e Entrega via WhatsApp/E-mail', async () => {
+  // 1. Gerar DANFE HTML oficial
+  const htmlDanfe = await gerarDanfeHtml('nfe-4821', CONCRETO_EMPRESA_ID);
+  assert.ok(typeof htmlDanfe === 'string');
+  assert.ok(htmlDanfe.includes('DANFSE') || htmlDanfe.includes('DANFE'));
+  assert.ok(htmlDanfe.includes('SERRANO CONCRETO USINADO & MINERAÇÃO LTDA'));
+  assert.ok(htmlDanfe.includes('51261103849201000110550010000048211004821014'));
+
+  // 2. Disparar entrega por WhatsApp
+  const resEntrega = await entregarNotaFiscal('nfe-4821', 'whatsapp', '(65) 99988-1200', CONCRETO_EMPRESA_ID);
+  assert.equal(resEntrega.ok, true);
+  assert.equal(resEntrega.status, 'entregue_whatsapp');
+});
+
+test('20. Telemetria das 8 Células de Carga Toledo Digital DLC-10t', async () => {
+  const telemetria = obterTelemetriaCelulasToledo(33480);
+  assert.equal(telemetria.ok, true);
+  assert.equal(telemetria.celulas.length, 8);
+  assert.equal(telemetria.pesoTotalMedidoKg, 33480);
+  assert.ok(telemetria.celulas[0].pesoKg > 4000);
+  assert.ok(telemetria.celulas[0].mVPorV > 0);
+  assert.equal(telemetria.celulas[0].status, 'conforme');
 });

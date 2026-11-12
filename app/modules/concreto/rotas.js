@@ -23,7 +23,6 @@ import {
   emitirRomaneioVendaAgregado,
   calcularEstatisticaResistenciaLote,
   gerarHtmlRomaneioOficial,
-  gerarHtmlLaudoOficial,
   assinarEntregaCarga,
   obterRomaneioCompleto,
   emitirTicketPesagemBalanca,
@@ -40,7 +39,12 @@ import {
   atualizarStatusMedicao,
   ajustarUmidadeBaia,
   reabastecerSiloOuTanque,
-  dosarBateladaProcesso
+  dosarBateladaProcesso,
+  obterNotasFiscaisVendas,
+  emitirNotaFiscalConcreto,
+  entregarNotaFiscal,
+  gerarDanfeHtml,
+  obterTelemetriaCelulasToledo
 } from './servico.js';
 import { CONCRETO_EMPRESA_ID } from '../../concreto-usina-seed.js';
 
@@ -175,31 +179,14 @@ export function criarRotasConcreto() {
     }
   });
 
-  // 9. Registrar ensaio de ruptura de CP no laboratório (NBR 5738 / NBR 5739)
+  // 9. Registrar ensaio de ruptura de CP no laboratório
   router.post('/ensaios/:loteId/ruptura', async (req, res) => {
     try {
-      const { cpId, idadeDias, tensaoMpa, forcaKn, diametroMm, alturaMm, tipoRuptura, tipoPreparoBase } = req.body;
-      const resultado = await registrarRupturaCorpoProva(req.params.loteId, cpId, idadeDias, tensaoMpa, forcaKn, {
-        diametroMm,
-        alturaMm,
-        tipoRuptura,
-        tipoPreparoBase
-      });
+      const { cpId, idadeDias, tensaoMpa, forcaKn } = req.body;
+      const resultado = await registrarRupturaCorpoProva(req.params.loteId, cpId, idadeDias, tensaoMpa, forcaKn);
       return res.json(resultado);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
-  // 9b. Emitir Laudo Oficial A4 em HTML para impressão ou visualização (NBR 5739)
-  router.get('/ensaios/:loteId/laudo/html', async (req, res) => {
-    try {
-      const empresaId = resolverEmpresa(req);
-      const html = await gerarHtmlLaudoOficial(req.params.loteId, empresaId);
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      return res.send(html);
-    } catch (e) {
-      return res.status(404).send(`<h1>Erro ao gerar Laudo Técnico NBR 5739</h1><p>${e.message}</p>`);
     }
   });
 
@@ -519,6 +506,59 @@ export function criarRotasConcreto() {
         tanques: dados.tanques || [],
         entradasSuprimentos: dados.entradasSuprimentos || []
       });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 36. Módulo de Vendas & Notas Fiscais (NF-e / NFS-e) - Listagem e Resumos
+  router.get('/vendas/notas', async (req, res) => {
+    try {
+      const resultado = await obterNotasFiscaisVendas(resolverEmpresa(req));
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 37. Emissão de Nova Nota Fiscal Integrada à Balança 80t e Romaneio
+  router.post('/vendas/emitir-nota', async (req, res) => {
+    try {
+      const resultado = await emitirNotaFiscalConcreto(req.body, resolverEmpresa(req));
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 38. Visualização do DANFE A4 em HTML Oficial
+  router.get('/vendas/notas/:id/danfe-html', async (req, res) => {
+    try {
+      const html = await gerarDanfeHtml(req.params.id, resolverEmpresa(req));
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    } catch (e) {
+      return res.status(400).send(`<h3>Erro ao gerar DANFE: ${e.message}</h3>`);
+    }
+  });
+
+  // 39. Entrega Multicanal da Nota Fiscal (WhatsApp / E-mail)
+  router.post('/vendas/notas/:id/entregar', async (req, res) => {
+    try {
+      const { canal, destinatario } = req.body || {};
+      const resultado = await entregarNotaFiscal(req.params.id, canal, destinatario, resolverEmpresa(req));
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 40. Telemetria das 8 Células de Carga Toledo da Balança Rodoviária 80t
+  router.get('/balanca/celulas/telemetria', async (req, res) => {
+    try {
+      const peso = req.query.peso ? Number(req.query.peso) : 0;
+      const telemetria = obterTelemetriaCelulasToledo(peso);
+      return res.json(telemetria);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
     }
