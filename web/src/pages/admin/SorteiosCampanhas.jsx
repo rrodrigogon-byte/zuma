@@ -21,14 +21,16 @@ import {
   Scissors,
   ShoppingBag,
   Award,
-  AlertCircle
+  AlertCircle,
+  Download,
+  Share2
 } from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import './SorteiosCampanhas.css';
 
-export default function SorteiosCampanhas() {
+export default function SorteiosCampanhas({ embed = false }) {
   const { empresaAtiva } = useAuth();
   const toast = useToast();
 
@@ -74,6 +76,47 @@ export default function SorteiosCampanhas() {
     motivo: 'Cortesia gerencial de balcão',
   });
   const [emitindoManual, setEmitindoManual] = useState(false);
+  const [ultimoBilheteEmitidoManual, setUltimoBilheteEmitidoManual] = useState(null);
+
+  // Áudio Sintético Web Audio API (Roleta e Vitória)
+  const tocarSomClickRoleta = () => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(600 + Math.random() * 200, ctx.currentTime);
+      gain.gain.setValueAtTime(0.08, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.05);
+    } catch (_) {}
+  };
+
+  const tocarFanfarraVitoria = () => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const notas = [523.25, 659.25, 783.99, 1046.50]; // Acorde Maior C - E - G - C
+      notas.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.12);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime + idx * 0.12);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.12 + 0.6);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + idx * 0.12);
+        osc.stop(ctx.currentTime + idx * 0.12 + 0.7);
+      });
+    } catch (_) {}
+  };
 
   // Carrega as campanhas
   const carregarCampanhas = useCallback(async () => {
@@ -113,6 +156,36 @@ export default function SorteiosCampanhas() {
       carregarBilhetes(campanhaSelecionada.id, termoBuscaBilhete);
     }
   }, [campanhaSelecionada, abaAtiva, termoBuscaBilhete, carregarBilhetes]);
+
+  // Exportar Bilhetes para CSV
+  const handleExportarCSV = () => {
+    if (bilhetes.length === 0) {
+      toast.warning('Nenhum bilhete disponível para exportar.');
+      return;
+    }
+    const cabecalho = ['Numero da Sorte', 'Cliente', 'Telefone', 'Origem', 'Valor Venda (R$)', 'Data Emissao', 'Status', 'Premiado', 'Hash SHA-256'];
+    const linhas = bilhetes.map(b => [
+      `"${b.numeroSorte}"`,
+      `"${b.clienteNome || ''}"`,
+      `"${b.clienteTelefone || ''}"`,
+      `"${b.origem || ''}"`,
+      Number(b.valorCompra || 0).toFixed(2),
+      `"${new Date(b.geradoEm).toLocaleString('pt-BR')}"`,
+      `"${b.status || 'ativo'}"`,
+      b.premiado ? 'SIM' : 'NAO',
+      `"${b.hashAutenticidade || ''}"`
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [cabecalho.join(';'), ...linhas.map(l => l.join(';'))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `sorteio_bilhetes_${campanhaSelecionada?.id || 'dino'}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Arquivo CSV de bilhetes exportado com sucesso!');
+  };
 
   // Salvar nova campanha
   const handleSalvarCampanha = async (e) => {
@@ -178,6 +251,14 @@ export default function SorteiosCampanhas() {
       });
 
       toast.success(`🎉 ${res.bilhetesGerados} Número(s) da Sorte gerado(s) com sucesso!`);
+      setUltimoBilheteEmitidoManual({
+        nome: formManual.clienteNome,
+        telefone: formManual.clienteTelefone,
+        quantidade: res.bilhetesGerados,
+        mensagemWhats: res.mensagemWhatsapp,
+        linkWhats: `https://api.whatsapp.com/send?phone=${formManual.clienteTelefone.replace(/\D/g, '')}&text=${encodeURIComponent(res.mensagemWhatsapp || '')}`
+      });
+
       setFormManual({
         clienteNome: '',
         clienteTelefone: '',
@@ -187,7 +268,6 @@ export default function SorteiosCampanhas() {
       });
       await carregarCampanhas();
       await carregarBilhetes(campanhaSelecionada.id);
-      setAbaAtiva('bilhetes');
     } catch (err) {
       toast.error('Erro ao emitir bilhete manual: ' + err.message);
     } finally {
@@ -207,13 +287,14 @@ export default function SorteiosCampanhas() {
     setGanhadorSorteado(null);
     setCertificadoAuditoria(null);
 
-    // Inicia efeito visual de roleta girando
+    // Inicia efeito visual e sonoro de roleta girando
     let contador = 0;
     animacaoRef.current = setInterval(() => {
       const numAleatorio = String(Math.floor(Math.random() * 999999)).padStart(6, '0');
       setNumeroAnimado(numAleatorio);
+      tocarSomClickRoleta();
       contador++;
-    }, 60);
+    }, 70);
 
     try {
       // Chama o backend para computar a semente e o bilhete seguro
@@ -229,6 +310,7 @@ export default function SorteiosCampanhas() {
         setGanhadorSorteado(res.ganhador);
         setCertificadoAuditoria(res.certificadoAuditoria);
         setSorteando(false);
+        tocarFanfarraVitoria();
         toast.success(`🎉 GANHADOR SORTEADO: ${res.ganhador.clienteNome}!`);
         carregarCampanhas();
       }, 3000);
@@ -249,33 +331,32 @@ export default function SorteiosCampanhas() {
         toast.success('Notificação aberta no WhatsApp Web!');
       }
     } catch (err) {
-      toast.error('Falha ao gerar notificação: ' + err.message);
+      toast.error('Erro ao gerar mensagem de notificação: ' + err.message);
     }
   };
 
-  // Métricas Consolidadas
-  const totalCampanhasAtivas = campanhas.filter(c => c.status === 'ativa').length;
-  const totalBilhetesEmitidosGeral = campanhas.reduce((sum, c) => sum + (c.totalBilhetes || 0), 0);
-  const totalGanhadoresGeral = campanhas.reduce((sum, c) => sum + (c.ganhadores?.length || (c.ganhadorNome ? 1 : 0)), 0);
+  const totalCampanhasAtivas = campanhas.filter((c) => c.status === 'ativa').length;
+  const totalBilhetesGeral = campanhas.reduce((s, c) => s + (c.totalBilhetes || 0), 0);
 
   return (
-    <div className="sorteios-container">
-      {/* Header Executivo */}
-      <div className="sorteios-header">
-        <div className="sorteios-title">
-          <h1>
-            <Gift className="text-amber-500" size={30} />
-            Sorteios & Campanhas Premiadas
-          </h1>
-          <p className="sorteios-subtitle">
+    <div className={`sorteios-container ${embed ? 'sorteios-embed' : ''}`}>
+      {/* Topo do Módulo */}
+      <div className="sorteios-header-area">
+        <div className="sorteios-header-info">
+          <div className="sorteios-tag-oficial">
+            <Gift size={14} /> MÓDULO OFICIAL KYTTO
+          </div>
+          <h1 className="sorteios-titulo">Sorteios & Campanhas Premiadas</h1>
+          <p className="sorteios-descricao">
             Crie sorteios oficiais para os clientes da <strong>Barbearia Dino</strong>, <strong>Loja & Perfumaria</strong> e <strong>E-commerce</strong> com emissão automática de Números da Sorte e apuração 100% auditável.
           </p>
         </div>
-        <div className="sorteios-actions">
+
+        <div className="sorteios-header-acoes">
           <a
             href="/sorteios/dino"
             target="_blank"
-            rel="noopener noreferrer"
+            rel="noreferrer"
             className="btn-outline-ouro"
           >
             <ExternalLink size={16} /> Portal do Cliente
@@ -285,626 +366,669 @@ export default function SorteiosCampanhas() {
             className="btn-ouro"
             onClick={() => setModalNovaCampanhaAberto(true)}
           >
-            <Plus size={18} /> Nova Campanha
+            <Plus size={16} /> Nova Campanha
           </button>
         </div>
       </div>
 
-      {/* Grid de KPIs */}
-      <div className="sorteios-kpis">
-        <div className="sorteio-kpi-card">
-          <div className="sorteio-kpi-icon">
-            <Trophy size={26} />
+      {/* Cartões de Indicadores Rápidos */}
+      <div className="sorteios-kpi-grid">
+        <div className="kpi-card">
+          <div className="kpi-icon-box ouro">
+            <Trophy size={20} />
           </div>
-          <div className="sorteio-kpi-info">
-            <span className="sorteio-kpi-label">Campanhas Ativas</span>
-            <span className="sorteio-kpi-val">{totalCampanhasAtivas}</span>
-            <span className="sorteio-kpi-desc">Disponíveis no caixa e loja</span>
-          </div>
-        </div>
-
-        <div className="sorteio-kpi-card">
-          <div className="sorteio-kpi-icon">
-            <Ticket size={26} />
-          </div>
-          <div className="sorteio-kpi-info">
-            <span className="sorteio-kpi-label">Números da Sorte</span>
-            <span className="sorteio-kpi-val">{totalBilhetesEmitidosGeral.toLocaleString('pt-BR')}</span>
-            <span className="sorteio-kpi-desc">Bilhetes distribuídos</span>
+          <div>
+            <div className="kpi-label">Campanhas Ativas</div>
+            <div className="kpi-valor">{totalCampanhasAtivas}</div>
+            <div className="kpi-sub">Disponíveis no caixa e loja</div>
           </div>
         </div>
 
-        <div className="sorteio-kpi-card">
-          <div className="sorteio-kpi-icon">
-            <ShoppingBag size={26} />
+        <div className="kpi-card">
+          <div className="kpi-icon-box verde">
+            <Ticket size={20} />
           </div>
-          <div className="sorteio-kpi-info">
-            <span className="sorteio-kpi-label">Perfumaria & Compras</span>
-            <span className="sorteio-kpi-val">2x Pontos</span>
-            <span className="sorteio-kpi-desc">Multiplicador automático</span>
+          <div>
+            <div className="kpi-label">Números da Sorte</div>
+            <div className="kpi-valor">{totalBilhetesGeral}</div>
+            <div className="kpi-sub">Bilhetes distribuídos</div>
           </div>
         </div>
 
-        <div className="sorteio-kpi-card">
-          <div className="sorteio-kpi-icon">
-            <ShieldCheck size={26} />
+        <div className="kpi-card">
+          <div className="kpi-icon-box roxo">
+            <ShoppingBag size={20} />
           </div>
-          <div className="sorteio-kpi-info">
-            <span className="sorteio-kpi-label">Auditoria Kytto</span>
-            <span className="sorteio-kpi-val">100% Cripto</span>
-            <span className="sorteio-kpi-desc">SHA-256 RFC 7518</span>
+          <div>
+            <div className="kpi-label">Perfumaria & Compras</div>
+            <div className="kpi-valor">2x Pontos</div>
+            <div className="kpi-sub">Multiplicador automático</div>
+          </div>
+        </div>
+
+        <div className="kpi-card">
+          <div className="kpi-icon-box azul">
+            <ShieldCheck size={20} />
+          </div>
+          <div>
+            <div className="kpi-label">Auditoria Kytto</div>
+            <div className="kpi-valor">100% Cripto</div>
+            <div className="kpi-sub">SHA-256 RFC 7518</div>
           </div>
         </div>
       </div>
 
       {/* Navegação por Abas */}
-      <div className="sorteios-tabs">
+      <div className="sorteios-tabs-nav">
         <button
           type="button"
-          className={`sorteios-tab-btn ${abaAtiva === 'campanhas' ? 'active' : ''}`}
+          className={`sorteios-tab-btn ${abaAtiva === 'campanhas' ? 'ativo' : ''}`}
           onClick={() => setAbaAtiva('campanhas')}
         >
           <Gift size={16} /> Campanhas & Prêmios ({campanhas.length})
         </button>
         <button
           type="button"
-          className={`sorteios-tab-btn ${abaAtiva === 'sorteador' ? 'active' : ''}`}
+          className={`sorteios-tab-btn ${abaAtiva === 'sorteador' ? 'ativo' : ''}`}
           onClick={() => setAbaAtiva('sorteador')}
         >
           <Sparkles size={16} /> Sorteador ao Vivo (Roleta & Apuração)
         </button>
         <button
           type="button"
-          className={`sorteios-tab-btn ${abaAtiva === 'bilhetes' ? 'active' : ''}`}
+          className={`sorteios-tab-btn ${abaAtiva === 'bilhetes' ? 'ativo' : ''}`}
           onClick={() => setAbaAtiva('bilhetes')}
         >
           <Ticket size={16} /> Bilhetes & Participantes ({totalBilhetes})
         </button>
         <button
           type="button"
-          className={`sorteios-tab-btn ${abaAtiva === 'manual' ? 'active' : ''}`}
+          className={`sorteios-tab-btn ${abaAtiva === 'manual' ? 'ativo' : ''}`}
           onClick={() => setAbaAtiva('manual')}
         >
           <Plus size={16} /> Emitir Bilhete Manual (Balcão)
         </button>
         <button
           type="button"
-          className={`sorteios-tab-btn ${abaAtiva === 'ganhadores' ? 'active' : ''}`}
+          className={`sorteios-tab-btn ${abaAtiva === 'ganhadores' ? 'ativo' : ''}`}
           onClick={() => setAbaAtiva('ganhadores')}
         >
-          <Trophy size={16} /> Ganhadores Históricos ({totalGanhadoresGeral})
+          <Trophy size={16} /> Ganhadores Históricos ({campanhas.filter(c => c.ganhadores?.length > 0 || c.ganhadorNome).length})
         </button>
       </div>
 
       {/* Conteúdo das Abas */}
-      {carregando ? (
-        <div style={{ padding: '60px', textAlign: 'center', color: '#94a3b8' }}>
-          <RotateCw className="animate-spin text-amber-500" size={36} style={{ margin: '0 auto 16px' }} />
-          Carregando sorteios e campanhas do Dino...
-        </div>
-      ) : (
-        <>
-          {/* ABA 1: CAMPANHAS */}
-          {abaAtiva === 'campanhas' && (
-            <div>
-              {campanhas.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '60px', background: '#1e293b', borderRadius: '12px' }}>
-                  <Gift size={48} className="text-amber-500" style={{ margin: '0 auto 16px' }} />
-                  <h3 style={{ color: '#fff', fontSize: '18px', margin: '0 0 8px' }}>Nenhuma campanha de sorteio criada ainda</h3>
-                  <p style={{ color: '#94a3b8', fontSize: '14px', maxWidth: '500px', margin: '0 auto 20px' }}>
-                    Crie sua primeira campanha para começar a emitir Números da Sorte automaticamente nas vendas da Barbearia e Perfumaria!
-                  </p>
-                  <button type="button" className="btn-ouro" onClick={() => setModalNovaCampanhaAberto(true)}>
-                    <Plus size={18} /> Criar Campanha Inaugural
-                  </button>
-                </div>
-              ) : (
-                <div className="campanhas-grid">
-                  {campanhas.map((camp) => (
-                    <div key={camp.id} className="campanha-card">
-                      <div
-                        className="campanha-card-banner"
-                        style={{
-                          backgroundImage: camp.bannerUrl
-                            ? `linear-gradient(to bottom, rgba(15,23,42,0.4), rgba(15,23,42,0.85)), url(${camp.bannerUrl})`
-                            : undefined,
-                        }}
-                      >
-                        <span className={`campanha-badge-status ${camp.status}`}>{camp.status}</span>
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          <span style={{ fontSize: '11px', background: 'rgba(0,0,0,0.6)', padding: '4px 8px', borderRadius: '4px', color: '#fbbf24' }}>
-                            📅 Sorteio: {new Date(camp.dataSorteio).toLocaleDateString('pt-BR')}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="campanha-card-body">
-                        <h3 className="campanha-card-title">{camp.titulo}</h3>
-
-                        <div className="campanha-premio-destaque">
-                          <span className="campanha-premio-icone">🏆</span>
-                          <div className="campanha-premio-texto">
-                            <span className="campanha-premio-label">Prêmio Principal</span>
-                            <span className="campanha-premio-nome">{camp.premioPrincipal}</span>
-                          </div>
-                        </div>
-
-                        <div className="campanha-regras-resumo">
-                          💡 <strong>Regras:</strong> A cada R$ {camp.regras?.valorMinimoBilhete || 50} em serviços = 1 bilhete.
-                          {camp.regras?.multiplicadorPerfumaria && (
-                            <span> Perfumaria e Loja = <strong>{camp.regras.multiplicadorPerfumaria}x bilhetes</strong>.</span>
-                          )}
-                          {camp.regras?.bonusClube && (
-                            <span> Assinantes do Clube = <strong>+{camp.regras.bonusClube} bilhetes</strong>.</span>
-                          )}
-                        </div>
-
-                        <div className="campanha-metricas-row">
-                          <div className="campanha-metrica-item">
-                            <span style={{ color: '#94a3b8' }}>Bilhetes Emitidos</span>
-                            <span className="campanha-metrica-num">{camp.totalBilhetes || 0}</span>
-                          </div>
-                          <div className="campanha-metrica-item">
-                            <span style={{ color: '#94a3b8' }}>Participantes</span>
-                            <span className="campanha-metrica-num">{camp.totalParticipantes || 0}</span>
-                          </div>
-                          <div className="campanha-metrica-item">
-                            <span style={{ color: '#94a3b8' }}>Negócios</span>
-                            <span className="campanha-metrica-num" style={{ fontSize: '13px', color: '#fbbf24' }}>
-                              Barbearia + Perfumaria
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="campanha-card-footer">
-                        <button
-                          type="button"
-                          className="btn-outline-ouro"
-                          style={{ fontSize: '12px', padding: '6px 12px' }}
-                          onClick={() => {
-                            setCampanhaSelecionada(camp);
-                            setAbaAtiva('bilhetes');
-                          }}
-                        >
-                          <Ticket size={14} /> Ver Bilhetes
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-ouro"
-                          style={{ fontSize: '12px', padding: '6px 14px' }}
-                          onClick={() => {
-                            setCampanhaSelecionada(camp);
-                            setAbaAtiva('sorteador');
-                          }}
-                        >
-                          <Sparkles size={14} /> Ir para Roleta
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ABA 2: SORTEADOR AO VIVO */}
-          {abaAtiva === 'sorteador' && (
-            <div>
-              <div className="sorteador-palco">
-                <h2 className="sorteador-titulo">
-                  {campanhaSelecionada?.titulo || 'Sorteio Oficial Dino'}
-                </h2>
-                <p className="sorteador-subtitulo">
-                  Prêmio: <strong>{campanhaSelecionada?.premioPrincipal}</strong> • Apuração Criptograficamente Segura
-                </p>
-
-                {/* Display do Tambor de Números */}
-                <div className="tambor-box">
-                  <div className="tambor-display">
-                    SÉRIE 01 - Nº {numeroAnimado}
-                  </div>
-                </div>
-
-                <div className="sorteador-controles">
-                  <button
-                    type="button"
-                    className="btn-sortear-gigante"
-                    onClick={handleExecutarSorteio}
-                    disabled={sorteando}
-                  >
-                    {sorteando ? (
-                      <>
-                        <RotateCw className="animate-spin" size={24} />
-                        GIRANDO ROLETA E APURANDO...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles size={24} />
-                        REALIZAR SORTEIO AO VIVO
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                <div style={{ marginTop: '16px', fontSize: '12px', color: '#94a3b8' }}>
-                  Total de bilhetes elegíveis concorrendo agora: <strong>{totalBilhetes} bilhetes</strong>
-                </div>
-              </div>
-
-              {/* Card do Ganhador com Confirmação e Notificação */}
-              {ganhadorSorteado && (
-                <div className="ganhador-card-revelado">
-                  <div className="ganhador-header">
-                    <div>
-                      <span className="ganhador-badge">🏆 GRANDE GANHADOR OFICIAL</span>
-                      <h3 style={{ fontSize: '24px', fontWeight: '900', color: '#fff', margin: '8px 0 0' }}>
-                        {ganhadorSorteado.clienteNome}
-                      </h3>
-                    </div>
+      <div className="sorteios-conteudo-aba">
+        {carregando ? (
+          <div className="sorteios-loading">
+            <RotateCw className="animate-spin" size={28} />
+            <span>Carregando dados de sorteios...</span>
+          </div>
+        ) : (
+          <>
+            {/* ABA 1: LISTAGEM DE CAMPANHAS */}
+            {abaAtiva === 'campanhas' && (
+              <div>
+                {campanhas.length === 0 ? (
+                  <div className="sorteios-vazio">
+                    <Gift size={48} className="text-amber-500" />
+                    <h3>Nenhuma campanha criada ainda</h3>
+                    <p>Crie o primeiro sorteio oficial para os clientes da Barbearia Dino e Perfumaria.</p>
                     <button
                       type="button"
                       className="btn-ouro"
-                      onClick={handleNotificarGanhador}
+                      onClick={() => setModalNovaCampanhaAberto(true)}
                     >
-                      <Send size={16} /> Notificar no WhatsApp
+                      <Plus size={16} /> Criar Campanha Agora
+                    </button>
+                  </div>
+                ) : (
+                  <div className="campanhas-grid">
+                    {campanhas.map((camp) => (
+                      <div
+                        key={camp.id}
+                        className={`campanha-card ${campanhaSelecionada?.id === camp.id ? 'selecionada' : ''}`}
+                      >
+                        <div
+                          className="campanha-card-banner"
+                          style={{
+                            backgroundImage: camp.bannerUrl
+                              ? `url(${camp.bannerUrl})`
+                              : 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+                          }}
+                        >
+                          <span className={`status-chip ${camp.status}`}>
+                            {camp.status}
+                          </span>
+                          <span className="data-sorteio-chip">
+                            📅 Sorteio: {new Date(camp.dataSorteio).toLocaleDateString('pt-BR')}
+                          </span>
+                        </div>
+
+                        <div className="campanha-card-body">
+                          <h3 className="campanha-card-title">{camp.titulo}</h3>
+
+                          <div className="campanha-premio-destaque">
+                            <span className="campanha-premio-icone">🏆</span>
+                            <div className="campanha-premio-texto">
+                              <span className="campanha-premio-label">Prêmio Principal</span>
+                              <span className="campanha-premio-nome">{camp.premioPrincipal}</span>
+                            </div>
+                          </div>
+
+                          <div className="campanha-regras-resumo">
+                            💡 <strong>Regras:</strong> A cada R$ {camp.regras?.valorMinimoBilhete || 50} em serviços = 1 bilhete.
+                            {camp.regras?.multiplicadorPerfumaria && (
+                              <span> Perfumaria e Loja = <strong>{camp.regras.multiplicadorPerfumaria}x bilhetes</strong>.</span>
+                            )}
+                            {camp.regras?.bonusClube && (
+                              <span> Assinantes do Clube = <strong>+{camp.regras.bonusClube} bilhetes</strong>.</span>
+                            )}
+                          </div>
+
+                          <div className="campanha-metricas-row">
+                            <div className="campanha-metrica-item">
+                              <span style={{ color: '#94a3b8' }}>Bilhetes Emitidos</span>
+                              <span className="campanha-metrica-num">{camp.totalBilhetes || 0}</span>
+                            </div>
+                            <div className="campanha-metrica-item">
+                              <span style={{ color: '#94a3b8' }}>Participantes</span>
+                              <span className="campanha-metrica-num">{camp.totalParticipantes || 0}</span>
+                            </div>
+                            <div className="campanha-metrica-item">
+                              <span style={{ color: '#94a3b8' }}>Negócios</span>
+                              <span className="campanha-metrica-num" style={{ fontSize: '13px', color: '#fbbf24' }}>
+                                Barbearia + Perfumaria
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="campanha-card-footer">
+                          <button
+                            type="button"
+                            className="btn-outline-ouro"
+                            style={{ fontSize: '12px', padding: '6px 12px' }}
+                            onClick={() => {
+                              setCampanhaSelecionada(camp);
+                              setAbaAtiva('bilhetes');
+                            }}
+                          >
+                            <Ticket size={14} /> Ver Bilhetes
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-ouro"
+                            style={{ fontSize: '12px', padding: '6px 14px' }}
+                            onClick={() => {
+                              setCampanhaSelecionada(camp);
+                              setAbaAtiva('sorteador');
+                            }}
+                          >
+                            <Sparkles size={14} /> Ir para Roleta
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ABA 2: SORTEADOR AO VIVO */}
+            {abaAtiva === 'sorteador' && (
+              <div>
+                <div className="sorteador-palco">
+                  <h2 className="sorteador-titulo">
+                    {campanhaSelecionada?.titulo || 'Sorteio Oficial Dino'}
+                  </h2>
+                  <p className="sorteador-subtitulo">
+                    Prêmio: <strong>{campanhaSelecionada?.premioPrincipal}</strong> • Apuração Criptograficamente Segura
+                  </p>
+
+                  {/* Display do Tambor de Números */}
+                  <div className="tambor-box">
+                    <div className="tambor-display">
+                      SÉRIE 01 - Nº {numeroAnimado}
+                    </div>
+                  </div>
+
+                  <div className="sorteador-controles">
+                    <button
+                      type="button"
+                      className="btn-sortear-gigante"
+                      onClick={handleExecutarSorteio}
+                      disabled={sorteando}
+                    >
+                      {sorteando ? (
+                        <>
+                          <RotateCw className="animate-spin" size={24} />
+                          GIRANDO ROLETA E APURANDO...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles size={24} />
+                          REALIZAR SORTEIO AO VIVO
+                        </>
+                      )}
                     </button>
                   </div>
 
-                  <div className="ganhador-detalhes-grid">
-                    <div className="ganhador-item">
-                      <span className="ganhador-item-label">Bilhete Sorteado</span>
-                      <span className="ganhador-item-val destaque">{ganhadorSorteado.numeroSorte}</span>
-                    </div>
-                    <div className="ganhador-item">
-                      <span className="ganhador-item-label">Prêmio Conquistado</span>
-                      <span className="ganhador-item-val">{ganhadorSorteado.premio}</span>
-                    </div>
-                    <div className="ganhador-item">
-                      <span className="ganhador-item-label">Telefone / WhatsApp</span>
-                      <span className="ganhador-item-val">{ganhadorSorteado.clienteTelefone}</span>
-                    </div>
-                    <div className="ganhador-item">
-                      <span className="ganhador-item-label">Origem da Compra</span>
-                      <span className="ganhador-item-val" style={{ textTransform: 'capitalize' }}>
-                        {ganhadorSorteado.origemCompra?.replace('_', ' ')}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="auditoria-box">
-                    <strong>🔒 Comprovante Imutável de Auditoria (RFC 7518):</strong>
-                    <br />
-                    Hash SHA-256: {ganhadorSorteado.hashAuditoria}
-                    <br />
-                    Data/Hora Oficial: {new Date(ganhadorSorteado.sorteadoEm).toLocaleString('pt-BR')} | Responsável: {ganhadorSorteado.sorteadoPor}
+                  <div style={{ marginTop: '16px', fontSize: '12px', color: '#94a3b8' }}>
+                    Total de bilhetes elegíveis concorrendo agora: <strong>{totalBilhetes} bilhetes</strong>
                   </div>
                 </div>
-              )}
-            </div>
-          )}
 
-          {/* ABA 3: BILHETES & PARTICIPANTES */}
-          {abaAtiva === 'bilhetes' && (
-            <div className="sorteios-tabela-box">
-              <div className="sorteios-tabela-busca">
-                <input
-                  type="text"
-                  className="input-busca-bilhetes"
-                  placeholder="Buscar por cliente, telefone ou número da sorte..."
-                  value={termoBuscaBilhete}
-                  onChange={(e) => setTermoBuscaBilhete(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="btn-ouro"
-                  style={{ fontSize: '13px', padding: '8px 14px' }}
-                  onClick={() => setAbaAtiva('manual')}
-                >
-                  <Plus size={16} /> Emitir Balcão
-                </button>
+                {/* Card do Ganhador com Confirmação e Notificação */}
+                {ganhadorSorteado && (
+                  <div className="ganhador-card-revelado">
+                    <div className="ganhador-header">
+                      <div>
+                        <span className="ganhador-badge">🏆 GRANDE GANHADOR OFICIAL</span>
+                        <h3 style={{ fontSize: '24px', fontWeight: '900', color: '#fff', margin: '8px 0 0' }}>
+                          {ganhadorSorteado.clienteNome}
+                        </h3>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn-ouro"
+                        onClick={handleNotificarGanhador}
+                      >
+                        <Send size={16} /> Notificar no WhatsApp
+                      </button>
+                    </div>
+
+                    <div className="ganhador-detalhes-grid">
+                      <div className="ganhador-item">
+                        <span className="ganhador-item-label">Bilhete Sorteado</span>
+                        <span className="ganhador-item-val destaque">{ganhadorSorteado.numeroSorte}</span>
+                      </div>
+                      <div className="ganhador-item">
+                        <span className="ganhador-item-label">Prêmio Conquistado</span>
+                        <span className="ganhador-item-val">{ganhadorSorteado.premio}</span>
+                      </div>
+                      <div className="ganhador-item">
+                        <span className="ganhador-item-label">Telefone / WhatsApp</span>
+                        <span className="ganhador-item-val">{ganhadorSorteado.clienteTelefone}</span>
+                      </div>
+                      <div className="ganhador-item">
+                        <span className="ganhador-item-label">Origem da Compra</span>
+                        <span className="ganhador-item-val" style={{ textTransform: 'capitalize' }}>
+                          {ganhadorSorteado.origemCompra?.replace('_', ' ')}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="auditoria-box">
+                      <strong>🔒 Comprovante Imutável de Auditoria (RFC 7518):</strong>
+                      <br />
+                      Hash SHA-256: {ganhadorSorteado.hashAuditoria}
+                      <br />
+                      Data/Hora Oficial: {new Date(ganhadorSorteado.sorteadoEm).toLocaleString('pt-BR')} | Responsável: {ganhadorSorteado.sorteadoPor}
+                    </div>
+                  </div>
+                )}
               </div>
+            )}
 
-              {bilhetes.length === 0 ? (
-                <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
-                  Nenhum bilhete encontrado para esta campanha ou filtro de busca.
-                </div>
-              ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table className="sorteios-tabela">
-                    <thead>
-                      <tr>
-                        <th>Número da Sorte</th>
-                        <th>Cliente</th>
-                        <th>WhatsApp / Telefone</th>
-                        <th>Origem</th>
-                        <th>Valor da Venda</th>
-                        <th>Data Emissão</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {bilhetes.map((b) => (
-                        <tr key={b.id}>
-                          <td>
-                            <span className="numero-sorte-tag">{b.numeroSorte}</span>
-                          </td>
-                          <td style={{ fontWeight: '600', color: '#fff' }}>{b.clienteNome}</td>
-                          <td>{b.clienteTelefone || '—'}</td>
-                          <td>
-                            <span style={{ fontSize: '11px', textTransform: 'uppercase', background: '#334155', padding: '2px 8px', borderRadius: '4px' }}>
-                              {b.origem === 'barbearia_comanda' ? '💈 Barbearia' : b.origem === 'loja_perfumaria' ? '✨ Perfumaria' : b.origem === 'manual_balcao' ? '🎟️ Balcão' : b.origem}
-                            </span>
-                          </td>
-                          <td>{b.valorCompra ? `R$ ${Number(b.valorCompra).toFixed(2)}` : 'Cortesia'}</td>
-                          <td>{new Date(b.geradoEm).toLocaleString('pt-BR')}</td>
-                          <td>
-                            {b.premiado ? (
-                              <span style={{ background: '#10b981', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold' }}>
-                                🏆 PREMIADO
-                              </span>
-                            ) : (
-                              <span style={{ color: '#10b981', fontSize: '12px' }}>● Ativo</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ABA 4: EMISSÃO MANUAL */}
-          {abaAtiva === 'manual' && (
-            <div style={{ maxWidth: '650px', margin: '0 auto', background: '#1e293b', border: '1px solid #334155', borderRadius: '16px', padding: '28px' }}>
-              <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#fff', margin: '0 0 8px' }}>
-                🎟️ Emissão Manual de Bilhetes de Cortesia
-              </h2>
-              <p style={{ color: '#94a3b8', fontSize: '13px', margin: '0 0 24px' }}>
-                Utilize este formulário para conceder Números da Sorte para clientes especiais, ações de balcão, parcerias ou cortesias da gerência do Dino.
-              </p>
-
-              <form onSubmit={handleEmitirManual}>
-                <div className="form-group">
-                  <label className="form-label">Campanha Ativa</label>
-                  <select
-                    className="form-select"
-                    value={campanhaSelecionada?.id || ''}
-                    onChange={(e) => {
-                      const c = campanhas.find(item => item.id === e.target.value);
-                      if (c) setCampanhaSelecionada(c);
-                    }}
-                  >
-                    {campanhas.map(c => (
-                      <option key={c.id} value={c.id}>{c.titulo}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Nome Completo do Cliente *</label>
+            {/* ABA 3: BILHETES & PARTICIPANTES */}
+            {abaAtiva === 'bilhetes' && (
+              <div className="sorteios-tabela-box">
+                <div className="sorteios-tabela-busca">
                   <input
                     type="text"
-                    required
-                    className="form-input"
-                    placeholder="Ex: Carlos Eduardo Silveira"
-                    value={formManual.clienteNome}
-                    onChange={(e) => setFormManual({ ...formManual, clienteNome: e.target.value })}
+                    className="input-busca-bilhetes"
+                    placeholder="Buscar por cliente, telefone ou número da sorte..."
+                    value={termoBuscaBilhete}
+                    onChange={(e) => setTermoBuscaBilhete(e.target.value)}
                   />
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="button"
+                      className="btn-outline-ouro"
+                      style={{ fontSize: '13px', padding: '8px 14px' }}
+                      onClick={handleExportarCSV}
+                      title="Exportar todos os bilhetes em formato CSV para auditoria"
+                    >
+                      <Download size={16} /> Exportar CSV
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-ouro"
+                      style={{ fontSize: '13px', padding: '8px 14px' }}
+                      onClick={() => setAbaAtiva('manual')}
+                    >
+                      <Plus size={16} /> Emitir Balcão
+                    </button>
+                  </div>
                 </div>
 
-                <div className="form-row">
+                {bilhetes.length === 0 ? (
+                  <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                    Nenhum bilhete encontrado para esta campanha ou filtro de busca.
+                  </div>
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="sorteios-tabela">
+                      <thead>
+                        <tr>
+                          <th>Número da Sorte</th>
+                          <th>Cliente</th>
+                          <th>WhatsApp / Telefone</th>
+                          <th>Origem</th>
+                          <th>Valor da Venda</th>
+                          <th>Data Emissão</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bilhetes.map((b) => (
+                          <tr key={b.id}>
+                            <td>
+                              <span className="numero-sorte-tag">{b.numeroSorte}</span>
+                            </td>
+                            <td style={{ fontWeight: '600', color: '#fff' }}>{b.clienteNome}</td>
+                            <td>{b.clienteTelefone || '—'}</td>
+                            <td>
+                              <span style={{ fontSize: '11px', textTransform: 'uppercase', background: '#334155', padding: '2px 8px', borderRadius: '4px' }}>
+                                {b.origem === 'barbearia_comanda' ? '💈 Barbearia' : b.origem === 'loja_perfumaria' ? '✨ Perfumaria' : b.origem === 'manual_balcao' ? '🎟️ Balcão' : b.origem}
+                              </span>
+                            </td>
+                            <td>{b.valorCompra ? `R$ ${Number(b.valorCompra).toFixed(2)}` : 'Cortesia'}</td>
+                            <td>{new Date(b.geradoEm).toLocaleString('pt-BR')}</td>
+                            <td>
+                              {b.premiado ? (
+                                <span style={{ background: '#10b981', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold' }}>
+                                  🏆 PREMIADO
+                                </span>
+                              ) : (
+                                <span style={{ color: '#10b981', fontSize: '12px' }}>● Ativo</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ABA 4: EMISSÃO MANUAL DE BILHETES NO BALCÃO */}
+            {abaAtiva === 'manual' && (
+              <div className="formulario-campanha-box">
+                <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#fff', marginBottom: '8px' }}>
+                  🎟️ Emissão Rápida de Bilhetes no Balcão
+                </h2>
+                <p style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '20px' }}>
+                  Emita bilhetes de cortesia ou bonificação para clientes presentes na Barbearia Dino ou compradores da loja física.
+                </p>
+
+                {ultimoBilheteEmitidoManual && (
+                  <div style={{
+                    background: 'rgba(16, 185, 129, 0.15)',
+                    border: '1px solid #10b981',
+                    borderRadius: '8px',
+                    padding: '14px 18px',
+                    marginBottom: '20px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '12px'
+                  }}>
+                    <div>
+                      <div style={{ fontWeight: '800', color: '#10b981', fontSize: '14px' }}>
+                        🎉 Bilhete emitido com sucesso para {ultimoBilheteEmitidoManual.nome}!
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#cbd5e1' }}>
+                        {ultimoBilheteEmitidoManual.quantidade} Número(s) da Sorte gerado(s).
+                      </div>
+                    </div>
+                    <a
+                      href={ultimoBilheteEmitidoManual.linkWhats}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        background: '#25D366',
+                        color: '#fff',
+                        padding: '8px 14px',
+                        borderRadius: '6px',
+                        textDecoration: 'none',
+                        fontWeight: '700',
+                        fontSize: '13px'
+                      }}
+                    >
+                      <Share2 size={16} /> Enviar no WhatsApp do Cliente
+                    </a>
+                  </div>
+                )}
+
+                <form onSubmit={handleEmitirManual} className="form-grid">
                   <div className="form-group">
-                    <label className="form-label">WhatsApp / Celular com DDD *</label>
+                    <label>Campanha Ativa</label>
+                    <select
+                      className="form-input"
+                      value={campanhaSelecionada?.id || ''}
+                      onChange={(e) => {
+                        const selecionada = campanhas.find((c) => c.id === e.target.value);
+                        setCampanhaSelecionada(selecionada);
+                      }}
+                    >
+                      {campanhas.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.titulo}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label>Nome Completo do Cliente *</label>
                     <input
                       type="text"
+                      className="form-input"
+                      placeholder="Ex: João da Silva"
+                      value={formManual.clienteNome}
+                      onChange={(e) => setFormManual({ ...formManual, clienteNome: e.target.value })}
                       required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>WhatsApp / Telefone com DDD *</label>
+                    <input
+                      type="tel"
                       className="form-input"
                       placeholder="Ex: 65999056008"
                       value={formManual.clienteTelefone}
                       onChange={(e) => setFormManual({ ...formManual, clienteTelefone: e.target.value })}
+                      required
                     />
                   </div>
+
                   <div className="form-group">
-                    <label className="form-label">Quantidade de Bilhetes *</label>
+                    <label>Quantidade de Bilhetes a Emitir</label>
                     <input
                       type="number"
                       min="1"
                       max="50"
-                      required
                       className="form-input"
                       value={formManual.quantidade}
                       onChange={(e) => setFormManual({ ...formManual, quantidade: e.target.value })}
                     />
                   </div>
-                </div>
 
-                <div className="form-group">
-                  <label className="form-label">Motivo da Concessão</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="Ex: Ação Promocional de Inauguração da Loja Dino"
-                    value={formManual.motivo}
-                    onChange={(e) => setFormManual({ ...formManual, motivo: e.target.value })}
-                  />
-                </div>
+                  <div className="form-group full-width">
+                    <label>Motivo da Emissão / Observação</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="Ex: Cortesia por compra de perfume importado no balcão"
+                      value={formManual.motivo}
+                      onChange={(e) => setFormManual({ ...formManual, motivo: e.target.value })}
+                    />
+                  </div>
 
-                <button
-                  type="submit"
-                  className="btn-ouro"
-                  style={{ width: '100%', justifyContent: 'center', padding: '14px', marginTop: '12px' }}
-                  disabled={emitindoManual}
-                >
-                  {emitindoManual ? 'Gerando Números...' : '🎟️ Gerar e Entregar Números da Sorte'}
-                </button>
-              </form>
-            </div>
-          )}
+                  <div className="form-group full-width" style={{ marginTop: '10px' }}>
+                    <button
+                      type="submit"
+                      className="btn-ouro"
+                      disabled={emitindoManual}
+                      style={{ padding: '12px 24px', fontSize: '14px' }}
+                    >
+                      {emitindoManual ? 'Gerando Números...' : 'Gerar e Emitir Números da Sorte'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
 
-          {/* ABA 5: GANHADORES HISTÓRICOS */}
-          {abaAtiva === 'ganhadores' && (
-            <div className="sorteios-tabela-box">
-              <div style={{ padding: '20px', borderBottom: '1px solid #334155' }}>
-                <h3 style={{ margin: 0, fontSize: '18px', color: '#fff' }}>🏆 Hall de Ganhadores dos Sorteios Dino</h3>
-                <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#94a3b8' }}>
+            {/* ABA 5: GANHADORES HISTÓRICOS */}
+            {abaAtiva === 'ganhadores' && (
+              <div className="sorteios-tabela-box">
+                <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#fff', marginBottom: '8px' }}>
+                  🏆 Hall de Ganhadores dos Sorteios Dino
+                </h3>
+                <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '16px' }}>
                   Histórico oficial e auditado de todos os clientes contemplados nas campanhas da Barbearia, Perfumaria e E-commerce.
                 </p>
-              </div>
 
-              {campanhas.flatMap(c => c.ganhadores || []).length === 0 ? (
-                <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
-                  Ainda não há sorteios encerrados com ganhadores registrados.
-                </div>
-              ) : (
-                <table className="sorteios-tabela">
-                  <thead>
-                    <tr>
-                      <th>Campanha</th>
-                      <th>Ganhador</th>
-                      <th>Bilhete Premiado</th>
-                      <th>Prêmio</th>
-                      <th>Data do Sorteio</th>
-                      <th>Auditoria</th>
-                      <th>Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {campanhas.flatMap(c => (c.ganhadores || []).map(g => ({ ...g, campanhaTitulo: c.titulo, campId: c.id }))).map((g, idx) => (
-                      <tr key={idx}>
-                        <td style={{ color: '#fbbf24', fontWeight: '600' }}>{g.campanhaTitulo}</td>
-                        <td style={{ color: '#fff', fontWeight: '700' }}>{g.clienteNome}</td>
-                        <td>
-                          <span className="numero-sorte-tag">{g.numeroSorte}</span>
-                        </td>
-                        <td>{g.premio}</td>
-                        <td>{new Date(g.sorteadoEm).toLocaleDateString('pt-BR')}</td>
-                        <td style={{ fontFamily: 'monospace', fontSize: '11px', color: '#94a3b8' }}>
-                          {g.hashAuditoria?.slice(0, 16)}...
-                        </td>
-                        <td>
-                          <button
-                            type="button"
-                            className="btn-outline-ouro"
-                            style={{ fontSize: '11px', padding: '4px 8px' }}
-                            onClick={() => {
-                              const textoWhats = `Fala, ${g.clienteNome}! Sua premiação do sorteio Dino (${g.premio}) está pronta para retirada! 🦖🎉`;
-                              window.open(`https://api.whatsapp.com/send?phone=${String(g.clienteTelefone).replace(/\D/g, '')}&text=${encodeURIComponent(textoWhats)}`, '_blank');
-                            }}
-                          >
-                            <Send size={12} /> WhatsApp
-                          </button>
-                        </td>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="sorteios-tabela">
+                    <thead>
+                      <tr>
+                        <th>Campanha</th>
+                        <th>Ganhador</th>
+                        <th>Bilhete Premiado</th>
+                        <th>Prêmio</th>
+                        <th>Data do Sorteio</th>
+                        <th>Auditoria</th>
+                        <th>Ações</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          )}
-        </>
-      )}
+                    </thead>
+                    <tbody>
+                      {campanhas
+                        .filter((c) => c.ganhadores?.length > 0 || c.ganhadorNome)
+                        .flatMap((c) =>
+                          (c.ganhadores?.length > 0 ? c.ganhadores : [{
+                            clienteNome: c.ganhadorNome,
+                            clienteTelefone: c.ganhadorTelefone,
+                            numeroSorte: c.numeroSorte,
+                            premio: c.premioPrincipal,
+                            sorteadoEm: c.sorteadoEm,
+                            hashAuditoria: c.hashAuditoria,
+                          }]).map((g, gIdx) => (
+                            <tr key={`${c.id}-${gIdx}`}>
+                              <td style={{ fontWeight: '600', color: '#fbbf24' }}>{c.titulo}</td>
+                              <td style={{ fontWeight: '700', color: '#fff' }}>{g.clienteNome}</td>
+                              <td>
+                                <span className="numero-sorte-tag">{g.numeroSorte}</span>
+                              </td>
+                              <td style={{ color: '#fff' }}>{g.premio}</td>
+                              <td>{new Date(g.sorteadoEm || c.sorteadoEm).toLocaleDateString('pt-BR')}</td>
+                              <td style={{ fontFamily: 'monospace', fontSize: '11px', color: '#94a3b8' }}>
+                                {(g.hashAuditoria || '').slice(0, 16)}...
+                              </td>
+                              <td>
+                                <button
+                                  type="button"
+                                  className="btn-outline-ouro"
+                                  style={{ fontSize: '11px', padding: '4px 8px' }}
+                                  onClick={async () => {
+                                    setCampanhaSelecionada(c);
+                                    handleNotificarGanhador();
+                                  }}
+                                >
+                                  <Send size={12} /> WhatsApp
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
-      {/* Modal Criar Nova Campanha */}
+      {/* MODAL NOVA CAMPANHA */}
       {modalNovaCampanhaAberto && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h2>🎁 Nova Campanha de Sorteio</h2>
-              <button
-                type="button"
-                style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '20px', cursor: 'pointer' }}
-                onClick={() => setModalNovaCampanhaAberto(false)}
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleSalvarCampanha}>
-              <div className="form-group">
-                <label className="form-label">Título da Campanha *</label>
+        <div className="modal-backdrop">
+          <div className="modal-card">
+            <h2 className="modal-titulo">Criar Nova Campanha de Sorteio</h2>
+            <form onSubmit={handleSalvarCampanha} className="form-grid">
+              <div className="form-group full-width">
+                <label>Título da Campanha *</label>
                 <input
                   type="text"
-                  required
                   className="form-input"
                   value={novaCampanha.titulo}
                   onChange={(e) => setNovaCampanha({ ...novaCampanha, titulo: e.target.value })}
+                  required
                 />
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Prêmio Principal *</label>
+              <div className="form-group full-width">
+                <label>Prêmio Principal *</label>
                 <input
                   type="text"
-                  required
                   className="form-input"
-                  placeholder="Ex: Moto Honda Fan 160 0km ou R$ 18.000 no Pix"
                   value={novaCampanha.premioPrincipal}
                   onChange={(e) => setNovaCampanha({ ...novaCampanha, premioPrincipal: e.target.value })}
+                  placeholder="Ex: Moto Honda 0km ou R$ 18.000 no Pix"
+                  required
                 />
               </div>
 
               <div className="form-group">
-                <label className="form-label">Descrição Chamativa</label>
-                <textarea
-                  rows="2"
-                  className="form-textarea"
-                  value={novaCampanha.descricao}
-                  onChange={(e) => setNovaCampanha({ ...novaCampanha, descricao: e.target.value })}
+                <label>R$ Mínimo por Bilhete (Serviços)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={novaCampanha.valorMinimoBilhete}
+                  onChange={(e) => setNovaCampanha({ ...novaCampanha, valorMinimoBilhete: e.target.value })}
                 />
               </div>
 
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">Valor Mínimo p/ 1 Bilhete (R$)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    className="form-input"
-                    value={novaCampanha.valorMinimoBilhete}
-                    onChange={(e) => setNovaCampanha({ ...novaCampanha, valorMinimoBilhete: e.target.value })}
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Multiplicador Perfumaria / Loja</label>
-                  <select
-                    className="form-select"
-                    value={novaCampanha.multiplicadorPerfumaria}
-                    onChange={(e) => setNovaCampanha({ ...novaCampanha, multiplicadorPerfumaria: Number(e.target.value) })}
-                  >
-                    <option value={1}>1x (Pontuação Normal)</option>
-                    <option value={2}>2x (Pontuação em Dobro!)</option>
-                    <option value={3}>3x (Triplo de Bilhetes!)</option>
-                  </select>
-                </div>
+              <div className="form-group">
+                <label>Multiplicador Perfumaria / Loja</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={novaCampanha.multiplicadorPerfumaria}
+                  onChange={(e) => setNovaCampanha({ ...novaCampanha, multiplicadorPerfumaria: e.target.value })}
+                />
               </div>
 
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">Bônus Assinantes Clube Dino</label>
-                  <input
-                    type="number"
-                    min="0"
-                    className="form-input"
-                    value={novaCampanha.bonusClube}
-                    onChange={(e) => setNovaCampanha({ ...novaCampanha, bonusClube: e.target.value })}
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Data Prevista do Sorteio</label>
-                  <input
-                    type="date"
-                    required
-                    className="form-input"
-                    value={novaCampanha.dataFim}
-                    onChange={(e) => setNovaCampanha({ ...novaCampanha, dataFim: e.target.value })}
-                  />
-                </div>
+              <div className="form-group">
+                <label>Bônus Clube Dino (Bilhetes)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={novaCampanha.bonusClube}
+                  onChange={(e) => setNovaCampanha({ ...novaCampanha, bonusClube: e.target.value })}
+                />
               </div>
 
-              <div className="modal-footer">
+              <div className="form-group">
+                <label>Data Oficial do Sorteio</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={novaCampanha.dataFim}
+                  onChange={(e) => setNovaCampanha({ ...novaCampanha, dataFim: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="modal-footer full-width">
                 <button
                   type="button"
                   className="btn-outline-ouro"
@@ -917,7 +1041,7 @@ export default function SorteiosCampanhas() {
                   className="btn-ouro"
                   disabled={salvandoCampanha}
                 >
-                  {salvandoCampanha ? 'Salvando...' : 'Criar e Ativar Sorteio'}
+                  {salvandoCampanha ? 'Salvando...' : 'Salvar e Publicar Campanha'}
                 </button>
               </div>
             </form>

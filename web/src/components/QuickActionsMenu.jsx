@@ -17,6 +17,7 @@ export default function QuickActionsMenu() {
   }, []);
 
   const acoes = [
+    { icone: '🎁', titulo: 'Sorteios & Prêmios', rota: '/admin/sorteios', desc: 'Campanhas, roleta e bilhetes Dino' },
     { icone: '📋', titulo: 'Abrir Nova Comanda', rota: '/admin/barbearia-erp?area=operacao&tab=Atendimento&nova=1', desc: 'Atendimento e comanda rápida' },
     { icone: '💰', titulo: 'Lançamento Financeiro', rota: '/admin/financeiro?acao=novo', desc: 'Conta a receber ou despesa' },
     { icone: '🛒', titulo: 'Pedido de Compras (IA)', rota: '/admin/comprador-inteligente', desc: 'Calcular reposição automática' },

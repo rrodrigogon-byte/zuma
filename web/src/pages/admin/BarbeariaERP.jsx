@@ -1,3 +1,4 @@
+import SorteiosCampanhas from "./SorteiosCampanhas";
 import BarbeariaNovoAgendamentoModal from "./BarbeariaNovoAgendamentoModal";
 import BarbeariaComandasAbertas from "./BarbeariaComandasAbertas";
 import BarbeariaAtendimentoBoard from "./BarbeariaAtendimentoBoard";
@@ -196,6 +197,7 @@ const AREAS = [
       "Avaliações (NPS)",
       "Origem dos clientes",
       "Fidelidade",
+      "Sorteios & Prêmios",
     ],
   },
   {
@@ -14013,6 +14015,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
     if (tab === "Fila e bloqueios") return renderFilaBloqueios();
     if (tab === "Planos e assinaturas") return renderPlanosAssinaturas();
     if (tab === "Fidelidade") return renderFidelidade();
+    if (tab === "Sorteios & Prêmios") return <SorteiosCampanhas />;
     if (
       tab === "Estoque de revenda" ||
       tab === "Compras e fornecedores" ||

@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useParams, Link } from 'react-router-dom';
 import {
   Gift,
   Trophy,
@@ -11,7 +11,11 @@ import {
   ShoppingBag,
   ExternalLink,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Share2,
+  Clock,
+  ArrowRight,
+  Scissors
 } from 'lucide-react';
 import './SorteiosPublico.css';
 
@@ -28,6 +32,14 @@ export default function SorteiosPublico() {
   const [consultando, setConsultando] = useState(false);
   const [resultadoMeusBilhetes, setResultadoMeusBilhetes] = useState(null);
   const [erroConsulta, setErroConsulta] = useState('');
+
+  // Máscara de telefone
+  const formatarTelefoneInput = (valor) => {
+    const limpo = valor.replace(/\D/g, '').slice(0, 11);
+    if (limpo.length <= 2) return limpo;
+    if (limpo.length <= 7) return `(${limpo.slice(0, 2)}) ${limpo.slice(2)}`;
+    return `(${limpo.slice(0, 2)}) ${limpo.slice(2, 7)}-${limpo.slice(7)}`;
+  };
 
   // Carrega informações públicas da empresa e campanhas
   const carregarDadosPublicos = useCallback(async () => {
@@ -82,6 +94,28 @@ export default function SorteiosPublico() {
 
   const campanhaPrincipal = campanhasAtivas[0];
 
+  // Cálculo da contagem regressiva
+  const tempoRestante = useMemo(() => {
+    if (!campanhaPrincipal?.dataSorteio) return null;
+    const diff = new Date(campanhaPrincipal.dataSorteio).getTime() - new Date().getTime();
+    if (diff <= 0) return { dias: 0, horas: 0, minutos: 0, expirado: true };
+    const dias = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const horas = Math.floor((diff / (1000 * 60 * 60)) % 24);
+    const minutos = Math.floor((diff / (1000 * 60)) % 60);
+    return { dias, horas, minutos, expirado: false };
+  }, [campanhaPrincipal?.dataSorteio]);
+
+  // Gerar link de compartilhamento no WhatsApp com os números do cliente
+  const linkCompartilharBilhetes = useMemo(() => {
+    if (!resultadoMeusBilhetes || resultadoMeusBilhetes.totalBilhetes === 0) return '';
+    const numeros = (resultadoMeusBilhetes.campanhas || [])
+      .flatMap(c => (c.bilhetes || []).map(b => b.numeroSorte))
+      .slice(0, 10)
+      .join(', ');
+    const texto = `🎟️ Meus Números da Sorte no Sorteio Dino Barbearia & Perfumaria:\n${numeros}\n\n🏆 Concorra a Moto 0km e Prêmios de Luxo! Confira seus bilhetes em: https://kytto.com.br/sorteios/${slug}`;
+    return `https://api.whatsapp.com/send?text=${encodeURIComponent(texto)}`;
+  }, [resultadoMeusBilhetes, slug]);
+
   return (
     <div className="sorteio-pub-page">
       <div className="sorteio-pub-container">
@@ -96,6 +130,46 @@ export default function SorteiosPublico() {
           <p className="sorteio-pub-subtitle">
             Concorra a prêmios incríveis a cada corte, barba ou compra de perfumes e cosméticos no balcão ou online!
           </p>
+
+          {/* Atalhos Rápidos para Serviços e Perfumaria */}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '16px', flexWrap: 'wrap' }}>
+            <Link
+              to="/agendar/dino"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: 'rgba(255, 255, 255, 0.08)',
+                color: '#fff',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                textDecoration: 'none',
+                fontSize: '13px',
+                fontWeight: '600',
+                border: '1px solid rgba(255, 255, 255, 0.15)'
+              }}
+            >
+              <Scissors size={15} color="#fbbf24" /> Agendar Horário na Barbearia
+            </Link>
+            <Link
+              to="/perfumaria/dino"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(217, 119, 6, 0.2) 100%)',
+                color: '#fbbf24',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                textDecoration: 'none',
+                fontSize: '13px',
+                fontWeight: '700',
+                border: '1px solid rgba(245, 158, 11, 0.4)'
+              }}
+            >
+              <ShoppingBag size={15} /> Perfumaria com 2x Bilhetes
+            </Link>
+          </div>
         </div>
 
         {carregando ? (
@@ -126,6 +200,35 @@ export default function SorteiosPublico() {
                     {campanhaPrincipal.descricao}
                   </p>
 
+                  {/* Contagem regressiva para o sorteio */}
+                  {tempoRestante && !tempoRestante.expirado && (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      background: 'rgba(245, 158, 11, 0.1)',
+                      border: '1px solid rgba(245, 158, 11, 0.3)',
+                      borderRadius: '8px',
+                      padding: '10px 16px',
+                      marginBottom: '20px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#fbbf24', fontWeight: '700', fontSize: '13px' }}>
+                        <Clock size={16} /> Próximo Sorteio Oficial:
+                      </div>
+                      <div style={{ display: 'flex', gap: '10px' }}>
+                        <span style={{ background: '#0f172a', padding: '4px 8px', borderRadius: '4px', color: '#fff', fontWeight: '800', fontSize: '13px' }}>
+                          {tempoRestante.dias}d
+                        </span>
+                        <span style={{ background: '#0f172a', padding: '4px 8px', borderRadius: '4px', color: '#fff', fontWeight: '800', fontSize: '13px' }}>
+                          {tempoRestante.horas}h
+                        </span>
+                        <span style={{ background: '#0f172a', padding: '4px 8px', borderRadius: '4px', color: '#fff', fontWeight: '800', fontSize: '13px' }}>
+                          {tempoRestante.minutos}m
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   <h4 style={{ color: '#fbbf24', fontSize: '13px', textTransform: 'uppercase', margin: '0 0 12px 0' }}>
                     🎁 Outros Prêmios desta Edição:
                   </h4>
@@ -146,7 +249,7 @@ export default function SorteiosPublico() {
                     ))}
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #334155', paddingTop: '14px', fontSize: '12px', color: '#94a3b8' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #334155', paddingTop: '14px', fontSize: '12px', color: '#94a3b8', flexWrap: 'wrap', gap: '8px' }}>
                     <span>📅 Data do Sorteio: <strong style={{ color: '#fff' }}>{new Date(campanhaPrincipal.dataSorteio).toLocaleDateString('pt-BR')}</strong></span>
                     <span>🔒 Apuração: <strong style={{ color: '#10b981' }}>100% Criptográfica SHA-256</strong></span>
                   </div>
@@ -169,7 +272,7 @@ export default function SorteiosPublico() {
                   className="sorteio-pub-input"
                   placeholder="(65) 99999-9999"
                   value={telefoneBusca}
-                  onChange={(e) => setTelefoneBusca(e.target.value)}
+                  onChange={(e) => setTelefoneBusca(formatarTelefoneInput(e.target.value))}
                 />
                 <button
                   type="submit"
@@ -189,7 +292,7 @@ export default function SorteiosPublico() {
               {/* Resultado da Consulta */}
               {resultadoMeusBilhetes && (
                 <div className="sorteio-pub-resultado">
-                  <div className="sorteio-pub-resultado-header">
+                  <div className="sorteio-pub-resultado-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                     <div>
                       <h3 style={{ margin: 0, fontSize: '16px', color: '#fff' }}>
                         Olá, {resultadoMeusBilhetes.clienteIdentificado}!
@@ -198,15 +301,37 @@ export default function SorteiosPublico() {
                         Você possui <strong>{resultadoMeusBilhetes.totalBilhetes} Número(s) da Sorte</strong> ativos!
                       </span>
                     </div>
+
+                    {linkCompartilharBilhetes && (
+                      <a
+                        href={linkCompartilharBilhetes}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          background: '#25D366',
+                          color: '#fff',
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          textDecoration: 'none',
+                          fontSize: '12px',
+                          fontWeight: '700'
+                        }}
+                      >
+                        <Share2 size={14} /> Guardar no WhatsApp
+                      </a>
+                    )}
                   </div>
 
                   {resultadoMeusBilhetes.totalBilhetes === 0 ? (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', background: '#0f172a', borderRadius: '8px' }}>
+                    <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', background: '#0f172a', borderRadius: '8px', marginTop: '14px' }}>
                       Nenhum bilhete emitido para este telefone ainda. Venha fazer a barba ou confira nossa perfumaria para ganhar seus números!
                     </div>
                   ) : (
                     resultadoMeusBilhetes.campanhas.map((item, idx) => (
-                      <div key={idx} style={{ marginBottom: '16px' }}>
+                      <div key={idx} style={{ marginTop: '16px' }}>
                         <div style={{ fontSize: '13px', fontWeight: '700', color: '#fbbf24', marginBottom: '8px' }}>
                           {item.campanha.titulo}
                         </div>
