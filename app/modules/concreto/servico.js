@@ -589,15 +589,20 @@ export function inicializarDatastoreConcreto() {
 export async function obterDadosConcreto(empresaId = CONCRETO_EMPRESA_ID) {
   const data = inicializarDatastoreConcreto();
 
-  const empresa = data.empresas?.find(e => e.id === empresaId) || CONCRETO_DADOS_EMPRESA;
-  const cargas = (data.concreto_cargas || []).filter(c => !c.empresaId || c.empresaId === empresaId);
-  const catalogo = (data.concreto_produtos || []).filter(p => !p.empresaId || p.empresaId === empresaId);
-  const frota = (data.concreto_frota || []).filter(f => !f.empresaId || f.empresaId === empresaId);
-  const ensaios = (data.concreto_ensaios || []).filter(e => !e.empresaId || e.empresaId === empresaId);
-  const propostas = (data.concreto_propostas || []).filter(p => !p.empresaId || p.empresaId === empresaId);
-  const silos = (data.concreto_silos || []).filter(s => !s.empresaId || s.empresaId === empresaId);
-  const compras = (data.concreto_compras || []).filter(c => !c.empresaId || c.empresaId === empresaId);
-  const ordensProducao = (data.concreto_ordens_producao || []).filter(op => !op.empresaId || op.empresaId === empresaId);
+  let empId = empresaId;
+  let cargas = (data.concreto_cargas || []).filter(c => !c.empresaId || c.empresaId === empId);
+  if (cargas.length === 0) {
+    empId = CONCRETO_EMPRESA_ID;
+    cargas = (data.concreto_cargas || []).filter(c => !c.empresaId || c.empresaId === empId);
+  }
+  const empresa = data.empresas?.find(e => e.id === empId) || CONCRETO_DADOS_EMPRESA;
+  const catalogo = (data.concreto_produtos || []).filter(p => !p.empresaId || p.empresaId === empId);
+  const frota = (data.concreto_frota || []).filter(f => !f.empresaId || f.empresaId === empId);
+  const ensaios = (data.concreto_ensaios || []).filter(e => !e.empresaId || e.empresaId === empId);
+  const propostas = (data.concreto_propostas || []).filter(p => !p.empresaId || p.empresaId === empId);
+  const silos = (data.concreto_silos || []).filter(s => !s.empresaId || s.empresaId === empId);
+  const compras = (data.concreto_compras || []).filter(c => !c.empresaId || c.empresaId === empId);
+  const ordensProducao = (data.concreto_ordens_producao || []).filter(op => !op.empresaId || op.empresaId === empId);
   const listasTecnicas = gerarListaTecnicaBOM();
 
   // KPIs Industriais

@@ -4,6 +4,15 @@ import { useToast } from '../../hooks/useToast';
 import { api } from '../../lib/api';
 import './ConcretoUsinaERP.css';
 
+const CARGAS_PADRAO = [
+  { id: "crg-1001", numero: 1001, obra: "Ed. Residencial Serra Dourada · lajes 4º pav.", cliente: "Construtora MT Horizon", fck: 30, brita: "Brita 1", slump: "14 ± 2 cm", volumeM3: 24, bomba: "BL-01 · Lança 32 m", valorTotal: 11160, status: "concluido",
+    viagens: [{ veiculo: "BT-01", saidaUsina: "08:15", chegadaObra: "08:35", fimDescarga: "09:20", pegaMinutos: null }, { veiculo: "BT-02", saidaUsina: "08:50", chegadaObra: "09:10", fimDescarga: "10:00", pegaMinutos: null }, { veiculo: "BT-03", saidaUsina: "09:30", chegadaObra: "09:55", fimDescarga: "10:45", pegaMinutos: null }] },
+  { id: "crg-1002", numero: 1002, obra: "Piso industrial galpão de cargas · etapa 2", cliente: "AgroLog Transportes & Logística", fck: 35, brita: "Brita 1 (fibras)", slump: "14 ± 2 cm", volumeM3: 32, bomba: "Direta · calha", valorTotal: 15360, status: "em_transito",
+    viagens: [{ veiculo: "BT-01", saidaUsina: "13:10", chegadaObra: "13:25", fimDescarga: "14:15", pegaMinutos: null }, { veiculo: "BT-02", saidaUsina: "13:45", chegadaObra: "14:05", fimDescarga: "—", pegaMinutos: 65 }, { veiculo: "BT-04", saidaUsina: "14:20", chegadaObra: "—", fimDescarga: "—", pegaMinutos: 30 }, { veiculo: "BT-05", saidaUsina: "—", chegadaObra: "—", fimDescarga: "—", pegaMinutos: null }] },
+  { id: "crg-1003", numero: 1003, obra: "Casa térrea lote 12 qd. 08 · vigas e baldrames", cliente: "Eng. Marcelo Dantas", fck: 25, brita: "Brita 1", slump: "12 ± 2 cm", volumeM3: 16, bomba: "BL-01 · Lança 32 m", valorTotal: 7310, status: "carregando",
+    viagens: [{ veiculo: "BT-03", saidaUsina: "—", chegadaObra: "—", fimDescarga: "—", pegaMinutos: null }, { veiculo: "BT-04", saidaUsina: "—", chegadaObra: "—", fimDescarga: "—", pegaMinutos: null }] }
+];
+
 export default function ConcretoUsinaERP() {
   const { empresaAtiva } = useAuth();
   const { toast } = useToast();
@@ -15,7 +24,7 @@ export default function ConcretoUsinaERP() {
   const [cargasAbertas, setCargasAbertas] = useState({ '#1002': true });
 
   // Estados de dados da usina
-  const [cargas, setCargas] = useState([]);
+  const [cargas, setCargas] = useState(CARGAS_PADRAO);
   const [catalogo, setCatalogo] = useState([]);
   const [frota, setFrota] = useState([]);
   const [ensaios, setEnsaios] = useState([]);
@@ -85,7 +94,7 @@ export default function ConcretoUsinaERP() {
       const res = await api.get('/api/admin/concreto/dados');
       if (res?.ok) {
         setEmpresa(res.empresa);
-        setCargas(res.cargas || []);
+        setCargas(res.cargas && res.cargas.length > 0 ? res.cargas : CARGAS_PADRAO);
         setCatalogo(res.catalogo || []);
         setFrota(res.frota || []);
         setEnsaios(res.ensaios || []);
