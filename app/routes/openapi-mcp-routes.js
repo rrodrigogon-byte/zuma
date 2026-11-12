@@ -282,6 +282,98 @@ export const MCP_READONLY_TOOLS = [
     },
   },
   {
+    name: 'concreto_ensaios',
+    description: 'Consulta o controle tecnológico de concreto usinado: lotes de corpos de prova (CP), slump test e laudos NBR 5739.',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        lote: { type: 'string', description: 'Número do lote do CP (ex: CP-2026-088)' }
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'concreto_lista_tecnica',
+    description: 'Consulta as Listas Técnicas (BOM / Fichas Técnicas de Traços) de fabricação de concreto FCK 15 a 45 MPa com consumos e custos de insumos.',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fck: { type: 'integer', description: 'FCK específico para filtrar (15, 20, 25, 30, 35, 40 ou 45)' }
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'concreto_compras',
+    description: 'Consulta pedidos de compras de matérias-primas (cimento a granel, britas, aditivos, diesel) e cotações de fornecedores.',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'concreto_custos',
+    description: 'Calculadora industrial de custos e precificação: decompõe CPV de insumos, usinagem da central Convicta, frete e margem de contribuição.',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fck: { type: 'integer', description: 'FCK desejado em MPa' },
+        volumeM3: { type: 'number', description: 'Volume total em m³' },
+        distanciaKm: { type: 'number', description: 'Distância da obra em km a partir da usina' },
+        tipoBomba: { type: 'string', description: 'Tipo de bombeamento (calha ou bomba lança)' }
+      },
+      required: ['fck', 'volumeM3'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'concreto_ordens_producao',
+    description: 'Consulta ordens de fabricação de concreto (OPs) e consumo real da balança de células de carga.',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'concreto_silos',
+    description: 'Consulta níveis de estoque industrial: Silo Convicta 96t (cimento), Silo 60t e pátios da Serrano Mineração.',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'concreto_mineracao',
+    description: 'Consulta operações da Serrano Mineração: dragas nos rios Sepotuba e Formoso, pátios de areia lavada, romaneios de balança e royalties CFEM.',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'concreto_medicoes',
+    description: 'Consulta medições periódicas de concretagem por construtora/obra (faturamento quinzenal/mensal e retenções técnicas).',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cliente: { type: 'string', description: 'Nome da construtora ou obra' }
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'holding_consolidacao',
     description: 'Relatório executivo consolidado da holding Grupo Serrano & Palatare (concreto usinado + pizzaria gourmet).',
     readOnlyHint: true,
@@ -675,11 +767,105 @@ export function createOpenApiAndMcpRouter({ auth, obterEmpresaIdToken, barbearia
     // EXTENSÃO INDUSTRIAL: SERRANO CONCRETO
     // ==========================================
     if (name === 'concreto_cargas') {
+      const { obterDadosConcreto } = await import('../modules/concreto/servico.js').catch(() => ({}));
+      const dados = typeof obterDadosConcreto === 'function' ? await obterDadosConcreto() : {};
       return {
         empresa: 'Serrano Concreto Usinado',
         usinaCapacidade: '80 m³/h (Central Dosadora Automatizada)',
-        cargasProgramadasHoje: CONCRETO_CARGAS_INICIAIS || [],
-        catalogoTracos: CONCRETO_CATALOGO_INICIAL || []
+        cargasProgramadasHoje: dados.cargas || CONCRETO_CARGAS_INICIAIS || [],
+        catalogoTracos: dados.catalogo || CONCRETO_CATALOGO_INICIAL || [],
+        frota: dados.frota || []
+      };
+    }
+
+    if (name === 'concreto_ensaios') {
+      const { obterDadosConcreto } = await import('../modules/concreto/servico.js').catch(() => ({}));
+      const dados = typeof obterDadosConcreto === 'function' ? await obterDadosConcreto() : {};
+      const lote = String(args.lote || '').trim().toUpperCase();
+      const ensaios = dados.ensaios || [];
+      if (lote) {
+        const e = ensaios.find(x => x.lote.toUpperCase() === lote || x.id.toUpperCase() === lote);
+        return e || { aviso: "Lote " + lote + " nao localizado no laboratorio.", ensaiosDisponiveis: ensaios.map(x => x.lote) };
+      }
+      return {
+        laboratorio: 'Laboratório Tecnológico Serrano Concreto',
+        responsavelTecnica: 'Engª Karin Prestes (CREA-MT 027300)',
+        totalEnsaios: ensaios.length,
+        ensaios
+      };
+    }
+
+    if (name === 'concreto_lista_tecnica') {
+      const { gerarListaTecnicaBOM } = await import('../modules/concreto/servico.js').catch(() => ({}));
+      const listas = typeof gerarListaTecnicaBOM === 'function' ? gerarListaTecnicaBOM() : [];
+      const fck = Number(args.fck);
+      if (fck) {
+        const item = listas.find(l => l.fck === fck);
+        return item || { aviso: 'Traço FCK ' + fck + ' não localizado.', disponiveis: listas.map(l => l.fck) };
+      }
+      return {
+        empresa: 'Serrano Concreto Usinado & Mineração',
+        normas: 'ABNT NBR 7212 / NBR 8953 / NBR 6118',
+        totalListasTecnicas: listas.length,
+        listasTecnicas: listas
+      };
+    }
+
+    if (name === 'concreto_compras') {
+      const { listarComprasInsumos } = await import('../modules/concreto/servico.js').catch(() => ({}));
+      const resCompras = typeof listarComprasInsumos === 'function' ? await listarComprasInsumos() : { compras: [] };
+      return {
+        empresa: 'Serrano Concreto & Mineração',
+        fornecedoresHomologados: ['Votorantim Cimentos (Nobres/MT)', 'Cimento Itambé', 'Pedreira Parecis', 'Vedacit / MC-Bauchemie', 'Petrobras'],
+        pedidosCompra: resCompras.compras || [],
+        insumosCatalogo: resCompras.insumosCatalogo || []
+      };
+    }
+
+    if (name === 'concreto_custos') {
+      const { calcularCustoConcretoAvancado } = await import('../modules/concreto/servico.js').catch(() => ({}));
+      const resCustos = typeof calcularCustoConcretoAvancado === 'function' ? calcularCustoConcretoAvancado(args) : {};
+      return {
+        empresa: 'Serrano Concreto Usinado',
+        simulacaoIndustrial: resCustos
+      };
+    }
+
+    if (name === 'concreto_ordens_producao') {
+      const { listarOrdensProducao } = await import('../modules/concreto/servico.js').catch(() => ({}));
+      const resOP = typeof listarOrdensProducao === 'function' ? await listarOrdensProducao() : { ordens: [] };
+      return {
+        empresa: 'Serrano Concreto Usinado',
+        centralDosadora: 'Central Automatizada Convicta Silo 96t',
+        ordensProducao: resOP.ordens || []
+      };
+    }
+
+    if (name === 'concreto_silos') {
+      const { obterDadosConcreto } = await import('../modules/concreto/servico.js').catch(() => ({}));
+      const dados = typeof obterDadosConcreto === 'function' ? await obterDadosConcreto() : {};
+      return {
+        unidade: 'Serrano Concreto & Mineração Tangará da Serra/MT',
+        silosEstoque: dados.silos || [],
+        siloPrincipal: 'Silo Convicta Vertical 96 Toneladas',
+        mineracaoPropria: 'Serrano Mineração (Areia Média e Grossa de Rio)'
+      };
+    }
+    if (name === 'concreto_mineracao') {
+      const { listarMineracao } = await import('../modules/concreto/servico.js').catch(() => ({}));
+      const resMin = typeof listarMineracao === 'function' ? await listarMineracao() : {};
+      return {
+        unidade: 'Serrano Mineração · Dragagem & Pátio de Agregados',
+        localizacao: 'Tangará da Serra / MT (Rios Sepotuba e Formoso)',
+        ...resMin
+      };
+    }
+    if (name === 'concreto_medicoes') {
+      const { listarMedicoesObras } = await import('../modules/concreto/servico.js').catch(() => ({}));
+      const resMed = typeof listarMedicoesObras === 'function' ? await listarMedicoesObras() : { medicoes: [] };
+      return {
+        empresa: 'Serrano Concreto Usinado',
+        medicoesObras: resMed.medicoes || []
       };
     }
 

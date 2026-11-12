@@ -440,6 +440,9 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
       }
 
       if (estado) {
+        estado.configuracao = estado.configuracao || {};
+        estado.configuracao.whatsappPublico = "(65) 99672-2055";
+        estado.configuracao.horarioFechamento = "19:00";
         if (!estado.servicos || Object.keys(estado.servicos).length === 0) {
           try {
             barbeariaErpKytto.criarServico(empId, {

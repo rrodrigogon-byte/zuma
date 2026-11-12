@@ -1,71 +1,116 @@
 /* ═══════════════════════════════════════════════════════════════════════════════
-   MÓDULO DE SORTEIOS & CAMPANHAS PREMIADAS KYTTO - ESTILOS OFICIAIS
-   Design executivo premium: paleta escura com toques dourados (âmbar/gold)
+   MÓDULO DE SORTEIOS & CAMPANHAS PREMIADAS KYTTO - BARBEARIA DINO & PERFUMARIA
+   Design System: Dark Luxury (Preto Ônix #0b0f19, Dourado Ouro #f59e0b, Esmeralda #10b981)
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 .sorteios-container {
   padding: 24px;
-  max-width: 1400px;
+  max-width: 1440px;
   margin: 0 auto;
-  color: #e2e8f0;
+  color: #f1f5f9;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background-color: #0b0f19;
+  border-radius: 16px;
+  border: 1px solid #1e293b;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  margin-top: 16px;
+  margin-bottom: 40px;
 }
 
-/* Header */
-.sorteios-header {
+.sorteios-container.sorteios-embed {
+  padding: 16px;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  margin: 0;
+}
+
+/* ─── Topo e Cabeçalho ─── */
+.sorteios-header-area {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 24px;
-  gap: 16px;
+  margin-bottom: 28px;
+  gap: 20px;
   flex-wrap: wrap;
+  border-bottom: 1px solid #1e293b;
+  padding-bottom: 24px;
 }
 
-.sorteios-title h1 {
-  font-size: 26px;
-  font-weight: 800;
-  color: #ffffff;
-  display: flex;
+.sorteios-header-info {
+  flex: 1;
+  min-width: 320px;
+}
+
+.sorteios-tag-oficial {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  margin: 0 0 6px 0;
-  letter-spacing: -0.5px;
+  gap: 6px;
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
 }
 
-.sorteios-subtitle {
+.sorteios-titulo {
+  font-size: 28px;
+  font-weight: 900;
+  color: #ffffff;
+  margin: 0 0 8px 0;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+}
+
+.sorteios-descricao {
   font-size: 14px;
   color: #94a3b8;
   margin: 0;
-  max-width: 700px;
-  line-height: 1.4;
+  max-width: 800px;
+  line-height: 1.5;
 }
 
-.sorteios-actions {
+.sorteios-descricao strong {
+  color: #cbd5e1;
+}
+
+.sorteios-header-acoes {
   display: flex;
   gap: 12px;
   align-items: center;
 }
 
+/* Botões Oficiais */
 .btn-ouro {
   background: linear-gradient(135deg, #d97706 0%, #f59e0b 50%, #b45309 100%);
   color: #ffffff;
   border: none;
-  border-radius: 8px;
-  padding: 10px 18px;
+  border-radius: 10px;
+  padding: 10px 20px;
   font-weight: 700;
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 14px rgba(217, 119, 6, 0.35);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 16px rgba(217, 119, 6, 0.35);
+  text-decoration: none;
 }
 
 .btn-ouro:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(217, 119, 6, 0.5);
-  filter: brightness(1.08);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 22px rgba(217, 119, 6, 0.55);
+  filter: brightness(1.1);
+}
+
+.btn-ouro:active {
+  transform: translateY(0);
 }
 
 .btn-ouro:disabled {
@@ -77,11 +122,11 @@
 .btn-outline-ouro {
   background: rgba(245, 158, 11, 0.1);
   color: #fbbf24;
-  border: 1px solid rgba(245, 158, 11, 0.4);
-  border-radius: 8px;
-  padding: 10px 16px;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 10px;
+  padding: 10px 18px;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -93,84 +138,95 @@
 .btn-outline-ouro:hover {
   background: rgba(245, 158, 11, 0.2);
   border-color: #f59e0b;
+  color: #ffffff;
 }
 
-/* KPI Grid */
-.sorteios-kpis {
+/* ─── Grid de KPIs / Indicadores ─── */
+.sorteios-kpi-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 16px;
   margin-bottom: 28px;
 }
 
-.sorteio-kpi-card {
-  background: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 12px;
+.kpi-card {
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 14px;
   padding: 18px 20px;
   display: flex;
   align-items: center;
   gap: 16px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
-  position: relative;
-  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  transition: transform 0.2s ease, border-color 0.2s ease;
 }
 
-.sorteio-kpi-card::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 4px;
-  height: 100%;
-  background: #f59e0b;
+.kpi-card:hover {
+  border-color: #374151;
+  transform: translateY(-2px);
 }
 
-.sorteio-kpi-icon {
+.kpi-icon-box {
   width: 48px;
   height: 48px;
-  border-radius: 10px;
-  background: rgba(245, 158, 11, 0.15);
-  color: #fbbf24;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
   flex-shrink: 0;
 }
 
-.sorteio-kpi-info {
-  display: flex;
-  flex-direction: column;
+.kpi-icon-box.ouro {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
-.sorteio-kpi-label {
-  font-size: 12px;
+.kpi-icon-box.verde {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.kpi-icon-box.roxo {
+  background: rgba(168, 85, 247, 0.15);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.kpi-icon-box.azul {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.kpi-label {
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
   color: #94a3b8;
-  font-weight: 600;
+  font-weight: 700;
   margin-bottom: 4px;
 }
 
-.sorteio-kpi-val {
+.kpi-valor {
   font-size: 24px;
-  font-weight: 800;
+  font-weight: 900;
   color: #ffffff;
   line-height: 1.1;
 }
 
-.sorteio-kpi-desc {
+.kpi-sub {
   font-size: 11px;
   color: #64748b;
-  margin-top: 4px;
+  margin-top: 3px;
 }
 
-/* Tabs */
-.sorteios-tabs {
+/* ─── Navegação de Abas ─── */
+.sorteios-tabs-nav {
   display: flex;
   gap: 8px;
-  border-bottom: 2px solid #334155;
+  border-bottom: 2px solid #1e293b;
   margin-bottom: 24px;
   overflow-x: auto;
   padding-bottom: 2px;
@@ -180,113 +236,166 @@
   background: transparent;
   border: none;
   color: #94a3b8;
-  font-size: 14px;
-  font-weight: 600;
-  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 12px 18px;
   border-radius: 8px 8px 0 0;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 8px;
   transition: all 0.2s ease;
-  position: relative;
   white-space: nowrap;
 }
 
 .sorteios-tab-btn:hover {
-  color: #f1f5f9;
+  color: #f8fafc;
   background: rgba(255, 255, 255, 0.04);
 }
 
-.sorteios-tab-btn.active {
+.sorteios-tab-btn.ativo {
   color: #fbbf24;
-  background: #1e293b;
+  background: #111827;
   border-bottom: 3px solid #f59e0b;
 }
 
-/* Cards de Campanha */
+/* ─── Área de Conteúdo da Aba ─── */
+.sorteios-conteudo-aba {
+  min-height: 400px;
+}
+
+.sorteios-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 80px 20px;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.sorteios-vazio {
+  text-align: center;
+  padding: 60px 20px;
+  background: #111827;
+  border: 1px dashed #334155;
+  border-radius: 14px;
+}
+
+.sorteios-vazio h3 {
+  font-size: 18px;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 16px 0 8px;
+}
+
+.sorteios-vazio p {
+  color: #94a3b8;
+  font-size: 13px;
+  margin: 0 0 20px;
+}
+
+/* ─── Grid e Cards de Campanhas ─── */
 .campanhas-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: 20px;
 }
 
 .campanha-card {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: #111827;
+  border: 1px solid #1f2937;
   border-radius: 14px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
   transition: all 0.25s ease;
 }
 
 .campanha-card:hover {
   border-color: #f59e0b;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.15);
+}
+
+.campanha-card.selecionada {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.3);
 }
 
 .campanha-card-banner {
   height: 140px;
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
   background-size: cover;
   background-position: center;
   position: relative;
-  padding: 14px;
+  padding: 12px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
 }
 
-.campanha-badge-status {
+.status-chip {
   padding: 4px 10px;
   border-radius: 20px;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 10px;
+  font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
-.campanha-badge-status.ativa {
+.status-chip.ativa {
   background: #10b981;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+}
+
+.status-chip.sorteada {
+  background: #6366f1;
   color: #ffffff;
 }
 
-.campanha-badge-status.sorteada {
-  background: #f59e0b;
-  color: #0f172a;
-}
-
-.campanha-badge-status.rascunho {
+.status-chip.rascunho {
   background: #64748b;
   color: #ffffff;
 }
 
+.data-sorteio-chip {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  color: #f8fafc;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
 .campanha-card-body {
-  padding: 20px;
+  padding: 18px;
   display: flex;
   flex-direction: column;
   flex: 1;
 }
 
 .campanha-card-title {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 800;
   color: #ffffff;
-  margin: 0 0 10px 0;
+  margin: 0 0 12px 0;
   line-height: 1.3;
 }
 
 .campanha-premio-destaque {
   background: rgba(245, 158, 11, 0.08);
   border: 1px solid rgba(245, 158, 11, 0.25);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 12px;
-  margin-bottom: 14px;
   display: flex;
   align-items: center;
   gap: 12px;
+  margin-bottom: 14px;
 }
 
 .campanha-premio-icone {
@@ -303,177 +412,192 @@
   font-size: 10px;
   text-transform: uppercase;
   color: #fbbf24;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.5px;
 }
 
 .campanha-premio-nome {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 800;
   color: #ffffff;
+  margin-top: 2px;
 }
 
 .campanha-regras-resumo {
   font-size: 12px;
   color: #94a3b8;
+  line-height: 1.5;
   margin-bottom: 16px;
-  line-height: 1.4;
-  background: #0f172a;
-  padding: 10px 12px;
-  border-radius: 6px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #1f2937;
 }
 
 .campanha-metricas-row {
-  display: flex;
-  justify-content: space-between;
-  margin-top: auto;
-  padding-top: 14px;
-  border-top: 1px solid #334155;
-  font-size: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+  text-align: center;
 }
 
 .campanha-metrica-item {
+  background: #0b0f19;
+  border-radius: 8px;
+  padding: 8px 4px;
   display: flex;
   flex-direction: column;
 }
 
+.campanha-metrica-item span:first-child {
+  font-size: 10px;
+}
+
 .campanha-metrica-num {
-  font-size: 16px;
-  font-weight: 800;
-  color: #f1f5f9;
+  font-size: 15px;
+  font-weight: 900;
+  color: #ffffff;
+  margin-top: 2px;
 }
 
 .campanha-card-footer {
-  padding: 14px 20px;
-  background: #172033;
-  border-top: 1px solid #334155;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  justify-content: flex-end;
   gap: 10px;
+  padding-top: 8px;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════════
-   ROLETA / TAMBOR AO VIVO DO SORTEIO
-   ═══════════════════════════════════════════════════════════════════════════════ */
-
+/* ─── Palco do Sorteador ao Vivo (Roleta) ─── */
 .sorteador-palco {
-  background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
-  border: 2px solid #f59e0b;
+  background: radial-gradient(circle at 50% 20%, #1e293b 0%, #0b0f19 80%);
+  border: 1px solid #334155;
   border-radius: 16px;
-  padding: 40px 24px;
+  padding: 40px 20px;
   text-align: center;
-  margin-bottom: 24px;
-  box-shadow: 0 10px 30px rgba(245, 158, 11, 0.15);
   position: relative;
   overflow: hidden;
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.6);
+  margin-bottom: 30px;
+}
+
+.sorteador-palco::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.08) 0%, transparent 60%);
+  pointer-events: none;
 }
 
 .sorteador-titulo {
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 900;
   color: #ffffff;
-  margin: 0 0 8px 0;
-  letter-spacing: -0.5px;
+  margin: 0 0 6px 0;
 }
 
 .sorteador-subtitulo {
   font-size: 14px;
-  color: #fbbf24;
-  margin: 0 0 24px 0;
-  font-weight: 600;
+  color: #94a3b8;
+  margin: 0 0 32px 0;
 }
 
 .tambor-box {
-  background: #020617;
-  border: 3px solid #d97706;
-  border-radius: 16px;
-  padding: 24px 32px;
-  display: inline-block;
-  margin: 20px auto;
-  box-shadow: inset 0 4px 12px rgba(0, 0, 0, 0.8), 0 0 25px rgba(245, 158, 11, 0.3);
+  display: flex;
+  justify-content: center;
+  margin: 20px 0 32px 0;
 }
 
 .tambor-display {
+  background: #000000;
+  border: 3px solid #f59e0b;
+  color: #fbbf24;
   font-family: 'Courier New', Courier, monospace;
-  font-size: 42px;
+  font-size: 38px;
   font-weight: 900;
-  color: #fef08a;
+  padding: 18px 40px;
+  border-radius: 14px;
   letter-spacing: 4px;
-  text-shadow: 0 0 12px rgba(254, 240, 138, 0.8);
-  min-width: 320px;
+  box-shadow: 0 0 30px rgba(245, 158, 11, 0.4), inset 0 0 20px rgba(0, 0, 0, 0.8);
+  text-shadow: 0 0 12px rgba(245, 158, 11, 0.8);
+  animation: glowPulse 2s infinite alternate;
+}
+
+@keyframes glowPulse {
+  from { box-shadow: 0 0 20px rgba(245, 158, 11, 0.3); }
+  to { box-shadow: 0 0 40px rgba(245, 158, 11, 0.7); }
 }
 
 .sorteador-controles {
-  margin-top: 24px;
   display: flex;
   justify-content: center;
-  gap: 16px;
 }
 
 .btn-sortear-gigante {
   background: linear-gradient(135deg, #d97706 0%, #f59e0b 50%, #b45309 100%);
   color: #ffffff;
   border: none;
-  border-radius: 12px;
-  padding: 16px 40px;
-  font-size: 18px;
-  font-weight: 800;
-  cursor: pointer;
+  border-radius: 14px;
+  padding: 16px 36px;
+  font-size: 16px;
+  font-weight: 900;
   letter-spacing: 0.5px;
-  box-shadow: 0 6px 20px rgba(217, 119, 6, 0.5);
-  transition: all 0.2s ease;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 12px;
+  transition: all 0.25s ease;
+  box-shadow: 0 10px 25px rgba(217, 119, 6, 0.45);
 }
 
 .btn-sortear-gigante:hover {
-  transform: scale(1.04);
-  filter: brightness(1.1);
-  box-shadow: 0 8px 28px rgba(217, 119, 6, 0.7);
+  transform: scale(1.03);
+  box-shadow: 0 14px 35px rgba(217, 119, 6, 0.65);
 }
 
 .btn-sortear-gigante:disabled {
-  opacity: 0.6;
-  transform: none;
+  opacity: 0.7;
   cursor: not-allowed;
+  transform: none;
 }
 
-/* Card do Ganhador Revelado */
+/* ─── Card do Ganhador Sorteado ─── */
 .ganhador-card-revelado {
-  background: linear-gradient(135deg, #1e293b 0%, #064e3b 100%);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(15, 23, 42, 0.9) 100%);
   border: 2px solid #10b981;
   border-radius: 16px;
-  padding: 28px;
+  padding: 24px;
   margin-top: 24px;
-  text-align: left;
-  box-shadow: 0 10px 30px rgba(16, 185, 129, 0.25);
-  animation: fadeInDown 0.5s ease-out;
+  box-shadow: 0 12px 30px rgba(16, 185, 129, 0.25);
+  animation: slideUp 0.4s ease;
 }
 
-@keyframes fadeInDown {
-  from { opacity: 0; transform: translateY(-20px); }
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .ganhador-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 16px;
   margin-bottom: 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(16, 185, 129, 0.3);
+  padding-bottom: 16px;
 }
 
 .ganhador-badge {
   background: #10b981;
   color: #ffffff;
-  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 4px 10px;
   border-radius: 20px;
-  font-size: 12px;
-  font-weight: 800;
-  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: inline-block;
 }
 
 .ganhador-detalhes-grid {
@@ -484,193 +608,216 @@
 }
 
 .ganhador-item {
-  display: flex;
-  flex-direction: column;
+  background: #0b0f19;
+  border-radius: 10px;
+  padding: 12px 14px;
+  border: 1px solid #1e293b;
 }
 
 .ganhador-item-label {
   font-size: 11px;
-  text-transform: uppercase;
   color: #94a3b8;
-  font-weight: 600;
+  text-transform: uppercase;
+  font-weight: 700;
+  display: block;
   margin-bottom: 4px;
 }
 
 .ganhador-item-val {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 800;
   color: #ffffff;
 }
 
 .ganhador-item-val.destaque {
-  color: #fbbf24;
-  font-size: 20px;
+  color: #34d399;
+  font-family: monospace;
+  font-size: 18px;
 }
 
 .auditoria-box {
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px dashed #64748b;
+  background: #050811;
+  border: 1px solid #1e293b;
   border-radius: 8px;
-  padding: 12px 16px;
-  font-family: monospace;
+  padding: 12px 14px;
   font-size: 11px;
-  color: #cbd5e1;
-  margin-bottom: 20px;
+  color: #94a3b8;
+  line-height: 1.6;
+  font-family: monospace;
   word-break: break-all;
 }
 
-/* Tabela de Bilhetes */
+/* ─── Tabela de Bilhetes & Participantes ─── */
 .sorteios-tabela-box {
-  background: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 12px;
-  overflow: hidden;
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
 
 .sorteios-tabela-busca {
-  padding: 16px 20px;
-  background: #172033;
-  border-bottom: 1px solid #334155;
   display: flex;
-  gap: 12px;
-  align-items: center;
   justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
 }
 
 .input-busca-bilhetes {
-  background: #0f172a;
+  flex: 1;
+  min-width: 260px;
+  background: #0b0f19;
   border: 1px solid #334155;
   border-radius: 8px;
   padding: 10px 14px;
   color: #ffffff;
-  font-size: 14px;
-  width: 100%;
-  max-width: 400px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s ease;
 }
 
 .input-busca-bilhetes:focus {
-  outline: none;
   border-color: #f59e0b;
 }
 
 .sorteios-tabela {
   width: 100%;
   border-collapse: collapse;
-  text-align: left;
   font-size: 13px;
 }
 
 .sorteios-tabela th {
-  background: #0f172a;
-  padding: 12px 18px;
+  background: #0b0f19;
   color: #94a3b8;
-  font-weight: 600;
-  border-bottom: 1px solid #334155;
+  font-weight: 700;
+  text-align: left;
+  padding: 12px 14px;
+  border-bottom: 1px solid #1f2937;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.5px;
 }
 
 .sorteios-tabela td {
-  padding: 12px 18px;
-  border-bottom: 1px solid #334155;
-  color: #e2e8f0;
+  padding: 14px;
+  border-bottom: 1px solid #1f2937;
+  color: #cbd5e1;
 }
 
-.sorteios-tabela tr:hover td {
+.sorteios-tabela tbody tr:hover {
   background: rgba(255, 255, 255, 0.02);
 }
 
 .numero-sorte-tag {
-  background: rgba(245, 158, 11, 0.15);
+  background: #0b0f19;
+  border: 1px solid #f59e0b;
   color: #fbbf24;
+  font-family: monospace;
+  font-size: 13px;
+  font-weight: 800;
   padding: 4px 8px;
   border-radius: 6px;
-  font-family: monospace;
-  font-weight: 700;
+  display: inline-block;
 }
 
-/* Modal Form */
-.modal-overlay {
+/* ─── Formulários e Modais ─── */
+.formulario-campanha-box {
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 14px;
+  padding: 24px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group.full-width {
+  grid-column: 1 / -1;
+}
+
+.form-group label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #cbd5e1;
+}
+
+.form-input {
+  background: #0b0f19;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #ffffff;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.form-input:focus {
+  border-color: #f59e0b;
+}
+
+.modal-backdrop {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.75);
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 9999;
   padding: 16px;
 }
 
-.modal-content {
-  background: #1e293b;
+.modal-card {
+  background: #111827;
   border: 1px solid #334155;
   border-radius: 16px;
+  padding: 28px;
+  max-width: 640px;
   width: 100%;
-  max-width: 600px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
   max-height: 90vh;
   overflow-y: auto;
-  padding: 24px;
-  color: #e2e8f0;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
 }
 
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  border-bottom: 1px solid #334155;
-  padding-bottom: 12px;
-}
-
-.modal-header h2 {
+.modal-titulo {
   font-size: 20px;
   font-weight: 800;
   color: #ffffff;
-  margin: 0;
-}
-
-.form-group {
-  margin-bottom: 16px;
-}
-
-.form-label {
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
-  color: #cbd5e1;
-  margin-bottom: 6px;
-}
-
-.form-input, .form-textarea, .form-select {
-  width: 100%;
-  background: #0f172a;
-  border: 1px solid #334155;
-  border-radius: 8px;
-  padding: 10px 14px;
-  color: #ffffff;
-  font-size: 14px;
-  box-sizing: border-box;
-}
-
-.form-input:focus, .form-textarea:focus, .form-select:focus {
-  outline: none;
-  border-color: #f59e0b;
-}
-
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  margin: 0 0 20px 0;
 }
 
 .modal-footer {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  margin-top: 24px;
-  border-top: 1px solid #334155;
-  padding-top: 16px;
+  margin-top: 20px;
+}
+
+/* ─── Responsividade ─── */
+@media (max-width: 768px) {
+  .sorteios-container {
+    padding: 14px;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .tambor-display {
+    font-size: 24px;
+    padding: 14px 20px;
+    letter-spacing: 2px;
+  }
 }
