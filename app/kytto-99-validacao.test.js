@@ -267,3 +267,12 @@ test('Fases B e C: consolidacao.js consulta est_saldos real (sem saldo_estoque i
     assert.equal(fs.existsSync(path.join(ROOT, rel)), true, `Componente ${rel} deve existir`);
   }
 });
+
+test('Anti-regressão TDZ (12/11): navigate e searchParams devem ser declarados antes de useEffect em BarbeariaERP.jsx', () => {
+  const barbeariaCode = fs.readFileSync(path.join(ROOT, 'web/src/pages/admin/BarbeariaERP.jsx'), 'utf8');
+  const idxNav = barbeariaCode.indexOf('const navigate = useNavigate()');
+  const idxEffect = barbeariaCode.indexOf('useEffect(() => {');
+  assert.ok(idxNav !== -1, 'useNavigate deve existir em BarbeariaERP.jsx');
+  assert.ok(idxEffect !== -1, 'useEffect deve existir em BarbeariaERP.jsx');
+  assert.ok(idxNav < idxEffect, 'useNavigate deve ser declarado antes de qualquer useEffect em BarbeariaERP.jsx para evitar Temporal Dead Zone (TDZ)');
+});

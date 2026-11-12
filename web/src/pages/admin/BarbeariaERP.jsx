@@ -602,8 +602,16 @@ const TABS_AUTONOMAS = new Set([
 ]);
 
 export default function BarbeariaERP({ tabInicial } = {}) {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
   const { user, empresaAtiva, empresasAcessiveis, trocarEmpresa, lojaAtiva, lojasAcessiveis, perfil } = useAuth();
+  const isDinoBrand = isDinoBrandContext(
+    empresaAtiva,
+    user?.empresaAtiva,
+    user?.empresa,
+    user?.tenant,
+  );
   useEffect(() => {
     if (!empresaAtiva || isDinoBrandContext(empresaAtiva)) return;
     const tipo = String(empresaAtiva.tipoNegocio || empresaAtiva.tipo_negocio || "").toLowerCase();
@@ -639,14 +647,6 @@ export default function BarbeariaERP({ tabInicial } = {}) {
     "organizador",
     "gerente",
   ].includes(String(user?.role || "").toLowerCase());
-  const isDinoBrand = isDinoBrandContext(
-    empresaAtiva,
-    user?.empresaAtiva,
-    user?.empresa,
-    user?.tenant,
-  );
-  const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
   // apelidos de links antigos/externos (ex.: ?tab=Fiscal) para o nome real da aba
   const requestedTab = { Fiscal: "Notas fiscais", fiscal: "Notas fiscais", vendas: "Como Vender Mais com IA", inteligencia: "Como Vender Mais com IA" }[searchParams.get("tab")] || searchParams.get("tab");
   const requestedArea = searchParams.get("area");
