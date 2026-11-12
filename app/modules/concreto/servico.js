@@ -5,7 +5,14 @@ import {
   CONCRETO_DADOS_EMPRESA, 
   CONCRETO_CATALOGO_INICIAL, 
   CONCRETO_FROTA_INICIAL, 
-  CONCRETO_CARGAS_INICIAIS 
+  CONCRETO_CARGAS_INICIAIS,
+  CONCRETO_SILOS_INICIAIS,
+  CONCRETO_BAIAS_INICIAIS,
+  CONCRETO_TANQUES_ADITIVOS,
+  CONCRETO_ENTRADAS_SUPRIMENTOS,
+  CONCRETO_BATELADAS_PROCESSO,
+  calcularCompensacaoUmidade,
+  calcularTracoBatelada
 } from '../../concreto-usina-seed.js';
 
 // =====================================================================
@@ -739,6 +746,10 @@ export function inicializarDatastoreConcreto() {
   if (!Array.isArray(data.concreto_vendas_agregados)) data.concreto_vendas_agregados = [];
   if (!Array.isArray(data.concreto_medicoes_obras)) data.concreto_medicoes_obras = [];
   if (!Array.isArray(data.concreto_tickets_balanca)) data.concreto_tickets_balanca = [];
+  if (!Array.isArray(data.concreto_baias)) data.concreto_baias = CONCRETO_BAIAS_INICIAIS;
+  if (!Array.isArray(data.concreto_tanques)) data.concreto_tanques = CONCRETO_TANQUES_ADITIVOS;
+  if (!Array.isArray(data.concreto_entradas_suprimentos)) data.concreto_entradas_suprimentos = CONCRETO_ENTRADAS_SUPRIMENTOS;
+  if (!Array.isArray(data.concreto_bateladas)) data.concreto_bateladas = CONCRETO_BATELADAS_PROCESSO;
 
   // Popular se vazio
   if (data.concreto_cargas.length === 0) {
@@ -833,6 +844,10 @@ export async function obterDadosConcreto(empresaId = CONCRETO_EMPRESA_ID) {
     ensaios,
     propostas,
     silos,
+    baias: data.concreto_baias || CONCRETO_BAIAS_INICIAIS,
+    tanques: data.concreto_tanques || CONCRETO_TANQUES_ADITIVOS,
+    entradasSuprimentos: data.concreto_entradas_suprimentos || CONCRETO_ENTRADAS_SUPRIMENTOS,
+    bateladas: data.concreto_bateladas || CONCRETO_BATELADAS_PROCESSO,
     compras,
     ordensProducao,
     listasTecnicas,
@@ -2639,4 +2654,94 @@ export async function salvarConfiguracoesBalanca(novasConfigs, empresaId = CONCR
   data.concreto_configuracoes_balanca = mesclado;
   save();
   return { ok: true, configuracoes: mesclado };
+}
+
+// =====================================================================
+// 14. SUPRIMENTOS, SILOS & CONTROLE DE PROCESSO NBR 7212
+// =====================================================================
+export async function ajustarUmidadeBaia(baiaId, umidadePercent) {
+  const data = inicializarDatastoreConcreto();
+  const baia = (data.concreto_baias || []).find(b => b.id === baiaId);
+  if (!baia) throw new Error(`Baia ${baiaId} não encontrada.`);
+  baia.umidadeAtualPercent = Number(umidadePercent);
+  baia.dataUltimoEnsaioUmidade = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  save();
+  return { ok: true, baia };
+}
+
+export async function reabastecerSiloOuTanque({ itemTipo, itemId, quantidade, fornecedor, placa, motorista }) {
+  const data = inicializarDatastoreConcreto();
+  let item = null;
+  const qtd = Number(quantidade) || 0;
+  if (itemTipo === 'silo') {
+    item = (data.concreto_silos || []).find(s => s.id === itemId);
+    if (!item) throw new Error(`Silo ${itemId} não encontrado.`);
+    const cap = item.capacidadeTotalTon || item.capacidadeToneladas || 100;
+    const estAtual = item.estoqueAtualTon != null ? item.estoqueAtualTon : (item.nivelAtualToneladas || 0);
+    item.estoqueAtualTon = Math.min(cap, +(estAtual + qtd).toFixed(2));
+    item.nivelAtualToneladas = item.estoqueAtualTon;
+    item.nivelPercent = Math.round((item.estoqueAtualTon / cap) * 100);
+    item.nivelPercentual = item.nivelPercent;
+    item.ultimaRecargaData = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  } else if (itemTipo === 'tanque') {
+    item = (data.concreto_tanques || []).find(t => t.id === itemId);
+    if (!item) throw new Error(`Tanque ${itemId} não encontrado.`);
+    item.nivelAtualLitros = Math.min(item.capacidadeLitros, Math.round(item.nivelAtualLitros + qtd));
+    item.nivelPercentual = Math.round((item.nivelAtualLitros / item.capacidadeLitros) * 100);
+    item.ultimaRecarga = new Date().toISOString().slice(0, 10);
+  } else if (itemTipo === 'baia') {
+    item = (data.concreto_baias || []).find(b => b.id === itemId);
+    if (!item) throw new Error(`Baia ${itemId} não encontrada.`);
+    item.nivelAtualToneladas = Math.min(item.capacidadeToneladas, Math.round(item.nivelAtualToneladas + qtd));
+    item.nivelPercentual = Math.round((item.nivelAtualToneladas / item.capacidadeToneladas) * 100);
+  }
+  const entrada = {
+    id: `rec-${Date.now()}`,
+    ticketBalanca: `TK-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+    dataHora: new Date().toISOString().slice(0, 16).replace('T', ' '),
+    insumo: item ? (item.nome || item.material || item.aditivo) : 'Insumo',
+    fornecedor: fornecedor || 'Fornecedor Homologado',
+    pesoLiquidoTon: qtd,
+    destino: item ? (item.codigo || item.nome) : itemId,
+    placaCaminhao: placa || 'BRA-2026',
+    motorista: motorista || 'Motorista Homologado',
+    statusConferencia: 'aprovado_laboratorio'
+  };
+  if (!Array.isArray(data.concreto_entradas_suprimentos)) data.concreto_entradas_suprimentos = [];
+  data.concreto_entradas_suprimentos.unshift(entrada);
+  save();
+  return { ok: true, item, entrada };
+}
+
+export async function dosarBateladaProcesso({ fck = 30, volumeM3 = 8.0, slumpAlvo = '12 ± 2 cm', operandoPor = 'Operador Central' }) {
+  const data = inicializarDatastoreConcreto();
+  const baiaAreia = (data.concreto_baias || []).find(b => b.id === 'baia-01') || { umidadeAtualPercent: 4.2 };
+  const calculo = calcularTracoBatelada({ fck, volumeM3, umidadeAreiaPercent: baiaAreia.umidadeAtualPercent });
+  const novaBatelada = {
+    id: `bat-2026-${Date.now().toString().slice(-4)}`,
+    dataHora: new Date().toISOString().slice(0, 16).replace('T', ' '),
+    fck: Number(fck),
+    volumeM3: Number(volumeM3),
+    slumpAlvo: slumpAlvo || '12 ± 2 cm',
+    balancas: {
+      cimento: { pesagemAlvoKg: calculo.cimentoKg, pesagemRealKg: calculo.cimentoKg + Math.floor(Math.random() * 5 - 2), status: 'conforme' },
+      agregados: {
+        pesagemAlvoKg: calculo.areiaCorrigidaKg + calculo.brita0Kg + calculo.brita1Kg,
+        pesagemRealKg: calculo.areiaCorrigidaKg + calculo.brita0Kg + calculo.brita1Kg + Math.floor(Math.random() * 10 - 5),
+        status: 'conforme'
+      },
+      agua: { pesagemAlvoLitros: calculo.aguaEfetivaLitros, pesagemRealLitros: calculo.aguaEfetivaLitros, status: 'conforme' },
+      aditivos: { dosagemAlvoLitros: calculo.aditivoLitros, dosagemRealLitros: calculo.aditivoLitros, status: 'conforme' }
+    },
+    tempoMisturaSegundos: 90,
+    energiaMisturadorKWh: +(1.4 * Number(volumeM3) / 8).toFixed(1),
+    statusCiclo: 'concluido_descarregado',
+    caminhaoBetoneira: 'Betoneira 02 · Placa QBX-5A90 (8m³)',
+    motorista: 'Carlos Eduardo Mendes',
+    lacreMetrologico: `INMETRO-MT-2026-${Math.floor(100000 + Math.random() * 900000)}`
+  };
+  if (!Array.isArray(data.concreto_bateladas)) data.concreto_bateladas = [];
+  data.concreto_bateladas.unshift(novaBatelada);
+  save();
+  return { ok: true, batelada: novaBatelada, calculo };
 }

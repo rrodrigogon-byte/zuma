@@ -718,3 +718,36 @@ export async function provisionarConcretoUsina() {
 
   return { ok: true, empresaId: CONCRETO_EMPRESA_ID, lojaId: CONCRETO_LOJA_ID };
 }
+
+export function calcularCompensacaoUmidade({ fck = 30, volumeM3 = 8.0, umidadeAreiaPercent = 4.2 } = {}) {
+  const vol = Number(volumeM3) || 8.0;
+  const umid = Number(umidadeAreiaPercent) || 4.2;
+  const areiaSecaBaseKg = 720 * vol;
+  const aguaBaseLitros = 175 * vol;
+  const aguaContidaAreiaLitros = Math.round(areiaSecaBaseKg * (umid / 100));
+  const areiaUmidaKg = areiaSecaBaseKg + aguaContidaAreiaLitros;
+  const aguaEfetivaLitros = Math.max(100, aguaBaseLitros - aguaContidaAreiaLitros);
+  return { areiaSecaBaseKg, areiaUmidaKg, aguaBaseLitros, aguaContidaAreiaLitros, aguaEfetivaLitros };
+}
+
+export function calcularTracoBatelada({ fck = 30, volumeM3 = 8.0, umidadeAreiaPercent = 4.2 } = {}) {
+  const vol = Number(volumeM3) || 8.0;
+  const comp = calcularCompensacaoUmidade({ fck, volumeM3: vol, umidadeAreiaPercent });
+  let cimentoKgM3 = 350;
+  const fckNum = Number(fck) || 30;
+  if (fckNum <= 20) cimentoKgM3 = 280;
+  else if (fckNum <= 25) cimentoKgM3 = 320;
+  else if (fckNum <= 35) cimentoKgM3 = 380;
+  else if (fckNum > 35) cimentoKgM3 = 420;
+
+  return {
+    fck: fckNum,
+    volumeM3: vol,
+    cimentoKg: cimentoKgM3 * vol,
+    areiaCorrigidaKg: comp.areiaUmidaKg,
+    brita0Kg: Math.round(360 * vol),
+    brita1Kg: Math.round(680 * vol),
+    aguaEfetivaLitros: comp.aguaEfetivaLitros,
+    aditivoLitros: +(2.8 * vol).toFixed(1)
+  };
+}

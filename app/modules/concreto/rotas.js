@@ -36,7 +36,10 @@ import {
   salvarConfiguracoesBalanca,
   listarMedicoesObras,
   criarMedicaoObra,
-  atualizarStatusMedicao
+  atualizarStatusMedicao,
+  ajustarUmidadeBaia,
+  reabastecerSiloOuTanque,
+  dosarBateladaProcesso
 } from './servico.js';
 import { CONCRETO_EMPRESA_ID } from '../../concreto-usina-seed.js';
 
@@ -450,6 +453,54 @@ export function criarRotasConcreto() {
       const empresaId = resolverEmpresa(req);
       const resultado = await salvarConfiguracoesBalanca(req.body, empresaId);
       return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+
+  // 32. Suprimentos e Silos - Ajuste de Umidade da Areia (NBR 7212)
+  router.post('/suprimentos-silos/umidade', async (req, res) => {
+    try {
+      const { baiaId, umidadePercent } = req.body;
+      const resultado = await ajustarUmidadeBaia(baiaId, umidadePercent);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 33. Suprimentos e Silos - Recebimento de Matéria-Prima
+  router.post('/suprimentos-silos/reabastecer', async (req, res) => {
+    try {
+      const resultado = await reabastecerSiloOuTanque(req.body);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 34. Controle de Processo - Dosagem Automática de Batelada
+  router.post('/processo-producao/dosar-batelada', async (req, res) => {
+    try {
+      const resultado = await dosarBateladaProcesso(req.body);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 35. Suprimentos e Silos - Listagem consolidada
+  router.get('/suprimentos-silos', async (req, res) => {
+    try {
+      const dados = await obterDadosConcreto(resolverEmpresa(req));
+      return res.json({
+        ok: true,
+        silos: dados.silos || [],
+        baias: dados.baias || [],
+        tanques: dados.tanques || [],
+        entradasSuprimentos: dados.entradasSuprimentos || []
+      });
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
     }
