@@ -107,6 +107,70 @@ export const TEMPLATES_NEGOCIO = {
     moduloPrincipal: 'supermercado'
   },
 
+  restaurante: {
+    id: 'restaurante',
+    icon: '🍕',
+    label: 'Pizzaria, Restaurante & Gastronomia',
+    tagline: 'Pizzarias, restaurantes à la carte, rodízios, bistrôs, massas e delivery gastronômico.',
+    servicos: [
+      { nome: 'Taxa de Entrega / Delivery Padrão', preco: 10, duracaoMinutos: 40, categoria: 'Delivery', grupoServico: 'entrega' },
+      { nome: 'Taxa de Rolha Especial (Vinho do Cliente)', preco: 40, duracaoMinutos: 0, categoria: 'Serviço de Mesa', grupoServico: 'servicos' },
+      { nome: 'Reserva Especial de Mesa VIP / Eventos', preco: 50, duracaoMinutos: 180, categoria: 'Reservas', grupoServico: 'reservas' }
+    ],
+    produtos: [
+      { nome: 'Pizza Calabresa Artesanal (8 Fatias)', precoVenda: 68, custoUnitario: 22, categoria: 'Pizzas Tradicionais', setor: 'cozinha', estoqueAtual: 50, estoqueMinimo: 10 },
+      { nome: 'Pizza Margherita Especial (8 Fatias)', precoVenda: 72, custoUnitario: 24, categoria: 'Pizzas Tradicionais', setor: 'cozinha', estoqueAtual: 40, estoqueMinimo: 10 },
+      { nome: 'Pizza Quatro Queijos Nobres (8 Fatias)', precoVenda: 78, custoUnitario: 28, categoria: 'Pizzas Tradicionais', setor: 'cozinha', estoqueAtual: 45, estoqueMinimo: 10 },
+      { nome: 'Pizza Portuguesa Tradicional (8 Fatias)', precoVenda: 74, custoUnitario: 26, categoria: 'Pizzas Tradicionais', setor: 'cozinha', estoqueAtual: 35, estoqueMinimo: 10 },
+      { nome: 'Pizza Frango com Catupiry Original (8 Fatias)', precoVenda: 75, custoUnitario: 25, categoria: 'Pizzas Tradicionais', setor: 'cozinha', estoqueAtual: 40, estoqueMinimo: 10 },
+      { nome: 'Pizza Pepperoni Crocante (8 Fatias)', precoVenda: 79, custoUnitario: 29, categoria: 'Pizzas Tradicionais', setor: 'cozinha', estoqueAtual: 30, estoqueMinimo: 8 },
+      { nome: 'Pizza Palatare Especial (Costela & Barbecue)', precoVenda: 89, custoUnitario: 34, categoria: 'Pizzas Especiais', setor: 'cozinha', estoqueAtual: 30, estoqueMinimo: 8 },
+      { nome: 'Pizza Parma & Rúcula Selvagem', precoVenda: 94, custoUnitario: 38, categoria: 'Pizzas Especiais', setor: 'cozinha', estoqueAtual: 25, estoqueMinimo: 6 },
+      { nome: 'Pizza Queijo Brie com Geleia de Pimenta', precoVenda: 88, custoUnitario: 32, categoria: 'Pizzas Especiais', setor: 'cozinha', estoqueAtual: 25, estoqueMinimo: 6 },
+      { nome: 'Pizza Doce Nutella com Morangos Frescos', precoVenda: 65, custoUnitario: 22, categoria: 'Pizzas Doces', setor: 'cozinha', estoqueAtual: 25, estoqueMinimo: 5 },
+      { nome: 'Pizza Doce Romeu e Julieta Artesanal', precoVenda: 58, custoUnitario: 18, categoria: 'Pizzas Doces', setor: 'cozinha', estoqueAtual: 20, estoqueMinimo: 5 },
+      { nome: 'Lasanha à Bolonhesa Gratinada 600g', precoVenda: 58, custoUnitario: 21, categoria: 'Pratos & Massas', setor: 'cozinha', estoqueAtual: 20, estoqueMinimo: 5 },
+      { nome: 'Fettuccine ao Molho Alfredo com Tiras de Filé', precoVenda: 62, custoUnitario: 23, categoria: 'Pratos & Massas', setor: 'cozinha', estoqueAtual: 20, estoqueMinimo: 5 },
+      { nome: 'Filé Mignon à Parmegiana com Arroz e Fritas', precoVenda: 79, custoUnitario: 32, categoria: 'Pratos & Massas', setor: 'cozinha', estoqueAtual: 15, estoqueMinimo: 4 },
+      { nome: 'Bruschetta Pomodoro Tradicional (4 un)', precoVenda: 32, custoUnitario: 9, categoria: 'Entradas & Antepastos', setor: 'cozinha', estoqueAtual: 30, estoqueMinimo: 8 },
+      { nome: 'Focaccia de Alecrim com Parmesão e Azeite', precoVenda: 28, custoUnitario: 7, categoria: 'Entradas & Antepastos', setor: 'cozinha', estoqueAtual: 30, estoqueMinimo: 8 },
+      { nome: 'Batata Rústica Trufada com Parmesão', precoVenda: 38, custoUnitario: 11, categoria: 'Entradas & Antepastos', setor: 'cozinha', estoqueAtual: 35, estoqueMinimo: 10 },
+      { nome: 'Vinho Tinto Cabernet Sauvignon Reserva 750ml', precoVenda: 98, custoUnitario: 45, categoria: 'Vinhos & Adega', setor: 'bar', estoqueAtual: 24, estoqueMinimo: 6 },
+      { nome: 'Chopp Pilsen Artesanal 500ml', precoVenda: 15, custoUnitario: 4.8, categoria: 'Bebidas & Chopps', setor: 'bar', estoqueAtual: 100, estoqueMinimo: 20 },
+      { nome: 'Cerveja Long Neck Stella Artois 330ml', precoVenda: 12, custoUnitario: 5.2, categoria: 'Bebidas & Chopps', setor: 'bar', estoqueAtual: 60, estoqueMinimo: 15 },
+      { nome: 'Refrigerante Lata 350ml (Coca / Guaraná)', precoVenda: 7.5, custoUnitario: 2.8, categoria: 'Bebidas & Chopps', setor: 'bar', estoqueAtual: 80, estoqueMinimo: 20 },
+      { nome: 'Água Mineral com Gás 500ml', precoVenda: 5, custoUnitario: 1.5, categoria: 'Bebidas & Chopps', setor: 'bar', estoqueAtual: 60, estoqueMinimo: 15 },
+      { nome: 'Suco Natural de Laranja 500ml', precoVenda: 12, custoUnitario: 3.5, categoria: 'Bebidas & Chopps', setor: 'bar', estoqueAtual: 40, estoqueMinimo: 10 },
+      { nome: 'Petit Gâteau com Sorvete de Creme', precoVenda: 32, custoUnitario: 10, categoria: 'Sobremesas', setor: 'cozinha', estoqueAtual: 20, estoqueMinimo: 5 },
+      { nome: 'Tiramisù Italiano Clássico', precoVenda: 28, custoUnitario: 9, categoria: 'Sobremesas', setor: 'cozinha', estoqueAtual: 15, estoqueMinimo: 4 }
+    ],
+    comissoes: { baseServicos: 10, baseProdutos: 5 },
+    moduloPrincipal: 'restaurante'
+  },
+
+  pizzaria: {
+    id: 'pizzaria',
+    icon: '🍕',
+    label: 'Pizzaria & Forno Artesanal',
+    tagline: 'Pizzarias tradicionais, delivery e salão gastronômico.',
+    servicos: [
+      { nome: 'Taxa de Entrega / Delivery Padrão', preco: 10, duracaoMinutos: 40, categoria: 'Delivery', grupoServico: 'entrega' }
+    ],
+    produtos: [
+      { nome: 'Pizza Calabresa Artesanal (8 Fatias)', precoVenda: 68, custoUnitario: 22, categoria: 'Pizzas Tradicionais', setor: 'cozinha', estoqueAtual: 50, estoqueMinimo: 10 },
+      { nome: 'Pizza Margherita Especial (8 Fatias)', precoVenda: 72, custoUnitario: 24, categoria: 'Pizzas Tradicionais', setor: 'cozinha', estoqueAtual: 40, estoqueMinimo: 10 },
+      { nome: 'Pizza Quatro Queijos Nobres (8 Fatias)', precoVenda: 78, custoUnitario: 28, categoria: 'Pizzas Tradicionais', setor: 'cozinha', estoqueAtual: 45, estoqueMinimo: 10 },
+      { nome: 'Pizza Portuguesa Tradicional (8 Fatias)', precoVenda: 74, custoUnitario: 26, categoria: 'Pizzas Tradicionais', setor: 'cozinha', estoqueAtual: 35, estoqueMinimo: 10 },
+      { nome: 'Pizza Frango com Catupiry Original (8 Fatias)', precoVenda: 75, custoUnitario: 25, categoria: 'Pizzas Tradicionais', setor: 'cozinha', estoqueAtual: 40, estoqueMinimo: 10 },
+      { nome: 'Pizza Pepperoni Crocante (8 Fatias)', precoVenda: 79, custoUnitario: 29, categoria: 'Pizzas Tradicionais', setor: 'cozinha', estoqueAtual: 30, estoqueMinimo: 8 },
+      { nome: 'Pizza Palatare Especial (Costela & Barbecue)', precoVenda: 89, custoUnitario: 34, categoria: 'Pizzas Especiais', setor: 'cozinha', estoqueAtual: 30, estoqueMinimo: 8 },
+      { nome: 'Pizza Doce Nutella com Morangos Frescos', precoVenda: 65, custoUnitario: 22, categoria: 'Pizzas Doces', setor: 'cozinha', estoqueAtual: 25, estoqueMinimo: 5 },
+      { nome: 'Refrigerante Lata 350ml (Coca / Guaraná)', precoVenda: 7.5, custoUnitario: 2.8, categoria: 'Bebidas', setor: 'bar', estoqueAtual: 80, estoqueMinimo: 20 },
+      { nome: 'Chopp Pilsen Artesanal 500ml', precoVenda: 15, custoUnitario: 4.8, categoria: 'Bebidas', setor: 'bar', estoqueAtual: 100, estoqueMinimo: 20 }
+    ],
+    comissoes: { baseServicos: 10, baseProdutos: 5 },
+    moduloPrincipal: 'restaurante'
+  },
   outro: {
     id: 'outro',
     icon: '🏢',

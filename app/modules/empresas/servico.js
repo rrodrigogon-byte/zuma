@@ -36,6 +36,27 @@ export const EMPRESA_DINO_ID = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
 
 const EMPRESAS_CANONICAS_PADRAO = [
   {
+    id: 'c1c1ac01-8e50-4b61-8c79-de4aaa916da9',
+    nome: 'Palatare Pizzaria & Restaurante',
+    nomeFantasia: 'Palatare Pizzaria',
+    razaoSocial: 'PALATARE PIZZARIA E RESTAURANTE LTDA',
+    cnpj: '52.184.920/0001-00',
+    cnpjNormalizado: '52184920000100',
+    inscricaoEstadual: '13.789.456-1',
+    inscricaoMunicipal: '45890',
+    tipoNegocio: 'restaurante',
+    telefone: '(65) 3326-8000',
+    email: 'contato@palatarepizzaria.com.br',
+    website: 'https://palatare.kytto.com.br',
+    logoUrl: '/palatare-logo.png',
+    enderecoCidade: 'Tangará da Serra',
+    enderecoEstado: 'MT',
+    endereco: 'Av. Brasil, nº 850, Centro, Tangará da Serra/MT, CEP 78300-000',
+    ativa: true,
+    permitirEstoqueNegativo: true,
+    totalLojas: 1
+  },
+  {
     id: 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
     nome: 'Barbearia Dino',
     nomeFantasia: 'Barbearia Dino',

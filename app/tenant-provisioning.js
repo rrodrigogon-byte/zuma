@@ -48,6 +48,20 @@ export const TENANTS_OFICIAIS = {
       { username: 'teste_diag', email: 'teste_diag@test.com', nome: 'Operador Agro Open', role: 'operador', pgRole: 'operador' },
     ]
   }
+,
+  palatare: {
+    empresaId: 'c1c1ac01-8e50-4b61-8c79-de4aaa916da9',
+    lojaId: 'loj-palatare-matriz-01',
+    nome: 'Palatare Pizzaria & Restaurante',
+    slug: 'palatare',
+    roleIdOwner: 'b125e523-957d-4d12-a881-56b958ecec45',
+    roleIdStaff: '85f0c5c5-584b-4d9f-946e-a348c3688483',
+    usuarios: [
+      { username: 'palatare', email: 'contato@palatarepizzaria.com.br', emailAlt: 'admin@palatarepizzaria.com.br', nome: 'Gerente Palatare', role: 'organizador', pgRole: 'gerente', isOwner: true },
+      { username: 'pizzaiolo', email: 'cozinha@palatarepizzaria.com.br', nome: 'Chef Pizzaiolo Palatare', role: 'operador', pgRole: 'operador' },
+      { username: 'atendente_palatare', email: 'atendimento@palatarepizzaria.com.br', nome: 'Atendente Palatare', role: 'operador', pgRole: 'operador' },
+    ]
+  }
 };
 
 const SENHA_PADRAO_HASH = bcrypt.hashSync('123456', 10);

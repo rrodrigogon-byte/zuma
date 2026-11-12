@@ -7,6 +7,7 @@ import Modal from '../../components/Modal'
 
 const TIPOS_NEGOCIO = [
   { id: 'barbearia', label: 'Barbearia & Perfumaria', icon: '💈' },
+  { id: 'restaurante', label: 'Pizzaria, Restaurante & Gastronomia', icon: '🍕' },
   { id: 'loja', label: 'Loja / Suplementos & Nutrição', icon: '🏪' },
   { id: 'esporte', label: 'Complexo Esportivo / Tênis & Beach', icon: '🎾' },
   { id: 'bar', label: 'Bar, Restaurante & Conveniência', icon: '🍻' },

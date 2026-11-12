@@ -193,6 +193,7 @@ import { buildCurrentMaterials, previewTaxMaterialPlan, PreviewConflictError, Pr
 import { perfilDoUsuario, profissionalPode, operadorPodeNaBarbearia, respostaParaOperador, papelLegadoDoRole, permissoesDoPerfil, MODULOS_FECHADOS_AO_OPERADOR, MENSAGEM_PERFIL } from './core/perfis-acesso.js';
 import { profissionalDoUsuario } from './dino-modo-barbeiro.js';
 import { provisionarEquipeDino } from './dino-equipe-seed.js';
+import { provisionarPalatarePizzaria, PALATARE_EMPRESA_ID } from './palatare-pizzaria-seed.js';
 import { sincronizarTenantsEquipes } from './tenant-provisioning.js';
 import { executarHigienizacaoGapsProducao } from './core/higienizar-gaps-producao.js';
 import { sincronizarBloqueioNoPostgres, desativarBloqueioNoPostgres, inicializarBloqueiosEquipe } from './core/barbearia-bloqueios-sync.js';
@@ -452,6 +453,7 @@ const PLATFORM_ADMIN_EMAILS = new Set((process.env.PLATFORM_ADMIN_EMAILS || '').
 const EMPRESA_DINO_ID = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
 const EMPRESA_STALLONE_ID = '31f70c83-9172-40c2-945f-9e793b5048be';
 const EMPRESA_AGRO_OPEN_ID = '2e041110-db20-4fd1-8278-12bd3dead008';
+const EMPRESA_PALATARE_ID = 'c1c1ac01-8e50-4b61-8c79-de4aaa916da9';
 
 const isAdminGlobal = (user) => {
   if (!user || user.role !== 'admin') return false;
@@ -498,6 +500,20 @@ const isAgroOpenUser = (user) => {
   );
   return em.includes("agroopen") || em.includes("caua") || em.includes("rafa") || em.includes("agro open");
 };
+
+const isPalatareUser = (user) => {
+  if (!user) return false;
+  if (isAdminGlobal(user)) return false;
+  const em = norm(
+    (user.email || "") + " " +
+    (user.emailAlternativo || "") + " " +
+    (user.username || "") + " " +
+    (user.login || "") + " " +
+    (user.nome || "") + " " +
+    (user.id || "")
+  );
+  return em.includes("palatare") || em.includes("pizzaria");
+};
 const obterEmpresasAutorizadasDoUsuario = (user) => {
   if (!user) return [];
   if (isAdminGlobal(user)) {
@@ -524,6 +540,13 @@ const obterEmpresasAutorizadasDoUsuario = (user) => {
       EMPRESA_AGRO_OPEN_ID,
       "emp-agro-open",
       "agroopen"
+    ];
+  }
+  if (isPalatareUser(user)) {
+    // Palatare: APENAS Palatare Pizzaria & Restaurante
+    return [
+      EMPRESA_PALATARE_ID,
+      "palatare"
     ];
   }
   if (user?.empresaId) {
@@ -11438,6 +11461,7 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
   setTimeout(() => {
     try { provisionarEquipeDino({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar equipe Dino:', err.message); }
     try { sincronizarTenantsEquipes(commerceDb); } catch (err) { console.warn('Aviso ao sincronizar tenants:', err.message); }
+    try { provisionarPalatarePizzaria({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar Palatare:', err.message); }
     executarHigienizacaoGapsProducao(commerceDb, { listarComandasBarbearia: barbeariaErpKytto.listarComandasBarbearia, listarClientesBarbearia: barbeariaErpKytto.listarAgendamentos }).then((resHig) => console.log('[Higienização Produção]', JSON.stringify(resHig))).catch((err) => console.warn('Aviso na higienização:', err.message));
   }, 4000).unref?.();
   for (const empId of ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp_dino', 'emp-kytto-001', 'dino']) {

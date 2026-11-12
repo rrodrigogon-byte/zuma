@@ -172,13 +172,23 @@ export default function Cardapio() {
     })
   }, [itens, busca, filtroCat, filtroDisp])
 
+  const todasCategorias = useMemo(() => {
+    const set = new Set(CATEGORIAS)
+    itens.forEach(i => {
+      const c = i.cat || i.categoria
+      if (c) set.add(c)
+    })
+    return Array.from(set)
+  }, [itens])
+
   // Itens agrupados por categoria, respeitando campo ordem
-  const grouped = useMemo(() => CATEGORIAS.reduce((acc, cat) => {
-    acc[cat] = itensFiltrados
-      .filter(i => i.cat === cat)
+  const grouped = useMemo(() => todasCategorias.reduce((acc, cat) => {
+    const lista = itensFiltrados
+      .filter(i => (i.cat || i.categoria) === cat)
       .sort((a, b) => (a.ordem ?? 999) - (b.ordem ?? 999))
+    if (lista.length > 0) acc[cat] = lista
     return acc
-  }, {}), [itensFiltrados])
+  }, {}), [itensFiltrados, todasCategorias])
 
   const handleToggle = async (item, campo) => {
     try {
@@ -353,7 +363,7 @@ export default function Cardapio() {
         />
         <select className="input" value={filtroCat} onChange={e => setFiltroCat(e.target.value)} style={{ maxWidth: 160 }}>
           <option value="Todas">Todas as categorias</option>
-          {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+          {todasCategorias.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
         {['todos', 'disponiveis', 'indisponiveis'].map(v => (
           <button key={v} className={`btn btn-sm ${filtroDisp === v ? 'btn-primary' : 'btn-ghost'}`}

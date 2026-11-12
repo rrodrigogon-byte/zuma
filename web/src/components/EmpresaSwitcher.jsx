@@ -2,6 +2,21 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 
+function iconeEmpresa(emp) {
+  if (!emp) return "🏢";
+  const nome = String(emp.nome || emp.nomeFantasia || emp.razaoSocial || '').toLowerCase();
+  const tipo = String(emp.tipoNegocio || '').toLowerCase();
+  if (emp.logoUrl) {
+    return <img src={emp.logoUrl} alt={emp.nome || ''} style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover' }} />;
+  }
+  if (tipo === 'restaurante' || nome.includes('palatare') || nome.includes('pizza')) return '🍕';
+  if (tipo === 'barbearia' || nome.includes('dino')) return '💈';
+  if (tipo === 'supermercado') return '🛒';
+  if (tipo === 'esporte' || nome.includes('agro')) return '🎾';
+  if (tipo === 'loja' || nome.includes('stallone')) return '🏪';
+  return '🏢';
+}
+
 export default function EmpresaSwitcher() {
   const [empresas, setEmpresas] = useState([]);
   const [empresaAtiva, setEmpresaAtiva] = useState(null);
@@ -124,7 +139,7 @@ export default function EmpresaSwitcher() {
         }}
         title={podeTrocar ? "Alternar Empresa Ativa (Acesso Superadmin Global)" : `Empresa Vinculada: ${nome}`}
       >
-        <span style={{ fontSize: "16px" }}>🏢</span>
+        <span style={{ fontSize: "16px", display: "inline-flex", alignItems: "center" }}>{iconeEmpresa(empresaAtiva)}</span>
         <div style={{ textAlign: "left", lineHeight: 1.2 }}>
           <div style={{
             fontSize: "12px",
@@ -219,7 +234,7 @@ export default function EmpresaSwitcher() {
                     fontWeight: 700,
                     flexShrink: 0
                   }}>
-                    🏢
+                    {iconeEmpresa(emp)}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{
