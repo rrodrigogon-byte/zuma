@@ -129,7 +129,7 @@ export async function provisionarPalatarePizzaria({ commerceDb } = {}) {
       { id: 'usr-palatare-atendente-01', username: 'atendente_palatare', email: 'atendimento@palatarepizzaria.com.br', nome: 'Atendente Salão & Delivery', role: 'operador' },
     ];
 
-    const SENHA_PADRAO_HASH = bcrypt.hashSync('123456', 10);
+    const SENHA_PADRAO_HASH = '$2a$10$GhTXS1zakV8wRo77OFp2JOvCJj9ezTUPg75ZbBupWek/RBR/.SHcq';
     for (const u of usuariosSeed) {
       const idx = rootDb.usuarios.findIndex(item => 
         (item.username && item.username.toLowerCase() === u.username.toLowerCase()) ||

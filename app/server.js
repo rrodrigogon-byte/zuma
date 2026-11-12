@@ -719,6 +719,7 @@ const findUser = login => {
   else if (['rodrigo', 'rodrigo goncalves', 'rodrigo gonçalves', 'rodrigo ribeiro', 'rodrigo.goncalves', 'rrodrigogon'].includes(n)) alias = 'rodrigo';
   else if (['stallone', 'silvester', 'silvester natal'].includes(n)) alias = 'stallone';
   else if (['agroopen', 'agro open', 'caua rafa', 'cauarafa', 'agro'].includes(n)) alias = 'agroopen';
+  else if (['palatare', 'pizzaria', 'gerente palatare'].includes(n)) alias = 'palatare';
 
   const porLogin = lista.find(u =>
     norm(u.email) === n ||

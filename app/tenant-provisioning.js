@@ -57,14 +57,14 @@ export const TENANTS_OFICIAIS = {
     roleIdOwner: 'b125e523-957d-4d12-a881-56b958ecec45',
     roleIdStaff: '85f0c5c5-584b-4d9f-946e-a348c3688483',
     usuarios: [
-      { username: 'palatare', email: 'contato@palatarepizzaria.com.br', emailAlt: 'admin@palatarepizzaria.com.br', nome: 'Gerente Palatare', role: 'organizador', pgRole: 'gerente', isOwner: true },
-      { username: 'pizzaiolo', email: 'cozinha@palatarepizzaria.com.br', nome: 'Chef Pizzaiolo Palatare', role: 'operador', pgRole: 'operador' },
-      { username: 'atendente_palatare', email: 'atendimento@palatarepizzaria.com.br', nome: 'Atendente Palatare', role: 'operador', pgRole: 'operador' },
+      { id: 'usr-palatare-gerente-01', username: 'palatare', email: 'contato@palatarepizzaria.com.br', emailAlt: 'admin@palatarepizzaria.com.br', nome: 'Gerente Palatare', role: 'organizador', pgRole: 'gerente', isOwner: true },
+      { id: 'usr-palatare-pizzaiolo-01', username: 'pizzaiolo', email: 'cozinha@palatarepizzaria.com.br', nome: 'Chef Pizzaiolo Palatare', role: 'operador', pgRole: 'operador' },
+      { id: 'usr-palatare-atendente-01', username: 'atendente_palatare', email: 'atendimento@palatarepizzaria.com.br', nome: 'Atendente Palatare', role: 'operador', pgRole: 'operador' },
     ]
   }
 };
 
-const SENHA_PADRAO_HASH = bcrypt.hashSync('123456', 10);
+const SENHA_PADRAO_HASH = '$2a$10$GhTXS1zakV8wRo77OFp2JOvCJj9ezTUPg75ZbBupWek/RBR/.SHcq';
 
 /**
  * Sincroniza todas as equipes nos tenants corretos do PostgreSQL e do JSON DB
@@ -83,7 +83,7 @@ export async function sincronizarTenantsEquipes(commerceDb) {
       );
 
       const dadosUsuarioJson = {
-        id: `usr-${tenantKey}-${u.username}`,
+        id: u.id || `usr-${tenantKey}-${u.username}`,
         username: u.username,
         nome: u.nome,
         email: u.email,
