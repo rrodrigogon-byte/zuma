@@ -195,6 +195,7 @@ const OrdensServico   = lazy(() => import('./pages/admin/OrdensServico'))
 const ExpedicaoLogistica = lazy(() => import('./pages/admin/ExpedicaoLogistica'))
 const PatrimonioAtivos = lazy(() => import('./pages/admin/PatrimonioAtivos'))
 const LojaModa        = lazy(() => import('./pages/admin/LojaModa'))
+const PalatarePizzariaSuite = lazyWithRetry(() => import("./pages/admin/PalatarePizzariaSuite"))
 const ConcretoUsinaERP = lazyWithRetry(() => import("./pages/admin/ConcretoUsinaERP"))
 const BarbeariaERP    = lazyWithRetry(() => import("./pages/admin/BarbeariaERP"))
 const Barbearia       = lazyWithRetry(() => import('./pages/admin/Barbearia'))
@@ -408,6 +409,9 @@ export default function App() {
           <Route path="/admin/fiscal/config" element={<TenantAware tenant={<Layout><Fiscal abaInicial="situacao" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Configuração de NF-e e NFC-e" /></Layout>} />} />
           <Route path="/admin/fiscal/classificacao" element={<TenantAware tenant={<Layout><Fiscal abaInicial="classificacao" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Classificação fiscal" /></Layout>} />} />
           <Route path="/admin/loja-moda"       element={<Layout><LojaModa /></Layout>} />
+          <Route path="/admin/pizzaria" element={<Layout><PalatarePizzariaSuite /></Layout>} />
+          <Route path="/admin/pizzaria-erp" element={<Layout><PalatarePizzariaSuite /></Layout>} />
+          <Route path="/admin/palatare" element={<Layout><PalatarePizzariaSuite /></Layout>} />
           <Route path="/admin/concreto" element={<Layout><ConcretoUsinaERP /></Layout>} />
           <Route path="/admin/usina-concreto" element={<Layout><ConcretoUsinaERP /></Layout>} />
           <Route path="/admin/barbearia-erp"   element={<Layout><BarbeariaERP /></Layout>} />

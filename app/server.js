@@ -193,7 +193,7 @@ import { buildCurrentMaterials, previewTaxMaterialPlan, PreviewConflictError, Pr
 import { perfilDoUsuario, profissionalPode, operadorPodeNaBarbearia, respostaParaOperador, papelLegadoDoRole, permissoesDoPerfil, MODULOS_FECHADOS_AO_OPERADOR, MENSAGEM_PERFIL } from './core/perfis-acesso.js';
 import { profissionalDoUsuario } from './dino-modo-barbeiro.js';
 import { provisionarEquipeDino } from './dino-equipe-seed.js';
-import { provisionarPalatarePizzaria, PALATARE_EMPRESA_ID } from './palatare-pizzaria-seed.js';
+import { provisionarPalatarePizzaria, PALATARE_EMPRESA_ID, PALATARE_DADOS_EMPRESA } from './palatare-pizzaria-seed.js';
 import { provisionarConcretoUsina, CONCRETO_EMPRESA_ID, CONCRETO_DADOS_EMPRESA } from './concreto-usina-seed.js';
 import { sincronizarTenantsEquipes } from './tenant-provisioning.js';
 import { executarHigienizacaoGapsProducao } from './core/higienizar-gaps-producao.js';
@@ -1308,7 +1308,7 @@ app.use('/api/admin/commerce', (req, res, next) => {
 });
 
 // Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
-const TENANT_ADMIN_MODULES = new Set(['concreto', 'a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'empresas', 'plataforma', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'supermercado', 'pdv-offline', 'minhas-permissoes', 'cupons', 'omnichannel', 'pdv', 'dino-captacao', 'clientes-360', 'relatorios', 'estoque', 'cardapio', 'fichas-tecnicas', 'erp', 'fechamento-diario', 'compras', 'whatsapp', 'whatsapp-gestao', 'ia', 'gamificacao', 'barber', 'barbeiro', 'crm', 'financeiro', 'automacoes', 'eventos', 'licenciamento', 'ia-advisor', 'inteligencia-vendas', 'vender-mais', 'tef', 'boletos', 'fiscal-avancado', 'sped', 'delivery', 'dimp-auditoria', 'supply-chain', 'reforma-tributaria', 'varejo-multicanal', 'oficina', 'agro', 'agropecuaria', 'cte-mdfe', 'implantacao']);
+const TENANT_ADMIN_MODULES = new Set(['palatare', 'pizzaria', 'concreto', 'a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'empresas', 'plataforma', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'supermercado', 'pdv-offline', 'minhas-permissoes', 'cupons', 'omnichannel', 'pdv', 'dino-captacao', 'clientes-360', 'relatorios', 'estoque', 'cardapio', 'fichas-tecnicas', 'erp', 'fechamento-diario', 'compras', 'whatsapp', 'whatsapp-gestao', 'ia', 'gamificacao', 'barber', 'barbeiro', 'crm', 'financeiro', 'automacoes', 'eventos', 'licenciamento', 'ia-advisor', 'inteligencia-vendas', 'vender-mais', 'tef', 'boletos', 'fiscal-avancado', 'sped', 'delivery', 'dimp-auditoria', 'supply-chain', 'reforma-tributaria', 'varejo-multicanal', 'oficina', 'agro', 'agropecuaria', 'cte-mdfe', 'implantacao']);
 
 // [kytto-clube] Kytto Clube & Academia (catraca, contrato digital, agenda, retenção, Wellhub/TotalPass).
 // Usa o pool do Commerce que já existe (não abre outro pool) e a mesma resolução de empresa e
@@ -2249,6 +2249,104 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
       const frota = data.concreto_frota || [];
       const empresa = data.empresas?.[CONCRETO_EMPRESA_ID] || CONCRETO_DADOS_EMPRESA;
       return res.json({ ok: true, empresa, cargas, catalogo, frota });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // [kytto-palatare] Módulo de Pizzaria Suite, Montador de Pizzas & CRM Gastronômico 360°
+  app.get('/api/admin/palatare/dados', auth, requireStaff, async (req, res) => {
+    try {
+      const data = db();
+      const { 
+        PALATARE_DADOS_EMPRESA: defEmpresa, 
+        PALATARE_CLIENTES_CRM, 
+        PALATARE_CONFIG_MONTADOR, 
+        PALATARE_RODIZIO_CONFIG, 
+        PALATARE_KDS_FILA, 
+        PALATARE_DELIVERY_ZONAS, 
+        PALATARE_METRICAS_BI,
+        PALATARE_EMPRESA_ID: empId
+      } = await import('./palatare-pizzaria-seed.js');
+      
+      const empresa = data.empresas?.[empId] || defEmpresa;
+      const clientes = data.palatare_clientes || PALATARE_CLIENTES_CRM;
+      const montador = data.palatare_montador || PALATARE_CONFIG_MONTADOR;
+      const rodizio = data.palatare_rodizio || PALATARE_RODIZIO_CONFIG;
+      const kds = data.palatare_kds || PALATARE_KDS_FILA;
+      const delivery = data.palatare_delivery || PALATARE_DELIVERY_ZONAS;
+      const metricas = data.palatare_metricas || PALATARE_METRICAS_BI;
+
+      return res.json({ 
+        ok: true, 
+        empresa, 
+        clientes, 
+        montador, 
+        rodizio, 
+        kds, 
+        delivery, 
+        metricas 
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Salvar novo pedido do montador de pizzas
+  app.post('/api/admin/palatare/pedidos', auth, requireStaff, async (req, res) => {
+    try {
+      const data = db();
+      data.palatare_kds ||= [];
+      const novoPedido = {
+        id: `kds-${Date.now().toString().slice(-4)}`,
+        comanda: `CMD-${Math.floor(1000 + Math.random() * 9000)}`,
+        origem: req.body?.origem || 'Balcão / Pedido Rápido',
+        tipo: req.body?.tipo || 'salao',
+        cliente: req.body?.cliente || 'Cliente Balcão',
+        horarioRecebido: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        tempoDecorridoMinutos: 0,
+        tempoEstimadoMinutos: req.body?.tempoEstimado || 8,
+        status: 'na_bancada',
+        praca: 'Bancada do Pizzaiolo',
+        itens: req.body?.itens || [],
+        total: req.body?.total || 0,
+        criadoEm: new Date().toISOString()
+      };
+      data.palatare_kds.unshift(novoPedido);
+      save();
+      return res.status(201).json({ ok: true, pedido: novoPedido });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Atualizar status do KDS (na_bancada -> no_forno -> finalizacao -> saiu_entrega/entregue)
+  app.patch('/api/admin/palatare/kds/:id/status', auth, requireStaff, async (req, res) => {
+    try {
+      const data = db();
+      const pedido = (data.palatare_kds || []).find(p => p.id === req.params.id);
+      if (!pedido) return res.status(404).json({ error: 'Pedido não encontrado no KDS' });
+      pedido.status = req.body?.status || pedido.status;
+      if (req.body?.praca) pedido.praca = req.body.praca;
+      save();
+      return res.json({ ok: true, pedido });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Atualizar status de mesa no rodízio
+  app.patch('/api/admin/palatare/rodizio/:mesa/status', auth, requireStaff, async (req, res) => {
+    try {
+      const data = db();
+      const rodizio = data.palatare_rodizio || {};
+      const mesas = rodizio.mesasEmRodizioHoje || [];
+      const mesa = mesas.find(m => String(m.mesaNumero) === String(req.params.mesa));
+      if (!mesa) return res.status(404).json({ error: 'Mesa não encontrada no rodízio' });
+      if (req.body?.statusMesa) mesa.statusMesa = req.body.statusMesa;
+      if (req.body?.adicionarFatias) mesa.fatiasServidas = (mesa.fatiasServidas || 0) + Number(req.body.adicionarFatias);
+      save();
+      return res.json({ ok: true, mesa });
     } catch (e) {
       return res.status(500).json({ error: e.message });
     }

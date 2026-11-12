@@ -3,7 +3,9 @@ import { useState, useEffect, useMemo } from 'react'
 import { api, fmtR, fmtDate } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 import { useAuth } from '../../lib/auth'
-import { isDinoBrandContext } from '../../lib/brand'
+import { isDinoBrandContext, isRestauranteBrandContext, isConcretoBrandContext } from '../../lib/brand'
+import PalatarePizzariaSuite from './PalatarePizzariaSuite'
+import ConcretoUsinaERP from './ConcretoUsinaERP'
 import { ehHostDino } from '../../lib/dominios-dino'
 import DinoBusinessDashboard from './DinoBusinessDashboard'
 import PainelEmpresa from './PainelEmpresa'
@@ -740,6 +742,12 @@ export default function Dashboard() {
   const scopeKey = `${empresaAtiva?.id || 'empresa'}:${lojaAtiva?.id || 'todas'}`
   const openDinoTab = (tab) => navigate(`/admin/barbearia-erp?area=${DINO_TAB_AREA[tab] || 'operacao'}&tab=${encodeURIComponent(tab)}`)
   if (isDino) return <DinoBusinessDashboard key={scopeKey} onOpenTab={openDinoTab} />
+  if (isRestauranteBrandContext(empresaAtiva, user?.empresaAtiva, user?.empresa, user?.tenant)) {
+    return <PalatarePizzariaSuite key={scopeKey} />
+  }
+  if (isConcretoBrandContext(empresaAtiva, user?.empresaAtiva, user?.empresa, user?.tenant)) {
+    return <ConcretoUsinaERP key={scopeKey} />
+  }
   // empresa sem painel de marca: o painel do evento é global (negado a usuário de empresa)
   // (a administração da plataforma continua vendo o painel do evento)
   return isTenantScope(user, empresaAtiva) && user?.platformAdmin !== true ? <PainelEmpresa key={scopeKey} /> : <EventDashboard />

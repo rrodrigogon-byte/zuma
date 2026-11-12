@@ -478,13 +478,14 @@ export const NAV_RESTAURANTE_GROUPS = [
   {
     label: 'Hoje na Pizzaria', aberto: true,
     items: [
-      { to: '/admin', icon: '📊', label: 'Painel do Restaurante', end: true },
-      { to: '/admin/inteligencia-vendas', icon: '🚀', label: 'Como Vender Mais com IA' },
-      { to: '/admin/mesas', icon: '🍽️', label: 'Mesas & Salão' },
-      { to: '/kds', icon: '👨‍🍳', label: 'Cozinha & KDS', badge: true },
+      { to: '/admin', icon: '📊', label: 'Painel Palatare Suite', end: true },
+      { to: '/admin/pizzaria?tab=montador', icon: '🍕', label: 'Montador de Pizzas' },
+      { to: '/admin/pizzaria?tab=rodizio', icon: '🍽️', label: 'Rodízio Inteligente' },
+      { to: '/admin/pizzaria?tab=kds', icon: '👨‍🍳', label: 'KDS Forno a Lenha', badge: true },
+      { to: '/admin/pizzaria?tab=delivery', icon: '🛵', label: 'Delivery Tangará' },
+      { to: '/admin/mesas', icon: '🪑', label: 'Mesas & Salão' },
       { to: '/pdv', icon: '🛒', label: 'PDV & Caixa', badge: true },
-      { to: '/garcom', icon: '🧑‍🍳', label: 'Modo Garçom' },
-      { to: '/admin/delivery', icon: '🛵', label: 'Central Delivery & Balcão' },
+      { to: '/admin/inteligencia-vendas', icon: '🚀', label: 'Como Vender Mais com IA' },
     ],
   },
   {
@@ -501,7 +502,8 @@ export const NAV_RESTAURANTE_GROUPS = [
   {
     label: 'Atendimento & Clientes',
     items: [
-      { to: '/admin/clientes', icon: '👥', label: 'Clientes' },
+      { to: '/admin/pizzaria?tab=crm', icon: '⭐', label: 'Clientes 360° & CRM Paladar' },
+      { to: '/admin/clientes', icon: '👥', label: 'Todos os Clientes' },
       { to: '/admin/whatsapp', icon: '💬', label: 'WhatsApp Pedidos' },
       { to: '/admin/cupons', icon: '🎟️', label: 'Cupons & Promoções' },
       { to: '/admin/pdv-offline', icon: '📡', label: 'PDV Offline & Periféricos' },
@@ -535,6 +537,13 @@ export const NAV_RESTAURANTE_GROUPS = [
       { to: '/admin/lojas', icon: '🏬', label: 'Unidades / Filiais' },
       { to: '/admin/configuracoes', icon: '🛠️', label: 'Configurações' },
       { to: '/admin/auditoria', icon: '🔍', label: 'Auditoria' },
+    ],
+  },
+  {
+    label: 'Grupo Serrano & Palatare', aberto: true,
+    items: [
+      { to: '/admin/concreto', icon: '🚚', label: 'Serrano Concreto Usinado' },
+      { to: '/admin/consolidacao-grupo', icon: '🏢', label: 'Holding & Consolidação' },
     ],
   },
 ]
@@ -596,6 +605,13 @@ export const NAV_CONCRETO_GROUPS = [
       { to: '/admin/lojas', icon: '🏬', label: 'Pátios / Filiais' },
       { to: '/admin/configuracoes', icon: '🛠️', label: 'Configurações' },
       { to: '/admin/auditoria', icon: '🔍', label: 'Auditoria' },
+    ],
+  },
+  {
+    label: 'Grupo Serrano & Palatare', aberto: true,
+    items: [
+      { to: '/admin/concreto', icon: '🚚', label: 'Serrano Concreto Usinado' },
+      { to: '/admin/consolidacao-grupo', icon: '🏢', label: 'Holding & Consolidação' },
     ],
   },
 ]

@@ -5,11 +5,20 @@ import {
   PALATARE_LOJA_ID,
   PALATARE_CNPJ,
   PALATARE_CNPJ_NUM,
+  PALATARE_GRUPO_ID,
+  PALATARE_GRUPO_NOME,
   PALATARE_DADOS_EMPRESA,
   PALATARE_CARDAPIO_INICIAL,
   PALATARE_MESAS_INICIAIS,
+  PALATARE_CLIENTES_CRM,
+  PALATARE_CONFIG_MONTADOR,
+  PALATARE_RODIZIO_CONFIG,
+  PALATARE_KDS_FILA,
+  PALATARE_DELIVERY_ZONAS,
+  PALATARE_METRICAS_BI,
   provisionarPalatarePizzaria
 } from './palatare-pizzaria-seed.js';
+import { CONCRETO_GRUPO_ID, CONCRETO_EMPRESA_ID } from './concreto-usina-seed.js';
 import { validarCnpj } from './core/formatadores.js';
 import { TEMPLATES_NEGOCIO } from './modules/empresas/onboarding-templates.js';
 import { listarEmpresas } from './modules/empresas/servico.js';
@@ -95,4 +104,52 @@ test('Provisionamento da Palatare no Datastore JSON', async () => {
   assert.ok(palatare, 'Empresa Palatare deve estar listada');
   assert.equal(palatare.cnpj, '31.002.650/0001-08');
   assert.equal(palatare.tipoNegocio, 'restaurante');
+});
+
+test('Grupo Econômico Serrano & Palatare: unificação de holding da Usina de Concreto e Pizzaria', () => {
+  assert.equal(PALATARE_GRUPO_ID, 'grp-serrano-palatare-03');
+  assert.equal(CONCRETO_GRUPO_ID, 'grp-serrano-palatare-03');
+  assert.equal(PALATARE_DADOS_EMPRESA.grupoId, CONCRETO_GRUPO_ID, 'Palatare e Concreto devem pertencer ao mesmo grupo');
+  assert.equal(PALATARE_DADOS_EMPRESA.empresaIrmaId, CONCRETO_EMPRESA_ID);
+  assert.equal(PALATARE_DADOS_EMPRESA.holding, 'Serrano & Palatare Participações S/A');
+});
+
+test('CRM Gastronômico 360° da Palatare: base de clientes detalhada com RFV e sabores favoritos', () => {
+  assert.ok(PALATARE_CLIENTES_CRM.length >= 15, 'Deve conter base rica de clientes reais de Tangará da Serra');
+  
+  const drRicardo = PALATARE_CLIENTES_CRM.find(c => c.nome.includes('Ricardo Mendonça'));
+  assert.ok(drRicardo, 'Dr. Ricardo deve estar cadastrado');
+  assert.equal(drRicardo.segmentoRFV, 'VIP / Diamante');
+  assert.ok(drRicardo.saboresFavoritos.includes('Pizza Filé Mignon ao Gorgonzola'));
+  assert.equal(drRicardo.bairro, 'Jardim Europa');
+  assert.ok(drRicardo.sugestaoAcao.length > 20);
+
+  const aniversariantes = PALATARE_CLIENTES_CRM.filter(c => c.aniversarianteMes);
+  assert.ok(aniversariantes.length >= 2, 'Deve identificar aniversariantes do mês para campanhas');
+
+  const emRisco = PALATARE_CLIENTES_CRM.filter(c => c.segmentoRFV === 'Em Risco');
+  assert.ok(emRisco.length >= 2, 'Deve identificar clientes em risco de churn');
+});
+
+test('Montador de Pizzas Avançado: 4 tamanhos, frações 1 a 4 sabores, massas artesanais e bordas recheadas', () => {
+  assert.equal(PALATARE_CONFIG_MONTADOR.tamanhos.length, 4);
+  assert.equal(PALATARE_CONFIG_MONTADOR.fracoesDisponiveis.length, 4);
+  assert.ok(PALATARE_CONFIG_MONTADOR.tiposMassa.length >= 4);
+  assert.ok(PALATARE_CONFIG_MONTADOR.bordasRecheadas.length >= 5);
+
+  const napolitana = PALATARE_CONFIG_MONTADOR.tiposMassa.find(m => m.id === 'napolitana_48h');
+  assert.ok(napolitana, 'Massa fermentação 48h deve existir');
+
+  const vulcao = PALATARE_CONFIG_MONTADOR.bordasRecheadas.find(b => b.id === 'fondue_vulcao');
+  assert.ok(vulcao, 'Borda Vulcão deve existir');
+});
+
+test('Rodízio Inteligente & KDS Forno a Lenha da Palatare', () => {
+  assert.equal(PALATARE_RODIZIO_CONFIG.precoAdulto, 59.90);
+  assert.ok(PALATARE_RODIZIO_CONFIG.mesasEmRodizioHoje.length >= 3);
+  
+  assert.ok(PALATARE_KDS_FILA.length >= 3);
+  const pedidoForno = PALATARE_KDS_FILA.find(k => k.status === 'no_forno');
+  assert.ok(pedidoForno, 'Deve ter pedido no forno com temperatura registrada');
+  assert.equal(pedidoForno.temperaturaForno, '410°C');
 });

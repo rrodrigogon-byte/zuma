@@ -5,8 +5,16 @@ export const CONCRETO_LOJA_ID = 'c2c2ac01-8e50-4b61-8c79-de4aaa916da0';
 export const CONCRETO_CNPJ = '51.499.928/0001-01';
 export const CONCRETO_CNPJ_NUM = '51499928000101';
 
+export const CONCRETO_GRUPO_ID = "grp-serrano-palatare-03";
+export const CONCRETO_GRUPO_NOME = "Grupo Serrano & Palatare";
+
 export const CONCRETO_DADOS_EMPRESA = {
   id: CONCRETO_EMPRESA_ID,
+  grupoId: CONCRETO_GRUPO_ID,
+  grupoNome: CONCRETO_GRUPO_NOME,
+  holding: "Serrano & Palatare Participações S/A",
+  empresaIrmaId: "c1c1ac01-8e50-4b61-8c79-de4aaa916da9",
+  empresaIrmaNome: "Palatare Pizzaria & Restaurante",
   nome: 'Serrano Concreto Usinado',
   nomeFantasia: 'Serrano Concreto',
   razaoSocial: 'SERRANO CONCRETO E ARTEFATOS DE CIMENTO LTDA',
@@ -233,22 +241,24 @@ export async function provisionarConcretoUsina() {
     const pool = typeof getPool === 'function' ? getPool() : null;
     if (pool && typeof pool.query === 'function') {
       await pool.query(`
-        INSERT INTO empresas (id, nome, razao_social, cnpj, tipo_negocio, ativa, config)
-        VALUES ($1, $2, $3, $4, $5, true, $6)
+        INSERT INTO empresas (id, nome, razao_social, cnpj, tipo_negocio, ativa, config, grupo_id)
+        VALUES ($1, $2, $3, $4, $5, true, $6, $7)
         ON CONFLICT (id) DO UPDATE SET
           nome = EXCLUDED.nome,
           razao_social = EXCLUDED.razao_social,
           cnpj = EXCLUDED.cnpj,
           tipo_negocio = EXCLUDED.tipo_negocio,
           ativa = true,
-          config = EXCLUDED.config;
+          config = EXCLUDED.config,
+          grupo_id = EXCLUDED.grupo_id;
       `, [
         CONCRETO_EMPRESA_ID,
         CONCRETO_DADOS_EMPRESA.nome,
         CONCRETO_DADOS_EMPRESA.razaoSocial,
         CONCRETO_CNPJ,
         'concreto',
-        JSON.stringify(CONCRETO_DADOS_EMPRESA)
+        JSON.stringify(CONCRETO_DADOS_EMPRESA),
+        CONCRETO_GRUPO_ID
       ]);
 
       await pool.query(`

@@ -27,6 +27,18 @@ const GRUPOS_PADRAO = [
     segmentoPrincipal: 'Agronegócio, Distribuição de Insumos, Esporte e B2B',
     descricao: 'Consolidação de operações esportivas, rastreabilidade de safras e vendas de insumos.',
     ativo: true,
+  },
+  {
+    id: 'grp-serrano-palatare-03',
+    nome: 'Grupo Serrano & Palatare',
+    slug: 'grupo-serrano-palatare',
+    cnpj: '51.499.928/0001-01',
+    cnpjFormatado: '51.499.928/0001-01',
+    razaoSocial: 'Serrano & Palatare Participações S/A',
+    responsavel: 'Diretoria Executiva do Grupo',
+    segmentoPrincipal: 'Concreto Usinado & Gastronomia de Alto Padrão',
+    descricao: 'Grupo empresarial integrando Serrano Concreto Usinado e Palatare Pizzaria & Restaurante.',
+    ativo: true,
   }
 ];
 
@@ -91,6 +103,30 @@ const MULTI_BUSINESS_MAP = {
     permiteComandaBar: false,
     permiteAppBarbeiro: false,
     modeloReceita: 'Licenças SaaS + E-commerce + Royalties Intercompany'
+  },
+  // Palatare Pizzaria & Restaurante
+  'c1c1ac01-8e50-4b61-8c79-de4aaa916da9': {
+    grupoId: 'grp-serrano-palatare-03',
+    grupoNome: 'Grupo Serrano & Palatare',
+    segmento: 'gastronomia_pizzaria',
+    nomeExibicao: 'Palatare Pizzaria & Restaurante · Forno a Lenha, Rodízio e Delivery',
+    icone: 'pizza',
+    modulosAtivos: ['montador_pizzas', 'rodizio_inteligente', 'kds_forno', 'delivery_tangara', 'crm_gastronomico_360'],
+    permiteComandaBar: true,
+    permiteAppBarbeiro: false,
+    modeloReceita: 'Rodízio Tradicional + Pizzas À La Carte + Delivery + Chopps e Vinhos'
+  },
+  // Serrano Concreto Usinado
+  'c2c2ac01-8e50-4b61-8c79-de4aaa916da2': {
+    grupoId: 'grp-serrano-palatare-03',
+    grupoNome: 'Grupo Serrano & Palatare',
+    segmento: 'concreto_usinado_industria',
+    nomeExibicao: 'Serrano Concreto Usinado · Central Dosadora e Bombas Lança',
+    icone: 'truck',
+    modulosAtivos: ['programacao_cargas', 'tracos_fck', 'dosagem_concreto', 'frota_betoneiras', 'corpos_de_prova'],
+    permiteComandaBar: false,
+    permiteAppBarbeiro: false,
+    modeloReceita: 'Concreto Usinado FCK 20-40 MPa + Serviços de Bombeamento Lança'
   }
 };
 
@@ -126,12 +162,20 @@ export async function listarGruposEmpresariais(db) {
   }
 
   const todasEmpresas = await listarEmpresas(db);
-  grupos[0].empresas = todasEmpresas.map(emp => ({
-    id: emp.id,
-    nome: emp.nome,
-    cnpj: emp.cnpj,
-    ativa: emp.ativa
-  }));
+  for (const emp of todasEmpresas) {
+    const mb = MULTI_BUSINESS_MAP[emp.id];
+    const targetGid = mb?.grupoId || (emp.grupo_id ? emp.grupo_id : "grp-kytto-silvester-01");
+    const g = grupos.find(x => x.id === targetGid) || grupos[0];
+    if (!g.empresas) g.empresas = [];
+    if (!g.empresas.some(e => e.id === emp.id)) {
+      g.empresas.push({
+        id: emp.id,
+        nome: emp.nome,
+        cnpj: emp.cnpj,
+        ativa: emp.ativa
+      });
+    }
+  }
 
   return grupos;
 }
