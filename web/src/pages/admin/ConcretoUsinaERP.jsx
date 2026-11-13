@@ -618,19 +618,28 @@ export default function ConcretoUsinaERP() {
         {/* Topbar Limpa */}
         <header className="serrano-topbar">
           <span className="serrano-crumb">
-            Operação / <b>{secaoAtiva.split('-')[1]?.toUpperCase() || 'DESPACHO AO VIVO'}</b>
+            Operação / <b>{secaoAtiva === 'torre-pesagem' ? 'TORRE DE PESAGEM CCO' : (secaoAtiva.split('-')[1]?.toUpperCase() || 'DESPACHO AO VIVO')}</b>
           </span>
 
-          <div className="serrano-search-box">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-            <input 
-              type="text" 
-              placeholder="Buscar carga, cliente, obra, placa..." 
-              value={busca}
-              onChange={e => setBusca(e.target.value)}
-            />
-            <kbd>Ctrl K</kbd>
-          </div>
+          {secaoAtiva !== 'torre-pesagem' ? (
+            <div className="serrano-search-box">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+              <input 
+                type="text" 
+                placeholder="Buscar carga, cliente, obra, placa..." 
+                value={busca}
+                onChange={e => setBusca(e.target.value)}
+              />
+              <kbd>Ctrl K</kbd>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: 'var(--ser-dim, #64748B)' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', padding: '2px 8px', borderRadius: 4, color: '#10B981', fontWeight: 600 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981' }}></span>
+                Telemetria CCO Ativa
+              </span>
+            </div>
+          )}
 
           <span className="serrano-sync">
             <span className="serrano-dot-sync"></span>
