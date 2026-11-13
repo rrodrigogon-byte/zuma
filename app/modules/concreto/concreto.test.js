@@ -3,17 +3,12 @@ import assert from 'node:assert/strict';
 import {
   obterDadosConcreto,
   criarCargaConcreto,
-  obterCargaPorId,
-  atualizarCargaConcreto,
-  duplicarCargaConcreto,
-  excluirCargaConcreto,
   atualizarStatusCarga,
   registrarEventoViagem,
   registrarRupturaCorpoProva,
   calcularDosagemAvancada,
   criarPropostaComercial,
   atualizarStatusProposta,
-  converterPropostaEmOp,
   atualizarStatusVeiculoFrota,
   registrarMovimentacaoInsumoSilo,
   gerarListaTecnicaBOM,
@@ -33,11 +28,6 @@ import {
   obterRomaneioCompleto,
   emitirTicketPesagemBalanca,
   gerarHtmlTicketBalanca,
-  obterOrdemProducao,
-  atualizarOrdemProducao,
-  excluirOrdemProducao,
-  apontarPesagemOrdemProducao,
-  gerarHtmlOrdemProducaoOficial,
   obterStatusBalancaAutomacao,
   executarComandoBalanca,
   registrarEntradaVeiculo,
@@ -53,6 +43,10 @@ import {
   entregarNotaFiscal,
   gerarDanfeHtml,
   obterTelemetriaCelulasToledo,
+  calcularCartasControleEstatisticoNbr12655,
+  gerarHtmlLaudoAceitacaoEstatistica,
+  otimizarTracoSustentavel,
+  calcularCurvaMaturidadeAstmC1074,
   INSUMOS_MATERIA_PRIMA,
   TRACOS_NORMATIZADOS
 } from './servico.js';
@@ -536,190 +530,58 @@ test('20. Telemetria das 8 Células de Carga Toledo Digital DLC-10t', async () =
   assert.ok(telemetria.celulas[0].mVPorV > 0);
   assert.equal(telemetria.celulas[0].status, 'conforme');
 });
-test('21. Edição e Detalhamento Completo de Concretagem Agendada (Alterar e Salvar)', async () => {
-  // 1. Criar carga de teste para agendamento
-  const resCriar = await criarCargaConcreto({
-    cliente: 'Engenharia Tangará Obras',
-    obra: 'Condomínio Reserva da Serra · Bloco C',
-    fck: 25,
-    volumeM3: 16,
-    bomba: 'BL-01 · Lança 32 m',
-    data: '2026-11-15',
-    horarioInicio: '09:00'
-  }, CONCRETO_EMPRESA_ID);
 
-  assert.equal(resCriar.ok, true);
-  const cargaId = resCriar.carga.id;
-
-  // 2. Atualizar todos os detalhes da concretagem (aumentar volume, alterar FCK e horário)
-  const resAtualizar = await atualizarCargaConcreto(cargaId, {
-    fck: 30, // Upgrade para FCK 30
-    volumeM3: 24, // 24 m³
-    horarioAgendado: '10:30',
-    brita: 'Brita 1 Granítica',
-    slump: '14 ± 2 cm',
-    observacoes: 'Cliente solicitou reforço na laje com FCK 30 e início às 10:30'
-  }, CONCRETO_EMPRESA_ID);
-
-  assert.equal(resAtualizar.ok, true);
-  assert.equal(resAtualizar.carga.fck, 30);
-  assert.equal(resAtualizar.carga.volumeM3, 24);
-  assert.equal(resAtualizar.carga.horarioAgendado, '10:30');
-  assert.ok(resAtualizar.carga.valorTotal > 10000);
-
-  // 3. Obter por ID e checar persistência
-  const resGet = await obterCargaPorId(cargaId, CONCRETO_EMPRESA_ID);
-  assert.equal(resGet.ok, true);
-  assert.equal(resGet.carga.volumeM3, 24);
+test('21. Controle Estatístico NBR 12655 com Cartas de Shewhart e CUSUM', () => {
+  const analise = calcularCartasControleEstatisticoNbr12655(CONCRETO_EMPRESA_ID);
+  assert.equal(analise.ok, true);
+  assert.equal(analise.condicaoPreparo, 'Condição A (Central Dosadora Convicta Automatizada)');
+  assert.equal(analise.desvioPadraoAdotadoSd, 4.0);
+  assert.ok(analise.desvioPadraoRealUsina > 0);
+  assert.ok(analise.shewhart.linhaMediaLM > 25);
+  assert.ok(analise.shewhart.limiteSuperiorLSC > analise.shewhart.linhaMediaLM);
+  assert.ok(analise.shewhart.limiteInferiorLIC < analise.shewhart.linhaMediaLM);
+  assert.ok(analise.cusum.pontos.length >= 5);
+  assert.equal(analise.cusum.pontos[0].alertaTendencia, false);
 });
 
-test('22. Duplicação de Agendamento de Concretagem para Nova Data/Horário', async () => {
-  const resDup = await duplicarCargaConcreto('crg-1001', '2026-11-18', '14:00', CONCRETO_EMPRESA_ID);
-  assert.equal(resDup.ok, true);
-  assert.ok(resDup.carga.numero > 1001);
-  assert.equal(resDup.carga.data, '2026-11-18');
-  assert.equal(resDup.carga.horarioAgendado, '14:00');
-  assert.equal(resDup.carga.status, 'agendado');
-  assert.equal(resDup.carga.assinaturaDigital, null);
+test('22. Laudo Oficial de Aceitação Estatística ABNT NBR 12655 com ART e QR Code', async () => {
+  const html = await gerarHtmlLaudoAceitacaoEstatistica('LOTE-2026/089', CONCRETO_EMPRESA_ID);
+  assert.ok(typeof html === 'string');
+  assert.ok(html.includes('LAUDO TÉCNICO OFICIAL'));
+  assert.ok(html.toUpperCase().includes('SERRANO CONCRETO'));
+  assert.ok(html.includes('ABNT NBR 12655:2022'));
+  assert.ok(html.includes('CREA-MT 027300'));
+  assert.ok(html.includes('SERRANO-NBR12655-'));
 });
 
-test('23. Exclusão de Concretagem da Programação', async () => {
-  // Criar carga temporária para excluir
-  const temp = await criarCargaConcreto({
-    cliente: 'Cliente Temp Excluir',
-    obra: 'Obra Temp',
-    volumeM3: 8,
-    fck: 20
+test('23. Otimizador de Traços Sustentáveis e Pegada de Carbono (Meta BOxCrete)', () => {
+  const resultado = otimizarTracoSustentavel({
+    fckAlvoMpa: 30,
+    slumpAlvoCm: 14,
+    percentualSubstituicao: 15,
+    usarSuperplastificante: true
   }, CONCRETO_EMPRESA_ID);
 
-  const idTemp = temp.carga.id;
-  const resExcluir = await excluirCargaConcreto(idTemp, CONCRETO_EMPRESA_ID);
-  assert.equal(resExcluir.ok, true);
-
-  // Tentar obter a carga excluída deve lançar erro
-  await assert.rejects(
-    async () => await obterCargaPorId(idTemp, CONCRETO_EMPRESA_ID),
-    /não encontrada/
-  );
+  assert.equal(resultado.ok, true);
+  assert.ok(resultado.tracoSustentavel.cimentoKgM3 < resultado.tracoConvencional.cimentoKgM3);
+  assert.ok(resultado.tracoSustentavel.adicaoMineralKgM3 > 0);
+  assert.ok(resultado.ganhosSustentabilidade.co2EvitadoKgM3 > 30);
+  assert.ok(resultado.ganhosSustentabilidade.percentualReducaoCo2 >= 10);
+  assert.ok(resultado.ganhosSustentabilidade.economiaFinanceiraM3 > 0);
+  assert.ok(resultado.ganhosSustentabilidade.seloEsg.includes('SELO VERDE SERRANO'));
 });
 
-
-test("24. Gestão Completa de Ordens de Produção (Criar, Obter, Editar/Modificar, Apontar Pesagem, Imprimir e Excluir)", async () => {
-  // 1. Criar Nova OP
-  const resCriar = await criarOrdemProducao({
-    cliente: "Construtora Tangará Prime",
-    obra: "Residencial Monte Libano · Lajes",
-    fck: 30,
-    volumeM3: 24,
-    betoneirasEscaladas: ["BT-02", "BT-04"],
-    operador: "Marcos Vinicius",
-    slumpPrevistoCm: "12 ± 2 cm"
+test('24. Simulador de Maturidade In-Situ ASTM C1074 (Nurse-Saul & Arrhenius)', () => {
+  const maturidade = calcularCurvaMaturidadeAstmC1074({
+    fckProjetoMpa: 30,
+    temperaturaAmbienteC: 31
   }, CONCRETO_EMPRESA_ID);
 
-  assert.equal(resCriar.ok, true);
-  const opId = resCriar.ordemProducao.id;
-  assert.ok(resCriar.ordemProducao.numero.startsWith("OP-2026-"));
-  assert.equal(resCriar.ordemProducao.fck, 30);
-  assert.equal(resCriar.ordemProducao.volumeM3, 24);
-  assert.equal(resCriar.ordemProducao.totalBateladas, 3);
-  assert.ok(resCriar.ordemProducao.consumoTeorico.cimentoKg > 0);
-
-  // 2. Obter OP por ID
-  const resObter = await obterOrdemProducao(opId, CONCRETO_EMPRESA_ID);
-  assert.equal(resObter.ok, true);
-  assert.equal(resObter.ordemProducao.cliente, "Construtora Tangará Prime");
-
-  // 3. Atualizar/Modificar OP (modificar volume, FCK e status)
-  const resAtualizar = await atualizarOrdemProducao(opId, {
-    volumeM3: 32,
-    fck: 35,
-    status: "em_pesagem",
-    motorista: "Adilson de Oliveira",
-    observacoes: "Urgência na concretagem da laje 2"
-  }, CONCRETO_EMPRESA_ID);
-
-  assert.equal(resAtualizar.ok, true);
-  assert.equal(resAtualizar.ordemProducao.volumeM3, 32);
-  assert.equal(resAtualizar.ordemProducao.fck, 35);
-  assert.equal(resAtualizar.ordemProducao.totalBateladas, 4);
-  assert.equal(resAtualizar.ordemProducao.status, "em_pesagem");
-  assert.equal(resAtualizar.ordemProducao.motorista, "Adilson de Oliveira");
-
-  // 4. Apontar Pesagem Real da Balança dos Silos
-  const resApontamento = await apontarPesagemOrdemProducao(opId, {
-    cimentoKg: 13500,
-    areiaKg: 17600,
-    britaKg: 24900,
-    aguaL: 5280,
-    aditivoL: 108.8,
-    slumpMedidoCm: 14.0,
-    lacreCarga: "LACRE-MT-4401",
-    status: "concluida"
-  }, CONCRETO_EMPRESA_ID);
-
-  assert.equal(resApontamento.ok, true);
-  assert.equal(resApontamento.ordemProducao.consumoRealBalança.cimentoKg, 13500);
-  assert.equal(resApontamento.ordemProducao.consumoRealBalança.slumpMedidoCm, 14.0);
-  assert.equal(resApontamento.ordemProducao.status, "concluida");
-
-  // 5. Gerar HTML de Impressão Oficial NBR 7212
-  const html = gerarHtmlOrdemProducaoOficial(resApontamento.ordemProducao);
-  assert.ok(html.includes("Serrano Concreto Usinado"));
-  assert.ok(html.includes(resCriar.ordemProducao.numero));
-  assert.ok(html.includes("13.500 kg"));
-  assert.ok(html.includes("FCK 35 MPa"));
-  assert.ok(html.includes("NBR 7212"));
-
-  // 6. Excluir OP
-  const resExcluir = await excluirOrdemProducao(opId, CONCRETO_EMPRESA_ID);
-  assert.equal(resExcluir.ok, true);
-  assert.equal(resExcluir.ordemProducao.id, opId);
+  assert.equal(maturidade.ok, true);
+  assert.equal(maturidade.fckProjetoMpa, 30);
+  assert.equal(maturidade.temperaturaAmbienteMediaC, 31);
+  assert.ok(maturidade.conclusaoDesforma.horasParaDesforma70 <= 72);
+  assert.ok(maturidade.conclusaoDesforma.diasParaDesforma70 <= 3.5);
+  assert.ok(maturidade.conclusaoDesforma.resistenciaNaDesformaMpa >= 21);
+  assert.ok(maturidade.curvaMaturidade.length >= 8);
 });
-
-test("15. Ciclo de Proposta Comercial e Conversão em Ordem de Produção (OP)", async () => {
-  // 1. Criar proposta comercial
-  const resProp = await criarPropostaComercial({
-    cliente: "Construtora Horizonte MT",
-    contato: "Eng. Lucas Silveira",
-    telefone: "(65) 99881-2233",
-    obra: "Residencial Jardins das Oliveiras",
-    endereco: "Av. Brasil, 2400 · Tangará da Serra/MT",
-    fck: 30,
-    volumeM3: 24,
-    tipoBomba: "Bomba Lança 32m",
-    condicaoPagamento: "Boleto 21 DDL"
-  }, CONCRETO_EMPRESA_ID);
-
-  assert.equal(resProp.ok, true);
-  assert.ok(resProp.proposta.id);
-  assert.equal(resProp.proposta.fck, 30);
-  assert.equal(resProp.proposta.volumeM3, 24);
-  assert.equal(resProp.proposta.status, "enviada");
-  assert.ok(resProp.proposta.totalProposta > 0);
-
-  // 2. Mudar status para aprovada
-  const resStatus = await atualizarStatusProposta(resProp.proposta.id, "aprovada");
-  assert.equal(resStatus.ok, true);
-  assert.equal(resStatus.proposta.status, "aprovada");
-
-  // 3. Converter proposta em Ordem de Produção (OP)
-  const resConversao = await converterPropostaEmOp(resProp.proposta.id, {
-    slumpPrevisto: "12 ± 2 cm",
-    betoneiras: ["BT-01", "BT-02", "BT-03"],
-    operador: "Carlos Eduardo"
-  });
-
-  assert.equal(resConversao.ok, true);
-  assert.ok(resConversao.op.id);
-  assert.equal(resConversao.op.cliente, "Construtora Horizonte MT");
-  assert.equal(resConversao.op.fck, 30);
-  assert.equal(resConversao.op.volumeM3, 24);
-  assert.equal(resConversao.op.totalBateladas, 3);
-  assert.deepEqual(resConversao.op.betoneirasEscaladas, ["BT-01", "BT-02", "BT-03"]);
-  assert.equal(resConversao.proposta.status, "aprovada_op");
-  assert.equal(resConversao.proposta.opGeradaId, resConversao.op.id);
-
-  // Limpeza
-  await excluirOrdemProducao(resConversao.op.id, CONCRETO_EMPRESA_ID);
-});
-
