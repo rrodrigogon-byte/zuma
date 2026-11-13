@@ -1298,6 +1298,110 @@ export async function atualizarStatusCarga(cargaId, status, observacoes = '') {
   return { ok: true, carga };
 }
 
+export async function obterCargaPorId(cargaId, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const carga = (data.concreto_cargas || []).find(c => c.id === cargaId || String(c.numero) === String(cargaId));
+  if (!carga) throw new Error(`Carga ${cargaId} não encontrada.`);
+  return { ok: true, carga };
+}
+
+export async function atualizarCargaConcreto(cargaId, dadosAtualizados, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const carga = (data.concreto_cargas || []).find(c => c.id === cargaId || String(c.numero) === String(cargaId));
+  if (!carga) throw new Error(`Carga ${cargaId} não encontrada.`);
+
+  if (dadosAtualizados.cliente !== undefined) carga.cliente = dadosAtualizados.cliente;
+  if (dadosAtualizados.obra !== undefined) carga.obra = dadosAtualizados.obra;
+  if (dadosAtualizados.endereco !== undefined) carga.endereco = dadosAtualizados.endereco;
+  if (dadosAtualizados.elemento !== undefined) carga.elemento = dadosAtualizados.elemento;
+  if (dadosAtualizados.data !== undefined) carga.data = dadosAtualizados.data;
+  if (dadosAtualizados.horarioInicio !== undefined) carga.horarioInicio = dadosAtualizados.horarioInicio;
+  if (dadosAtualizados.horarioAgendado !== undefined) carga.horarioAgendado = dadosAtualizados.horarioAgendado;
+  if (dadosAtualizados.fck !== undefined) {
+    carga.fck = Number(dadosAtualizados.fck);
+    if (!dadosAtualizados.precoM3) {
+      carga.precoM3 = carga.fck === 20 ? 380 : carga.fck === 25 ? 410 : carga.fck === 30 ? 440 : carga.fck === 35 ? 480 : carga.fck === 40 ? 520 : 340;
+    }
+  }
+  if (dadosAtualizados.brita !== undefined) carga.brita = dadosAtualizados.brita;
+  if (dadosAtualizados.slump !== undefined) carga.slump = dadosAtualizados.slump;
+  if (dadosAtualizados.volumeM3 !== undefined) carga.volumeM3 = Number(dadosAtualizados.volumeM3);
+  if (dadosAtualizados.bomba !== undefined) carga.bomba = dadosAtualizados.bomba;
+  if (dadosAtualizados.precoM3 !== undefined) carga.precoM3 = Number(dadosAtualizados.precoM3);
+  if (dadosAtualizados.status !== undefined) carga.status = dadosAtualizados.status;
+  if (dadosAtualizados.observacoes !== undefined) carga.observacoes = dadosAtualizados.observacoes;
+  if (dadosAtualizados.telefoneCliente !== undefined) carga.telefoneCliente = dadosAtualizados.telefoneCliente;
+  if (dadosAtualizados.emailCliente !== undefined) carga.emailCliente = dadosAtualizados.emailCliente;
+  if (dadosAtualizados.engenheiroResponsavel !== undefined) carga.engenheiroResponsavel = dadosAtualizados.engenheiroResponsavel;
+
+  // Recalcular valores caso volume ou preco tenham mudado
+  const vol = Number(carga.volumeM3) || 8;
+  const preco = Number(carga.precoM3) || 440;
+  carga.subtotalConcreto = +(vol * preco).toFixed(2);
+  let taxaBomba = 0;
+  const bStr = String(carga.bomba || "").toLowerCase();
+  if (bStr.includes("bomba") || bStr.includes("lança") || bStr.includes("lanca") || bStr.includes("bl-")) {
+    taxaBomba = 750.00;
+    if (vol > 25) taxaBomba += (vol - 25) * 25.00;
+  }
+  carga.taxaBomba = taxaBomba;
+  carga.valorTotal = +(carga.subtotalConcreto + taxaBomba).toFixed(2);
+
+  // Se forem passadas viagens atualizadas, sincronizar
+  if (Array.isArray(dadosAtualizados.viagens)) {
+    carga.viagens = dadosAtualizados.viagens;
+  }
+
+  save();
+  return { ok: true, carga, mensagem: 'Concretagem atualizada com sucesso!' };
+}
+
+export async function excluirCargaConcreto(cargaId, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const index = (data.concreto_cargas || []).findIndex(c => c.id === cargaId || String(c.numero) === String(cargaId));
+  if (index === -1) throw new Error(`Carga ${cargaId} não encontrada para exclusão.`);
+
+  const cargaRemovida = data.concreto_cargas.splice(index, 1)[0];
+  save();
+  return { ok: true, mensagem: `Carga #${cargaRemovida.numero || cargaId} excluída com sucesso!`, carga: cargaRemovida };
+}
+
+export async function duplicarCargaConcreto(cargaId, novaData = null, novoHorario = null, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const cargaOriginal = (data.concreto_cargas || []).find(c => c.id === cargaId || String(c.numero) === String(cargaId));
+  if (!cargaOriginal) throw new Error(`Carga ${cargaId} não encontrada para duplicação.`);
+
+  const ultimoNumero = (data.concreto_cargas || []).reduce((max, c) => Math.max(max, Number(c.numero) || 1000), 1000);
+  const proximoNumero = ultimoNumero + 1;
+
+  const novaCarga = {
+    ...JSON.parse(JSON.stringify(cargaOriginal)),
+    id: `crg-${proximoNumero}`,
+    numero: proximoNumero,
+    data: novaData || cargaOriginal.data,
+    horarioInicio: novoHorario || cargaOriginal.horarioInicio || '08:30',
+    horarioAgendado: novoHorario || cargaOriginal.horarioAgendado || '08:30',
+    status: 'agendado',
+    assinaturaDigital: null,
+    hashIntegridade: null,
+    codigoAutenticidade: null,
+    loteCp: `CP-2026-${String(proximoNumero).slice(-3)}`,
+    viagens: (cargaOriginal.viagens || []).map((v, idx) => ({
+      ...v,
+      viagemNumero: idx + 1,
+      saidaUsina: null,
+      chegadaObra: null,
+      inicioDescarga: null,
+      fimDescarga: null,
+      status: 'agendada'
+    }))
+  };
+
+  data.concreto_cargas.unshift(novaCarga);
+  save();
+  return { ok: true, carga: novaCarga, mensagem: `Concretagem #${proximoNumero} agendada a partir da carga #${cargaOriginal.numero}!` };
+}
+
 export async function registrarEventoViagem(cargaId, viagemIndex, evento, horario = null) {
   const data = inicializarDatastoreConcreto();
   const carga = (data.concreto_cargas || []).find(c => c.id === cargaId || String(c.numero) === String(cargaId));

@@ -2,6 +2,10 @@ import { Router } from 'express';
 import {
   obterDadosConcreto,
   criarCargaConcreto,
+  obterCargaPorId,
+  atualizarCargaConcreto,
+  excluirCargaConcreto,
+  duplicarCargaConcreto,
   atualizarStatusCarga,
   registrarEventoViagem,
   registrarRupturaCorpoProva,
@@ -152,6 +156,51 @@ export function criarRotasConcreto() {
     try {
       const empresaId = resolverEmpresa(req);
       const resultado = await criarCargaConcreto(req.body, empresaId);
+      return res.status(201).json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 6b. Obter carga detalhada por ID
+  router.get('/cargas/:id', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await obterCargaPorId(req.params.id, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(404).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 6c. Atualizar / Editar carga de concretagem agendada
+  router.put('/cargas/:id', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await atualizarCargaConcreto(req.params.id, req.body, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 6d. Excluir carga de concretagem agendada
+  router.delete('/cargas/:id', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await excluirCargaConcreto(req.params.id, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 6e. Duplicar agendamento de carga de concretagem
+  router.post('/cargas/:id/duplicar', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const { data, horario } = req.body || {};
+      const resultado = await duplicarCargaConcreto(req.params.id, data, horario, empresaId);
       return res.status(201).json(resultado);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
