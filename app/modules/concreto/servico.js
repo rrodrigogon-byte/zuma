@@ -1297,110 +1297,6 @@ export async function atualizarStatusCarga(cargaId, status, observacoes = '') {
   return { ok: true, carga };
 }
 
-export async function obterCargaPorId(cargaId, empresaId = CONCRETO_EMPRESA_ID) {
-  const data = inicializarDatastoreConcreto();
-  const carga = (data.concreto_cargas || []).find(c => c.id === cargaId || String(c.numero) === String(cargaId));
-  if (!carga) throw new Error(`Carga ${cargaId} não encontrada.`);
-  return { ok: true, carga };
-}
-
-export async function atualizarCargaConcreto(cargaId, dadosAtualizados, empresaId = CONCRETO_EMPRESA_ID) {
-  const data = inicializarDatastoreConcreto();
-  const carga = (data.concreto_cargas || []).find(c => c.id === cargaId || String(c.numero) === String(cargaId));
-  if (!carga) throw new Error(`Carga ${cargaId} não encontrada.`);
-
-  if (dadosAtualizados.cliente !== undefined) carga.cliente = dadosAtualizados.cliente;
-  if (dadosAtualizados.obra !== undefined) carga.obra = dadosAtualizados.obra;
-  if (dadosAtualizados.endereco !== undefined) carga.endereco = dadosAtualizados.endereco;
-  if (dadosAtualizados.elemento !== undefined) carga.elemento = dadosAtualizados.elemento;
-  if (dadosAtualizados.data !== undefined) carga.data = dadosAtualizados.data;
-  if (dadosAtualizados.horarioInicio !== undefined) carga.horarioInicio = dadosAtualizados.horarioInicio;
-  if (dadosAtualizados.horarioAgendado !== undefined) carga.horarioAgendado = dadosAtualizados.horarioAgendado;
-  if (dadosAtualizados.fck !== undefined) {
-    carga.fck = Number(dadosAtualizados.fck);
-    if (!dadosAtualizados.precoM3) {
-      carga.precoM3 = carga.fck === 20 ? 380 : carga.fck === 25 ? 410 : carga.fck === 30 ? 440 : carga.fck === 35 ? 480 : carga.fck === 40 ? 520 : 340;
-    }
-  }
-  if (dadosAtualizados.brita !== undefined) carga.brita = dadosAtualizados.brita;
-  if (dadosAtualizados.slump !== undefined) carga.slump = dadosAtualizados.slump;
-  if (dadosAtualizados.volumeM3 !== undefined) carga.volumeM3 = Number(dadosAtualizados.volumeM3);
-  if (dadosAtualizados.bomba !== undefined) carga.bomba = dadosAtualizados.bomba;
-  if (dadosAtualizados.precoM3 !== undefined) carga.precoM3 = Number(dadosAtualizados.precoM3);
-  if (dadosAtualizados.status !== undefined) carga.status = dadosAtualizados.status;
-  if (dadosAtualizados.observacoes !== undefined) carga.observacoes = dadosAtualizados.observacoes;
-  if (dadosAtualizados.telefoneCliente !== undefined) carga.telefoneCliente = dadosAtualizados.telefoneCliente;
-  if (dadosAtualizados.emailCliente !== undefined) carga.emailCliente = dadosAtualizados.emailCliente;
-  if (dadosAtualizados.engenheiroResponsavel !== undefined) carga.engenheiroResponsavel = dadosAtualizados.engenheiroResponsavel;
-
-  // Recalcular valores caso volume ou preco tenham mudado
-  const vol = Number(carga.volumeM3) || 8;
-  const preco = Number(carga.precoM3) || 440;
-  carga.subtotalConcreto = +(vol * preco).toFixed(2);
-  let taxaBomba = 0;
-  const bStr = String(carga.bomba || "").toLowerCase();
-  if (bStr.includes("bomba") || bStr.includes("lança") || bStr.includes("lanca") || bStr.includes("bl-")) {
-    taxaBomba = 750.00;
-    if (vol > 25) taxaBomba += (vol - 25) * 25.00;
-  }
-  carga.taxaBomba = taxaBomba;
-  carga.valorTotal = +(carga.subtotalConcreto + taxaBomba).toFixed(2);
-
-  // Se forem passadas viagens atualizadas, sincronizar
-  if (Array.isArray(dadosAtualizados.viagens)) {
-    carga.viagens = dadosAtualizados.viagens;
-  }
-
-  save();
-  return { ok: true, carga, mensagem: 'Concretagem atualizada com sucesso!' };
-}
-
-export async function excluirCargaConcreto(cargaId, empresaId = CONCRETO_EMPRESA_ID) {
-  const data = inicializarDatastoreConcreto();
-  const index = (data.concreto_cargas || []).findIndex(c => c.id === cargaId || String(c.numero) === String(cargaId));
-  if (index === -1) throw new Error(`Carga ${cargaId} não encontrada para exclusão.`);
-
-  const cargaRemovida = data.concreto_cargas.splice(index, 1)[0];
-  save();
-  return { ok: true, mensagem: `Carga #${cargaRemovida.numero || cargaId} excluída com sucesso!`, carga: cargaRemovida };
-}
-
-export async function duplicarCargaConcreto(cargaId, novaData = null, novoHorario = null, empresaId = CONCRETO_EMPRESA_ID) {
-  const data = inicializarDatastoreConcreto();
-  const cargaOriginal = (data.concreto_cargas || []).find(c => c.id === cargaId || String(c.numero) === String(cargaId));
-  if (!cargaOriginal) throw new Error(`Carga ${cargaId} não encontrada para duplicação.`);
-
-  const ultimoNumero = (data.concreto_cargas || []).reduce((max, c) => Math.max(max, Number(c.numero) || 1000), 1000);
-  const proximoNumero = ultimoNumero + 1;
-
-  const novaCarga = {
-    ...JSON.parse(JSON.stringify(cargaOriginal)),
-    id: `crg-${proximoNumero}`,
-    numero: proximoNumero,
-    data: novaData || cargaOriginal.data,
-    horarioInicio: novoHorario || cargaOriginal.horarioInicio || '08:30',
-    horarioAgendado: novoHorario || cargaOriginal.horarioAgendado || '08:30',
-    status: 'agendado',
-    assinaturaDigital: null,
-    hashIntegridade: null,
-    codigoAutenticidade: null,
-    loteCp: `CP-2026-${String(proximoNumero).slice(-3)}`,
-    viagens: (cargaOriginal.viagens || []).map((v, idx) => ({
-      ...v,
-      viagemNumero: idx + 1,
-      saidaUsina: null,
-      chegadaObra: null,
-      inicioDescarga: null,
-      fimDescarga: null,
-      status: 'agendada'
-    }))
-  };
-
-  data.concreto_cargas.unshift(novaCarga);
-  save();
-  return { ok: true, carga: novaCarga, mensagem: `Concretagem #${proximoNumero} agendada a partir da carga #${cargaOriginal.numero}!` };
-}
-
 export async function registrarEventoViagem(cargaId, viagemIndex, evento, horario = null) {
   const data = inicializarDatastoreConcreto();
   const carga = (data.concreto_cargas || []).find(c => c.id === cargaId || String(c.numero) === String(cargaId));
@@ -3867,4 +3763,465 @@ export async function gerarHtmlLaudoOficial(loteId, empresaId = CONCRETO_EMPRESA
   </div>
 </body>
 </html>`;
+}
+
+// ─── COPILOT KYTTOIA INDUSTRIAL (NBR 7212 / NBR 12655 / NBR 6118) ───
+
+export async function obterRecomendacoesKyttoIA(empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const baias = data.concreto_baias || [];
+  const baiaAreia = baias.find(b => b.codigo === 'BAIA-01') || { umidadeAtualPercent: 5.8 };
+  const ensaios = data.concreto_ensaios || [];
+  const frota = data.concreto_frota || [];
+
+  return {
+    ok: true,
+    motor: 'KyttoIA 2.5 Flash Industrial Engine',
+    timestamp: new Date().toISOString(),
+    temperaturaAmbiente: 34,
+    umidadeAr: 42,
+    cidade: 'Tangará da Serra/MT',
+    diagnosticos: [
+      {
+        id: 'rec-01',
+        tipo: 'aviso_termico',
+        severidade: 'atencao',
+        titulo: 'Alerta Térmico em Tangará da Serra (34°C)',
+        descricao: 'Temperatura ambiente elevada acelera a taxa de hidratação do cimento. O Chiller Industrial deve manter a água a 8°C e dosar aditivo plastificante retardador TecFlow R (+0,15% sobre o peso do cimento) para manter slump de 14 ± 2 cm até o canteiro.',
+        norma: 'ABNT NBR 7212 § 5.3',
+        acaoSugerida: 'Acionar dosagem Chiller e TecFlow R'
+      },
+      {
+        id: 'rec-02',
+        tipo: 'compensacao_umidade',
+        severidade: 'informativo',
+        titulo: `Compensação de Umidade da Areia (${baiaAreia.umidadeAtualPercent}% Baia 1)`,
+        descricao: `Areia média do Rio Sepotuba com ${baiaAreia.umidadeAtualPercent}% de umidade. Desconto metrológico automático de 68 L/m³ de água de amassamento e compensação de +72 kg/m³ de areia úmida para manter fator a/c exato de 0,48.`,
+        norma: 'ABNT NBR 7212 Anexo A',
+        acaoSugerida: 'Balança Convicta com desconto aplicado'
+      },
+      {
+        id: 'rec-03',
+        tipo: 'prazo_pega',
+        severidade: 'sucesso',
+        titulo: 'Monitoramento de Pega NBR 7212 (Máx. 150 min)',
+        descricao: 'Todas as betoneiras em trânsito estão dentro da margem de trabalhabilidade. BT-02 registra 65 min de trajeto com temperatura de massa estável em 29,4°C.',
+        norma: 'ABNT NBR 7212 § 8.2',
+        acaoSugerida: 'Descarga em andamento'
+      },
+      {
+        id: 'rec-04',
+        tipo: 'qualidade_nbr12655',
+        severidade: 'sucesso',
+        titulo: 'Conformidade Estatística fck,est Aprovada',
+        descricao: 'Último lote rompido (CP-2026-088) atingiu 34,2 MPa aos 28 dias (114% do fck 30 MPa especificado). Desvio-padrão da usina s = 1,82 MPa enquadra a usina na Condição de Preparo A.',
+        norma: 'ABNT NBR 12655 Tabela 1',
+        acaoSugerida: 'Emitir laudos com ART'
+      }
+    ]
+  };
+}
+
+export async function consultarKyttoIAConcreto(pergunta, contexto = {}, empresaId = CONCRETO_EMPRESA_ID) {
+  const q = String(pergunta || '').toLowerCase();
+  
+  if (q.includes('fator a/c') || q.includes('umidade') || q.includes('água') || q.includes('areia')) {
+    return {
+      ok: true,
+      motor: 'KyttoIA Industrial NBR 7212',
+      resposta: 'Para areia com umidade medida de 5,8% no pátio da Serrano (Rio Sepotuba), a Central Convicta executa o desconto automático de água da batelada: em um traço FCK 30 MPa com 350 kg de cimento e 820 kg de areia seca, a água absorvida e superficial retida na areia equivale a 47,5 L por m³. Portanto, a balança de água desconta esse volume e adiciona o peso de areia proporcional, garantindo que o fator a/c efetivo permaneça em 0,48 sem perda de resistência.',
+      normasCitadas: ['ABNT NBR 7212', 'ABNT NBR 6118'],
+      parametrosSugeridos: { fatorAc: 0.48, descontoAguaL: 47.5, correcaoAreiaKg: 47.5 }
+    };
+  }
+
+  if (q.includes('prazo de pega') || q.includes('tempo') || q.includes('150 min') || q.includes('transporte')) {
+    return {
+      ok: true,
+      motor: 'KyttoIA Industrial NBR 7212',
+      resposta: 'Conforme a ABNT NBR 7212 § 8.2, o tempo limite de transporte e descarregamento do concreto usinado é de 150 minutos (2 horas e meia) contados a partir do primeiro contato da água com o cimento e agregados na central dosadora. Em Tangará da Serra/MT, com temperaturas superiores a 32°C, o uso do aditivo plastificante retardador de pega TecFlow R estende a janela de trabalhabilidade sem elevar a relação água/cimento.',
+      normasCitadas: ['ABNT NBR 7212', 'ABNT NBR 11768'],
+      parametrosSugeridos: { tempoMaximoMin: 150, aditivoRecomendado: 'TecFlow R (0,15% s.p.c.)' }
+    };
+  }
+
+  if (q.includes('ensaio') || q.includes('rompimento') || q.includes('cp') || q.includes('nbr 5739') || q.includes('laudo')) {
+    return {
+      ok: true,
+      motor: 'KyttoIA Industrial NBR 7212',
+      resposta: 'Os corpos de prova cilíndricos (100 mm × 200 mm) devem ser ensaiados à compressão axial segundo a ABNT NBR 5739 com taxa de carregamento contínuo de 0,45 ± 0,15 MPa/s. A aceitação do lote segue a NBR 12655: para lotes de controle total, fck,est = fck; para controle por amostragem parcial, calcula-se com o desvio padrão da usina. Lotes com ruptura Tipo A (cônica) indicam paralelismo perfeito das bases e ausência de excentricidade de carga na prensa digital.',
+      normasCitadas: ['ABNT NBR 5738', 'ABNT NBR 5739', 'ABNT NBR 12655'],
+      parametrosSugeridos: { taxaCarregamentoMpaS: '0,45 ± 0,15', tipoRupturaEsperada: 'Tipo A / Tipo B' }
+    };
+  }
+
+  return {
+    ok: true,
+    motor: 'KyttoIA Industrial NBR 7212',
+    resposta: `Análise KyttoIA para a usina Serrano Concreto: a operação atual está em plena conformidade com as normas ABNT NBR 7212 e NBR 12655. Todos os 5 silos e baias estão monitorados, a Balança Rodoviária 80t opera com 8 células digitais Toledo e a calibração metrológica anual está ativa. Para otimizar o despacho das betoneiras, utilize o simulador de Slump Loss antes da saída para os canteiros mais distantes de Tangará da Serra.`,
+    normasCitadas: ['ABNT NBR 7212', 'ABNT NBR 12655'],
+    parametrosSugeridos: {}
+  };
+}
+
+// ─── CHECKLIST DIGITAL PRÉ-OPERACIONAL (NR-11 / NR-12) ───
+
+export const FROTA_CHECKLISTS_INICIAIS = [
+  {
+    id: 'chk-bt01-20261112',
+    veiculoCodigo: 'BT-01',
+    placa: 'RAX-3E21',
+    motorista: 'Marcos Silveira',
+    dataHora: '2026-11-12 07:15',
+    statusGeral: 'aprovado',
+    odometroKm: 84210,
+    horimetroTambor: 3120,
+    itens: [
+      { item: 'Pressão e estado dos pneus', conforme: true, obs: '110 PSI ok' },
+      { item: 'Freios pneumáticos e manômetros de ar', conforme: true, obs: '8 bar estável' },
+      { item: 'Lâminas helicoidais e tambor sem crostas', conforme: true, obs: 'Lavado no pós-turno' },
+      { item: 'Lacre do tanque pressurizado de água (inviolabilidade a/c)', conforme: true, obs: 'Lacre #0941 intacto' },
+      { item: 'Extintor ABC e kit de emergência / cones', conforme: true, obs: 'Carga válida até 2027' },
+      { item: 'Luzes, seta, giroflex e faróis de ré', conforme: true, obs: '100% funcionais' },
+      { item: 'Comando hidráulico do balão e acionamento na cabine', conforme: true, obs: 'Resposta imediata' },
+      { item: 'Nível de óleo do redutor do tambor e motor hidráulico', conforme: true, obs: 'Nível normal' },
+      { item: 'Rádio comunicador VHF/UHF com a central', conforme: true, obs: 'Canal 03 Usina Serrano' },
+      { item: 'EPIs completos do motorista (capacete, óculos, botina de aço)', conforme: true, obs: 'Conferido pelo fiscal' }
+    ]
+  },
+  {
+    id: 'chk-bt02-20261112',
+    veiculoCodigo: 'BT-02',
+    placa: 'RBY-4F32',
+    motorista: 'Carlos Eduardo Santos',
+    dataHora: '2026-11-12 07:25',
+    statusGeral: 'aprovado',
+    odometroKm: 62450,
+    horimetroTambor: 2450,
+    itens: [
+      { item: 'Pressão e estado dos pneus', conforme: true, obs: 'Calibrado' },
+      { item: 'Freios pneumáticos e manômetros de ar', conforme: true, obs: 'Conforme' },
+      { item: 'Lâminas helicoidais e tambor sem crostas', conforme: true, obs: 'Inspeção visual ok' },
+      { item: 'Lacre do tanque pressurizado de água (inviolabilidade a/c)', conforme: true, obs: 'Lacre #0942 intacto' },
+      { item: 'Extintor ABC e kit de emergência / cones', conforme: true, obs: 'Conforme' },
+      { item: 'Luzes, seta, giroflex e faróis de ré', conforme: true, obs: 'Conforme' },
+      { item: 'Comando hidráulico do balão e acionamento na cabine', conforme: true, obs: 'Conforme' },
+      { item: 'Nível de óleo do redutor do tambor e motor hidráulico', conforme: true, obs: 'Conforme' },
+      { item: 'Rádio comunicador VHF/UHF com a central', conforme: true, obs: 'Conforme' },
+      { item: 'EPIs completos do motorista (capacete, óculos, botina de aço)', conforme: true, obs: 'Conforme' }
+    ]
+  }
+];
+
+export async function listarChecklistsFrota(empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  if (!data.concreto_checklists) {
+    data.concreto_checklists = [...FROTA_CHECKLISTS_INICIAIS];
+    save();
+  }
+  return { ok: true, checklists: data.concreto_checklists };
+}
+
+export async function salvarChecklistVeiculo(dados, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  if (!data.concreto_checklists) data.concreto_checklists = [...FROTA_CHECKLISTS_INICIAIS];
+
+  const novo = {
+    id: 'chk-' + (dados.veiculoCodigo || 'VEIC') + '-' + Date.now(),
+    veiculoCodigo: dados.veiculoCodigo,
+    placa: dados.placa,
+    motorista: dados.motorista,
+    dataHora: new Date().toISOString().replace('T', ' ').substring(0, 16),
+    statusGeral: dados.statusGeral || 'aprovado',
+    odometroKm: Number(dados.odometroKm || 0),
+    horimetroTambor: Number(dados.horimetroTambor || 0),
+    itens: dados.itens || []
+  };
+
+  data.concreto_checklists.unshift(novo);
+  save();
+  return { ok: true, checklist: novo };
+}
+
+// ─── GESTÃO DE CONCRETO RESIDUAL & RECICLADOR ECOLÓGICO (CONAMA / NBR 15575) ───
+
+export const DADOS_RECICLADOR_INICIAIS = {
+  capacidadeHoraM3: 15,
+  concretoRecicladoHojeM3: 2.8,
+  agregadosRecuperadosTon: 6.4,
+  aguaClarificadaLitros: 4200,
+  saldoBaciaDecantacaoLitros: 18500,
+  phAguaClarificada: 8.4,
+  destinacaoAgregados: 'Artefatos de Concreto / Guias e Sarjetas / Base de Pavimentação',
+  registrosDevolucao: [
+    {
+      id: 'dev-001',
+      dataHora: '2026-11-12 11:30',
+      betoneira: 'BT-01',
+      motorista: 'Marcos Silveira',
+      obraOrigem: 'Edifício Residencial Serra Dourada',
+      volumeResidualM3: 0.6,
+      motivo: 'Sobra de cota solicitada pelo encarregado da laje',
+      processamento: 'Reciclado · Brita e Areia separadas no lavador mecânico',
+      britaRecuperadaKg: 640,
+      areiaRecuperadaKg: 490
+    },
+    {
+      id: 'dev-002',
+      dataHora: '2026-11-11 16:45',
+      betoneira: 'BT-03',
+      motorista: 'Valdemir Oliveira',
+      obraOrigem: 'Casa Térrea Alphaville',
+      volumeResidualM3: 0.4,
+      motivo: 'Ajuste de volume de vigamento superior',
+      processamento: 'Reciclado · Água enviada para bacia de decantação',
+      britaRecuperadaKg: 420,
+      areiaRecuperadaKg: 330
+    }
+  ]
+};
+
+export async function obterDadosRecicladorConcreto(empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  if (!data.concreto_reciclador) {
+    data.concreto_reciclador = JSON.parse(JSON.stringify(DADOS_RECICLADOR_INICIAIS));
+    save();
+  }
+  return { ok: true, reciclador: data.concreto_reciclador };
+}
+
+export async function registrarConcretoResidual(dados, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  if (!data.concreto_reciclador) data.concreto_reciclador = JSON.parse(JSON.stringify(DADOS_RECICLADOR_INICIAIS));
+
+  const vol = Number(dados.volumeResidualM3 || 0.5);
+  const brita = Math.round(vol * 1050);
+  const areia = Math.round(vol * 820);
+  const agua = Math.round(vol * 180);
+
+  const novo = {
+    id: 'dev-' + Date.now(),
+    dataHora: new Date().toISOString().replace('T', ' ').substring(0, 16),
+    betoneira: dados.betoneira || 'BT-01',
+    motorista: dados.motorista || 'Motorista Usina',
+    obraOrigem: dados.obraOrigem || 'Canteiro Tangará',
+    volumeResidualM3: vol,
+    motivo: dados.motivo || 'Sobra operacional de concretagem',
+    processamento: 'Reciclado · Lavador Helicoidal e Bacia de Decantação',
+    britaRecuperadaKg: brita,
+    areiaRecuperadaKg: areia
+  };
+
+  data.concreto_reciclador.concretoRecicladoHojeM3 = +(data.concreto_reciclador.concretoRecicladoHojeM3 + vol).toFixed(1);
+  data.concreto_reciclador.agregadosRecuperadosTon = +(data.concreto_reciclador.agregadosRecuperadosTon + (brita + areia)/1000).toFixed(1);
+  data.concreto_reciclador.aguaClarificadaLitros += agua;
+  data.concreto_reciclador.registrosDevolucao.unshift(novo);
+  save();
+
+  return { ok: true, registro: novo, reciclador: data.concreto_reciclador };
+}
+
+// ─── AUDITORIA METROLÓGICA DAS 4 BALANÇAS DA CENTRAL CONVICTA (NBR 7212) ───
+
+export async function obterAuditoriaMetrologicaBalancas(empresaId = CONCRETO_EMPRESA_ID) {
+  return {
+    ok: true,
+    dataAuditoria: '2026-11-12',
+    calibracaoRbcCertificado: 'RBC-MT-2026-9094-CONV',
+    validadeCalibracao: '2027-08-30',
+    normaReferencia: 'ABNT NBR 7212 Tabela 1 (Exatidão dos Equipamentos de Medida)',
+    balancas: [
+      {
+        id: 'bal-01',
+        nome: 'Balança de Cimento & Fíler (Silos Verticais 96t)',
+        capacidadeMaxKg: 1500,
+        toleranciaNormaPercent: 1.0,
+        desvioMedioPercent: 0.32,
+        desvioPadraoKg: 1.45,
+        status: 'conforme',
+        amostrasAuditadas: 48,
+        ultimaAfericaoPadrao: 'Padrão rastreado IPEM-MT 500 kg'
+      },
+      {
+        id: 'bal-02',
+        nome: 'Balança de Agregados (Areia Rio Sepotuba & Britas 0/1)',
+        capacidadeMaxKg: 5000,
+        toleranciaNormaPercent: 2.0,
+        desvioMedioPercent: 0.65,
+        desvioPadraoKg: 4.80,
+        status: 'conforme',
+        amostrasAuditadas: 48,
+        ultimaAfericaoPadrao: 'Padrão rastreado IPEM-MT 1000 kg'
+      },
+      {
+        id: 'bal-03',
+        nome: 'Balança de Água de Amassamento & Chiller Industrial',
+        capacidadeMaxKg: 800,
+        toleranciaNormaPercent: 1.0,
+        desvioMedioPercent: -0.18,
+        desvioPadraoKg: 0.85,
+        status: 'conforme',
+        amostrasAuditadas: 48,
+        ultimaAfericaoPadrao: 'Medidor volumétrico de calibração metrológica'
+      },
+      {
+        id: 'bal-04',
+        nome: 'Balança de Aditivos Químicos (Plastificante / Retardador)',
+        capacidadeMaxKg: 20,
+        toleranciaNormaPercent: 3.0,
+        desvioMedioPercent: 0.78,
+        desvioPadraoKg: 0.08,
+        status: 'conforme',
+        amostrasAuditadas: 48,
+        ultimaAfericaoPadrao: 'Balança eletrônica de precisão 1g'
+      }
+    ],
+    indiceCapacidadeGeral: {
+      cp: 1.62,
+      cpk: 1.54,
+      classificacao: 'Processo Industrial Altamente Capaz (NBR ISO 9001 / NBR 7212)'
+    }
+  };
+}
+
+// ─── RASTREAMENTO GPS & ROTAS EM TANGARÁ DA SERRA/MT ───
+
+export async function obterRotasGpsFrota(empresaId = CONCRETO_EMPRESA_ID) {
+  return {
+    ok: true,
+    cidade: 'Tangará da Serra/MT',
+    coordenadasUsina: { lat: -14.6215, lng: -57.4890, nome: 'Usina Serrano Concreto · MT-358 km 12' },
+    locaisChave: [
+      { id: 'loc-01', nome: 'Edifício Residencial Belvedere Tower', endereco: 'Rua José Corsino, 880, Jd. Europa', lat: -14.6190, lng: -57.4930, cliente: 'Grupo Moradda' },
+      { id: 'loc-02', nome: 'Edifício Residencial Serra Dourada', endereco: 'Rua José Corsino, 450, Jd. Europa', lat: -14.6205, lng: -57.4945, cliente: 'Construtora MT Horizon' },
+      { id: 'loc-03', nome: 'Piso Industrial Galpão de Cargas', endereco: 'Av. Lions Internacional, 1800, Distrito Industrial', lat: -14.6350, lng: -57.5120, cliente: 'AgroLog Transportes' },
+      { id: 'loc-04', nome: 'Casa Térrea Lote 12 Qd. 08', endereco: 'Rua das Palmeiras, 112, Alphaville Tangará', lat: -14.6120, lng: -57.4780, cliente: 'Eng. Marcelo Dantas' },
+      { id: 'loc-05', nome: 'Mineração & Porto de Areia Rio Sepotuba', endereco: 'Rod. MT-358 km 24, Sentido Barra do Bugres', lat: -14.6650, lng: -57.5450, cliente: 'Extração Própria Serrano' }
+    ],
+    veiculosGps: [
+      {
+        codigo: 'BT-01',
+        tipo: 'betoneira',
+        placa: 'RAX-3E21',
+        motorista: 'Marcos Silveira',
+        status: 'retornando_usina',
+        lat: -14.6210,
+        lng: -57.4910,
+        velocidadeKmH: 48,
+        sentido: 'Leste (MT-358 sentido Usina)',
+        distanciaUsinaKm: 2.4,
+        etaMinutos: 4,
+        rpmTambor: 2.8,
+        sentidoGiro: 'horario',
+        cargaAtual: 'Vazio / Lavando tambor',
+        nivelDieselPercent: 78
+      },
+      {
+        codigo: 'BT-02',
+        tipo: 'betoneira',
+        placa: 'RBY-4F32',
+        motorista: 'Carlos Eduardo Santos',
+        status: 'descarregando_obra',
+        lat: -14.6205,
+        lng: -57.4945,
+        velocidadeKmH: 0,
+        sentido: 'Estacionado na obra',
+        distanciaUsinaKm: 4.8,
+        etaMinutos: 0,
+        rpmTambor: 14.2,
+        sentidoGiro: 'anti_horario',
+        cargaAtual: '8 m³ FCK 30 MPa (4 m³ descarregados)',
+        tempoDecorridoMinutos: 65,
+        tempoRestantePegaMin: 85,
+        nivelDieselPercent: 64
+      },
+      {
+        codigo: 'BT-03',
+        tipo: 'betoneira',
+        placa: 'RCZ-5G43',
+        motorista: 'Valdemir Oliveira',
+        status: 'patio_usina',
+        lat: -14.6215,
+        lng: -57.4890,
+        velocidadeKmH: 0,
+        sentido: 'Aguardando balança',
+        distanciaUsinaKm: 0.0,
+        etaMinutos: 0,
+        rpmTambor: 0,
+        sentidoGiro: 'parado',
+        cargaAtual: 'Vazio / Higienizado',
+        nivelDieselPercent: 92
+      },
+      {
+        codigo: 'BT-04',
+        tipo: 'betoneira',
+        placa: 'RDA-6H54',
+        motorista: 'Roberto Lima',
+        status: 'em_transito_obra',
+        lat: -14.6280,
+        lng: -57.5020,
+        velocidadeKmH: 52,
+        sentido: 'Sudoeste (Av. Lions Internacional)',
+        distanciaUsinaKm: 5.1,
+        etaMinutos: 8,
+        rpmTambor: 3.4,
+        sentidoGiro: 'horario',
+        cargaAtual: '8 m³ FCK 35 MPa c/ Fibras',
+        tempoDecorridoMinutos: 28,
+        tempoRestantePegaMin: 122,
+        nivelDieselPercent: 81
+      },
+      {
+        codigo: 'BT-05',
+        tipo: 'betoneira',
+        placa: 'RDB-7J65',
+        motorista: 'Fernando Souza',
+        status: 'patio_usina',
+        lat: -14.6214,
+        lng: -57.4888,
+        velocidadeKmH: 0,
+        sentido: 'Pátio Central',
+        distanciaUsinaKm: 0.0,
+        etaMinutos: 0,
+        rpmTambor: 0,
+        sentidoGiro: 'parado',
+        cargaAtual: 'Vazio / Pronto',
+        nivelDieselPercent: 88
+      },
+      {
+        codigo: 'BL-01',
+        tipo: 'bomba_lanca',
+        placa: 'REC-8K76',
+        motorista: 'Gilberto Ramos',
+        status: 'operando_obra',
+        lat: -14.6190,
+        lng: -57.4930,
+        velocidadeKmH: 0,
+        sentido: 'Patolado no canteiro Belvedere Tower',
+        distanciaUsinaKm: 4.5,
+        etaMinutos: 0,
+        lancaAbertaM: 32,
+        pressaoHidraulicaBar: 185,
+        vazaoEfetivaM3H: 38,
+        nivelDieselPercent: 72
+      },
+      {
+        codigo: 'BL-02',
+        tipo: 'bomba_lanca',
+        placa: 'RED-9L87',
+        motorista: 'Claudemir Costa',
+        status: 'patio_usina',
+        lat: -14.6216,
+        lng: -57.4892,
+        velocidadeKmH: 0,
+        sentido: 'Disponível no Pátio',
+        distanciaUsinaKm: 0.0,
+        etaMinutos: 0,
+        lancaAbertaM: 0,
+        pressaoHidraulicaBar: 0,
+        vazaoEfetivaM3H: 0,
+        nivelDieselPercent: 95
+      }
+    ]
+  };
 }
