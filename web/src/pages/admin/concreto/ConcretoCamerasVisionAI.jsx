@@ -471,8 +471,8 @@ export default function ConcretoCamerasVisionAI({
     try {
       setTestandoId(camId);
       const res = await api.post(`/api/admin/concreto/cameras/${camId}/testar`, {});
-      const data = await res.json();
-      if (data.ok) {
+      const data = (res && res.data) ? res.data : res;
+      if (data && data.ok) {
         setCameras(prev => prev.map(c => c.id === camId ? { ...c, status: "online", latenciaMs: data.latenciaMs, ultimoPingEm: data.testadoEm } : c));
       }
     } catch (e) {
@@ -488,7 +488,7 @@ export default function ConcretoCamerasVisionAI({
     try {
       setTestandoId("form");
       const res = await api.post("/api/admin/concreto/cameras/testar-conexao", formCamera);
-      const data = await res.json();
+      const data = (res && res.data) ? res.data : res;
       setTesteResultado(data);
     } catch (e) {
       const lat = Math.floor(Math.random() * 14) + 8;
@@ -509,8 +509,8 @@ export default function ConcretoCamerasVisionAI({
     try {
       setAnalisandoId(camId);
       const res = await api.post(`/api/admin/concreto/cameras/${camId}/analisar`, {});
-      const data = await res.json();
-      if (data.ok) {
+      const data = (res && res.data) ? res.data : res;
+      if (data && data.ok) {
         setAnaliseResultado({ camId, ...data });
         carregarDados();
       }
@@ -1935,6 +1935,118 @@ export default function ConcretoCamerasVisionAI({
                 style={{ background: "#334155", border: "none", color: "#fff", padding: "6px 14px", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
               >
                 Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL: RESULTADO DA ANÁLISE DE VISÃO MOTOR KYTTOIA ─── */}
+      {analiseResultado && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.85)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#0f172a", border: "1px solid #10b981", borderRadius: 12, maxWidth: 880, width: "100%", padding: 20, boxShadow: "0 20px 40px rgba(0,0,0,0.8)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ background: "#10b981", color: "#064e3b", fontSize: 11, fontWeight: 900, padding: "3px 8px", borderRadius: 4 }}>
+                  MOTOR KYTTOIA VISION AI
+                </span>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "#f8fafc" }}>
+                  {analiseResultado.camera?.nome || "Análise de Câmera IP"}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAnaliseResultado(null)}
+                style={{ background: "transparent", border: "none", color: "#94a3b8", fontSize: 20, cursor: "pointer" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Imagem com Bounding Boxes */}
+            <div style={{ position: "relative", width: "100%", maxHeight: "55vh", overflow: "hidden", borderRadius: 8, background: "#000", border: "1px solid #1e293b" }}>
+              <img
+                src={analiseResultado.camera?.hlsStreamUrl || analiseResultado.evento?.snapshotUrl || "/assets/cftv/cftv_cam01_lpr_entrada.jpg"}
+                alt="Frame Vision"
+                style={{ width: "100%", height: "auto", display: "block" }}
+              />
+              {(analiseResultado.analise?.boundingBoxes || []).map((box, bIdx) => (
+                <div
+                  key={bIdx}
+                  style={{
+                    position: "absolute",
+                    left: `${box.x}%`,
+                    top: `${box.y}%`,
+                    width: `${box.w}%`,
+                    height: `${box.h}%`,
+                    border: `2px solid ${box.color || "#10b981"}`,
+                    boxShadow: `0 0 10px ${box.color || "#10b981"}44`,
+                    pointerEvents: "none"
+                  }}
+                >
+                  <span style={{ position: "absolute", top: -20, left: 0, background: box.color || "#10b981", color: "#0f172a", fontSize: 10, fontWeight: 800, padding: "1px 6px", borderRadius: 2, whiteSpace: "nowrap" }}>
+                    {box.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Detalhes da Análise */}
+            <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div style={{ background: "#090d16", padding: 12, borderRadius: 8, border: "1px solid #1e293b" }}>
+                <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>EVENTO IDENTIFICADO</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: "#38bdf8", marginTop: 2 }}>
+                  {analiseResultado.analise?.tipoRotulo || "Detecção Operacional"}
+                </div>
+                {analiseResultado.analise?.placaDetectada && (
+                  <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ background: "#1e293b", border: "1px solid #10b981", color: "#10b981", fontSize: 13, fontWeight: 900, padding: "2px 8px", borderRadius: 4, fontFamily: "monospace" }}>
+                      PLACA: {analiseResultado.analise?.placaDetectada}
+                    </span>
+                    <span style={{ fontSize: 11, color: "#94a3b8" }}>{analiseResultado.analise?.tipoPlaca}</span>
+                  </div>
+                )}
+                {analiseResultado.analise?.veiculoDescricao && (
+                  <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 4 }}>
+                    <strong>Veículo:</strong> {analiseResultado.analise?.veiculoDescricao}
+                  </div>
+                )}
+                {analiseResultado.analise?.motorista && (
+                  <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 2 }}>
+                    <strong>Motorista:</strong> {analiseResultado.analise?.motorista}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ background: "#090d16", padding: 12, borderRadius: 8, border: "1px solid #1e293b" }}>
+                <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>TELEMETRIA &amp; CONFIANÇA</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                  <span style={{ fontSize: 18, fontWeight: 900, color: "#10b981" }}>
+                    {analiseResultado.analise?.confianca}%
+                  </span>
+                  <span style={{ fontSize: 11, color: "#64748b" }}>Índice de Certeza do Motor KyttoIA</span>
+                </div>
+                <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>
+                  {analiseResultado.analise?.detalhes || "Frame validado e sincronizado com o CCO da Usina Serrano."}
+                </div>
+                {analiseResultado.analise?.temperaturaMax && (
+                  <div style={{ fontSize: 11, color: "#f59e0b", marginTop: 4, fontWeight: 700 }}>
+                    Termografia: Temp. Máx {analiseResultado.analise.temperaturaMax}°C (Média {analiseResultado.analise.temperaturaMedia}°C)
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14 }}>
+              <span style={{ fontSize: 12, color: "#10b981", fontWeight: 700 }}>
+                ✓ Análise registrada na linha do tempo de eventos do CCO
+              </span>
+              <button
+                type="button"
+                onClick={() => setAnaliseResultado(null)}
+                style={{ background: "#10b981", border: "none", color: "#064e3b", padding: "6px 16px", borderRadius: 6, fontSize: 12, fontWeight: 800, cursor: "pointer" }}
+              >
+                Concluir Análise
               </button>
             </div>
           </div>

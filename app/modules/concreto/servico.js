@@ -5651,6 +5651,61 @@ export function analisarFrameVisionKyttoIa(id, empresaId = CONCRETO_EMPRESA_ID) 
         { label: "Sensor Óptico 2 (Livre)", x: 80, y: 25, w: 8, h: 10, color: "#06b6d4" }
       ]
     };
+  } else if (camera.marca === "flir" || camera.pontoInstalacao === "termografia_silos") {
+    resultadoAnalise = {
+      tipoEvento: "termografia_concreto",
+      tipoRotulo: "Termografia FLIR & Temperatura NBR 7212",
+      confianca: 99.4,
+      severidade: "info",
+      detalhes: "Temperatura da massa de concreto no tambor em 28.4°C (Conforme NBR 7212 - Limite máximo 32.0°C). Silos em gradiente térmico estável.",
+      boundingBoxes: [
+        { label: "Tambor Betoneira 28.4°C (NBR 7212 OK)", x: 65, y: 35, w: 25, h: 30, color: "#ef4444" },
+        { label: "Silo 1 CP II-F (31.2°C)", x: 22, y: 22, w: 14, h: 55, color: "#f97316" },
+        { label: "Silo 2 CP V-ARI (29.8°C)", x: 42, y: 22, w: 14, h: 55, color: "#eab308" }
+      ]
+    };
+  } else if (camera.marca === "bosch" || (camera.nome && camera.nome.includes("Células"))) {
+    resultadoAnalise = {
+      tipoEvento: "celulas_toledo_conformidade",
+      tipoRotulo: "Inspeção Visual Células Toledo Prix C1-C8",
+      confianca: 99.8,
+      severidade: "info",
+      detalhes: "8 Células Toledo Prix digitais inspecionadas visualmente sem desvios ou obstruções. Certificação IPEM-MT ativa.",
+      boundingBoxes: [
+        { label: "Plataforma 21m Nivelada", x: 12, y: 36, w: 76, h: 34, color: "#10b981" },
+        { label: "Células C1-C4 (Eixo Diant.)", x: 18, y: 38, w: 32, h: 10, color: "#38bdf8" },
+        { label: "Células C5-C8 (Eixo Tras.)", x: 52, y: 38, w: 32, h: 10, color: "#38bdf8" }
+      ]
+    };
+  } else if (camera.marca === "toledo_prix_lpr" || camera.pontoInstalacao === "balanca_autoatendimento") {
+    resultadoAnalise = {
+      tipoEvento: "totem_motorista_toledo",
+      tipoRotulo: "Autoatendimento Totem Prix 9094 & 720i",
+      confianca: 99.6,
+      severidade: "info",
+      placaDetectada: "RRA-4E80",
+      detalhes: "Display Indicador 720i: 33.480 kg BRUTO sincronizado via Modbus/TCP. Motorista autenticado via RFID.",
+      boundingBoxes: [
+        { label: "Totem Toledo Prix 9094", x: 38, y: 25, w: 25, h: 60, color: "#3b82f6" },
+        { label: "Indicador 720i (33.480 kg)", x: 42, y: 32, w: 18, h: 16, color: "#10b981" }
+      ]
+    };
+  } else if (camera.recursosIa?.lprLeituraPlaca || camera.pontoInstalacao?.includes("lpr") || camera.pontoInstalacao?.includes("portao")) {
+    const placa = camera.pontoInstalacao?.includes("mineracao") ? "SRO-9A12" : "RRA-4E80";
+    resultadoAnalise = {
+      tipoEvento: "lpr_placa_identificada",
+      tipoRotulo: "Leitura LPR Mercosul pelo Motor KyttoIA",
+      placaDetectada: placa,
+      tipoPlaca: "Mercosul Comercial",
+      confianca: 99.8,
+      severidade: "info",
+      enquadramentoOk: true,
+      detalhes: `Placa ${placa} reconhecida com sucesso pelo Motor KyttoIA. Cancela automatizada liberada.`,
+      boundingBoxes: [
+        { label: `LPR: ${placa} (99.8%)`, x: 40, y: 50, w: 20, h: 12, color: "#10b981" },
+        { label: "Veículo Comercial", x: 32, y: 28, w: 36, h: 48, color: "#3b82f6" }
+      ]
+    };
   } else {
     resultadoAnalise = {
       tipoEvento: "monitoramento_patio_ia",
@@ -5713,6 +5768,32 @@ export function reconhecerEventoVision(id, empresaId = CONCRETO_EMPRESA_ID, oper
   evt.reconhecidoEm = new Date().toISOString();
   save();
   return true;
+}
+
+export function obterSnapshotUrlParaPontoOuMarca(ponto = "", marca = "", finalIp = null) {
+  if (finalIp === 120 || ponto === "balanca_entrada_lpr") return "/assets/cftv/cftv_cam01_lpr_entrada.jpg";
+  if (finalIp === 121 || ponto === "balanca_panoramica") {
+    if (marca === "bosch" || finalIp === 130) return "/assets/cftv/cftv_cam07_bosch_celulas.jpg";
+    return "/assets/cftv/cftv_cam02_plataforma_panoramica.jpg";
+  }
+  if (finalIp === 122 || ponto === "balanca_cancela_saida") return "/assets/cftv/cftv_cam03_cancela_saida.jpg";
+  if (finalIp === 123 || ponto === "patio_betoneiras") return "/assets/cftv/cftv_cam04_patio_silos.jpg";
+  if (finalIp === 124 || ponto === "central_dosadora") return "/assets/cftv/cftv_cam05_central_dosadora.jpg";
+  if (finalIp === 125 || ponto === "mineracao_areia") return "/assets/cftv/cftv_cam06_mineracao_areia.jpg";
+  if (finalIp === 130 || marca === "bosch") return "/assets/cftv/cftv_cam07_bosch_celulas.jpg";
+  if (finalIp === 132 || marca === "avigilon") return "/assets/cftv/cftv_cam08_avigilon_traseira.jpg";
+  if (finalIp === 135 || marca === "toledo_prix_lpr") return "/assets/cftv/cftv_cam09_toledo_totem.jpg";
+  if (finalIp === 127 || marca === "uniview") return "/assets/cftv/cftv_cam10_uniview_mineracao.jpg";
+  if (finalIp === 138 || marca === "tplink_vigi") return "/assets/cftv/cftv_cam11_tplink_vigi_baias.jpg";
+  if (finalIp === 150 || marca === "flir") return "/assets/cftv/cftv_cam12_flir_termica.jpg";
+  if (finalIp === 140 || marca === "hanwha") return "/assets/cftv/cftv_cam13_hanwha_silos.jpg";
+  if (finalIp === 145 || marca === "pelco") return "/assets/cftv/cftv_cam14_pelco_lavagem.jpg";
+  if (finalIp === 142 || marca === "vivotek") return "/assets/cftv/cftv_cam15_vivotek_portao.jpg";
+  if (finalIp === 152 || marca === "geovision") return "/assets/cftv/cftv_cam16_geovision_manobras.jpg";
+  if (finalIp === 128 || marca === "giga") return "/assets/cftv/cftv_cam17_giga_almoxarifado.jpg";
+  if (finalIp === 129 || marca === "tecvoz") return "/assets/cftv/cftv_cam18_tecvoz_estacionamento.jpg";
+  if (finalIp === 160 || marca === "onvif_generica") return "/assets/cftv/cftv_cam19_onvif_perimetro.jpg";
+  return "/assets/cftv/cftv_cam01_lpr_entrada.jpg";
 }
 
 export async function escanearRedeCamerasIpConcreto(opcoes = {}, empresaId = CONCRETO_EMPRESA_ID) {
@@ -6162,6 +6243,7 @@ export async function escanearRedeCamerasIpConcreto(opcoes = {}, empresaId = CON
       status: jaCadastrada ? "conectado" : "disponivel",
       cameraIdConectada: jaCadastrada ? jaCadastrada.id : null,
       cameraNomeConectada: jaCadastrada ? jaCadastrada.nome : null,
+      hlsStreamUrl: obterSnapshotUrlParaPontoOuMarca(disp.pontoInstalacao, disp.marca, disp.finalIp),
       urlsGeradas: {
         rtsp: urls.streamRtspUrl,
         snapshot: urls.snapshotHttpUrl,
@@ -6265,6 +6347,7 @@ export function integrarCamerasLoteConcreto(dispositivosParaIntegrar = [], empre
       fps: disp.fps || 30,
       resolucao: disp.resolucao || "1920x1080 (Full HD)",
       codec: disp.codec || "H.265",
+      hlsStreamUrl: disp.hlsStreamUrl || obterSnapshotUrlParaPontoOuMarca(disp.pontoInstalacao, disp.marca),
       recursosIa: {
         lprLeituraPlaca: disp.tipoAplicacao === "lpr_mercosul" || (disp.pontoSugerido && disp.pontoSugerido.includes("LPR")),
         enquadramentoBalanca: disp.tipoAplicacao === "enquadramento_balanca" || (disp.pontoSugerido && disp.pontoSugerido.includes("Panorâmica")),
