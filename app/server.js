@@ -2383,9 +2383,7 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   });
 
   app.get("/api/public/concreto/download-apk", (req, res) => {
-    const fs = require('fs');
-    const path = require('path');
-    const apkFile = path.resolve(__dirname, '../web/public/downloads/Serrano-Concreto-Campo.apk');
+    const apkFile = path.resolve(__dirname, "../web/public/downloads/Serrano-Concreto-Campo.apk");
     if (fs.existsSync(apkFile)) {
       res.setHeader('Content-Type', 'application/vnd.android.package-archive');
       res.setHeader('Content-Disposition', 'attachment; filename="Serrano-Concreto-Campo.apk"');
