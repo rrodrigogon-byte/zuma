@@ -47,8 +47,112 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
     veiculosNoPatio: []
   });
 
-  // Câmera CFTV selecionada em destaque
+  // Câmeras CFTV & Vision AI
+  const [filtroCftv, setFiltroCftv] = useState('todos');
+  const [testandoCamId, setTestandoCamId] = useState(null);
+  const [lprStatusMap, setLprStatusMap] = useState({});
   const [cameraAtiva, setCameraAtiva] = useState('cam01');
+
+  const LISTA_CAMERAS_COCKPIT = [
+    {
+      id: 'cam01',
+      nome: 'CAM-01 · Balança 80t (Totem LPR Entrada)',
+      marca: 'intelbras',
+      modelo: 'VIP 7250 LPR IA',
+      ip: '192.168.1.120',
+      portaRtsp: 554,
+      portaHttp: 80,
+      ponto: 'balanca',
+      codec: 'H.265 · 30 FPS',
+      foto: '/assets/cftv/cftv_cam01_lpr_entrada.jpg',
+      status: 'Placa: RRA-4E80 (99.6%)',
+      statusCor: '#10B981'
+    },
+    {
+      id: 'cam02',
+      nome: 'CAM-02 · Balança 80t (Panorâmica 21m)',
+      marca: 'hikvision',
+      modelo: 'DS-2CD2T87G2-L (ColorVu 4K)',
+      ip: '192.168.1.121',
+      portaRtsp: 554,
+      portaHttp: 80,
+      ponto: 'balanca',
+      codec: 'H.265 · 25 FPS (4K)',
+      foto: '/assets/cftv/cftv_cam02_plataforma_panoramica.jpg',
+      status: 'Enquadramento 100% OK · 8 Células Toledo',
+      statusCor: '#10B981'
+    },
+    {
+      id: 'cam03',
+      nome: 'CAM-03 · Balança 80t (Cancela Saída & Semáforo)',
+      marca: 'intelbras',
+      modelo: 'VIP 3230 B G3',
+      ip: '192.168.1.122',
+      portaRtsp: 554,
+      portaHttp: 80,
+      ponto: 'balanca',
+      codec: 'H.264 · 30 FPS',
+      foto: '/assets/cftv/cftv_cam03_cancela_saida.jpg',
+      status: 'Cancela Fechada (Aguardando Liberação)',
+      statusCor: '#EF4444'
+    },
+    {
+      id: 'cam04',
+      nome: 'CAM-04 · Pátio de Betoneiras & Silos 96t',
+      marca: 'dahua',
+      modelo: 'DH-IPC-HFW5842E-Z4E',
+      ip: '192.168.1.123',
+      portaRtsp: 554,
+      portaHttp: 80,
+      ponto: 'patio',
+      codec: 'H.265 · 25 FPS',
+      foto: '/assets/cftv/cftv_cam04_patio_silos.jpg',
+      status: 'EPIs Conformes (Capacete / Colete)',
+      statusCor: '#10B981'
+    },
+    {
+      id: 'cam05',
+      nome: 'CAM-05 · Central Dosadora NBR 7212',
+      marca: 'axis',
+      modelo: 'P1455-LE Industrial',
+      ip: '192.168.1.124',
+      portaRtsp: 554,
+      portaHttp: 80,
+      ponto: 'patio',
+      codec: 'H.265 · 30 FPS',
+      foto: '/assets/cftv/cftv_cam05_central_dosadora.jpg',
+      status: 'Batelada #1042 Concluída',
+      statusCor: '#38BDF8'
+    },
+    {
+      id: 'cam06',
+      nome: 'CAM-06 · Mineração Areia (Draga Sepotuba)',
+      marca: 'hikvision',
+      modelo: 'DS-2CD2047G2-LU/SL (2K)',
+      ip: '192.168.1.125',
+      portaRtsp: 554,
+      portaHttp: 80,
+      ponto: 'mineracao',
+      codec: 'H.265 · 20 FPS (2K)',
+      foto: '/assets/cftv/cftv_cam06_mineracao_areia.jpg',
+      status: 'Draga 01 em Operação Contínua',
+      statusCor: '#10B981'
+    },
+    {
+      id: 'cam07',
+      nome: 'CAM-07 · Balança Extra (Positivo Seg IP)',
+      marca: 'positivo',
+      modelo: 'Smart Câmera IP Wi-Fi 1080p',
+      ip: '192.168.1.126',
+      portaRtsp: 554,
+      portaHttp: 80,
+      ponto: 'balanca',
+      codec: 'H.264 · 25 FPS',
+      foto: '/assets/cftv/cftv_cam03_cancela_saida.jpg',
+      status: 'Conectada · ONVIF Porta 8899',
+      statusCor: '#10B981'
+    }
+  ];
   const [snapshotCapturado, setSnapshotCapturado] = useState(null);
   const [scannerLprAtivo, setScannerLprAtivo] = useState(true);
   const [interfoneOuvindo, setInterfoneOuvindo] = useState(false);
@@ -528,7 +632,7 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           {onVoltar && (
             <button onClick={onVoltar} style={{ background: '#1E293B', border: '1px solid #334155', color: '#94A3B8', borderRadius: '6px', padding: '5px 10px', cursor: 'pointer', fontSize: '11px', fontWeight: '700' }}>
-              🚚 Balcão Concreto
+              🚚 Expedição da Usina
             </button>
           )}
           <div>
@@ -559,7 +663,7 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
           <button
             onClick={() => setAbaPrincipal('cftv')}
             style={{ background: abaPrincipal === 'cftv' ? '#0284C7' : 'transparent', color: abaPrincipal === 'cftv' ? '#FFF' : '#94A3B8', border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>
-            📹 Câmeras CFTV (4)
+            📹 Câmeras & Vision AI (7)
           </button>
           <button
             onClick={() => setAbaPrincipal('historico')}
@@ -576,6 +680,11 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
             style={{ background: abaPrincipal === 'configuracoes' ? '#0284C7' : 'transparent', color: abaPrincipal === 'configuracoes' ? '#FFF' : '#94A3B8', border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>
             ⚙️ Hardware
           </button>
+          <a
+            href="/admin/concreto?secao=torre-pesagem"
+            style={{ background: '#FF7000', color: '#16181B', textDecoration: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '11px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            🗼 Torre de Controle
+          </a>
         </div>
       </div>
 

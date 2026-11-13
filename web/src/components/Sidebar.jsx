@@ -531,6 +531,7 @@ export const NAV_RESTAURANTE_GROUPS = [
   {
     label: 'Financeiro & Caixa',
     items: [
+      { to: '/admin/pizzaria?tab=financeiro', icon: '💰', label: 'Financeiro, CMV & DRE' },
       { to: '/admin/fechamento-diario', icon: '🔐', label: 'Fechamento de Caixa', razao: true },
       { to: '/admin/financeiro', icon: '💰', label: 'Financeiro' },
       { to: '/admin/contas-pagar', icon: '🧾', label: 'Contas a Pagar', razao: true },
@@ -574,10 +575,10 @@ export const NAV_HOLDING_GROUPS = [
     label: "Holding Corporativa", aberto: true,
     items: [
       { to: "/admin/concreto?secao=empresa-holding", icon: "🏢", label: "Painel Geral da Holding" },
-      { to: "/admin/concreto?secao=empresa-holding", icon: "📊", label: "DRE Consolidada & Cash Pooling" },
+      { to: "/admin/concreto?secao=empresa-holding&aba=dre", icon: "📊", label: "DRE Consolidada & Cash Pooling" },
       { to: "/admin/concreto?secao=empresa-holding", icon: "🤝", label: "Hub de Sinergias B2B (Concreto & Sabor)" },
       { to: "/admin/concreto?secao=empresa-holding", icon: "🌱", label: "Governança ESG & Economia Circular" },
-      { to: "/admin/concreto?secao=empresa-holding", icon: "💎", label: "Dividendos & Remuneração Acionária" },
+      { to: "/admin/concreto?secao=empresa-holding&aba=dividendos", icon: "💎", label: "Dividendos & Remuneração Acionária" },
       { to: "/admin/concreto?secao=empresa-holding", icon: "🤖", label: "Copilot KyttoIA de Expansão" },
       { to: "/admin/consolidacao-grupo", icon: "🏛️", label: "Consolidação Geral dos Negócios" },
     ],
@@ -615,10 +616,12 @@ export const NAV_CONCRETO_GROUPS = [
     label: "Operação", aberto: true,
     items: [
       { to: "/admin/concreto?secao=operacao-despacho", icon: "🚚", label: "Despacho ao Vivo" },
+      { to: "/admin/concreto?secao=torre-pesagem", icon: "🗼", label: "Torre de Controle & Balança" },
       { to: "/admin/concreto?secao=app-campo-assinatura", icon: "📱", label: "App PWA & Canhoto em Campo" },
       { to: "/admin/concreto?secao=operacao-programacao", icon: "📅", label: "Programação de Cargas" },
       { to: "/admin/concreto?secao=operacao-frota", icon: "🚛", label: "Frota & Telemetria" },
-      { to: "/pdv", icon: "⚖️", label: "Balança Rodoviária & Balcão" },
+      { to: "/pdv", icon: "⚖️", label: "Balança Rodoviária 80t" },
+      { to: "/admin/concreto?secao=cameras-cftv", icon: "📹", label: "Câmeras & Vision AI" },
     ],
   },
   {
@@ -653,7 +656,7 @@ export const NAV_CONCRETO_GROUPS = [
     items: [
       { to: "/admin/concreto?secao=empresa-holding", icon: "🏢", label: "Grupo Palatare · Holding & Fiscais" },
       { to: "/admin/pizzaria", icon: "🍕", label: "Palatare Pizzaria & Restaurante" },
-      { to: "/admin/financeiro", icon: "💰", label: "Financeiro & Medições" },
+      { to: "/admin/concreto?secao=financeiro-usina", icon: "💰", label: "Financeiro, Fluxo & Medições de Obras" },
       { to: "/admin/notas", icon: "🧾", label: "Notas Fiscais (NF-e / MDF-e)" },
       { to: "/admin/cadastros-mestres", icon: "🗂️", label: "Motoristas & Fornecedores" },
       { to: "/admin/configuracoes", icon: "⚙️", label: "Configurações" },
@@ -1463,7 +1466,8 @@ export default function Sidebar() {
                 : isConcreto
                 ? [
                     { to: "/admin/concreto", icon: "🚚", label: "Expedição & Cargas", badge: true },
-                    { to: "/pdv", icon: "⚖️", label: "Balança & Balcão", badge: false },
+                    { to: "/admin/concreto?secao=torre-pesagem", icon: "🗼", label: "Torre de Controle", badge: false },
+                    { to: "/pdv", icon: "⚖️", label: "Balança Rodoviária 80t", badge: false },
                     { to: "/admin/concreto?secao=cameras-cftv", icon: "📹", label: "Câmeras & Vision AI", badge: false },
                   ]
                 : isClube

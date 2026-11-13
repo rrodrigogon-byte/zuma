@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { api } from '../../../lib/api';
 import { useToast } from '../../../hooks/useToast';
+import ModalOtimizadorKyttoIA from './ModalOtimizadorKyttoIA';
 
 export default function ProgramacaoCargasAgenda({
   cargas = [],
@@ -419,6 +420,30 @@ export default function ProgramacaoCargasAgenda({
               R$ {Number(kpis.fatPrevisto || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </div>
             <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Concreto usinado + taxa de bomba</span>
+          </div>
+
+          <div 
+            style={{ 
+              background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(234, 88, 12, 0.05) 100%)', 
+              border: '1px solid rgba(245, 158, 11, 0.35)', 
+              borderRadius: 8, 
+              padding: '12px 16px',
+              cursor: 'pointer',
+              transition: 'transform 0.15s ease'
+            }}
+            onClick={() => handleAnalisarKyttoIA(true)}
+            title="Abrir Painel KyttoIA de Otimização e Previsão de Gargalos"
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase' }}>Otimizador KyttoIA</span>
+              <span style={{ fontSize: 13 }}>🤖</span>
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: (analiseKyttoIA?.scoreEficiencia ?? 96) >= 90 ? '#10b981' : '#f59e0b', fontFamily: 'var(--font-data)', marginTop: 2 }}>
+              {analiseKyttoIA?.scoreEficiencia ?? 96}% <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>Score</span>
+            </div>
+            <span style={{ fontSize: 10, color: (analiseKyttoIA?.gargalosPrevistos?.length || 0) === 0 ? '#10b981' : '#f59e0b', fontWeight: 700 }}>
+              {(analiseKyttoIA?.gargalosPrevistos?.length || 0) === 0 ? '✓ Gargalos Zero (NBR 7212)' : `⚠️ ${analiseKyttoIA?.gargalosPrevistos?.length || 0} pontos de atenção`}
+            </span>
           </div>
         </div>
       </div>
@@ -1373,6 +1398,18 @@ export default function ProgramacaoCargasAgenda({
           </div>
         </div>
       )}
+
+      {/* ─── MODAL KYTTOIA: OTIMIZADOR DE ESCALA & GARGALOS ─── */}
+      <ModalOtimizadorKyttoIA
+        isOpen={modalKyttoIAAberto}
+        onClose={() => setModalKyttoIAAberto(false)}
+        analise={analiseKyttoIA}
+        carregando={carregandoKyttoIA}
+        onRecalcular={() => handleAnalisarKyttoIA(true)}
+        onAplicarEscala={handleAplicarEscalaKyttoIA}
+        aplicando={aplicandoKyttoIA}
+        dataAlvo={dataSelecionada}
+      />
     </div>
   );
 }

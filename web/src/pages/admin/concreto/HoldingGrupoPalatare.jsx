@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../lib/auth';
 import {
   HOLDING_PALATARE_EMPRESA_ID,
@@ -9,11 +9,12 @@ import {
 
 export default function HoldingGrupoPalatare({ setSecaoAtiva }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { trocarEmpresa, empresaAtiva } = useAuth() || {};
   const [modalDossieAberto, setModalDossieAberto] = useState(false);
   const [modalDividendosAberto, setModalDividendosAberto] = useState(false);
   const [payoutPercentual, setPayoutPercentual] = useState(55);
-  const [filtroAbaInterna, setFiltroAbaInterna] = useState('todas'); // 'todas', 'empresas', 'dre', 'sinergias', 'esg', 'copilot', 'societario', 'fiscais', 'licencas'
+  const [filtroAbaInterna, setFiltroAbaInterna] = useState(searchParams.get('aba') || 'todas'); // 'todas', 'empresas', 'dre', 'sinergias', 'esg', 'dividendos', 'copilot', 'societario', 'fiscais', 'licencas'
   const [voucherConstrutora, setVoucherConstrutora] = useState('Construtora MT Horizon');
   const [voucherVolumeM3, setVoucherVolumeM3] = useState(48);
   const [voucherGerado, setVoucherGerado] = useState(null);

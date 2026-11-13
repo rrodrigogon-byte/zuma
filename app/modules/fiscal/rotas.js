@@ -30,6 +30,7 @@ export function createFiscalAdminRouter({ db, escopoDaRequisicao, env = process.
   const empresaToda = (lojaRestrita, acao) => { if (lojaRestrita) throw new ErroDominio('PERMISSION_DENIED', `${acao} exige permissão na empresa toda`, 403); };
 
   router.get('/estado', rota('payments.read', ({ req, empresaId, lojaRestrita }) => svc.prontidao(db, empresaId, { lojaId: lojaRestrita || req.query.lojaId || null, env })));
+  router.get('/validacao-dino', rota('payments.read', ({ req, empresaId }) => svc.auditarConformidadeFiscalDino(db, empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6', { env })));
   router.post('/saneamento-multiempresa', rota('settings.write', () => svc.sanearFiscalMultiempresa(db)));
   router.post('/arquivar-demonstracao-dino', rota('settings.write', () => svc.arquivarCatalogoDemoDino(db)));
   router.post('/classificar-agro-open', rota('settings.write', () => svc.classificarProdutosAgroOpen(db)));

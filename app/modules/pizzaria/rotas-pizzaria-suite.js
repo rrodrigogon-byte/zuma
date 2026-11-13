@@ -39,6 +39,50 @@ import {
   PALATARE_EMPRESA_ID
 } from '../../palatare-pizzaria-seed.js';
 
+
+function normalizarPedidoParaSuite(p) {
+  if (!p) return null;
+  return {
+    ...p,
+    comanda: p.comanda || p.codigoExibicao || p.id,
+    cliente: p.cliente || p.clienteNome || "Cliente Palatare",
+    telefone: p.telefone || p.clienteTelefone || "",
+    endereco: p.endereco || p.enderecoEntrega || "",
+    total: p.total || p.totalGeral || p.subtotal || 0,
+    origem: p.origem || p.canalNome || "DELIVERY",
+    itens: (p.itens || []).map(it => ({
+      ...it,
+      nome: it.nome || (it.sabores && it.sabores.length > 0 ? it.sabores.join(" / ") : ("Pizza " + (it.tamanho || "Artesanal"))),
+      qtd: it.qtd || it.quantidade || 1,
+      valor: it.valor || it.valorUnitario || (it.subtotal ? it.subtotal / (it.qtd || it.quantidade || 1) : 85.00)
+    }))
+  };
+}
+
+function localizarPedidoPizzariaUnificado(data, pedidoId) {
+  if (!data || !pedidoId) return null;
+  
+  // 1. Procurar no KDS
+  const pedidoKds = (data.palatare_kds || []).find(p => p.id === pedidoId);
+  if (pedidoKds) return normalizarPedidoParaSuite(pedidoKds);
+
+  // 2. Procurar no Hub de Delivery Multicanal
+  if (data.pizzaria_delivery_hub) {
+    for (const empId of Object.keys(data.pizzaria_delivery_hub)) {
+      const p = (data.pizzaria_delivery_hub[empId]?.pedidos || []).find(x => x.id === pedidoId);
+      if (p) return normalizarPedidoParaSuite(p);
+    }
+  }
+
+  // 3. Procurar em pedidos/comandas
+  if (data.palatare_pedidos) {
+    const p = data.palatare_pedidos.find(x => x.id === pedidoId);
+    if (p) return normalizarPedidoParaSuite(p);
+  }
+
+  return null;
+}
+
 export function criarRotasPizzariaSuite() {
   const router = Router();
 
@@ -123,7 +167,7 @@ export function criarRotasPizzariaSuite() {
   router.patch('/kds/:id/status', async (req, res) => {
     try {
       const data = db();
-      const pedido = (data.palatare_kds || []).find(p => p.id === req.params.id);
+      const pedido = localizarPedidoPizzariaUnificado(data, req.params.id);
       if (!pedido) return res.status(404).json({ error: 'Pedido não encontrado no KDS' });
 
       const statusAntigo = pedido.status;
@@ -149,7 +193,7 @@ export function criarRotasPizzariaSuite() {
   router.post('/pedidos/:id/imprimir-cozinha', async (req, res) => {
     try {
       const data = db();
-      const pedido = (data.palatare_kds || []).find(p => p.id === req.params.id);
+      const pedido = localizarPedidoPizzariaUnificado(data, req.params.id);
       if (!pedido) return res.status(404).json({ error: 'Pedido não encontrado' });
 
       const impressao = gerarComandaCozinhaEscPos(pedido);
@@ -165,7 +209,7 @@ export function criarRotasPizzariaSuite() {
   router.post('/pedidos/:id/imprimir-motoboy', async (req, res) => {
     try {
       const data = db();
-      const pedido = (data.palatare_kds || []).find(p => p.id === req.params.id);
+      const pedido = localizarPedidoPizzariaUnificado(data, req.params.id);
       if (!pedido) return res.status(404).json({ error: 'Pedido não encontrado' });
 
       const entregador = MOTOBOYS_FROTA_PALATARE.find(m => m.id === req.body?.motoboyId) || MOTOBOYS_FROTA_PALATARE[0];
@@ -182,7 +226,7 @@ export function criarRotasPizzariaSuite() {
   router.post('/pedidos/:id/emitir-nfce', async (req, res) => {
     try {
       const data = db();
-      const pedido = (data.palatare_kds || []).find(p => p.id === req.params.id);
+      const pedido = localizarPedidoPizzariaUnificado(data, req.params.id);
       if (!pedido) return res.status(404).json({ error: 'Pedido não encontrado' });
 
       const nfce = gerarPreviaNfcePizzaria(pedido);
@@ -228,7 +272,7 @@ export function criarRotasPizzariaSuite() {
     motoboy.pedidoAtual = pedidoId;
 
     const data = db();
-    const pedido = (data.palatare_kds || []).find(p => p.id === pedidoId);
+    const pedido = localizarPedidoPizzariaUnificado(data, pedidoId);
     if (pedido) {
       pedido.status = 'saiu_entrega';
       pedido.praca = `Em rota com ${motoboy.nome}`;

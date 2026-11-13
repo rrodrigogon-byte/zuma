@@ -4,6 +4,7 @@ import { useAuth } from '../../lib/auth';
 import { useToast } from '../../hooks/useToast';
 import { api } from '../../lib/api';
 import './ConcretoUsinaERP.css';
+import ConcretoFinanceiroUsina from './concreto/ConcretoFinanceiroUsina';
 import ConcretoVendasFaturamento from './concreto/ConcretoVendasFaturamento';
 import ProgramacaoCargasAgenda from './concreto/ProgramacaoCargasAgenda';
 import ConcretoKyttoIACopilot from './concreto/ConcretoKyttoIACopilot';
@@ -15,6 +16,7 @@ import ConcretoCamerasVisionAI from './concreto/ConcretoCamerasVisionAI';
 import ConcretoLaboratorioTecnologico from './concreto/ConcretoLaboratorioTecnologico';
 import ConcretoAppCampoPainel from './concreto/ConcretoAppCampoPainel';
 import HoldingGrupoPalatare from './concreto/HoldingGrupoPalatare';
+import TorreDeControlePesagemSerrano from './concreto/TorreDeControlePesagemSerrano';
 import { HOLDING_PALATARE_EMPRESA_ID, SERRANO_CONCRETO_EMPRESA_ID } from '../../lib/palatare-constants';
 
 
@@ -35,7 +37,7 @@ export default function ConcretoUsinaERP() {
   const [themeDark, setThemeDark] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const secaoParam = searchParams.get('secao') || searchParams.get('tab') || 'operacao-despacho';
-  const secaoAtiva = (secaoParam === 'app-campo' || secaoParam === 'app-campo-assinatura') ? 'app-campo-assinatura' : secaoParam;
+  const secaoAtiva = (secaoParam === 'app-campo' || secaoParam === 'app-campo-assinatura') ? 'app-campo-assinatura' : (secaoParam === 'torre' || secaoParam === 'torre-controle' || secaoParam === 'torre-pesagem') ? 'torre-pesagem' : secaoParam;
   const setSecaoAtiva = (s) => {
     const sNorm = (s === 'app-campo' || s === 'app-campo-assinatura') ? 'app-campo-assinatura' : s;
     setSearchParams({ secao: sNorm });
@@ -660,6 +662,7 @@ export default function ConcretoUsinaERP() {
         <nav className="serrano-nav-tabs" aria-label="Navegação da Usina">
           {[
             { id: "operacao-despacho", label: "Despacho ao Vivo", icon: "🚚", count: cargas.length },
+            { id: "torre-pesagem", label: "Torre de Controle & Balança", icon: "🗼" },
             { id: "app-campo-assinatura", label: "App PWA & Canhoto em Campo", icon: "📱", count: cargas.filter(c => !c.assinaturaEntrega).length },
             { id: "operacao-programacao", label: "Programação de Cargas", icon: "📅" },
             { id: "operacao-frota", label: "Frota & Telemetria", icon: "🚛", count: frota.length },
@@ -667,6 +670,7 @@ export default function ConcretoUsinaERP() {
             { id: "producao-op", label: "Ordens de Produção", icon: "📋" },
             { id: "producao-laboratorio", label: "Laboratório & CPs (NBR 5739)", icon: "🔬", count: ensaios.length },
             { id: "suprimentos-silos", label: "Mineração & Silos 96t", icon: "⛏️", count: silos.length },
+            { id: "financeiro-usina", label: "Financeiro & Fluxo de Caixa", icon: "💰" },
             { id: "vendas-faturamento", label: "Vendas & Notas Fiscais", icon: "📑" },
             { id: "comercial-propostas", label: "Orçamentos & Propostas", icon: "💼", count: propostas.length },
             { id: "empresa-holding", label: "Holding & Dados Fiscais", icon: "🏢" },
@@ -1694,6 +1698,13 @@ export default function ConcretoUsinaERP() {
 
         {/* ─── ABA 6: HOLDING & DADOS FISCAIS SEFAZ ─── */}
         
+        {/* ─── ABA: TORRE DE CONTROLE DE PESAGEM & GÊMEO DIGITAL ─── */}
+        {(secaoAtiva === 'torre-pesagem' || secaoAtiva === 'torre-controle') && (
+          <TorreDeControlePesagemSerrano
+            onVoltar={() => setSecaoAtiva('operacao-despacho')}
+          />
+        )}
+
         {/* ─── ABA 11: CÂMERAS IP INDUSTRIAIS & VISION AI (LPR / BALANÇA / SILOS) ─── */}
         {secaoAtiva === 'cameras-cftv' && (
           <ConcretoCamerasVisionAI
@@ -2030,6 +2041,11 @@ export default function ConcretoUsinaERP() {
             onAbrirRomaneio={(c) => { setModalRomaneioAberto(c); setAbaRomaneio('romaneio'); }}
             onAbrirTicketBalanca={(c) => { setModalRomaneioAberto(c); setAbaRomaneio('balanca'); }}
           />
+        )}
+
+        {/* ─── ABA 11: FINANCEIRO, FLUXO DE CAIXA & MEDIÇÕES DE OBRAS ─── */}
+        {(secaoAtiva === 'financeiro-usina' || secaoAtiva === 'financeiro') && (
+          <ConcretoFinanceiroUsina cargas={cargas} />
         )}
       </main>
 
