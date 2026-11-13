@@ -8,7 +8,7 @@ import './comanda-nova.css'
 const moeda = (valor) => Number(valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 /** Campo de cliente com busca: digite o nome, telefone ou e-mail e escolha com o mouse ou o teclado. */
-export function BuscaCliente({ clientes, clienteId, onSelecionar, onNomeEventual, nomeEventual = '', permitirEventual = true }) {
+export function BuscaCliente({ clientes, clienteId, onSelecionar, onNomeEventual, onAbrirCadastro, nomeEventual = '', permitirEventual = true }) {
   const [termo, setTermo] = useState('')
   const [aberto, setAberto] = useState(false)
   const [ativo, setAtivo] = useState(0)
@@ -40,10 +40,82 @@ export function BuscaCliente({ clientes, clienteId, onSelecionar, onNomeEventual
     return (
       <div className="cn-cliente-escolhido">
         <div>
-          <strong>{selecionado.nome}</strong>
+          <strong
+            style={onAbrirCadastro ? { cursor: 'pointer', textDecoration: 'underline' } : {}}
+            onClick={() => onAbrirCadastro?.(selecionado)}
+            title="Acessar cadastro e ficha do cliente"
+          >
+            {selecionado.nome}
+          </strong>
           <small>{[selecionado.telefone, selecionado.email].filter(Boolean).join(' · ') || 'Sem contato cadastrado'}</small>
         </div>
-        <button type="button" className="cn-link" onClick={() => onSelecionar(null)}>Trocar</button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {onAbrirCadastro && (
+            <button
+              type="button"
+              className="cn-link"
+              style={{
+                fontWeight: 700,
+                color: 'var(--accent, #1d4ed8)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                cursor: 'pointer',
+                background: 'rgba(59, 130, 246, 0.08)',
+                padding: '4px 10px',
+                borderRadius: 6,
+                border: '1px solid rgba(59, 130, 246, 0.25)',
+              }}
+              onClick={() => onAbrirCadastro(selecionado)}
+              title="Acessar / editar cadastro completo do cliente"
+            >
+              👤 Cadastro do cliente
+            </button>
+          )}
+          <button type="button" className="cn-link" onClick={() => onSelecionar(null)}>Trocar</button>
+        </div>
+      </div>
+    )
+  }
+
+  if (nomeEventual) {
+    return (
+      <div className="cn-cliente-escolhido">
+        <div>
+          <strong
+            style={onAbrirCadastro ? { cursor: 'pointer', textDecoration: 'underline' } : {}}
+            onClick={() => onAbrirCadastro?.({ nome: nomeEventual })}
+            title="Acessar / vincular cadastro do cliente"
+          >
+            {nomeEventual}
+          </strong>
+          <small>Cliente eventual (sem cadastro vinculado)</small>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {onAbrirCadastro && (
+            <button
+              type="button"
+              className="cn-link"
+              style={{
+                fontWeight: 700,
+                color: 'var(--accent, #1d4ed8)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                cursor: 'pointer',
+                background: 'rgba(59, 130, 246, 0.08)',
+                padding: '4px 10px',
+                borderRadius: 6,
+                border: '1px solid rgba(59, 130, 246, 0.25)',
+              }}
+              onClick={() => onAbrirCadastro({ nome: nomeEventual })}
+              title="Criar cadastro ou abrir ficha 360"
+            >
+              👤 Cadastro do cliente
+            </button>
+          )}
+          <button type="button" className="cn-link" onClick={() => { onNomeEventual(''); onSelecionar(null); }}>Trocar</button>
+        </div>
       </div>
     )
   }
@@ -459,7 +531,7 @@ export function usePlanosDoCliente(clienteId) {
 }
 
 /** Tela completa de abertura da comanda. */
-export default function ComandaNova({ clientes, profissionais, servicos, produtosRevenda, catalogoPlanos = [], agendamentos = [], agendamentoId = '', clienteInicial = '', nomeInicial = '', telefoneInicial = '', profissionalInicial = '', servicoInicialId = '', observacoesIniciais = '', dataInicial = '', onCancelar, onCriada, toast }) {
+export default function ComandaNova({ clientes, profissionais, servicos, produtosRevenda, catalogoPlanos = [], agendamentos = [], agendamentoId = '', clienteInicial = '', nomeInicial = '', telefoneInicial = '', profissionalInicial = '', servicoInicialId = '', observacoesIniciais = '', dataInicial = '', onCancelar, onCriada, onAbrirCadastroCliente, toast }) {
   const [dataComanda, setDataComanda] = useState(() => dataInicial || new Date().toISOString().slice(0, 10));
   const [clienteId, setClienteId] = useState(clienteInicial)
   const [nomeEventual, setNomeEventual] = useState(clienteInicial ? '' : nomeInicial)
@@ -565,7 +637,16 @@ export default function ComandaNova({ clientes, profissionais, servicos, produto
         </label>
         {/* div (e não label): um label repassaria o clique para o botão "Trocar" e desfaria a escolha. */}
         <div className="cn-campo" role="group" aria-labelledby="cn-rotulo-cliente"><span id="cn-rotulo-cliente">Cliente</span>
-          <BuscaCliente clientes={clientes} clienteId={clienteId} nomeEventual={nomeEventual} onSelecionar={(c) => { setClienteId(c?.id || ''); setNomeEventual('') }} onNomeEventual={(nome) => { setClienteId(''); setNomeEventual(nome) }} />
+          <BuscaCliente
+            clientes={clientes}
+            clienteId={clienteId}
+            nomeEventual={nomeEventual}
+            onSelecionar={(c) => { setClienteId(c?.id || ''); setNomeEventual('') }}
+            onNomeEventual={(nome) => { setClienteId(''); setNomeEventual(nome) }}
+            onAbrirCadastro={(c) => {
+              onAbrirCadastroCliente?.(c || cliente || (clienteId ? (clientes || []).find((item) => item.id === clienteId) : null) || { nome: nomeEventual, telefone: telefoneEventual });
+            }}
+          />
           {!cliente && (
             <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
               <span style={{ fontSize: 11, color: 'var(--muted, #64748b)' }}>Atalho de consumo rápido:</span>

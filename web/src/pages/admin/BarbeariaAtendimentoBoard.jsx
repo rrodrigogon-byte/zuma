@@ -198,6 +198,7 @@ export default function BarbeariaAtendimentoBoard({
   onOpenRecebimento,
   onOpenHistorico,
   onReassignBarber,
+  onOpenCadastroCliente,
   onCreateEncaixe,
   onAddItemComanda,
   onRefresh,
@@ -1079,6 +1080,7 @@ export default function BarbeariaAtendimentoBoard({
                           onOpenRecebimento={onOpenRecebimento}
                           onOpenHistorico={onOpenHistorico}
                           onOpenAddItem={(ag, cm) => setModalItemComanda({ agendamento: ag, comanda: cm })}
+                          onOpenCadastroCliente={onOpenCadastroCliente}
                           menuAbertoId={menuAbertoId}
                           setMenuAbertoId={setMenuAbertoId}
                           moverAbertoId={moverAbertoId}
@@ -1703,6 +1705,7 @@ function CardAtendimentoSwipeable({
   onOpenRecebimento,
   onOpenHistorico,
   onOpenAddItem,
+  onOpenCadastroCliente,
   menuAbertoId,
   setMenuAbertoId,
   moverAbertoId,
@@ -2152,6 +2155,19 @@ function CardAtendimentoSwipeable({
                     }}
                   >
                     ⇄ Reatribuir barbeiro
+                  </button>
+                )}
+
+                {onOpenCadastroCliente && (
+                  <button
+                    type="button"
+                    className="atendimento-popover-item"
+                    onClick={() => {
+                      setMenuAbertoId(null)
+                      onOpenCadastroCliente(item)
+                    }}
+                  >
+                    👤 Cadastro do cliente
                   </button>
                 )}
 

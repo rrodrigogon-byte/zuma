@@ -378,6 +378,7 @@ export default function BarbeariaAgendaPeriodo({
   onNewAppointment,
   onBloquearAgenda,
   onDesativarBloqueio,
+  onOpenCadastroCliente,
 }) {
   const hoje = hojeAgenda();
 
@@ -1190,8 +1191,36 @@ export default function BarbeariaAgendaPeriodo({
             )}
           </div>
         </div>
-        <div className="dino-cal-event-client">
-          {item.clienteNome || item.cliente_nome || "Cliente sem nome"}
+        <div className="dino-cal-event-client" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {item.clienteNome || item.cliente_nome || "Cliente sem nome"}
+          </span>
+          {onOpenCadastroCliente && (item.clienteId || item.clienteNome || item.cliente_nome) && (
+            <span
+              role="button"
+              tabIndex={0}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "1px 5px",
+                borderRadius: 4,
+                fontSize: 10,
+                fontWeight: 700,
+                background: "rgba(255, 255, 255, 0.28)",
+                color: "inherit",
+                cursor: "pointer",
+                flexShrink: 0,
+              }}
+              title="Acessar cadastro do cliente"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenCadastroCliente(item);
+              }}
+            >
+              👤 Ficha
+            </span>
+          )}
         </div>
         <div className="dino-cal-event-service">
           {item.servicoNome || item.servico_nome || "Serviço"}
@@ -1706,8 +1735,36 @@ export default function BarbeariaAgendaPeriodo({
                                     </span>
                                   )}
                                 </div>
-                                <div className="dino-cal-event-client">
-                                  {item.clienteNome || "Cliente sem nome"}
+                                <div className="dino-cal-event-client" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
+                                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                    {item.clienteNome || "Cliente sem nome"}
+                                  </span>
+                                  {onOpenCadastroCliente && (item.clienteId || item.clienteNome) && (
+                                    <span
+                                      role="button"
+                                      tabIndex={0}
+                                      style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        padding: "1px 5px",
+                                        borderRadius: 4,
+                                        fontSize: 10,
+                                        fontWeight: 700,
+                                        background: "rgba(255, 255, 255, 0.28)",
+                                        color: "inherit",
+                                        cursor: "pointer",
+                                        flexShrink: 0,
+                                      }}
+                                      title="Acessar cadastro do cliente"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onOpenCadastroCliente(item);
+                                      }}
+                                    >
+                                      👤 Ficha
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="dino-cal-event-service">
                                   {item.servicoNome || "Serviço histórico"}
@@ -1806,10 +1863,38 @@ export default function BarbeariaAgendaPeriodo({
                                   )}
                                 </div>
                               </div>
-                              <div className="dino-cal-event-client">
-                                {item.clienteNome ||
-                                  item.cliente_nome ||
-                                  "Cliente sem nome"}
+                              <div className="dino-cal-event-client" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
+                                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  {item.clienteNome ||
+                                    item.cliente_nome ||
+                                    "Cliente sem nome"}
+                                </span>
+                                {onOpenCadastroCliente && (item.clienteId || item.clienteNome || item.cliente_nome) && (
+                                  <span
+                                    role="button"
+                                    tabIndex={0}
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      padding: "1px 5px",
+                                      borderRadius: 4,
+                                      fontSize: 10,
+                                      fontWeight: 700,
+                                      background: "rgba(255, 255, 255, 0.28)",
+                                      color: "inherit",
+                                      cursor: "pointer",
+                                      flexShrink: 0,
+                                    }}
+                                    title="Acessar cadastro do cliente"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onOpenCadastroCliente(item);
+                                    }}
+                                  >
+                                    👤 Ficha
+                                  </span>
+                                )}
                               </div>
                               <div className="dino-cal-event-service">
                                 {item.servicoNome ||
@@ -2351,9 +2436,32 @@ export default function BarbeariaAgendaPeriodo({
                                         onClick={() => onOpenAppointment?.(ag)}
                                         title={`${ag.isEncaixe ? "⚡ ENCAIXE: " : ""}${ag.clienteNome || ag.cliente_nome || "Cliente"} (${rotuloStatusAgendamento(ag)}) - ${ag.servicoNome || ag.servico_nome} às ${horaDoItem(ag)}`}
                                       >
-                                        <span className="dino-cal-slot-busy-pill-name">
-                                          {ag.isEncaixe && <span className="dino-cal-encaixe-mini-badge">⚡ ENCAIXE</span>}
-                                          👤 {ag.clienteNome || ag.cliente_nome || "Cliente"}
+                                        <span className="dino-cal-slot-busy-pill-name" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
+                                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                            {ag.isEncaixe && <span className="dino-cal-encaixe-mini-badge">⚡ ENCAIXE</span>}
+                                            👤 {ag.clienteNome || ag.cliente_nome || "Cliente"}
+                                          </span>
+                                          {onOpenCadastroCliente && (ag.clienteId || ag.clienteNome || ag.cliente_nome) && (
+                                            <span
+                                              role="button"
+                                              tabIndex={0}
+                                              style={{
+                                                fontSize: 9,
+                                                fontWeight: 700,
+                                                padding: "0 4px",
+                                                borderRadius: 3,
+                                                background: "rgba(255,255,255,0.3)",
+                                                cursor: "pointer",
+                                              }}
+                                              title="Acessar cadastro do cliente"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                onOpenCadastroCliente(ag);
+                                              }}
+                                            >
+                                              Ficha
+                                            </span>
+                                          )}
                                         </span>
                                         <span className="dino-cal-slot-busy-pill-srv">
                                           {ag.servicoNome || ag.servico_nome || "Serviço"} · {horaDoItem(ag)}
@@ -2515,8 +2623,36 @@ export default function BarbeariaAgendaPeriodo({
                               <span>{horaDoItem(item)}</span>
                               <span>{formatarMoeda(item.valor)}</span>
                             </div>
-                            <div className="dino-cal-event-client">
-                              {item.clienteNome || "Cliente sem nome"}
+                            <div className="dino-cal-event-client" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
+                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {item.clienteNome || "Cliente sem nome"}
+                              </span>
+                              {onOpenCadastroCliente && (item.clienteId || item.clienteNome) && (
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    padding: "1px 5px",
+                                    borderRadius: 4,
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                    background: "rgba(255, 255, 255, 0.28)",
+                                    color: "inherit",
+                                    cursor: "pointer",
+                                    flexShrink: 0,
+                                  }}
+                                  title="Acessar cadastro do cliente"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onOpenCadastroCliente(item);
+                                  }}
+                                >
+                                  👤 Ficha
+                                </span>
+                              )}
                             </div>
                             <div className="dino-cal-event-service">
                               {item.servicoNome || "Serviço"}

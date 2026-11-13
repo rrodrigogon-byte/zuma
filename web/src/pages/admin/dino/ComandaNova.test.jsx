@@ -59,4 +59,18 @@ describe('nova comanda', () => {
     expect(texto(renderer.toJSON())).toContain('Pomada Dino')
     vi.useRealTimers()
   })
+
+  it('aciona onAbrirCadastroCliente ao clicar no botão de cadastro do cliente', async () => {
+    const onAbrirCadastroCliente = vi.fn()
+    await act(async () => {
+      renderer = create(<ComandaNova clientes={clientes} profissionais={[]} servicos={servicos} produtosRevenda={[]} clienteInicial="c1" onAbrirCadastroCliente={onAbrirCadastroCliente} onCriada={vi.fn()} toast={vi.fn()} />)
+      await tick()
+    })
+    expect(texto(renderer.toJSON())).toContain('Cadastro do cliente')
+    const btnCadastro = renderer.root.findAll((n) => n.type === 'button' && texto(n.children).includes('Cadastro do cliente'))[0]
+    expect(btnCadastro).toBeTruthy()
+    await act(async () => { btnCadastro.props.onClick(); await tick() })
+    expect(onAbrirCadastroCliente).toHaveBeenCalled()
+    expect(onAbrirCadastroCliente.mock.calls[0][0].id).toBe('c1')
+  })
 })

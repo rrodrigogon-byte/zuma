@@ -142,11 +142,24 @@ export default function BarbeariaFichaCompletaClienteModal({
   // Ações de Cadastro
   async function salvarCadastro(e) {
     if (e && e.preventDefault) e.preventDefault();
-    if (!cli.id) return;
     setSalvandoCadastro(true);
     setMensagemSucesso('');
     try {
-      const resp = await api.patch(`/api/admin/barbearia/clientes/${cli.id}`, formCadastro);
+      let resp;
+      const targetId = cli.id && !String(cli.id).startsWith('busca') ? cli.id : null;
+      if (targetId) {
+        try {
+          resp = await api.patch(`/api/admin/barbearia/clientes/${encodeURIComponent(targetId)}`, formCadastro);
+        } catch (errPatch) {
+          if (errPatch?.status === 404 || String(errPatch?.message || '').toLowerCase().includes('não encontrado')) {
+            resp = await api.post('/api/admin/barbearia/clientes', { ...formCadastro, id: targetId });
+          } else {
+            throw errPatch;
+          }
+        }
+      } else {
+        resp = await api.post('/api/admin/barbearia/clientes', formCadastro);
+      }
       if (resp?.cliente) {
         setDados((prev) => ({
           ...prev,
@@ -2028,4 +2041,3 @@ export default function BarbeariaFichaCompletaClienteModal({
     </div>
   );
 }
-

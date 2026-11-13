@@ -1452,6 +1452,18 @@ export default function BarbeariaERP({ tabInicial } = {}) {
     setModal({ tipo: "detalheCliente", cliente });
   }
 
+  function abrirCadastroCliente(itemOuCliente) {
+    if (!itemOuCliente) return;
+    const clienteId = itemOuCliente.clienteId || itemOuCliente.clienteCrmId || itemOuCliente.id || null;
+    const telefone = itemOuCliente.clienteTelefone || itemOuCliente.telefone || "";
+    const nome = itemOuCliente.clienteNome || itemOuCliente.nome || "";
+    setModalFichaCompleta({
+      clienteId,
+      telefone,
+      nome,
+    });
+  }
+
   function abrirEdicaoCliente(cliente) {
     setFormCliente({
       nome: cliente.nome || "",
@@ -4289,6 +4301,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
             setModal("bloqueioAgenda");
           }}
           onDesativarBloqueio={desativarBloqueio}
+          onOpenCadastroCliente={abrirCadastroCliente}
         />
       </div>
     );
@@ -4324,6 +4337,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
           onReassignBarber={reatribuirBarbeiroAtendimento}
           onCreateEncaixe={criarEncaixeRapido}
           onAddItemComanda={adicionarItemComandaRapido}
+          onOpenCadastroCliente={abrirCadastroCliente}
           onRefresh={carregar}
           onBloquearAgenda={(dados) => {
             setFormBloqueio((atual) => ({
@@ -9308,6 +9322,28 @@ export default function BarbeariaERP({ tabInicial } = {}) {
               >
                 📋 Detalhes do atendimento
               </button>
+              {(agendamentoComanda?.clienteId || agendamentoComanda?.clienteTelefone || agendamentoComanda?.clienteNome || formComanda.clienteId || formComanda.clienteNome) && (
+                <button
+                  type="button"
+                  style={{
+                    ...styles.secondary,
+                    padding: "4px 10px",
+                    fontSize: 12,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                  onClick={() =>
+                    abrirCadastroCliente({
+                      clienteId: agendamentoComanda?.clienteId || agendamentoComanda?.clienteCrmId || formComanda.clienteId,
+                      telefone: agendamentoComanda?.clienteTelefone || formComanda.clienteTelefone,
+                      nome: agendamentoComanda?.clienteNome || formComanda.clienteNome,
+                    })
+                  }
+                >
+                  👤 Cadastro do cliente
+                </button>
+              )}
             </div>
           )}
           <ComandaNova
@@ -9336,6 +9372,13 @@ export default function BarbeariaERP({ tabInicial } = {}) {
               );
               setModal(comanda?.id ? { tipo: "comanda", comanda } : null);
               await carregar();
+            }}
+            onAbrirCadastroCliente={(cli) => {
+              abrirCadastroCliente(cli || {
+                clienteId: formComanda.clienteId,
+                telefone: formComanda.clienteTelefone,
+                nome: formComanda.clienteNome,
+              });
             }}
           />
         </Modal>
@@ -9416,9 +9459,36 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                 {iniciais(comanda.clienteNome || "Cliente")}
               </div>
               <div style={{ flex: 1 }}>
-                <strong style={{ fontSize: 20 }}>
-                  {comanda.clienteNome || "Cliente eventual"}
-                </strong>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <strong style={{ fontSize: 20 }}>
+                    {comanda.clienteNome || "Cliente eventual"}
+                  </strong>
+                  {(comanda.clienteId || comanda.clienteTelefone || comanda.clienteNome) && (
+                    <button
+                      type="button"
+                      style={{
+                        ...styles.small,
+                        padding: "2px 8px",
+                        fontSize: 11,
+                        cursor: "pointer",
+                        color: "var(--accent, #1d4ed8)",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                      onClick={() =>
+                        abrirCadastroCliente({
+                          clienteId: comanda.clienteId,
+                          telefone: comanda.clienteTelefone,
+                          nome: comanda.clienteNome,
+                        })
+                      }
+                      title="Abrir cadastro e ficha 360 do cliente"
+                    >
+                      👤 Cadastro do cliente
+                    </button>
+                  )}
+                </div>
                 <div style={styles.sub}>
                   {comanda.profissionalNome || "Sem profissional atribuído"} ·{" "}
                   {comanda.agendamentoId
@@ -9502,6 +9572,28 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                 >
                   📋 Detalhes do atendimento
                 </button>
+                {(comanda.clienteId || comanda.clienteTelefone || comanda.clienteNome || agendamentoComanda?.clienteId || agendamentoComanda?.clienteTelefone || agendamentoComanda?.clienteNome) && (
+                  <button
+                    type="button"
+                    style={{
+                      ...styles.secondary,
+                      padding: "4px 10px",
+                      fontSize: 12,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                    }}
+                    onClick={() =>
+                      abrirCadastroCliente({
+                        clienteId: comanda.clienteId || agendamentoComanda?.clienteId || agendamentoComanda?.clienteCrmId,
+                        telefone: comanda.clienteTelefone || agendamentoComanda?.clienteTelefone,
+                        nome: comanda.clienteNome || agendamentoComanda?.clienteNome,
+                      })
+                    }
+                  >
+                    👤 Cadastro do cliente
+                  </button>
+                )}
               </div>
             )}
             <div style={styles.comandaMetrics}>
@@ -10897,7 +10989,11 @@ export default function BarbeariaERP({ tabInicial } = {}) {
       const agendamento = modal.agendamento;
       const proximas = TRANSICOES[agendamento.status] || [];
       const clienteCrm = clientes.find(
-        (c) => c.id === (agendamento.clienteCrmId || agendamento.clienteId),
+        (c) =>
+          (agendamento.clienteCrmId && c.id === agendamento.clienteCrmId) ||
+          (agendamento.clienteId && c.id === agendamento.clienteId) ||
+          (agendamento.clienteTelefone && c.telefone && String(c.telefone).replace(/\D/g, '') === String(agendamento.clienteTelefone).replace(/\D/g, '')) ||
+          (agendamento.clienteNome && c.nome && c.nome.trim().toLowerCase() === String(agendamento.clienteNome).trim().toLowerCase())
       );
       return (
         <Modal title="Detalhes do atendimento" onClose={() => setModal(null)}>
@@ -11019,9 +11115,21 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                 <button
                   type="button"
                   style={styles.secondary}
-                  onClick={() => navigate("/admin/clientes-360")}
+                  onClick={() => {
+                    setFormCliente({
+                      nome: agendamento.clienteNome || "",
+                      telefone: agendamento.clienteTelefone || "",
+                      email: "",
+                      dataNascimento: "",
+                      limiteCreditoMensal: 500,
+                      diasVencimento: 30,
+                      observacao: "",
+                      relacionamento: {},
+                    });
+                    setModal("cliente");
+                  }}
                 >
-                  Abrir Clientes 360
+                  + Cadastrar no CRM
                 </button>
               )}
               <button
@@ -14320,7 +14428,16 @@ export default function BarbeariaERP({ tabInicial } = {}) {
         {renderModalReabrir()}
         {renderModalRefechar()}
         {renderModalCancelamentoComanda()}
-        {renderModalCancelamentoComanda()}
+        <BarbeariaFichaCompletaClienteModal
+          aberto={Boolean(modalFichaCompleta)}
+          onClose={() => setModalFichaCompleta(null)}
+          clienteId={modalFichaCompleta?.clienteId}
+          telefone={modalFichaCompleta?.telefone}
+          nome={modalFichaCompleta?.nome}
+          onClienteAtualizado={() => {
+            if (typeof carregar === 'function') carregar();
+          }}
+        />
       </div>
     );
   }
@@ -14572,6 +14689,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
         {renderModalItemValor()}
         {renderModalReabrir()}
         {renderModalRefechar()}
+        {renderModalCancelamentoComanda()}
       <BarbeariaFichaCompletaClienteModal
         aberto={Boolean(modalFichaCompleta)}
         onClose={() => setModalFichaCompleta(null)}
