@@ -76,7 +76,7 @@ const OPERADOR_LEITURA = [
   // a tela da barbearia carrega tudo pela visão geral; os números da empresa saem na resposta
   /^\/overview$/,
   /^\/agenda$/, /^\/agenda\/[^/]+$/, /^\/agenda\/[^/]+\/sinal$/, /^\/agenda-periodo$/, /^\/horarios-livres$/, /^\/bloqueios$/, /^\/fila$/,
-  /^\/clientes$/, /^\/clientes\/[^/]+$/, /^\/clientes\/aniversariantes$/,
+  /^\/clientes$/, /^\/clientes\/[^/]+$/, /^\/clientes\/[^/]+\/ficha-completa$/, /^\/clientes\/aniversariantes$/,
   /^\/comandas$/, /^\/comandas\/[^/]+$/, /^\/historico-comandas$/,
   /^\/servicos$/, /^\/profissionais$/, /^\/planos$/, /^\/assinaturas$/, /^\/cobrancas$/,
   /^\/estoque-revenda$/, /^\/vendas-revenda$/, /^\/vendas-revenda\/[^/]+$/,
@@ -93,6 +93,7 @@ const OPERADOR_ESCRITA = [
   ['POST', /^\/bloqueios$/], ['PATCH', /^\/bloqueios\/[^/]+$/], ['DELETE', /^\/bloqueios\/[^/]+$/],
   ['POST', /^\/fila$/], ['PATCH', /^\/fila\/[^/]+\/status$/],
   ['POST', /^\/clientes$/], ['PATCH', /^\/clientes\/[^/]+$/], ['PATCH', /^\/clientes\/[^/]+\/consentimentos$/],
+  ['POST', /^\/clientes\/[^/]+\/(?:creditos|pacotes)$/], ['PATCH', /^\/clientes\/[^/]+\/creditos\/[^/]+$/], ['DELETE', /^\/clientes\/[^/]+\/creditos\/[^/]+$/],
   // cancelar, estornar e consumo interno de comanda ficam com a gestão
   ['POST', /^\/comandas$/], ['PATCH', /^\/comandas\/[^/]+$/], ['PATCH', /^\/comandas\/[^/]+\/status$/],
   ['POST', /^\/comandas\/[^/]+\/(?:itens|pagamentos|aguardar-pagamento|fiscal\/rascunho)$/],
