@@ -90,7 +90,6 @@ export default function BarbeariaFichaCompletaClienteModal({
     setBuscaTabela('');
   }, [tab]);
 
-  if (!aberto) return null;
 
   const cli = dados?.cliente || {};
   const agendamentos = dados?.agendamentos || [];
@@ -356,6 +355,7 @@ export default function BarbeariaFichaCompletaClienteModal({
   const inicioReg = (paginaAtual - 1) * itensPorPagina;
   const fimReg = Math.min(inicioReg + itensPorPagina, totalRegistros);
   const itensPaginados = listaFiltrada.slice(inicioReg, fimReg);
+  if (!aberto) return null;
 
   return (
     <div
