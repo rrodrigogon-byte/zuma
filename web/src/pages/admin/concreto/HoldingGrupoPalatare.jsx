@@ -1,8 +1,15 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../../lib/auth';
+import {
+  HOLDING_PALATARE_EMPRESA_ID,
+  PALATARE_PIZZARIA_EMPRESA_ID,
+  SERRANO_CONCRETO_EMPRESA_ID
+} from '../../../lib/palatare-constants';
 
 export default function HoldingGrupoPalatare({ setSecaoAtiva }) {
   const navigate = useNavigate();
+  const { trocarEmpresa } = useAuth() || {};
   const [modalDossieAberto, setModalDossieAberto] = useState(false);
   const [filtroAbaInterna, setFiltroAbaInterna] = useState('todas'); // 'todas', 'societario', 'empresas', 'fiscais', 'licencas'
 
@@ -523,7 +530,10 @@ export default function HoldingGrupoPalatare({ setSecaoAtiva }) {
                       type="button"
                       className="btn-serrano pri"
                       style={{ background: '#FF6B2C', borderColor: '#FF6B2C' }}
-                      onClick={() => navigate(emp.linkPainel)}
+                      onClick={() => {
+                        if (trocarEmpresa) trocarEmpresa(PALATARE_PIZZARIA_EMPRESA_ID);
+                        navigate(emp.linkPainel);
+                      }}
                     >
                       🍕 {emp.textoLink}
                     </button>
@@ -644,7 +654,10 @@ export default function HoldingGrupoPalatare({ setSecaoAtiva }) {
                     <button
                       type="button"
                       className="btn-serrano pri"
-                      onClick={() => setSecaoAtiva('operacao-despacho')}
+                      onClick={() => {
+                        if (trocarEmpresa) trocarEmpresa(SERRANO_CONCRETO_EMPRESA_ID);
+                        setSecaoAtiva('operacao-despacho');
+                      }}
                     >
                       🚚 {emp.textoLink}
                     </button>

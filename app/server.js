@@ -459,6 +459,8 @@ const EMPRESA_DINO_ID = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
 const EMPRESA_STALLONE_ID = '31f70c83-9172-40c2-945f-9e793b5048be';
 const EMPRESA_AGRO_OPEN_ID = '2e041110-db20-4fd1-8278-12bd3dead008';
 const EMPRESA_PALATARE_ID = 'c1c1ac01-8e50-4b61-8c79-de4aaa916da9';
+export const HOLDING_PALATARE_EMPRESA_ID = 'c0c0ac01-8e50-4b61-8c79-de4aaa916da0';
+export const HOLDING_PALATARE_LOJA_ID = 'c0c0ac01-8e50-4b61-8c79-de4aaa916da1';
 
 const isAdminGlobal = (user) => {
   if (!user || user.role !== 'admin') return false;
@@ -555,24 +557,21 @@ const obterEmpresasAutorizadasDoUsuario = (user) => {
   }
   if (isAgroOpenUser(user)) {
     // Agro Open: APENAS AGRO OPEN TTC (não vê Dino nem Stallone)
+      return [
+        EMPRESA_AGRO_OPEN_ID,
+        "emp-agro-open",
+        "agroopen"
+      ];
+    }
+  if (isPalatareUser(user) || isConcretoUser(user)) {
+    // Grupo Palatare: Holding, Pizzaria e Concreto Usinado integrados
     return [
-      EMPRESA_AGRO_OPEN_ID,
-      "emp-agro-open",
-      "agroopen"
-    ];
-  }
-  if (isPalatareUser(user)) {
-    // Palatare: APENAS Palatare Pizzaria & Restaurante
-    return [
+      HOLDING_PALATARE_EMPRESA_ID,
       EMPRESA_PALATARE_ID,
-      "palatare"
-    ];
-  }
-  if (isConcretoUser(user)) {
-    // Concreto: APENAS Serrano Concreto Usinado
-    return [
       CONCRETO_EMPRESA_ID,
-      "concreto"
+      "palatare",
+      "concreto",
+      "holding"
     ];
   }
   if (user?.empresaId) {
@@ -914,6 +913,31 @@ async function commerceSessionFor(user) {
       const loja = lojas[0] || null;
       return {
         empresas_acessiveis: empresasDino,
+        empresa,
+        empresaId: empresa?.id || null,
+        lojas_acessiveis: lojas,
+        loja,
+        lojaId: loja?.id || null,
+      };
+    }
+
+    // 4. Grupo Palatare (Palatare Pizzaria, Serrano Concreto & Holding Grupo Palatare)
+    if (isPalatareUser(user) || isConcretoUser(user)) {
+      const empresasGrupoPalatare = [
+        { id: HOLDING_PALATARE_EMPRESA_ID, nome: 'Holding Grupo Palatare', razaoSocial: 'Holding Grupo Palatare Participações S/A', cnpj: '51.499.928/0001-01', brandKey: 'holding_palatare', tipoNegocio: 'holding', grupoId: 'grp-serrano-palatare-03', grupoNome: 'Grupo Palatare', isHolding: true, ativa: true },
+        { id: EMPRESA_PALATARE_ID, nome: 'Palatare Pizzaria & Restaurante', razaoSocial: 'Palatare Restaurante e Pizzaria LTDA', cnpj: '31.002.650/0001-08', brandKey: 'palatare', tipoNegocio: 'restaurante', grupoId: 'grp-serrano-palatare-03', grupoNome: 'Grupo Palatare', ativa: true },
+        { id: CONCRETO_EMPRESA_ID, nome: 'Serrano Concreto Usinado', razaoSocial: 'SERRANO CONCRETO USINADO & MINERAÇÃO LTDA', cnpj: '53.798.485/0001-77', brandKey: 'concreto', tipoNegocio: 'concreto', grupoId: 'grp-serrano-palatare-03', grupoNome: 'Grupo Palatare', ativa: true },
+      ];
+      const lojas = [
+        { id: HOLDING_PALATARE_LOJA_ID, empresaId: HOLDING_PALATARE_EMPRESA_ID, codigo: 'HOLDING-01', nome: 'Sede Corporativa Grupo Palatare', ativa: true },
+        { id: 'c1c1ac01-8e50-4b61-8c79-de4aaa916da0', empresaId: EMPRESA_PALATARE_ID, codigo: 'PALATARE-MATRIZ', nome: 'Palatare - Centro (Salão & Delivery)', ativa: true },
+        { id: 'c2c2ac01-8e50-4b61-8c79-de4aaa916da0', empresaId: CONCRETO_EMPRESA_ID, codigo: 'USINA-01', nome: 'Serrano Concreto · Usina Matriz', ativa: true },
+      ];
+      const empresaAtivaId = user.empresaId || (isConcretoUser(user) ? CONCRETO_EMPRESA_ID : EMPRESA_PALATARE_ID);
+      const empresa = empresasGrupoPalatare.find(e => e.id === empresaAtivaId) || empresasGrupoPalatare[0];
+      const loja = lojas.find(l => l.empresaId === empresa?.id) || lojas[0];
+      return {
+        empresas_acessiveis: empresasGrupoPalatare,
         empresa,
         empresaId: empresa?.id || null,
         lojas_acessiveis: lojas,
@@ -11942,6 +11966,29 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
     try { sincronizarTenantsEquipes(commerceDb); } catch (err) { console.warn('Aviso ao sincronizar tenants:', err.message); }
     try { provisionarPalatarePizzaria({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar Palatare:', err.message); }
     try { provisionarConcretoUsina({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar Concreto:', err.message); }
+    try {
+      if (commerceDb && typeof commerceDb.query === 'function') {
+        commerceDb.query(`
+          INSERT INTO empresas (id, nome, razao_social, cnpj, tipo_negocio, ativa, grupo_id)
+          VALUES ('c0c0ac01-8e50-4b61-8c79-de4aaa916da0', 'Holding Grupo Palatare', 'Holding Grupo Palatare Participações S/A', '51499928000101', 'holding', true, 'grp-serrano-palatare-03')
+          ON CONFLICT (id) DO UPDATE SET
+            nome = EXCLUDED.nome,
+            razao_social = EXCLUDED.razao_social,
+            cnpj = EXCLUDED.cnpj,
+            tipo_negocio = EXCLUDED.tipo_negocio,
+            grupo_id = EXCLUDED.grupo_id,
+            ativa = true;
+          INSERT INTO lojas (id, empresa_id, codigo, nome, ativa)
+          VALUES ('c0c0ac01-8e50-4b61-8c79-de4aaa916da1', 'c0c0ac01-8e50-4b61-8c79-de4aaa916da0', 'HOLDING-01', 'Sede Corporativa Grupo Palatare', true)
+          ON CONFLICT (id) DO UPDATE SET
+            empresa_id = EXCLUDED.empresa_id,
+            nome = EXCLUDED.nome,
+            ativa = true;
+        `).catch(e => console.warn('Aviso ao provisionar Holding no banco:', e.message));
+      }
+    } catch (err) {
+      console.warn('Aviso ao provisionar Holding:', err.message);
+    }
     executarHigienizacaoGapsProducao(commerceDb, { listarComandasBarbearia: barbeariaErpKytto.listarComandasBarbearia, listarClientesBarbearia: barbeariaErpKytto.listarAgendamentos }).then((resHig) => console.log('[Higienização Produção]', JSON.stringify(resHig))).catch((err) => console.warn('Aviso na higienização:', err.message));
   }, 4000).unref?.();
   for (const empId of ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp_dino', 'emp-kytto-001', 'dino']) {

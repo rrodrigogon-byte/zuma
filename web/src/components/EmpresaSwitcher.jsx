@@ -1,6 +1,13 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
+import {
+  HOLDING_PALATARE_EMPRESA_ID,
+  PALATARE_PIZZARIA_EMPRESA_ID,
+  SERRANO_CONCRETO_EMPRESA_ID,
+  GRUPO_PALATARE_EMPRESAS,
+  isGrupoPalatareEmpresa
+} from "../lib/palatare-constants";
 
 function iconeEmpresa(emp) {
   if (!emp) return "🏢";
@@ -47,7 +54,7 @@ export default function EmpresaSwitcher() {
       setEhAdminPlataforma(ehAdmin);
 
       // Filtra estritamente apenas empresas legítimas (remover qualquer resquício de Imperial ou testes)
-      const lista = (Array.isArray(bruta) ? bruta : []).filter(e => {
+      let lista = (Array.isArray(bruta) ? bruta : []).filter(e => {
         const nome = String(e.nome || "").toLowerCase();
         const cnpj = String(e.cnpj || "").replace(/\D/g, "");
         if (nome.includes("imperial") || nome.includes("homologação alterada") || cnpj === "98765432000199") {
@@ -55,6 +62,14 @@ export default function EmpresaSwitcher() {
         }
         return true;
       });
+
+      // Garante SEMPRE as 3 empresas canônicas do Grupo Palatare (Holding, Pizzaria, Concreto)
+      for (const empGp of GRUPO_PALATARE_EMPRESAS) {
+        const jaTem = lista.some(e => String(e.id || '').toLowerCase() === empGp.id.toLowerCase());
+        if (!jaTem) {
+          lista.push(empGp);
+        }
+      }
 
       if (lista.length > 0) {
         setEmpresas(lista);
@@ -109,12 +124,18 @@ export default function EmpresaSwitcher() {
       window.dispatchEvent(new CustomEvent("empresa_alterada", { detail: emp }));
     } catch {}
     setAberto(false);
-    if (recarregar) {
+    if (emp.id === HOLDING_PALATARE_EMPRESA_ID || emp.tipoNegocio === 'holding') {
+      navigate('/admin/concreto?secao=empresa-holding');
+    } else if (emp.id === PALATARE_PIZZARIA_EMPRESA_ID || emp.tipoNegocio === 'restaurante') {
+      navigate('/admin/pizzaria');
+    } else if (emp.id === SERRANO_CONCRETO_EMPRESA_ID || emp.tipoNegocio === 'concreto') {
+      navigate('/admin/concreto');
+    } else if (recarregar) {
       window.location.reload();
     }
   };
 
-  const podeTrocar = ehAdminPlataforma && empresas.length > 1;
+  const podeTrocar = empresas.length > 1;
   const nome = empresaAtiva?.nome || empresaAtiva?.nomeFantasia || empresaAtiva?.razaoSocial || (empresas[0]?.nome) || "Barbearia Dino";
   const ie = empresaAtiva?.inscricaoEstadual || (empresas[0]?.inscricaoEstadual) || "Isento";
   const cnpj = empresaAtiva?.cnpj || (empresas[0]?.cnpj) || "";
@@ -195,76 +216,178 @@ export default function EmpresaSwitcher() {
             justifyContent: "space-between"
           }}>
             <span style={{ fontSize: "11px", fontWeight: 800, color: "var(--muted, #94a3b8)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-              Empresas do Grupo (Superadmin)
+              Seletor de Empresas &amp; Holding
             </span>
             <span style={{ fontSize: "10px", background: "rgba(16, 185, 129, 0.15)", color: "#10b981", padding: "1px 6px", borderRadius: "4px", fontWeight: 700 }}>
-              {empresas.length} autorizada(s)
+              {empresas.length} disponível(is)
             </span>
           </div>
 
-          <div style={{ maxHeight: "240px", overflowY: "auto", padding: "6px" }}>
-            {empresas.map((emp) => {
-              const selecionada = (empresaAtiva?.id === emp.id) || (empresaAtiva?.cnpj === emp.cnpj);
+          <div style={{ maxHeight: "300px", overflowY: "auto", padding: "6px" }}>
+            {/* 1. SEÇÃO GRUPO PALATARE (HOLDING E CONTROLADAS) */}
+            {(() => {
+              const empresasPalatare = empresas.filter(e => isGrupoPalatareEmpresa(e.id) || isGrupoPalatareEmpresa(e.nome));
+              const outrasEmpresas = empresas.filter(e => !isGrupoPalatareEmpresa(e.id) && !isGrupoPalatareEmpresa(e.nome));
               return (
-                <div
-                  key={emp.id}
-                  onClick={() => selecionarEmpresa(emp)}
-                  style={{
-                    padding: "8px 12px",
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    background: selecionada ? "rgba(99, 102, 241, 0.15)" : "transparent",
-                    border: selecionada ? "1px solid rgba(99, 102, 241, 0.3)" : "1px solid transparent",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "10px",
-                    marginBottom: "4px",
-                    transition: "all 0.1s ease"
-                  }}
-                >
-                  <div style={{
-                    width: "30px",
-                    height: "30px",
-                    borderRadius: "6px",
-                    background: selecionada ? "var(--accent, #6366f1)" : "var(--card, #0f172a)",
-                    color: "#ffffff",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "14px",
-                    fontWeight: 700,
-                    flexShrink: 0
-                  }}>
-                    {iconeEmpresa(emp)}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{
-                      fontSize: "13px",
-                      fontWeight: 700,
-                      color: selecionada ? "#ffffff" : "var(--text, #f8fafc)",
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis"
-                    }}>
-                      {emp.nome || emp.nomeFantasia || emp.razaoSocial}
+                <>
+                  {empresasPalatare.length > 0 && (
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{
+                        padding: "6px 10px 4px",
+                        fontSize: "10px",
+                        fontWeight: 800,
+                        color: "#C5A059",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.6px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6
+                      }}>
+                        <span>🏛️</span> GRUPO PALATARE · HOLDING
+                      </div>
+                      {empresasPalatare.map((emp) => {
+                        const selecionada = (empresaAtiva?.id === emp.id) || (empresaAtiva?.cnpj === emp.cnpj);
+                        const isH = emp.id === HOLDING_PALATARE_EMPRESA_ID || emp.tipoNegocio === 'holding';
+                        return (
+                          <div
+                            key={emp.id}
+                            onClick={() => selecionarEmpresa(emp)}
+                            style={{
+                              padding: "8px 12px",
+                              borderRadius: "8px",
+                              cursor: "pointer",
+                              background: selecionada ? "rgba(197, 160, 89, 0.18)" : "transparent",
+                              border: selecionada ? "1px solid rgba(197, 160, 89, 0.4)" : "1px solid transparent",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "10px",
+                              marginBottom: "4px",
+                              marginLeft: isH ? 0 : 8,
+                              transition: "all 0.1s ease"
+                            }}
+                          >
+                            <div style={{
+                              width: "30px",
+                              height: "30px",
+                              borderRadius: "6px",
+                              background: isH ? "#C5A059" : emp.tipoNegocio === 'restaurante' ? "#EF4444" : "#FF7000",
+                              color: isH ? "#000" : "#ffffff",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: "14px",
+                              fontWeight: 700,
+                              flexShrink: 0
+                            }}>
+                              {isH ? "🏢" : emp.tipoNegocio === 'restaurante' ? "🍕" : "🚚"}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{
+                                fontSize: "13px",
+                                fontWeight: 700,
+                                color: selecionada ? "#ffffff" : "var(--text, #f8fafc)",
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis"
+                              }}>
+                                {emp.nome || emp.nomeFantasia || emp.razaoSocial}
+                                {isH && <span style={{ marginLeft: 6, fontSize: 10, background: "#C5A059", color: "#000", padding: "1px 5px", borderRadius: 4, fontWeight: 800 }}>Controladora</span>}
+                              </div>
+                              {emp.cnpj && (
+                                <div style={{ fontSize: "11px", color: "var(--muted, #94a3b8)" }}>
+                                  CNPJ: {emp.cnpj}
+                                </div>
+                              )}
+                              {emp.inscricaoEstadual && emp.inscricaoEstadual !== "Isento" && (
+                                <div style={{ fontSize: "10px", color: "#10b981", fontWeight: 600 }}>
+                                  IE: {emp.inscricaoEstadual} (SEFAZ-MT)
+                                </div>
+                              )}
+                            </div>
+                            {selecionada && (
+                              <span style={{ color: "#10b981", fontSize: "12px", fontWeight: 800 }}>✓</span>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                    {emp.cnpj && (
-                      <div style={{ fontSize: "11px", color: "var(--muted, #94a3b8)" }}>
-                        CNPJ: {emp.cnpj}
-                      </div>
-                    )}
-                    {emp.inscricaoEstadual && emp.inscricaoEstadual !== "Isento" && (
-                      <div style={{ fontSize: "10px", color: "#10b981", fontWeight: 600 }}>
-                        IE: {emp.inscricaoEstadual} (SEFAZ-MT)
-                      </div>
-                    )}
-                  </div>
-                  {selecionada && (
-                    <span style={{ color: "#10b981", fontSize: "14px", fontWeight: 800 }}>✓</span>
                   )}
-                </div>
+
+                  {/* 2. OUTRAS EMPRESAS DA PLATAFORMA */}
+                  {outrasEmpresas.length > 0 && (
+                    <div>
+                      <div style={{
+                        padding: "6px 10px 4px",
+                        fontSize: "10px",
+                        fontWeight: 800,
+                        color: "var(--muted)",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.6px"
+                      }}>
+                        Outras Empresas
+                      </div>
+                      {outrasEmpresas.map((emp) => {
+                        const selecionada = (empresaAtiva?.id === emp.id) || (empresaAtiva?.cnpj === emp.cnpj);
+                        return (
+                          <div
+                            key={emp.id}
+                            onClick={() => selecionarEmpresa(emp)}
+                            style={{
+                              padding: "8px 12px",
+                              borderRadius: "8px",
+                              cursor: "pointer",
+                              background: selecionada ? "rgba(99, 102, 241, 0.15)" : "transparent",
+                              border: selecionada ? "1px solid rgba(99, 102, 241, 0.3)" : "1px solid transparent",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "10px",
+                              marginBottom: "4px",
+                              transition: "all 0.1s ease"
+                            }}
+                          >
+                            <div style={{
+                              width: "30px",
+                              height: "30px",
+                              borderRadius: "6px",
+                              background: selecionada ? "var(--accent, #6366f1)" : "var(--card, #0f172a)",
+                              color: "#ffffff",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: "14px",
+                              fontWeight: 700,
+                              flexShrink: 0
+                            }}>
+                              {iconeEmpresa(emp)}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{
+                                fontSize: "13px",
+                                fontWeight: 700,
+                                color: selecionada ? "#ffffff" : "var(--text, #f8fafc)",
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis"
+                              }}>
+                                {emp.nome || emp.nomeFantasia || emp.razaoSocial}
+                              </div>
+                              {emp.cnpj && (
+                                <div style={{ fontSize: "11px", color: "var(--muted, #94a3b8)" }}>
+                                  CNPJ: {emp.cnpj}
+                                </div>
+                              )}
+                            </div>
+                            {selecionada && (
+                              <span style={{ color: "#10b981", fontSize: "12px", fontWeight: 800 }}>✓</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
               );
-            })}
+            })()}
           </div>
 
           <div style={{
