@@ -6,7 +6,8 @@ import {
   PALATARE_PIZZARIA_EMPRESA_ID,
   SERRANO_CONCRETO_EMPRESA_ID,
   GRUPO_PALATARE_EMPRESAS,
-  isGrupoPalatareEmpresa
+  isGrupoPalatareEmpresa,
+  deduplicarEmpresas
 } from "../lib/palatare-constants";
 
 function iconeEmpresa(emp) {
@@ -65,11 +66,9 @@ export default function EmpresaSwitcher() {
 
       // Garante SEMPRE as 3 empresas canônicas do Grupo Palatare (Holding, Pizzaria, Concreto)
       for (const empGp of GRUPO_PALATARE_EMPRESAS) {
-        const jaTem = lista.some(e => String(e.id || '').toLowerCase() === empGp.id.toLowerCase());
-        if (!jaTem) {
-          lista.push(empGp);
-        }
+        lista.push(empGp);
       }
+      lista = deduplicarEmpresas(lista);
 
       if (lista.length > 0) {
         setEmpresas(lista);

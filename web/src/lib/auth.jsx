@@ -6,10 +6,14 @@ import { DINO_COMPANY, DINO_STORE, isDinoDedicatedHost } from './dino-scope'
 import { isDinoBrandContext } from './brand'
 import {
   HOLDING_PALATARE_EMPRESA,
+  PALATARE_PIZZARIA_EMPRESA,
+  SERRANO_CONCRETO_EMPRESA,
   GRUPO_PALATARE_EMPRESAS,
   GRUPO_PALATARE_LOJAS,
   GRUPO_PALATARE_IDS,
-  isGrupoPalatareEmpresa
+  isGrupoPalatareEmpresa,
+  deduplicarEmpresas,
+  deduplicarLojas
 } from './palatare-constants'
 
 const AuthContext = createContext(null)
@@ -24,6 +28,19 @@ function readStorage(key, fallback = null) {
 
 function readEmpresaAtivaInicial() {
   const atual = readStorage('sp_empresa_ativa')
+  if (typeof window !== 'undefined') {
+    const path = String(window.location.pathname || '').toLowerCase()
+    const search = String(window.location.search || '').toLowerCase()
+    if (search.includes('secao=empresa-holding') || path.startsWith('/admin/consolidacao-grupo')) {
+      return HOLDING_PALATARE_EMPRESA
+    }
+    if (path.startsWith('/admin/concreto') || path.startsWith('/admin/usina-concreto')) {
+      return SERRANO_CONCRETO_EMPRESA
+    }
+    if (path.startsWith('/admin/pizzaria')) {
+      return PALATARE_PIZZARIA_EMPRESA
+    }
+  }
   if (!isDinoDedicatedHost()) return atual
   const empresas = garantirEmpresasCanonicas(readStorage('sp_empresas_acessiveis', []))
   const dino = Array.isArray(empresas) ? empresas.find((empresa) => isDinoBrandContext(empresa)) : null
@@ -97,12 +114,9 @@ function garantirEmpresasCanonicas(empresas) {
   }
   // Garante SEMPRE as 3 empresas canônicas do Grupo Palatare
   for (const empGp of GRUPO_PALATARE_EMPRESAS) {
-    const jaTem = lista.some((e) => String(e.id || '').toLowerCase() === empGp.id.toLowerCase());
-    if (!jaTem) {
-      lista.push(empGp);
-    }
+    lista.push(empGp);
   }
-  return lista
+  return deduplicarEmpresas(lista)
 }
 
 function garantirLojasCanonicas(lojas) {
@@ -112,12 +126,9 @@ function garantirLojasCanonicas(lojas) {
     lista.push(DINO_STORE)
   }
   for (const lojaGp of GRUPO_PALATARE_LOJAS) {
-    const jaTem = lista.some((l) => String(l.id || '').toLowerCase() === lojaGp.id.toLowerCase());
-    if (!jaTem) {
-      lista.push(lojaGp);
-    }
+    lista.push(lojaGp);
   }
-  return lista
+  return deduplicarLojas(lista)
 }
 // Aliases de compatibilidade histórica
 const empresasComFallbackDino = garantirEmpresasCanonicas
@@ -268,17 +279,22 @@ export function AuthProvider({ children }) {
   }
 
   const trocarEmpresa = (empresaId) => {
-    const proxima = empresasAcessiveis.find((empresa) => empresa.id === empresaId)
+    if (!empresaId) return false
+    const proxima = empresasAcessiveis.find((empresa) => String(empresa.id).toLowerCase() === String(empresaId).toLowerCase())
+      || GRUPO_PALATARE_EMPRESAS.find((e) => String(e.id).toLowerCase() === String(empresaId).toLowerCase())
+      || (String(empresaId).toLowerCase() === DINO_COMPANY.id.toLowerCase() ? DINO_COMPANY : null)
     if (!proxima) return false
     if (empresaAtiva?.id !== proxima.id || lojaAtiva?.id) desligarPushContextoAtual()
     // a unidade escolhida da última vez nesta empresa volta; no host da Dino vale a unidade Dino
     const lembrada = lojaLembrada(proxima.id)
     const proximaLoja = selecionarLojaDoContexto(lojasAcessiveis, proxima, lembrada ? { id: lembrada } : null)
+      || lojasAcessiveis.find((l) => l.empresaId === proxima.id)
+      || (proxima.lojaPadraoId ? lojasAcessiveis.find((l) => l.id === proxima.lojaPadraoId) : null)
     localStorage.setItem('sp_empresa_ativa', JSON.stringify(proxima))
     if (proximaLoja) localStorage.setItem('sp_loja_ativa', JSON.stringify(proximaLoja))
     else localStorage.removeItem('sp_loja_ativa')
     setEmpresaAtiva(proxima)
-    setLojaAtiva(proximaLoja)
+    setLojaAtiva(proximaLoja || null)
     return true
   }
 

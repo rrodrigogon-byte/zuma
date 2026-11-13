@@ -12,7 +12,9 @@ import {
   HOLDING_PALATARE_EMPRESA_ID,
   PALATARE_PIZZARIA_EMPRESA_ID,
   SERRANO_CONCRETO_EMPRESA_ID,
-  isGrupoPalatareEmpresa
+  isGrupoPalatareEmpresa,
+  deduplicarEmpresas,
+  deduplicarLojas
 } from '../lib/palatare-constants'
 import { DINO_STORE, isDinoDedicatedHost } from '../lib/dino-scope'
 import { empresaSemUnidade, sincronizarContextoComercial } from '../lib/contexto-comercial'
@@ -561,6 +563,42 @@ export const NAV_RESTAURANTE_GROUPS = [
   },
 ]
 
+export const NAV_HOLDING_GROUPS = [
+  {
+    label: "Holding Corporativa", aberto: true,
+    items: [
+      { to: "/admin/concreto?secao=empresa-holding", icon: "🏢", label: "Painel Geral da Holding" },
+      { to: "/admin/concreto?secao=empresa-holding", icon: "📊", label: "DRE Consolidada & Cash Pooling" },
+      { to: "/admin/concreto?secao=empresa-holding", icon: "🤝", label: "Hub de Sinergias B2B (Concreto & Sabor)" },
+      { to: "/admin/concreto?secao=empresa-holding", icon: "🌱", label: "Governança ESG & Economia Circular" },
+      { to: "/admin/concreto?secao=empresa-holding", icon: "🤖", label: "Copilot KyttoIA de Expansão" },
+      { to: "/admin/consolidacao-grupo", icon: "🏛️", label: "Consolidação Geral dos Negócios" },
+    ],
+  },
+  {
+    label: "Empresas Controladas", aberto: true,
+    items: [
+      { to: "/admin/pizzaria", icon: "🍕", label: "Palatare Pizzaria & Restaurante" },
+      { to: "/admin/concreto", icon: "🚚", label: "Serrano Concreto Usinado & Mineração" },
+    ],
+  },
+  {
+    label: "Administração & Finanças", aberto: true,
+    items: [
+      { to: "/admin/financeiro", icon: "💰", label: "Financeiro & Contas da Holding" },
+      { to: "/admin/notas", icon: "🧾", label: "Barramento Fiscal & Notas" },
+      { to: "/admin/empresas", icon: "🏢", label: "Cadastro de Empresas do Grupo" },
+      { to: "/admin/cadastros-mestres", icon: "🗂️", label: "Sócios & Fornecedores Globais" },
+      { to: "/admin/configuracoes", icon: "⚙️", label: "Configurações da Holding" },
+    ],
+  },
+];
+
+const NAV_HOLDING_PUBLIC = [
+  { to: '/admin/concreto?secao=empresa-holding', icon: '🏢', label: 'Portal Corporativo' },
+  { to: '/admin/consolidacao-grupo', icon: '🏛️', label: 'Transparência & Consolidação' },
+];
+
 export const NAV_CONCRETO_GROUPS = [
   {
     label: "Operação", aberto: true,
@@ -855,14 +893,31 @@ export default function Sidebar() {
   const isMobile = useMenuEmGaveta()
   const recolhido = !isMobile && !hovered && !focado
   const pendentes = usePendingOrders(isStaff)
-  const isDino = isDinoDedicatedHost() || isDinoBrandContext(empresaAtiva)
-  const isStallone = !isDino && isStalloneBrandContext(empresaAtiva)
-  const isHolding = !isDino && !isStallone && (empresaAtiva?.id === HOLDING_PALATARE_EMPRESA_ID || empresaAtiva?.tipoNegocio === 'holding')
-  const isRestaurante = !isDino && !isStallone && !isHolding && isRestauranteBrandContext(empresaAtiva)
   const location = useLocation()
   const naRotaConcreto = location.pathname.startsWith('/admin/concreto') || location.pathname.startsWith('/admin/usina-concreto')
-  const isConcreto = (!isDino && !isStallone && !isHolding && !isRestaurante && isConcretoBrandContext(empresaAtiva)) || naRotaConcreto
-  const isClube = !isDino && !isStallone && !isHolding && !isRestaurante && !isConcreto && isClubeBrandContext(empresaAtiva)
+  const naRotaHolding = (naRotaConcreto && location.search.includes('secao=empresa-holding')) || location.pathname.startsWith('/admin/consolidacao-grupo')
+  const naRotaPizzaria = location.pathname.startsWith('/admin/pizzaria')
+
+  // Contexto de Marca com Prioridade Correta:
+  const isHolding = (empresaAtiva?.id === HOLDING_PALATARE_EMPRESA_ID || empresaAtiva?.tipoNegocio === 'holding' || naRotaHolding)
+  const isRestaurante = !isHolding && (empresaAtiva?.id === PALATARE_PIZZARIA_EMPRESA_ID || isRestauranteBrandContext(empresaAtiva) || naRotaPizzaria)
+  const isConcreto = !isHolding && !isRestaurante && (empresaAtiva?.id === SERRANO_CONCRETO_EMPRESA_ID || isConcretoBrandContext(empresaAtiva) || naRotaConcreto)
+  const isGrupoPalatareAtivo = isHolding || isRestaurante || isConcreto || isGrupoPalatareEmpresa(empresaAtiva?.id)
+  const isDino = !isGrupoPalatareAtivo && (isDinoDedicatedHost() || isDinoBrandContext(empresaAtiva))
+  const isStallone = !isGrupoPalatareAtivo && !isDino && isStalloneBrandContext(empresaAtiva)
+  const isClube = !isGrupoPalatareAtivo && !isDino && !isStallone && isClubeBrandContext(empresaAtiva)
+
+  // Sincroniza a empresaAtiva ao navegar entre as empresas do Grupo Palatare
+  useEffect(() => {
+    if (naRotaHolding && empresaAtiva?.id !== HOLDING_PALATARE_EMPRESA_ID) {
+      trocarEmpresa(HOLDING_PALATARE_EMPRESA_ID)
+    } else if (naRotaConcreto && !naRotaHolding && empresaAtiva?.id !== SERRANO_CONCRETO_EMPRESA_ID) {
+      trocarEmpresa(SERRANO_CONCRETO_EMPRESA_ID)
+    } else if (naRotaPizzaria && empresaAtiva?.id !== PALATARE_PIZZARIA_EMPRESA_ID) {
+      trocarEmpresa(PALATARE_PIZZARIA_EMPRESA_ID)
+    }
+  }, [location.pathname, location.search, empresaAtiva?.id])
+
   const [themeMode, setThemeMode] = useState(() => storedThemeMode())
   const contextoSemUnidade = Boolean(user && isStaff && empresaAtiva?.id) && (empresaSemUnidade(lojasAcessiveis, empresaAtiva?.id) || !lojaAtiva?.id)
   // Corrige no carregamento o contexto antigo do navegador em que a unidade perdeu o
@@ -998,12 +1053,21 @@ export default function Sidebar() {
             )}
             {isHolding && (
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
-                <div style={{ width: 38, height: 38, borderRadius: 8, background: "#C5A059", color: "#16181B", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 16 }}>
+                <div style={{
+                  width: 40, height: 40, borderRadius: 10,
+                  background: "linear-gradient(135deg, #C5A059 0%, #E5C378 100%)",
+                  color: "#16181B", display: "flex", alignItems: "center", justifyContent: "center",
+                  fontWeight: 900, fontSize: 18, boxShadow: "0 2px 8px rgba(197, 160, 89, 0.4)"
+                }}>
                   🏢
                 </div>
                 <div>
-                  <div style={{ color: "#FFFFFF", fontWeight: 800, fontSize: 13, lineHeight: 1.1 }}>GRUPO PALATARE</div>
-                  <div style={{ color: "#C5A059", fontWeight: 700, fontSize: 9, textTransform: "uppercase", letterSpacing: "0.5px" }}>Holding Participações</div>
+                  <div style={{ color: "#FFFFFF", fontWeight: 900, fontSize: 13.5, lineHeight: 1.15, letterSpacing: "0.3px" }}>
+                    GRUPO PALATARE
+                  </div>
+                  <div style={{ color: "#F3E5AB", fontWeight: 800, fontSize: 9.5, textTransform: "uppercase", letterSpacing: "0.7px" }}>
+                    Holding Controladora S/A
+                  </div>
                 </div>
               </div>
             )}
@@ -1012,22 +1076,35 @@ export default function Sidebar() {
                 <img
                   src="/palatare-logo.png"
                   alt="Palatare Pizzaria"
-                  style={{ width: 38, height: 38, borderRadius: "50%", border: "1.5px solid #C5A059", background: "#000", objectFit: "contain" }}
+                  style={{ width: 40, height: 40, borderRadius: "50%", border: "2px solid #C5A059", background: "#000", objectFit: "contain" }}
                 />
                 <div>
-                  <div style={{ color: "#FFFFFF", fontWeight: 800, fontSize: 13, lineHeight: 1.1 }}>PALATARE</div>
-                  <div style={{ color: "#C5A059", fontWeight: 700, fontSize: 9, textTransform: "uppercase", letterSpacing: "0.5px" }}>Pizzaria & Restaurante</div>
+                  <div style={{ color: "#FFFFFF", fontWeight: 900, fontSize: 13.5, lineHeight: 1.15, letterSpacing: "0.3px" }}>
+                    PALATARE
+                  </div>
+                  <div style={{ color: "#F3E5AB", fontWeight: 800, fontSize: 9.5, textTransform: "uppercase", letterSpacing: "0.7px" }}>
+                    Pizzaria & Restaurante
+                  </div>
                 </div>
               </div>
             )}
             {isConcreto && (
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
-                <div style={{ width: 38, height: 38, borderRadius: 8, background: "#FF7000", color: "#16181B", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 16 }}>
+                <div style={{
+                  width: 40, height: 40, borderRadius: 10,
+                  background: "linear-gradient(135deg, #FF6B2C 0%, #EA580C 100%)",
+                  color: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center",
+                  fontWeight: 900, fontSize: 16, boxShadow: "0 2px 8px rgba(234, 88, 12, 0.4)"
+                }}>
                   SC
                 </div>
                 <div>
-                  <div style={{ color: "#FFFFFF", fontWeight: 800, fontSize: 13, lineHeight: 1.1 }}>SERRANO CONCRETO</div>
-                  <div style={{ color: "#FF7000", fontWeight: 700, fontSize: 9, textTransform: "uppercase", letterSpacing: "0.5px" }}>Usinado & Mineração</div>
+                  <div style={{ color: "#FFFFFF", fontWeight: 900, fontSize: 13.5, lineHeight: 1.15, letterSpacing: "0.3px" }}>
+                    SERRANO CONCRETO
+                  </div>
+                  <div style={{ color: "#FFB088", fontWeight: 800, fontSize: 9.5, textTransform: "uppercase", letterSpacing: "0.7px" }}>
+                    Usinado & Mineração
+                  </div>
                 </div>
               </div>
             )}
@@ -1055,8 +1132,9 @@ export default function Sidebar() {
         {user && !recolhido && (
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)', display: 'grid', gap: 10 }}>
             {empresasAcessiveis.length >= 1 && (() => {
-              const empresasPalatare = empresasAcessiveis.filter(e => isGrupoPalatareEmpresa(e.id) || isGrupoPalatareEmpresa(e.nome));
-              const outrasEmpresas = empresasAcessiveis.filter(e => !isGrupoPalatareEmpresa(e.id) && !isGrupoPalatareEmpresa(e.nome));
+              const empresasDeduplicadas = deduplicarEmpresas(empresasAcessiveis);
+              const empresasPalatare = empresasDeduplicadas.filter(e => isGrupoPalatareEmpresa(e.id) || isGrupoPalatareEmpresa(e.nome));
+              const outrasEmpresas = empresasDeduplicadas.filter(e => !isGrupoPalatareEmpresa(e.id) && !isGrupoPalatareEmpresa(e.nome));
               return (
                 <label htmlFor="empresa-ativa" style={{ display: 'grid', gap: 6, fontSize: 10, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.8px' }}>
                   Empresa ativa
@@ -1072,6 +1150,8 @@ export default function Sidebar() {
                         navigate('/admin/pizzaria');
                       } else if (novaId === SERRANO_CONCRETO_EMPRESA_ID) {
                         navigate('/admin/concreto');
+                      } else {
+                        navigate('/admin');
                       }
                     }}
                     style={{
@@ -1102,7 +1182,7 @@ export default function Sidebar() {
                         )}
                       </>
                     ) : (
-                      empresasAcessiveis.map((empresa) => (
+                      empresasDeduplicadas.map((empresa) => (
                         <option key={empresa.id} value={empresa.id}>
                           {empresa.nome || empresa.slug || empresa.id}
                         </option>
@@ -1117,39 +1197,39 @@ export default function Sidebar() {
             {(isRestaurante || isConcreto || isHolding || isGrupoPalatareEmpresa(empresaAtiva?.id)) && (
               <div style={{
                 background: 'linear-gradient(180deg, #16181B 0%, #1A1D21 100%)',
-                border: '1px solid rgba(197, 160, 89, 0.35)',
+                border: '1px solid rgba(197, 160, 89, 0.45)',
                 borderRadius: 10,
                 padding: '10px 12px',
                 display: 'grid',
                 gap: 8,
-                boxShadow: '0 4px 14px rgba(0,0,0,0.25)'
+                boxShadow: '0 4px 14px rgba(0,0,0,0.35)'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 13 }}>🏛️</span>
-                    <span style={{ fontSize: 11, fontWeight: 900, color: '#C5A059', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
+                    <span style={{ fontSize: 14 }}>🏛️</span>
+                    <span style={{ fontSize: 11.5, fontWeight: 900, color: '#E5C378', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
                       Grupo Palatare
                     </span>
                   </div>
                   <span style={{
-                    fontSize: 9,
+                    fontSize: 9.5,
                     fontWeight: 800,
-                    color: '#10b981',
-                    background: 'rgba(16, 185, 129, 0.12)',
-                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    color: '#34d399',
+                    background: 'rgba(16, 185, 129, 0.15)',
+                    border: '1px solid rgba(52, 211, 153, 0.4)',
                     padding: '2px 6px',
                     borderRadius: 4
                   }}>
                     ● Síncrono A2
                   </span>
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div style={{ fontSize: 10.5, color: '#9CA3AF', display: 'flex', alignItems: 'center', gap: 4 }}>
                   <span>Controle:</span>
                   <b style={{ color: '#F3E5AB' }}>Alexandre Palatare</b>
                 </div>
 
                 {/* Lista Vertical de Empresas com Hierarquia Visual de Grupo */}
-                <div style={{ display: 'grid', gap: 5 }}>
+                <div style={{ display: 'grid', gap: 6 }}>
                   {/* 1. Holding */}
                   {(() => {
                     const ativo = (empresaAtiva?.id === HOLDING_PALATARE_EMPRESA_ID || isHolding);
@@ -1161,8 +1241,8 @@ export default function Sidebar() {
                           navigate('/admin/concreto?secao=empresa-holding');
                         }}
                         style={{
-                          background: ativo ? 'linear-gradient(90deg, rgba(197, 160, 89, 0.25) 0%, rgba(197, 160, 89, 0.1) 100%)' : 'rgba(255,255,255,0.03)',
-                          border: ativo ? '1px solid #C5A059' : '1px solid rgba(255,255,255,0.08)',
+                          background: ativo ? 'linear-gradient(90deg, rgba(197, 160, 89, 0.3) 0%, rgba(197, 160, 89, 0.15) 100%)' : 'rgba(255,255,255,0.06)',
+                          border: ativo ? '1.5px solid #E5C378' : '1px solid rgba(255,255,255,0.12)',
                           borderRadius: 8,
                           padding: '7px 9px',
                           display: 'flex',
@@ -1176,25 +1256,25 @@ export default function Sidebar() {
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <div style={{
-                            width: 24, height: 24, borderRadius: 6,
-                            background: ativo ? '#C5A059' : 'rgba(197, 160, 89, 0.2)',
-                            color: ativo ? '#000' : '#C5A059',
+                            width: 26, height: 26, borderRadius: 6,
+                            background: ativo ? '#C5A059' : 'rgba(197, 160, 89, 0.25)',
+                            color: ativo ? '#000' : '#E5C378',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: 12, fontWeight: 800
+                            fontSize: 13, fontWeight: 900
                           }}>
                             🏢
                           </div>
                           <div>
-                            <div style={{ fontSize: 11, fontWeight: 800, color: ativo ? '#FFF' : 'var(--cream)', lineHeight: 1.2 }}>
+                            <div style={{ fontSize: 11.5, fontWeight: 800, color: '#FFFFFF', lineHeight: 1.2 }}>
                               Holding Grupo Palatare
                             </div>
-                            <div style={{ fontSize: 9, color: '#C5A059', fontWeight: 600 }}>
+                            <div style={{ fontSize: 9.5, color: '#F3E5AB', fontWeight: 700 }}>
                               Controladora Geral S/A
                             </div>
                           </div>
                         </div>
                         {ativo && (
-                          <span style={{ fontSize: 9, fontWeight: 800, color: '#C5A059', background: 'rgba(197, 160, 89, 0.2)', padding: '1px 5px', borderRadius: 4 }}>
+                          <span style={{ fontSize: 9.5, fontWeight: 900, color: '#16181B', background: '#E5C378', padding: '2px 6px', borderRadius: 4 }}>
                             Ativa
                           </span>
                         )}
@@ -1204,7 +1284,7 @@ export default function Sidebar() {
 
                   {/* 2. Palatare Pizzaria */}
                   {(() => {
-                    const ativo = empresaAtiva?.id === PALATARE_PIZZARIA_EMPRESA_ID;
+                    const ativo = (empresaAtiva?.id === PALATARE_PIZZARIA_EMPRESA_ID || isRestaurante);
                     return (
                       <button
                         type="button"
@@ -1213,9 +1293,8 @@ export default function Sidebar() {
                           navigate('/admin/pizzaria');
                         }}
                         style={{
-                          marginLeft: 6,
-                          background: ativo ? 'linear-gradient(90deg, rgba(239, 68, 68, 0.25) 0%, rgba(239, 68, 68, 0.1) 100%)' : 'rgba(255,255,255,0.03)',
-                          border: ativo ? '1px solid #EF4444' : '1px solid rgba(255,255,255,0.08)',
+                          background: ativo ? 'linear-gradient(90deg, rgba(239, 68, 68, 0.3) 0%, rgba(239, 68, 68, 0.15) 100%)' : 'rgba(255,255,255,0.06)',
+                          border: ativo ? '1.5px solid #F87171' : '1px solid rgba(255,255,255,0.12)',
                           borderRadius: 8,
                           padding: '7px 9px',
                           display: 'flex',
@@ -1229,25 +1308,25 @@ export default function Sidebar() {
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <div style={{
-                            width: 24, height: 24, borderRadius: 6,
-                            background: ativo ? '#EF4444' : 'rgba(239, 68, 68, 0.2)',
+                            width: 26, height: 26, borderRadius: 6,
+                            background: ativo ? '#EF4444' : 'rgba(239, 68, 68, 0.25)',
                             color: '#FFF',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: 12, fontWeight: 800
+                            fontSize: 13, fontWeight: 900
                           }}>
                             🍕
                           </div>
                           <div>
-                            <div style={{ fontSize: 11, fontWeight: 800, color: ativo ? '#FFF' : 'var(--cream)', lineHeight: 1.2 }}>
+                            <div style={{ fontSize: 11.5, fontWeight: 800, color: '#FFFFFF', lineHeight: 1.2 }}>
                               Palatare Pizzaria
                             </div>
-                            <div style={{ fontSize: 9, color: '#EF4444', fontWeight: 600 }}>
+                            <div style={{ fontSize: 9.5, color: '#FCA5A5', fontWeight: 700 }}>
                               Salão Gourmet &amp; Delivery
                             </div>
                           </div>
                         </div>
                         {ativo && (
-                          <span style={{ fontSize: 9, fontWeight: 800, color: '#EF4444', background: 'rgba(239, 68, 68, 0.2)', padding: '1px 5px', borderRadius: 4 }}>
+                          <span style={{ fontSize: 9.5, fontWeight: 900, color: '#FFF', background: '#EF4444', padding: '2px 6px', borderRadius: 4 }}>
                             Ativa
                           </span>
                         )}
@@ -1257,7 +1336,7 @@ export default function Sidebar() {
 
                   {/* 3. Serrano Concreto */}
                   {(() => {
-                    const ativo = empresaAtiva?.id === SERRANO_CONCRETO_EMPRESA_ID;
+                    const ativo = (empresaAtiva?.id === SERRANO_CONCRETO_EMPRESA_ID || isConcreto);
                     return (
                       <button
                         type="button"
@@ -1266,9 +1345,8 @@ export default function Sidebar() {
                           navigate('/admin/concreto');
                         }}
                         style={{
-                          marginLeft: 6,
-                          background: ativo ? 'linear-gradient(90deg, rgba(255, 112, 0, 0.25) 0%, rgba(255, 112, 0, 0.1) 100%)' : 'rgba(255,255,255,0.03)',
-                          border: ativo ? '1px solid #FF7000' : '1px solid rgba(255,255,255,0.08)',
+                          background: ativo ? 'linear-gradient(90deg, rgba(255, 112, 0, 0.3) 0%, rgba(255, 112, 0, 0.15) 100%)' : 'rgba(255,255,255,0.06)',
+                          border: ativo ? '1.5px solid #FB923C' : '1px solid rgba(255,255,255,0.12)',
                           borderRadius: 8,
                           padding: '7px 9px',
                           display: 'flex',
@@ -1282,25 +1360,25 @@ export default function Sidebar() {
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <div style={{
-                            width: 24, height: 24, borderRadius: 6,
-                            background: ativo ? '#FF7000' : 'rgba(255, 112, 0, 0.2)',
-                            color: ativo ? '#16181B' : '#FF7000',
+                            width: 26, height: 26, borderRadius: 6,
+                            background: ativo ? '#FF7000' : 'rgba(255, 112, 0, 0.25)',
+                            color: ativo ? '#FFFFFF' : '#FF7000',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: 12, fontWeight: 900
+                            fontSize: 13, fontWeight: 900
                           }}>
                             🚚
                           </div>
                           <div>
-                            <div style={{ fontSize: 11, fontWeight: 800, color: ativo ? '#FFF' : 'var(--cream)', lineHeight: 1.2 }}>
+                            <div style={{ fontSize: 11.5, fontWeight: 800, color: '#FFFFFF', lineHeight: 1.2 }}>
                               Serrano Concreto
                             </div>
-                            <div style={{ fontSize: 9, color: '#FF7000', fontWeight: 600 }}>
+                            <div style={{ fontSize: 9.5, color: '#FDBA74', fontWeight: 700 }}>
                               Central Dosadora NBR 7212
                             </div>
                           </div>
                         </div>
                         {ativo && (
-                          <span style={{ fontSize: 9, fontWeight: 800, color: '#FF7000', background: 'rgba(255, 112, 0, 0.2)', padding: '1px 5px', borderRadius: 4 }}>
+                          <span style={{ fontSize: 9.5, fontWeight: 900, color: '#FFF', background: '#FF7000', padding: '2px 6px', borderRadius: 4 }}>
                             Ativa
                           </span>
                         )}
@@ -1330,7 +1408,7 @@ export default function Sidebar() {
               aria-label="Selecionar loja ativa"
             >
               <option value="">Todas as lojas da empresa</option>
-              {lojasDaEmpresa.map((loja) => (
+              {deduplicarLojas(lojasDaEmpresa).map((loja) => (
                 <option key={loja.id} value={loja.id}>
                   {loja.codigo ? `${loja.codigo} — ` : ''}{loja.nome || loja.nome_fantasia}
                 </option>
@@ -1357,67 +1435,83 @@ export default function Sidebar() {
             ))}
           </div>
         )}
-        {isStaff && !isDino && !isStallone && (
-  <Section
-    label={isRestaurante ? "Operação de Salão & Cozinha" : isConcreto ? "Operação da Usina" : isClube ? "Balcão, bar e portaria" : "Operações"}
-    items={opVisiveis(
-      isRestaurante
-        ? [
-            { to: "/pdv", icon: "🛒", label: "PDV Balcão", badge: true },
-            { to: "/garcom", icon: "🧑‍🍳", label: "Modo Garçom", badge: false },
-            { to: "/kds", icon: "👨‍🍳", label: "Cozinha / KDS", badge: true },
-          ]
-        : isConcreto
-        ? [
-            { to: "/admin/concreto", icon: "🚚", label: "Expedição & Cargas", badge: true },
-            { to: "/pdv", icon: "⚖️", label: "Balança & Balcão", badge: false },
-            { to: "/admin/concreto?secao=cameras-cftv", icon: "📹", label: "Câmeras & Vision AI", badge: false },
-          ]
-        : isClube
-        ? NAV_OP.filter((item) => item.to !== "/loja-atendimento")
-        : NAV_OP
-    )}
-    onNavClick={handleNavClick}
-    badgesMap={badgesMap}
-    sidebarCollapsed={recolhido}
-  />
-)}
+        {isStaff && !isDino && !isStallone && !isHolding && (
+          <Section
+            label={isRestaurante ? "Operação de Salão & Cozinha" : isConcreto ? "Operação da Usina" : isClube ? "Balcão, bar e portaria" : "Operações"}
+            items={opVisiveis(
+              isRestaurante
+                ? [
+                    { to: "/pdv", icon: "🛒", label: "PDV Balcão", badge: true },
+                    { to: "/garcom", icon: "🧑‍🍳", label: "Modo Garçom", badge: false },
+                    { to: "/kds", icon: "👨‍🍳", label: "Cozinha / KDS", badge: true },
+                  ]
+                : isConcreto
+                ? [
+                    { to: "/admin/concreto", icon: "🚚", label: "Expedição & Cargas", badge: true },
+                    { to: "/pdv", icon: "⚖️", label: "Balança & Balcão", badge: false },
+                    { to: "/admin/concreto?secao=cameras-cftv", icon: "📹", label: "Câmeras & Vision AI", badge: false },
+                  ]
+                : isClube
+                ? NAV_OP.filter((item) => item.to !== "/loja-atendimento")
+                : NAV_OP
+            )}
+            onNavClick={handleNavClick}
+            badgesMap={badgesMap}
+            sidebarCollapsed={recolhido}
+          />
+        )}
+        {isStaff && isHolding && (
+          <Section
+            label="Comando do Grupo Palatare"
+            items={opVisiveis([
+              { to: "/admin/concreto?secao=empresa-holding", icon: "🏢", label: "Cockpit da Holding", badge: false },
+              { to: "/admin/pizzaria", icon: "🍕", label: "Palatare Pizzaria", badge: false },
+              { to: "/admin/concreto", icon: "🚚", label: "Serrano Concreto", badge: false },
+              { to: "/admin/consolidacao-grupo", icon: "📊", label: "DRE Consolidada", badge: false },
+            ])}
+            onNavClick={handleNavClick}
+            badgesMap={badgesMap}
+            sidebarCollapsed={recolhido}
+          />
+        )}
         {isOrg && (
-  <AdminGroups
-    groups={
-      isDino
-        ? NAV_DINO_GROUPS
-        : isStallone
-        ? NAV_STALLONE_GROUPS
-        : isRestaurante
-        ? NAV_RESTAURANTE_GROUPS
-        : isConcreto
-        ? NAV_CONCRETO_GROUPS
-        : isClube
-        ? NAV_CLUBE_GROUPS
-        : NAV_ADMIN_GROUPS
-    }
-    onNavClick={handleNavClick}
-    isPlatformAdmin={isPlatformAdmin}
-    empresa={empresaDoMenu}
-    usuarioDeEmpresa={usuarioDeEmpresa}
-    sidebarCollapsed={recolhido}
-    compacto={isClube || isRestaurante || isConcreto}
-  />
-)}
+          <AdminGroups
+            groups={
+              isHolding
+                ? NAV_HOLDING_GROUPS
+                : isDino
+                ? NAV_DINO_GROUPS
+                : isStallone
+                ? NAV_STALLONE_GROUPS
+                : isRestaurante
+                ? NAV_RESTAURANTE_GROUPS
+                : isConcreto
+                ? NAV_CONCRETO_GROUPS
+                : isClube
+                ? NAV_CLUBE_GROUPS
+                : NAV_ADMIN_GROUPS
+            }
+            onNavClick={handleNavClick}
+            isPlatformAdmin={isPlatformAdmin}
+            empresa={empresaDoMenu}
+            usuarioDeEmpresa={usuarioDeEmpresa}
+            sidebarCollapsed={recolhido}
+            compacto={isHolding || isClube || isRestaurante || isConcreto}
+          />
+        )}
         {isPlatformAdmin && <Section label="Administração da Plataforma" items={NAV_PLATFORM} onNavClick={handleNavClick} sidebarCollapsed={recolhido} />}
         {isPlatformAdmin && <BackofficePlataforma empresa={empresaDoMenu} onNavClick={handleNavClick} sidebarCollapsed={recolhido} />}
         {isAtleta && <Section label="Portal do Atleta" items={NAV_ATLETA} onNavClick={handleNavClick} sidebarCollapsed={recolhido} />}
         <Section
-  label={
-    isDino ? "Dino público" : isStallone ? "Stallone público" : isRestaurante ? "Palatare público" : isConcreto ? "Usina pública" : "Site Público"
-  }
-  items={
-    isDino ? NAV_DINO_PUBLIC : isStallone ? NAV_STALLONE_PUBLIC : isRestaurante ? NAV_PALATARE_PUBLIC : isConcreto ? NAV_CONCRETO_PUBLIC : NAV_PUBLIC
-  }
-  onNavClick={handleNavClick}
-  sidebarCollapsed={recolhido}
-/>
+          label={
+            isHolding ? "Holding pública" : isDino ? "Dino público" : isStallone ? "Stallone público" : isRestaurante ? "Palatare público" : isConcreto ? "Usina pública" : "Site Público"
+          }
+          items={
+            isHolding ? NAV_HOLDING_PUBLIC : isDino ? NAV_DINO_PUBLIC : isStallone ? NAV_STALLONE_PUBLIC : isRestaurante ? NAV_PALATARE_PUBLIC : isConcreto ? NAV_CONCRETO_PUBLIC : NAV_PUBLIC
+          }
+          onNavClick={handleNavClick}
+          sidebarCollapsed={recolhido}
+        />
 
         {/* Bottom user area */}
         <div style={{ marginTop: 'auto', padding: recolhido ? '10px 8px' : '12px 16px', borderTop: '1px solid var(--line)' }}>

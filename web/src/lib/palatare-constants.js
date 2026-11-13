@@ -126,3 +126,127 @@ export function isGrupoPalatareEmpresa(id) {
   const s = String(id).toLowerCase();
   return GRUPO_PALATARE_IDS.some(x => x.toLowerCase() === s) || s.includes('palatare') || s.includes('serrano') || s.includes('concreto');
 }
+
+export function normalizarCnpjDigitos(val) {
+  return String(val || '').replace(/\D/g, '');
+}
+
+/**
+ * Deduplica estritamente a lista de empresas, garantindo que
+ * Holding Grupo Palatare, Palatare Pizzaria e Serrano Concreto
+ * apareçam exatamente uma vez cada, com seus IDs canônicos oficiais,
+ * eliminando duplicidades vindas do banco de dados, storage local ou seeds.
+ */
+export function deduplicarEmpresas(empresas) {
+  if (!Array.isArray(empresas)) return GRUPO_PALATARE_EMPRESAS;
+  const mapa = new Map();
+
+  for (const emp of empresas) {
+    if (!emp) continue;
+    const id = String(emp.id || '').trim().toLowerCase();
+    const cnpj = normalizarCnpjDigitos(emp.cnpj || emp.cnpjNormalizado || '');
+    const nome = String(emp.nome || emp.razaoSocial || emp.nomeFantasia || '').toLowerCase();
+
+    // 1. Holding Grupo Palatare
+    if (
+      id === HOLDING_PALATARE_EMPRESA_ID.toLowerCase() ||
+      cnpj === '51499928000101' ||
+      nome.includes('holding grupo palatare') ||
+      nome.includes('holding palatare') ||
+      nome.includes('palatare participacoes') ||
+      (emp.tipoNegocio === 'holding' && nome.includes('palatare'))
+    ) {
+      mapa.set(HOLDING_PALATARE_EMPRESA_ID, { ...emp, ...HOLDING_PALATARE_EMPRESA, id: HOLDING_PALATARE_EMPRESA_ID });
+      continue;
+    }
+
+    // 2. Palatare Pizzaria & Restaurante
+    if (
+      id === PALATARE_PIZZARIA_EMPRESA_ID.toLowerCase() ||
+      cnpj === '31002650000108' ||
+      (nome.includes('palatare') && (nome.includes('pizzaria') || nome.includes('restaurante')))
+    ) {
+      mapa.set(PALATARE_PIZZARIA_EMPRESA_ID, { ...emp, ...PALATARE_PIZZARIA_EMPRESA, id: PALATARE_PIZZARIA_EMPRESA_ID });
+      continue;
+    }
+
+    // 3. Serrano Concreto Usinado & Mineração
+    if (
+      id === SERRANO_CONCRETO_EMPRESA_ID.toLowerCase() ||
+      cnpj === '53798485000177' ||
+      (nome.includes('serrano') && (nome.includes('concreto') || nome.includes('usina') || nome.includes('mineracao'))) ||
+      nome.includes('serrano concreto')
+    ) {
+      mapa.set(SERRANO_CONCRETO_EMPRESA_ID, { ...emp, ...SERRANO_CONCRETO_EMPRESA, id: SERRANO_CONCRETO_EMPRESA_ID });
+      continue;
+    }
+
+    // 4. Barbearia Dino (Dino Barbershop)
+    if (
+      id === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6' ||
+      cnpj === '50073355000189' ||
+      (nome.includes('barbearia') && nome.includes('dino'))
+    ) {
+      mapa.set('d0d0ac01-8e50-4b61-8c79-de4aaa916da6', {
+        ...emp,
+        id: 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
+        nome: 'BARBEARIA DINO',
+        nomeFantasia: 'Barbearia Dino',
+        brandKey: 'dino',
+        tipoNegocio: 'barbearia'
+      });
+      continue;
+    }
+
+    // Outras empresas: chave única por id ou cnpj
+    const chave = id || (cnpj ? `cnpj_${cnpj}` : nome);
+    if (!mapa.has(chave)) {
+      mapa.set(chave, emp);
+    }
+  }
+
+  // Sempre garantir a presença dos 3 pilares do Grupo Palatare
+  if (!mapa.has(HOLDING_PALATARE_EMPRESA_ID)) mapa.set(HOLDING_PALATARE_EMPRESA_ID, HOLDING_PALATARE_EMPRESA);
+  if (!mapa.has(PALATARE_PIZZARIA_EMPRESA_ID)) mapa.set(PALATARE_PIZZARIA_EMPRESA_ID, PALATARE_PIZZARIA_EMPRESA);
+  if (!mapa.has(SERRANO_CONCRETO_EMPRESA_ID)) mapa.set(SERRANO_CONCRETO_EMPRESA_ID, SERRANO_CONCRETO_EMPRESA);
+
+  return Array.from(mapa.values());
+}
+
+/**
+ * Deduplica estritamente as lojas / unidades das empresas.
+ */
+export function deduplicarLojas(lojas) {
+  if (!Array.isArray(lojas)) return GRUPO_PALATARE_LOJAS;
+  const mapa = new Map();
+
+  for (const lj of lojas) {
+    if (!lj) continue;
+    const id = String(lj.id || '').trim().toLowerCase();
+    const codigo = String(lj.codigo || '').toUpperCase().trim();
+
+    if (id === HOLDING_PALATARE_LOJA_ID.toLowerCase() || codigo === 'HOLDING-01') {
+      mapa.set(HOLDING_PALATARE_LOJA_ID, { ...lj, ...GRUPO_PALATARE_LOJAS[0], id: HOLDING_PALATARE_LOJA_ID });
+      continue;
+    }
+    if (id === PALATARE_PIZZARIA_LOJA_ID.toLowerCase() || codigo === 'PALATARE-MATRIZ') {
+      mapa.set(PALATARE_PIZZARIA_LOJA_ID, { ...lj, ...GRUPO_PALATARE_LOJAS[1], id: PALATARE_PIZZARIA_LOJA_ID });
+      continue;
+    }
+    if (id === SERRANO_CONCRETO_LOJA_ID.toLowerCase() || codigo === 'USINA-01') {
+      mapa.set(SERRANO_CONCRETO_LOJA_ID, { ...lj, ...GRUPO_PALATARE_LOJAS[2], id: SERRANO_CONCRETO_LOJA_ID });
+      continue;
+    }
+
+    const chave = id || codigo || String(lj.nome || '');
+    if (!mapa.has(chave)) {
+      mapa.set(chave, lj);
+    }
+  }
+
+  for (const lojaGp of GRUPO_PALATARE_LOJAS) {
+    if (!mapa.has(lojaGp.id)) mapa.set(lojaGp.id, lojaGp);
+  }
+
+  return Array.from(mapa.values());
+}

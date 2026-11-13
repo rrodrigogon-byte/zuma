@@ -15,6 +15,7 @@ import ConcretoCamerasVisionAI from './concreto/ConcretoCamerasVisionAI';
 import ConcretoLaboratorioTecnologico from './concreto/ConcretoLaboratorioTecnologico';
 import ConcretoAppCampoPainel from './concreto/ConcretoAppCampoPainel';
 import HoldingGrupoPalatare from './concreto/HoldingGrupoPalatare';
+import { HOLDING_PALATARE_EMPRESA_ID, SERRANO_CONCRETO_EMPRESA_ID } from '../../lib/palatare-constants';
 
 
 const CARGAS_PADRAO = [
@@ -27,14 +28,38 @@ const CARGAS_PADRAO = [
 ];
 
 export default function ConcretoUsinaERP() {
-  const { empresaAtiva } = useAuth();
+  const { empresaAtiva, trocarEmpresa } = useAuth();
   const { toast } = useToast();
 
   // Estados de layout e tema
   const [themeDark, setThemeDark] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const secaoAtiva = searchParams.get('secao') || searchParams.get('tab') || 'operacao-despacho';
-  const setSecaoAtiva = (s) => setSearchParams({ secao: s });
+  const setSecaoAtiva = (s) => {
+    setSearchParams({ secao: s });
+    if (trocarEmpresa) {
+      if (s === 'empresa-holding') {
+        trocarEmpresa(HOLDING_PALATARE_EMPRESA_ID);
+      } else if (empresaAtiva?.id === HOLDING_PALATARE_EMPRESA_ID) {
+        trocarEmpresa(SERRANO_CONCRETO_EMPRESA_ID);
+      }
+    }
+  };
+
+  // Sincronização automática de empresa ativa conforme a aba
+  useEffect(() => {
+    if (!trocarEmpresa) return;
+    if (secaoAtiva === 'empresa-holding') {
+      if (empresaAtiva?.id !== HOLDING_PALATARE_EMPRESA_ID) {
+        trocarEmpresa(HOLDING_PALATARE_EMPRESA_ID);
+      }
+    } else {
+      if (empresaAtiva?.id !== SERRANO_CONCRETO_EMPRESA_ID && empresaAtiva?.id !== HOLDING_PALATARE_EMPRESA_ID) {
+        trocarEmpresa(SERRANO_CONCRETO_EMPRESA_ID);
+      }
+    }
+  }, [secaoAtiva, empresaAtiva?.id]);
+
   const [busca, setBusca] = useState('');
   const [cargasAbertas, setCargasAbertas] = useState({ '#1002': true });
   const [copilotAberto, setCopilotAberto] = useState(false);

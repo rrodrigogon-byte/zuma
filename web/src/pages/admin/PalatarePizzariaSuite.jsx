@@ -59,6 +59,13 @@ export default function PalatarePizzariaSuite() {
   const initialTab = queryParams.get('tab') || 'montador';
   const [tabAtiva, setTabAtiva] = useState(initialTab);
 
+  // Garantir sincronização da empresa ativa ao entrar na Palatare Pizzaria
+  useEffect(() => {
+    if (trocarEmpresa && empresaAtiva?.id !== PALATARE_PIZZARIA_EMPRESA_ID) {
+      trocarEmpresa(PALATARE_PIZZARIA_EMPRESA_ID);
+    }
+  }, [empresaAtiva?.id, trocarEmpresa]);
+
   const [carregando, setCarregando] = useState(true);
   const [dadosSuite, setDadosSuite] = useState(null);
   const [erro, setErro] = useState(null);
