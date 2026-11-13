@@ -2249,7 +2249,19 @@ try {
   if (p.get('view') && V[p.get('view')]) S.view = p.get('view');
   if (p.get('bal') && SCALES[p.get('bal')]) S.bal = p.get('bal');
   if (p.get('site')) S.site = p.get('site');
+  if (p.has('caminhao') || p.has('betoneira')) {
+    const bet = TRIPS.find(t => t.bal === S.bal && t.op === 'expedicao');
+    if (bet) S.T = bet.p2 + 0.6;
+  }
 } catch(e) {}
+
+window.S = S;
+window.TRIPS = TRIPS;
+window.SCALES = SCALES;
+window.tick = tick;
+window.render = render;
+window.openDrawer = openDrawer;
+window.closeDrawer = closeDrawer;
 
 render();
 setInterval(tick,250);

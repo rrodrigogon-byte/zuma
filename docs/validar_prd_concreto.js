@@ -38,13 +38,13 @@ async function validarPRD() {
   const cellC2 = await page.$('[data-pista-action="celula"][data-celula="2"]');
   if (cellC2) {
     await cellC2.click();
-    await page.waitForSelector('#drawer-metrologia.ativo', { timeout: 5000 });
+    await page.waitForSelector('#overlay .drawer', { timeout: 5000 });
     await new Promise(r => setTimeout(r, 600));
     await page.screenshot({ path: path.join(DOCS_DIR, 'prd_validacao_torre_pesagem_celula.png') });
     console.log('📸 Screenshot 2: Diagnóstico metrológico da Célula C2 capturado.');
 
     // Fechar modal
-    await page.click('#drawer-metrologia .drawer-close');
+    await page.click('#overlay [data-act="close"]');
     await new Promise(r => setTimeout(r, 400));
   } else {
     console.error('❌ Célula C2 não encontrada no DOM!');
@@ -52,16 +52,30 @@ async function validarPRD() {
 
   // 3. Clicar no Caminhão Betoneira
   console.log('🚛 Testando interação com Caminhão Betoneira...');
+  // Ajustar o tempo da simulação para quando o caminhão betoneira estiver posicionado na plataforma
+  await page.evaluate(() => {
+    try {
+      const trip = TRIPS.find(t => t.bal === S.bal && t.op === 'expedicao');
+      if (trip) {
+        S.T = trip.p2 + 0.6;
+        tick();
+      }
+    } catch(e) {
+      console.error(e);
+    }
+  });
+  await new Promise(r => setTimeout(r, 600));
+
   const caminhao = await page.$('[data-pista-action="caminhao"]');
   if (caminhao) {
     await caminhao.click();
-    await page.waitForSelector('#drawer-caminhao.ativo', { timeout: 5000 });
+    await page.waitForSelector('#overlay .drawer', { timeout: 5000 });
     await new Promise(r => setTimeout(r, 600));
     await page.screenshot({ path: path.join(DOCS_DIR, 'prd_validacao_torre_pesagem_caminhao.png') });
     console.log('📸 Screenshot 3: Dossiê operacional do Caminhão Betoneira capturado.');
 
     // Fechar modal
-    await page.click('#drawer-caminhao .drawer-close');
+    await page.click('#overlay [data-act="close"]');
     await new Promise(r => setTimeout(r, 400));
   } else {
     console.error('❌ Caminhão Betoneira não encontrado no DOM!');
@@ -82,12 +96,12 @@ async function validarPRD() {
   const totemLpr = await page.$('[data-pista-action="totem-lpr"]');
   if (totemLpr) {
     await totemLpr.click();
-    await page.waitForSelector('#drawer-totem.ativo', { timeout: 5000 });
+    await page.waitForSelector('#overlay .drawer', { timeout: 5000 });
     await new Promise(r => setTimeout(r, 600));
     await page.screenshot({ path: path.join(DOCS_DIR, 'prd_validacao_torre_pesagem_totem_lpr.png') });
     console.log('📸 Screenshot 5: Diagnóstico do Totem LPR Vision AI capturado.');
 
-    await page.click('#drawer-totem .drawer-close');
+    await page.click('#overlay [data-act="close"]');
     await new Promise(r => setTimeout(r, 400));
   }
 
@@ -96,12 +110,12 @@ async function validarPRD() {
   const totemMot = await page.$('[data-pista-action="totem-motorista"]');
   if (totemMot) {
     await totemMot.click();
-    await page.waitForSelector('#drawer-totem.ativo', { timeout: 5000 });
+    await page.waitForSelector('#overlay .drawer', { timeout: 5000 });
     await new Promise(r => setTimeout(r, 600));
     await page.screenshot({ path: path.join(DOCS_DIR, 'prd_validacao_torre_pesagem_totem_motorista.png') });
     console.log('📸 Screenshot 6: Totem do Motorista com interfone e KyttoIA CCO capturado.');
 
-    await page.click('#drawer-totem .drawer-close');
+    await page.click('#overlay [data-act="close"]');
     await new Promise(r => setTimeout(r, 400));
   }
 
