@@ -61,6 +61,7 @@ import {
   obterComparativoResistenciaNbr5739PorTraco,
   analisarEscalaProgramacaoKyttoIA,
   aplicarEscalaSugeridaKyttoIA,
+  simularSlumpLossML,
   obterTelemetriaFrotaTempoReal,
   atualizarTelemetriaBetoneira,
   listarCamerasIpConcreto,
@@ -762,6 +763,16 @@ router.post('/dosagem/calcular', (req, res) => {
     try {
       const { sugestoes } = req.body;
       const resultado = await aplicarEscalaSugeridaKyttoIA(sugestoes, resolverEmpresa(req));
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 50b. Simulador de Machine Learning de Slump Loss e Risco de Fissuração Plástica (ACI 305R / NBR 7212)
+  router.post('/programacao/simulador-ml-slump', (req, res) => {
+    try {
+      const resultado = simularSlumpLossML(req.body || {});
       return res.json(resultado);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
