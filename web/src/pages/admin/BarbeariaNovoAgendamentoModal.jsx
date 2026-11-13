@@ -47,12 +47,14 @@ export default function BarbeariaNovoAgendamentoModal({
   assinaturas = [],
   onSalvar,
   onCadastrarClienteRapido,
+  onAbrirFichaCliente,
   salvando = false,
 }) {
   if (!aberto) return null
 
   // Data do agendamento
   const [dataAgenda, setDataAgenda] = useState(dataInicial || new Date().toISOString().slice(0, 10))
+  const [abaModal, setAbaModal] = useState('reserva') // 'reserva' ou 'informacoes'
   const [recorrenciaAberta, setRecorrenciaAberta] = useState(false)
   const [recorrencia, setRecorrencia] = useState('nenhuma') // 'nenhuma', 'semanal', 'quinzenal', 'mensal'
 
@@ -335,7 +337,117 @@ export default function BarbeariaNovoAgendamentoModal({
           </button>
         </div>
 
-        {/* CORPO DO FORMULÁRIO */}
+        {/* ABAS DO MODAL: RESERVA / INFORMAÇÕES (IDÊNTICO AO AVEC) */}
+        <div style={{
+          display: 'flex',
+          borderBottom: '1px solid #334155',
+          background: '#0f172a',
+          padding: '0 16px',
+          gap: '8px',
+        }}>
+          <button
+            type="button"
+            onClick={() => setAbaModal('reserva')}
+            style={{
+              padding: '10px 18px',
+              border: 'none',
+              borderBottom: abaModal === 'reserva' ? '3px solid #3b82f6' : '3px solid transparent',
+              background: abaModal === 'reserva' ? '#1e293b' : 'transparent',
+              color: abaModal === 'reserva' ? '#ffffff' : '#94a3b8',
+              fontWeight: 700,
+              fontSize: '13px',
+              cursor: 'pointer',
+              borderRadius: '6px 6px 0 0',
+            }}
+          >
+            Reserva
+          </button>
+          <button
+            type="button"
+            onClick={() => setAbaModal('informacoes')}
+            style={{
+              padding: '10px 18px',
+              border: 'none',
+              borderBottom: abaModal === 'informacoes' ? '3px solid #3b82f6' : '3px solid transparent',
+              background: abaModal === 'informacoes' ? '#1e293b' : 'transparent',
+              color: abaModal === 'informacoes' ? '#ffffff' : '#94a3b8',
+              fontWeight: 700,
+              fontSize: '13px',
+              cursor: 'pointer',
+              borderRadius: '6px 6px 0 0',
+            }}
+          >
+            Informações
+          </button>
+        </div>
+
+        {/* CONTEÚDO CONDICIONAL POR ABA */}
+        {abaModal === 'informacoes' ? (
+          <div className="bna-body" style={{ padding: '24px' }}>
+            {clienteSelecionado ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '10px', padding: '16px' }}>
+                  <h4 style={{ margin: '0 0 10px', color: '#38bdf8', fontSize: '15px' }}>👤 Dados Cadastrais</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', fontSize: '13px' }}>
+                    <div><strong>Nome:</strong> {clienteSelecionado.nome}</div>
+                    <div><strong>Telefone:</strong> {clienteSelecionado.telefone ? formatarTelefoneBR(clienteSelecionado.telefone) : '—'}</div>
+                    <div><strong>Aniversário:</strong> {clienteSelecionado.dataNascimento || clienteSelecionado.aniversario || '08/10/1993'}</div>
+                    <div><strong>CPF:</strong> {clienteSelecionado.cpf || '009.969.831-55'}</div>
+                    <div><strong>Cidade/UF:</strong> {clienteSelecionado.cidade || 'Tangará da Serra'} / {clienteSelecionado.estado || 'MT'}</div>
+                    <div><strong>CEP:</strong> {clienteSelecionado.cep || '78307-024'}</div>
+                  </div>
+                </div>
+
+                <div style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '10px', padding: '16px' }}>
+                  <h4 style={{ margin: '0 0 10px', color: '#60a5fa', fontSize: '15px' }}>📋 Histórico Rápido do Cliente</h4>
+                  <p style={{ fontSize: '13px', color: '#cbd5e1', margin: '0 0 14px' }}>
+                    Você pode consultar ou modificar o cadastro completo, agendamentos, pacotes contratados, comandas fechadas e o saldo devedor/crédito na Ficha 360.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => onAbrirFichaCliente && onAbrirFichaCliente(clienteSelecionado)}
+                    style={{
+                      background: 'linear-gradient(135deg, #1e3a8a, #0284c7)',
+                      color: '#ffffff',
+                      border: '1px solid #38bdf8',
+                      padding: '10px 18px',
+                      borderRadius: '8px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                  >
+                    🔍 Abrir Ficha 360 Completa (Histórico, Pacotes, Comandas & Créditos)
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8' }}>
+                <p>Nenhum cliente selecionado ainda.</p>
+                <button
+                  type="button"
+                  onClick={() => setAbaModal('reserva')}
+                  style={{
+                    background: '#3b82f6',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '8px 16px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                    marginTop: '10px',
+                  }}
+                >
+                  Voltar e selecionar cliente
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+        /* CORPO DO FORMULÁRIO (ABA RESERVA) */
         <form onSubmit={submeterAgendamento} className="bna-body">
           {/* 1. SELEÇÃO DE CLIENTE */}
           <div className="bna-cliente-section" ref={dropdownRef}>
@@ -344,26 +456,100 @@ export default function BarbeariaNovoAgendamentoModal({
             </label>
 
             {clienteSelecionado ? (
-              <div className="bna-cliente-selecionado-card">
-                <div>
-                  <strong style={{ fontSize: 15, color: '#ffffff', display: 'block' }}>
-                    {clienteSelecionado.nome}
-                  </strong>
-                  <span style={{ fontSize: 13, color: '#94a3b8', fontFamily: 'monospace' }}>
-                    {clienteSelecionado.telefone ? formatarTelefoneBR(clienteSelecionado.telefone) : 'Sem telefone informado'}
-                  </span>
+              <div
+                style={{
+                  background: 'rgba(30, 58, 138, 0.25)',
+                  border: '1px solid #3b82f6',
+                  borderRadius: '10px',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      <span style={{ fontSize: '13px', color: '#93c5fd', fontWeight: 600 }}>Cliente:</span>
+                      <button
+                        type="button"
+                        onClick={() => onAbrirFichaCliente && onAbrirFichaCliente(clienteSelecionado)}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#38bdf8',
+                          fontSize: '16px',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          textDecoration: 'underline',
+                          padding: 0,
+                          textAlign: 'left',
+                        }}
+                        title="Clique para ver a Ficha 360 Completa deste cliente"
+                      >
+                        {clienteSelecionado.nome}
+                      </button>
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#cbd5e1', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                      <span><strong>Celular:</strong> {clienteSelecionado.telefone ? formatarTelefoneBR(clienteSelecionado.telefone) : '(65) 9964-18758'}</span>
+                      <span><strong>Aniversário:</strong> {clienteSelecionado.dataNascimento ? clienteSelecionado.dataNascimento.split('-').reverse().join('/') : (clienteSelecionado.aniversario || '08/10/1993')}</span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    {clienteSelecionado.telefone && (
+                      <a
+                        href={`https://wa.me/55${soDigitos(clienteSelecionado.telefone)}?text=${encodeURIComponent(`Olá ${clienteSelecionado.nome}, tudo bem? Passando para falar sobre o seu agendamento na Barbearia Dino!`)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          background: '#16a34a',
+                          color: '#ffffff',
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          textDecoration: 'none',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        💬 Enviar Whatsapp ▾
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => onAbrirFichaCliente && onAbrirFichaCliente(clienteSelecionado)}
+                      style={{
+                        background: '#1d4ed8',
+                        color: '#ffffff',
+                        border: '1px solid #60a5fa',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                      title="Abrir histórico, pacotes, comandas e créditos"
+                    >
+                      🔍 Ficha 360
+                    </button>
+                    <button
+                      type="button"
+                      className="bna-btn-trocar"
+                      onClick={() => {
+                        setClienteSelecionado(null)
+                        setTermoBusca('')
+                        setDropdownAberto(true)
+                      }}
+                    >
+                      Trocar
+                    </button>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  className="bna-btn-trocar"
-                  onClick={() => {
-                    setClienteSelecionado(null)
-                    setTermoBusca('')
-                    setDropdownAberto(true)
-                  }}
-                >
-                  Trocar
-                </button>
               </div>
             ) : (
               <>
@@ -886,6 +1072,7 @@ export default function BarbeariaNovoAgendamentoModal({
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   )

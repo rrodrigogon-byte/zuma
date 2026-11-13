@@ -9107,6 +9107,13 @@ export default function BarbeariaERP({ tabInicial } = {}) {
           planos={planos}
           assinaturas={assinaturas}
           salvando={salvando}
+          onAbrirFichaCliente={(cli) => {
+            setModalFichaCompleta({
+              clienteId: cli?.id,
+              telefone: cli?.telefone,
+              nome: cli?.nome,
+            });
+          }}
           onCadastrarClienteRapido={async (dados) => {
             const resp = await api.post("/api/admin/barbearia/clientes", dados);
             if (resp?.cliente) {
