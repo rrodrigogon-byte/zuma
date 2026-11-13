@@ -751,6 +751,7 @@ export function inicializarDatastoreConcreto() {
   if (!Array.isArray(data.concreto_tickets_balanca)) data.concreto_tickets_balanca = [];
   if (!Array.isArray(data.concreto_baias)) data.concreto_baias = CONCRETO_BAIAS_INICIAIS;
   if (!Array.isArray(data.concreto_tanques)) data.concreto_tanques = CONCRETO_TANQUES_ADITIVOS;
+  if (!Array.isArray(data.concreto_eventos_vision)) data.concreto_eventos_vision = [];
   if (!Array.isArray(data.concreto_cameras_ip) || data.concreto_cameras_ip.length === 0) {
     data.concreto_cameras_ip = [
       {
@@ -5292,9 +5293,37 @@ export function obterComparativoResistenciaNbr5739PorTraco(empresaId = CONCRETO_
   };
 }
 
+export const PRESETS_FABRICANTES_CAMERAS = [
+  { id: "intelbras", nome: "Intelbras", linha: "VIP / iMDVR / iSIC / Mibo / LPR", rtsp: 554, http: 80, onvif: 80, servico: 37777, codec: "H.265", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "VIP 7250 LPR IA (4MP Starlight)", rotaRtsp: "/cam/realmonitor?channel={canal}&subtype={sub}", rotaSnapshot: "/cgi-bin/snapshot.cgi?channel={canal}" },
+  { id: "hikvision", nome: "Hikvision", linha: "ColorVu 4K / AcuSense / DarkFighter", rtsp: 554, http: 80, onvif: 80, servico: 8000, codec: "H.265", fps: 25, resolucao: "3840x2160 (4K UHD)", modelo: "DS-2CD2T87G2-L (ColorVu 4K)", rotaRtsp: "/Streaming/Channels/{canal}01", rotaSnapshot: "/ISAPI/Streaming/channels/{canal}01/picture" },
+  { id: "dahua", nome: "Dahua", linha: "WizSense / WizMind / ITC LPR", rtsp: 554, http: 80, onvif: 80, servico: 37777, codec: "H.265", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "DH-IPC-HFW5842E-Z4E", rotaRtsp: "/cam/realmonitor?channel={canal}&subtype={sub}", rotaSnapshot: "/cgi-bin/snapshot.cgi?channel={canal}" },
+  { id: "bosch", nome: "Bosch Security", linha: "Dinion IP Starlight / Autodome / FlexiDome", rtsp: 554, http: 80, onvif: 80, servico: 1756, codec: "H.265", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "Dinion IP Starlight 7000 HD", rotaRtsp: "/rtsp_tunnel?line=1&inst={sub}", rotaSnapshot: "/snap.jpg?JpegCam={canal}" },
+  { id: "avigilon", nome: "Motorola / Avigilon", linha: "H5A Bullet / H6A / Control Center LPR", rtsp: 554, http: 80, onvif: 80, servico: 3880, codec: "H.265", fps: 30, resolucao: "2592x1944 (5MP)", modelo: "H5A Bullet 5.0 MP LPR", rotaRtsp: "/defaultPrimary?streamType=u", rotaSnapshot: "/media/cam{canal}.jpg" },
+  { id: "uniview", nome: "Uniview (UNV)", linha: "Tri-Guard / LightHunter / LPR IPC2324", rtsp: 554, http: 80, onvif: 80, servico: 82, codec: "H.265", fps: 30, resolucao: "2560x1440 (2K QHD)", modelo: "IPC2324EBR-DPZ28-D LPR", rotaRtsp: "/unicast/c{canal}/s{sub}/live", rotaSnapshot: "/images/snapshot.jpg" },
+  { id: "pelco", nome: "Pelco by Motorola", linha: "Sarix Pro 4 / Spectra / ExSite", rtsp: 554, http: 80, onvif: 80, servico: 80, codec: "H.264", fps: 30, resolucao: "2048x1536 (3MP)", modelo: "IBP341-1ER 3MP Bullet", rotaRtsp: "/stream{subStreamNum}", rotaSnapshot: "/jpeg" },
+  { id: "vivotek", nome: "Vivotek", linha: "Série IB Industrial LPR / Supreme", rtsp: 554, http: 80, onvif: 80, servico: 554, codec: "H.265", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "IB9387-LPR Industrial", rotaRtsp: "/live.sdp", rotaSnapshot: "/cgi-bin/viewer/video.jpg" },
+  { id: "hanwha", nome: "Hanwha Vision", linha: "Wisenet Q / X-Series AI / P-Series", rtsp: 554, http: 80, onvif: 80, servico: 4520, codec: "H.265", fps: 30, resolucao: "2592x1944 (5MP)", modelo: "QNO-8080R 5MP IR Bullet", rotaRtsp: "/profile{subStreamNum}/media.smp", rotaSnapshot: "/stw-cgi/video.cgi?msubmenu=snapshot&action=view" },
+  { id: "toledo_prix_lpr", nome: "Toledo do Brasil", linha: "Totem Prix LPR 9094 / Indicador 720i Rodoviário", rtsp: 554, http: 80, onvif: 80, servico: 5000, codec: "H.264", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "Totem Prix LPR 9094 Balança", rotaRtsp: "/live/prix_lpr_ch{canal}", rotaSnapshot: "/api/lpr/capture.jpg" },
+  { id: "tplink_vigi", nome: "TP-Link VIGI", linha: "VIGI C340 / C440 / C540 Outdoor", rtsp: 554, http: 80, onvif: 2020, servico: 2020, codec: "H.265+", fps: 25, resolucao: "2560x1440 (2K QHD)", modelo: "VIGI C340-W 4MP Bullet", rotaRtsp: "/stream{subStreamNum}", rotaSnapshot: "/cgi-bin/snapshot.cgi?stream={subStreamNum}" },
+  { id: "flir", nome: "Teledyne FLIR", linha: "FLIR A50/A70 Térmica Radiométrica (Silos/Balança)", rtsp: 554, http: 80, onvif: 80, servico: 80, codec: "H.264", fps: 30, resolucao: "640x480 (Radiométrica)", modelo: "FLIR A50 Smart Thermal Sensor", rotaRtsp: "/ch0", rotaSnapshot: "/api/snapshot" },
+  { id: "geovision", nome: "GeoVision", linha: "GV-LPR / GV-Target Industrial", rtsp: 554, http: 80, onvif: 80, servico: 554, codec: "H.264", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "GV-LPR 2800-FD", rotaRtsp: "/live{subStreamNum}.sdp", rotaSnapshot: "/vstream.jpg" },
+  { id: "positivo", nome: "Positivo", linha: "Smart Câmera 360 / Seg Externa Wi-Fi", rtsp: 554, http: 80, onvif: 8899, servico: 8000, codec: "H.264", fps: 25, resolucao: "1920x1080 (Full HD)", modelo: "Smart Câmera IP Wi-Fi 1080p", rotaRtsp: "/live/ch{chZero}", rotaSnapshot: "/snapshot.jpg" },
+  { id: "hilook", nome: "HiLook", linha: "Série Bullet / Dome 1080p", rtsp: 554, http: 80, onvif: 80, servico: 8000, codec: "H.264", fps: 25, resolucao: "1920x1080 (Full HD)", modelo: "IPC-B121H 1080p", rotaRtsp: "/Streaming/Channels/{canal}01", rotaSnapshot: "/ISAPI/Streaming/channels/{canal}01/picture" },
+  { id: "giga", nome: "Giga / Multi", linha: "Série Orion / Open HD", rtsp: 554, http: 80, onvif: 8899, servico: 34567, codec: "H.264", fps: 25, resolucao: "1920x1080 (Full HD)", modelo: "GS0081 Orion Full HD", rotaRtsp: "/ch0{canal}.264", rotaSnapshot: "/cgi-bin/snapshot.cgi" },
+  { id: "tecvoz", nome: "Tecvoz / JFL", linha: "Flex IP / NVR Série WD", rtsp: 554, http: 80, onvif: 80, servico: 8000, codec: "H.264", fps: 25, resolucao: "1920x1080 (Full HD)", modelo: "Flex IP 2MP Bullet", rotaRtsp: "/channel={canal}&stream={sub}.sdp", rotaSnapshot: "/snapshot.jpg" },
+  { id: "axis", nome: "Axis", linha: "P1455-LE Industrial / Q1656 LPR", rtsp: 554, http: 80, onvif: 80, servico: 443, codec: "H.265", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "P1455-LE Industrial Lightfinder", rotaRtsp: "/axis-media/media.amp?videocodec=h264", rotaSnapshot: "/axis-cgi/jpg/image.cgi" },
+  { id: "onvif_generica", nome: "ONVIF Genérico", linha: "Profile S / T / M Padrão Internacional", rtsp: 554, http: 80, onvif: 80, servico: 554, codec: "H.264", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "Câmera IP ONVIF Profile S/T", rotaRtsp: "/live/ch{canal}", rotaSnapshot: "/snapshot.jpg" }
+];
+
+export function obterPresetsFabricantesCameras() {
+  return PRESETS_FABRICANTES_CAMERAS;
+}
+
 export function construirUrlsCamera(marca, ipHost, portaHttp = 80, portaRtsp = 554, usuario = "admin", senha = "", canal = 1, substream = false) {
-  const m = String(marca || "intelbras").toLowerCase();
+  const m = String(marca || "intelbras").toLowerCase().replace(/[^a-z0-9_]/g, "_");
   const sub = substream ? 1 : 0;
+  const subStreamNum = substream ? 2 : 1;
+  const chZero = canal ? (canal - 1) : 0;
   const auth = usuario ? encodeURIComponent(usuario) + ":" + encodeURIComponent(senha) + "@" : "";
   const hostRtsp = String(ipHost || "192.168.1.100") + ":" + String(portaRtsp || 554);
   const hostHttp = String(ipHost || "192.168.1.100") + (Number(portaHttp) !== 80 ? ":" + portaHttp : "");
@@ -5305,18 +5334,58 @@ export function construirUrlsCamera(marca, ipHost, portaHttp = 80, portaRtsp = 5
   let marcaRotulo = "";
 
   if (m === "positivo") {
-    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/live/ch" + (canal ? (canal - 1) : 0);
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/live/ch" + chZero;
     snapshotHttpUrl = "http://" + auth + hostHttp + "/snapshot.jpg";
     marcaRotulo = "Positivo Casa Inteligente / Segurança";
   } else if (m === "intelbras" || m === "dahua") {
     streamRtspUrl = "rtsp://" + auth + hostRtsp + "/cam/realmonitor?channel=" + (canal || 1) + "&subtype=" + sub;
     snapshotHttpUrl = "http://" + auth + hostHttp + "/cgi-bin/snapshot.cgi?channel=" + (canal || 1);
-    marcaRotulo = m === "intelbras" ? "Intelbras (iMDVR / VIP)" : "Dahua WizSense";
+    marcaRotulo = m === "intelbras" ? "Intelbras (VIP / iMDVR / LPR)" : "Dahua WizSense / WizMind";
   } else if (m === "hikvision" || m === "hilook") {
-    const ch = (canal || 1) <= 16 ? (100 * (canal || 1) + (substream ? 2 : 1)) : (canal || 101);
+    const ch = (canal || 1) <= 16 ? (100 * (canal || 1) + subStreamNum) : (canal || 101);
     streamRtspUrl = "rtsp://" + auth + hostRtsp + "/Streaming/Channels/" + ch;
     snapshotHttpUrl = "http://" + auth + hostHttp + "/ISAPI/Streaming/channels/" + ch + "/picture";
-    marcaRotulo = m === "hikvision" ? "Hikvision ColorVu" : "HiLook Series";
+    marcaRotulo = m === "hikvision" ? "Hikvision ColorVu / AcuSense" : "HiLook Series";
+  } else if (m === "bosch") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/rtsp_tunnel?line=1&inst=" + sub;
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/snap.jpg?JpegCam=" + (canal || 1);
+    marcaRotulo = "Bosch Security Systems (Dinion IP / Autodome)";
+  } else if (m === "avigilon" || m === "motorola") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + (substream ? "/defaultSecondary?streamType=u" : "/defaultPrimary?streamType=u");
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/media/cam" + (canal || 1) + ".jpg";
+    marcaRotulo = "Avigilon / Motorola Solutions H5A LPR";
+  } else if (m === "uniview" || m === "unv") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/unicast/c" + (canal || 1) + "/s" + sub + "/live";
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/images/snapshot.jpg";
+    marcaRotulo = "Uniview (UNV) Tri-Guard LPR";
+  } else if (m === "pelco") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/stream" + subStreamNum;
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/jpeg";
+    marcaRotulo = "Pelco by Motorola (Sarix / Spectra)";
+  } else if (m === "vivotek") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + (substream ? "/live2.sdp" : "/live.sdp");
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/cgi-bin/viewer/video.jpg";
+    marcaRotulo = "Vivotek LPR & Industrial Supreme";
+  } else if (m === "hanwha" || m === "wisenet" || m === "samsung") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/profile" + subStreamNum + "/media.smp";
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/stw-cgi/video.cgi?msubmenu=snapshot&action=view";
+    marcaRotulo = "Hanwha Vision / Wisenet Series";
+  } else if (m === "toledo_prix_lpr" || m === "toledo" || m === "prix") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/live/prix_lpr_ch" + (canal || 1);
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/api/lpr/capture.jpg";
+    marcaRotulo = "Toledo do Brasil (Totem Prix LPR 9094 / 720i)";
+  } else if (m === "tplink_vigi" || m === "vigi" || m === "tp_link") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/stream" + subStreamNum;
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/cgi-bin/snapshot.cgi?stream=" + subStreamNum;
+    marcaRotulo = "TP-Link VIGI Industrial (C340-W)";
+  } else if (m === "flir" || m === "termica") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/ch0";
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/api/snapshot";
+    marcaRotulo = "Teledyne FLIR (Térmica / Silos & Carga)";
+  } else if (m === "geovision") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/live" + subStreamNum + ".sdp";
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/vstream.jpg";
+    marcaRotulo = "GeoVision GV-LPR Industrial";
   } else if (m === "giga" || m === "multilaser") {
     streamRtspUrl = "rtsp://" + auth + hostRtsp + "/ch0" + (canal || 1) + (substream ? "_sub.264" : ".264");
     snapshotHttpUrl = "http://" + auth + hostHttp + "/cgi-bin/snapshot.cgi";
@@ -5325,18 +5394,14 @@ export function construirUrlsCamera(marca, ipHost, portaHttp = 80, portaRtsp = 5
     streamRtspUrl = "rtsp://" + auth + hostRtsp + "/user=" + (usuario || "admin") + "&password=" + (senha || "") + "&channel=" + (canal || 1) + "&stream=" + sub + ".sdp";
     snapshotHttpUrl = "http://" + auth + hostHttp + "/snapshot.jpg";
     marcaRotulo = "Tecvoz / JFL Alarmes";
-  } else if (m === "uniview" || m === "unv") {
-    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/unicast/c" + (canal || 1) + "/s" + sub + "/live";
-    snapshotHttpUrl = "http://" + auth + hostHttp + "/images/snapshot.jpg";
-    marcaRotulo = "Uniview (UNV)";
   } else if (m === "axis") {
     streamRtspUrl = "rtsp://" + auth + hostRtsp + "/axis-media/media.amp?videocodec=h264";
     snapshotHttpUrl = "http://" + auth + hostHttp + "/axis-cgi/jpg/image.cgi";
-    marcaRotulo = "Axis Communications";
+    marcaRotulo = "Axis Communications Industrial";
   } else {
     streamRtspUrl = "rtsp://" + auth + hostRtsp + "/live/ch" + (canal || 1);
     snapshotHttpUrl = "http://" + auth + hostHttp + "/snapshot.jpg";
-    marcaRotulo = "ONVIF / RTSP Genérico";
+    marcaRotulo = "ONVIF / RTSP Profile S/T Padrão";
   }
 
   return {
@@ -5354,19 +5419,35 @@ export function listarCamerasIpConcreto(empresaId = CONCRETO_EMPRESA_ID) {
   const data = inicializarDatastoreConcreto();
   const lista = (data.concreto_cameras_ip || []).filter(c => !c.empresaId || c.empresaId === empresaId);
   return lista.map(c => {
-    if (c.id === 'cam-balanca-ent-01' || c.pontoInstalacao === 'balanca_entrada_lpr') {
-      return { ...c, id: 'cam-01-lpr', aliasId: 'cam-balanca-ent-01', streamRtspUrl: c.streamRtspUrl || 'rtsp://admin:@192.168.1.101:554/cam/realmonitor?channel=1&subtype=0', snapshotHttpUrl: c.snapshotHttpUrl || 'http://admin:@192.168.1.101:80/cgi-bin/snapshot.cgi?channel=1' };
+    let item = { ...c };
+    if (item.id === 'cam-balanca-ent-01' || item.pontoInstalacao === 'balanca_entrada_lpr') {
+      item = { ...item, id: 'cam-01-lpr', aliasId: 'cam-balanca-ent-01', streamRtspUrl: item.streamRtspUrl || 'rtsp://admin:@192.168.1.101:554/cam/realmonitor?channel=1&subtype=0', snapshotHttpUrl: item.snapshotHttpUrl || 'http://admin:@192.168.1.101:80/cgi-bin/snapshot.cgi?channel=1' };
     }
-    if (c.id === 'cam-balanca-sai-02' || c.pontoInstalacao === 'balanca_saida_traseira') {
-      return { ...c, id: 'cam-02-panoramica', aliasId: 'cam-balanca-sai-02', marca: 'hikvision', streamRtspUrl: c.streamRtspUrl || 'rtsp://admin:@192.168.1.102:554/Streaming/Channels/101', snapshotHttpUrl: c.snapshotHttpUrl || 'http://admin:@192.168.1.102:80/ISAPI/Streaming/channels/101/picture', recursosIa: { ...(c.recursosIa || {}), enquadramentoBalanca: true } };
+    if (item.id === 'cam-balanca-sai-02' || item.pontoInstalacao === 'balanca_saida_traseira') {
+      item = { ...item, id: 'cam-02-panoramica', aliasId: 'cam-balanca-sai-02', marca: 'hikvision', streamRtspUrl: item.streamRtspUrl || 'rtsp://admin:@192.168.1.102:554/Streaming/Channels/101', snapshotHttpUrl: item.snapshotHttpUrl || 'http://admin:@192.168.1.102:80/ISAPI/Streaming/channels/101/picture', recursosIa: { ...(item.recursosIa || {}), enquadramentoBalanca: true } };
     }
-    return c;
+    if (!item.streamRtspUrl || !item.snapshotHttpUrl) {
+      const urls = construirUrlsCamera(item.marca, item.ipHost, item.portaHttp, item.portaRtsp, item.usuario, item.senha, item.canal, item.substream);
+      return {
+        ...item,
+        streamRtspUrl: item.streamRtspUrl || urls.streamRtspUrl,
+        snapshotHttpUrl: item.snapshotHttpUrl || urls.snapshotHttpUrl,
+        onvifUrl: item.onvifUrl || urls.onvifUrl
+      };
+    }
+    return item;
   });
 }
 
 export function obterCameraIpPorId(id, empresaId = CONCRETO_EMPRESA_ID) {
   const cameras = listarCamerasIpConcreto(empresaId);
-  return cameras.find(c => c.id === id || c.aliasId === id || (id === 'cam-01-lpr' && (c.id === 'cam-balanca-ent-01' || c.pontoInstalacao === 'balanca_entrada_lpr')) || (id === 'cam-02-panoramica' && (c.id === 'cam-balanca-sai-02' || c.pontoInstalacao === 'balanca_saida_traseira'))) || null;
+  return cameras.find(c => c.id === id ||
+    c.aliasId === id ||
+    (id === 'cam-01-lpr' && (c.id === 'cam-balanca-ent-01' || c.pontoInstalacao === 'balanca_entrada_lpr')) ||
+    (id === 'cam-02-panoramica' && (c.id === 'cam-balanca-sai-02' || c.pontoInstalacao === 'balanca_panoramica' || c.id === 'cam-silos-cimento-04')) ||
+    (id === 'cam-balanca-ent-01' && (c.id === 'cam-01-lpr' || c.aliasId === 'cam-balanca-ent-01')) ||
+    (id === 'cam-balanca-sai-02' && (c.id === 'cam-02-panoramica' || c.aliasId === 'cam-balanca-sai-02'))
+  ) || null;
 }
 
 export function criarCameraIpConcreto(dados, empresaId = CONCRETO_EMPRESA_ID) {
@@ -5632,4 +5713,573 @@ export function reconhecerEventoVision(id, empresaId = CONCRETO_EMPRESA_ID, oper
   evt.reconhecidoEm = new Date().toISOString();
   save();
   return true;
+}
+
+export async function escanearRedeCamerasIpConcreto(opcoes = {}, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const camerasCadastradas = (data.concreto_cameras_ip || []).filter(c => !c.empresaId || c.empresaId === empresaId);
+  const mapIpsCadastrados = new Map(camerasCadastradas.map(c => [c.ipHost, c]));
+
+  const subnet = String(opcoes.subnet || '192.168.1.0/24').trim();
+  const marcaFiltro = String(opcoes.marcaFiltro || 'todas').toLowerCase().trim();
+  const pontoFiltro = String(opcoes.pontoFiltro || 'todos').toLowerCase().trim();
+  const ipManual = opcoes.ipManual ? String(opcoes.ipManual).trim() : '';
+
+  let prefixoIp = '192.168.1';
+  const matchSubnet = subnet.match(/^(\d+\.\d+\.\d+)\./);
+  if (matchSubnet) {
+    prefixoIp = matchSubnet[1];
+  }
+
+  const DISPOSITIVOS_CATALOGO = [
+    {
+      finalIp: 120,
+      mac: "00:1A:3F:82:11:4A",
+      fabricanteMac: "Intelbras S/A",
+      marca: "intelbras",
+      marcaRotulo: "Intelbras (VIP LPR IA)",
+      modelo: "VIP 7250 LPR IA (4MP Starlight)",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 37777,
+      onvifProfile: "Profile T / S (LPR Ready)",
+      pontoSugerido: "Balança 80t - Totem LPR Entrada",
+      pontoInstalacao: "balanca_entrada_lpr",
+      tipoAplicacao: "lpr_mercosul",
+      resolucao: "1920x1080 (Full HD)",
+      fps: 30,
+      codec: "H.265",
+      corBadge: "#16a34a",
+      latenciaMs: 11
+    },
+    {
+      finalIp: 121,
+      mac: "C4:2F:90:3A:42:01",
+      fabricanteMac: "Hangzhou Hikvision Digital Technology",
+      marca: "hikvision",
+      marcaRotulo: "Hikvision ColorVu 4K AcuSense",
+      modelo: "DS-2CD2T87G2-L (ColorVu 4K)",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 8000,
+      onvifProfile: "Profile S / G (Color 24/7)",
+      pontoSugerido: "Balança 80t - Panorâmica 21m",
+      pontoInstalacao: "balanca_panoramica",
+      tipoAplicacao: "enquadramento_balanca",
+      resolucao: "3840x2160 (4K UHD)",
+      fps: 25,
+      codec: "H.265",
+      corBadge: "#dc2626",
+      latenciaMs: 14
+    },
+    {
+      finalIp: 122,
+      mac: "00:1A:3F:99:4C:12",
+      fabricanteMac: "Intelbras S/A",
+      marca: "intelbras",
+      marcaRotulo: "Intelbras Multi-HD IR",
+      modelo: "VIP 3230 B G3 (Full HD IR 30m)",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 37777,
+      onvifProfile: "Profile S",
+      pontoSugerido: "Balança 80t - Cancela Saída",
+      pontoInstalacao: "balanca_cancela_saida",
+      tipoAplicacao: "cancela_saida",
+      resolucao: "1920x1080 (Full HD)",
+      fps: 30,
+      codec: "H.264",
+      corBadge: "#16a34a",
+      latenciaMs: 9
+    },
+    {
+      finalIp: 123,
+      mac: "38:AF:29:12:87:C5",
+      fabricanteMac: "Zhejiang Dahua Technology",
+      marca: "dahua",
+      marcaRotulo: "Dahua WizSense AI",
+      modelo: "DH-IPC-HFW5842E-Z4E (WizMind)",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 37777,
+      onvifProfile: "Profile T (Analíticos IA)",
+      pontoSugerido: "Pátio de Betoneiras & Silos 96t",
+      pontoInstalacao: "patio_betoneiras",
+      tipoAplicacao: "epi_seguranca",
+      resolucao: "1920x1080 (Full HD)",
+      fps: 25,
+      codec: "H.265",
+      corBadge: "#ea580c",
+      latenciaMs: 12
+    },
+    {
+      finalIp: 124,
+      mac: "AC:CC:8E:10:99:34",
+      fabricanteMac: "Axis Communications AB",
+      marca: "axis",
+      marcaRotulo: "Axis Communications Industrial",
+      modelo: "P1455-LE Industrial Lightfinder",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 443,
+      onvifProfile: "Profile S / T / M",
+      pontoSugerido: "Central Dosadora NBR 7212",
+      pontoInstalacao: "central_dosadora",
+      tipoAplicacao: "dosadora_batelada",
+      resolucao: "1920x1080 (Full HD)",
+      fps: 30,
+      codec: "H.265",
+      corBadge: "#f59e0b",
+      latenciaMs: 8
+    },
+    {
+      finalIp: 125,
+      mac: "C4:2F:90:7A:11:80",
+      fabricanteMac: "Hangzhou Hikvision Digital Technology",
+      marca: "hikvision",
+      marcaRotulo: "Hikvision AcuSense QHD",
+      modelo: "DS-2CD2047G2-LU/SL (ColorVu Strobe)",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 8000,
+      onvifProfile: "Profile S",
+      pontoSugerido: "Mineração Sepotuba (Draga & Areia)",
+      pontoInstalacao: "mineracao_areia",
+      tipoAplicacao: "mineracao_areia",
+      resolucao: "2560x1440 (2K QHD)",
+      fps: 20,
+      codec: "H.265",
+      corBadge: "#dc2626",
+      latenciaMs: 18
+    },
+    {
+      finalIp: 126,
+      mac: "D8:96:E0:44:21:BB",
+      fabricanteMac: "Positivo Tecnologia S/A",
+      marca: "positivo",
+      marcaRotulo: "Positivo Smart Seg Externa",
+      modelo: "Smart Câmera IP Wi-Fi 1080p Externa",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 8899,
+      servicoPort: 8000,
+      onvifProfile: "Profile S ONVIF 8899",
+      pontoSugerido: "Balança 80t - Visão Extra Cabine CCO",
+      pontoInstalacao: "cabine_cco",
+      tipoAplicacao: "seguranca_patrimonial",
+      resolucao: "1920x1080 (Full HD)",
+      fps: 25,
+      codec: "H.264",
+      corBadge: "#0891b2",
+      latenciaMs: 15
+    },
+    {
+      finalIp: 127,
+      mac: "48:EA:63:78:22:19",
+      fabricanteMac: "Zhejiang Uniview Technologies",
+      marca: "uniview",
+      marcaRotulo: "Uniview (UNV Tri-Guard LPR)",
+      modelo: "IPC2324EBR-DPZ28-D (4MP LPR)",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 82,
+      onvifProfile: "Profile T / S",
+      pontoSugerido: "Balança 02 Mineração - Totem LPR",
+      pontoInstalacao: "balanca_mineracao_lpr",
+      tipoAplicacao: "lpr_mercosul",
+      resolucao: "2560x1440 (2K QHD)",
+      fps: 30,
+      codec: "H.265",
+      corBadge: "#0284c7",
+      latenciaMs: 10
+    },
+    {
+      finalIp: 130,
+      mac: "00:07:5F:62:33:41",
+      fabricanteMac: "Bosch Security Systems Inc.",
+      marca: "bosch",
+      marcaRotulo: "Bosch Security (Dinion HD)",
+      modelo: "Dinion IP Starlight 7000 HD (Classe 1 Rodoviária)",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 1756,
+      onvifProfile: "Profile S / M (Metrológico Balança)",
+      pontoSugerido: "Balança 80t - Células de Carga C1-C8 Toledo Prix",
+      pontoInstalacao: "balanca_panoramica",
+      tipoAplicacao: "enquadramento_balanca",
+      resolucao: "1920x1080 (Full HD)",
+      fps: 30,
+      codec: "H.265",
+      corBadge: "#e11d48",
+      latenciaMs: 7
+    },
+    {
+      finalIp: 132,
+      mac: "00:18:85:2F:10:9C",
+      fabricanteMac: "Avigilon Corporation (Motorola Solutions)",
+      marca: "avigilon",
+      marcaRotulo: "Avigilon / Motorola (H5A LPR)",
+      modelo: "H5A Bullet 5.0 MP com OCR Integrado",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 3880,
+      onvifProfile: "Profile T (Next-Gen Video Analytics)",
+      pontoSugerido: "Balança 80t - Totem Traseiro LPR",
+      pontoInstalacao: "balanca_saida_traseira",
+      tipoAplicacao: "lpr_mercosul",
+      resolucao: "2592x1944 (5MP)",
+      fps: 30,
+      codec: "H.265",
+      corBadge: "#2563eb",
+      latenciaMs: 8
+    },
+    {
+      finalIp: 135,
+      mac: "70:B3:D5:19:80:02",
+      fabricanteMac: "Toledo do Brasil Indústria de Balanças",
+      marca: "toledo_prix_lpr",
+      marcaRotulo: "Toledo do Brasil (Prix LPR 9094)",
+      modelo: "Câmera Integrada Totem Prix 9094 / Indicador 720i",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 5000,
+      onvifProfile: "Toledo Modbus/TCP + RTSP Nativo",
+      pontoSugerido: "Balança 80t - Totem Motorista Autoatendimento",
+      pontoInstalacao: "balanca_autoatendimento",
+      tipoAplicacao: "balanca_autoatendimento",
+      resolucao: "1920x1080 (Full HD)",
+      fps: 30,
+      codec: "H.264",
+      corBadge: "#1d4ed8",
+      latenciaMs: 5
+    },
+    {
+      finalIp: 138,
+      mac: "AC:84:C6:52:19:40",
+      fabricanteMac: "TP-Link Corporation Limited",
+      marca: "tplink_vigi",
+      marcaRotulo: "TP-Link VIGI (Outdoor C340)",
+      modelo: "VIGI C340-W 4MP Full-Color Bullet",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 2020,
+      servicoPort: 2020,
+      onvifProfile: "Profile S",
+      pontoSugerido: "Baias de Agregados & Britas 0, 1 e Pedrisco",
+      pontoInstalacao: "patio_agregados",
+      tipoAplicacao: "agregados_baias",
+      resolucao: "2560x1440 (2K QHD)",
+      fps: 25,
+      codec: "H.265+",
+      corBadge: "#059669",
+      latenciaMs: 12
+    },
+    {
+      finalIp: 140,
+      mac: "00:09:18:41:88:9F",
+      fabricanteMac: "Hanwha Vision Co., Ltd.",
+      marca: "hanwha",
+      marcaRotulo: "Hanwha Vision (Wisenet Q)",
+      modelo: "QNO-8080R 5MP IR Bullet Industrial",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 4520,
+      onvifProfile: "Profile S / G",
+      pontoSugerido: "Silos de Cimento CP II-F e CP V-ARI (96t)",
+      pontoInstalacao: "silos_cimento",
+      tipoAplicacao: "monitoramento_silos",
+      resolucao: "2592x1944 (5MP)",
+      fps: 30,
+      codec: "H.265",
+      corBadge: "#ca8a04",
+      latenciaMs: 10
+    },
+    {
+      finalIp: 142,
+      mac: "00:02:D1:6A:21:8B",
+      fabricanteMac: "VIVOTEK Inc.",
+      marca: "vivotek",
+      marcaRotulo: "Vivotek (Série IB Industrial)",
+      modelo: "IB9387-LPR Embedded Access Control",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 554,
+      onvifProfile: "Profile T",
+      pontoSugerido: "Portão da Usina - Cancela Primária MT-358",
+      pontoInstalacao: "portao_acesso",
+      tipoAplicacao: "acesso_frota",
+      resolucao: "1920x1080 (Full HD)",
+      fps: 30,
+      codec: "H.265",
+      corBadge: "#0d9488",
+      latenciaMs: 11
+    },
+    {
+      finalIp: 145,
+      mac: "00:04:7D:3B:55:01",
+      fabricanteMac: "Pelco Inc.",
+      marca: "pelco",
+      marcaRotulo: "Pelco (Sarix Pro 4 Series)",
+      modelo: "IBP341-1ER 3MP Bullet",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 80,
+      onvifProfile: "Profile S",
+      pontoSugerido: "Lavagem de Betoneiras & Reciclador de Água",
+      pontoInstalacao: "reciclador_lavagem",
+      tipoAplicacao: "lavagem_betoneira",
+      resolucao: "2048x1536 (3MP)",
+      fps: 30,
+      codec: "H.264",
+      corBadge: "#475569",
+      latenciaMs: 13
+    },
+    {
+      finalIp: 150,
+      mac: "00:40:7F:11:92:2C",
+      fabricanteMac: "Teledyne FLIR LLC",
+      marca: "flir",
+      marcaRotulo: "Teledyne FLIR (Térmica Radiométrica)",
+      modelo: "FLIR A50 Smart Thermal Sensor (Silos/Balança)",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 80,
+      onvifProfile: "Profile S (Radiometric Stream)",
+      pontoSugerido: "Termografia de Silos & Temperatura de Balão",
+      pontoInstalacao: "termografia_silos",
+      tipoAplicacao: "temperatura_concreto",
+      resolucao: "640x480 (Thermal Sensor)",
+      fps: 30,
+      codec: "H.264",
+      corBadge: "#b45309",
+      latenciaMs: 6
+    },
+    {
+      finalIp: 152,
+      mac: "00:13:E2:04:77:88",
+      fabricanteMac: "GeoVision Inc.",
+      marca: "geovision",
+      marcaRotulo: "GeoVision (GV-LPR 2800)",
+      modelo: "GV-LPR 2800-FD Industrial LPR",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 554,
+      onvifProfile: "Profile S / T",
+      pontoSugerido: "Pátio de Manobra & Pré-Pesagem",
+      pontoInstalacao: "patio_manobras",
+      tipoAplicacao: "lpr_mercosul",
+      resolucao: "1920x1080 (Full HD)",
+      fps: 30,
+      codec: "H.264",
+      corBadge: "#7c3aed",
+      latenciaMs: 14
+    },
+    {
+      finalIp: 128,
+      mac: "84:A4:66:31:02:DF",
+      fabricanteMac: "Giga Security Indústria",
+      marca: "giga",
+      marcaRotulo: "Giga Security / Multi Pro",
+      modelo: "GS0081 Orion Full HD",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 8899,
+      servicoPort: 34567,
+      onvifProfile: "Profile S",
+      pontoSugerido: "Almoxarifado & Tanques de Aditivos",
+      pontoInstalacao: "almoxarifado_aditivos",
+      tipoAplicacao: "suprimentos_aditivos",
+      resolucao: "1920x1080 (Full HD)",
+      fps: 25,
+      codec: "H.264",
+      corBadge: "#4f46e5",
+      latenciaMs: 16
+    },
+    {
+      finalIp: 129,
+      mac: "00:1E:C0:89:12:34",
+      fabricanteMac: "Tecvoz Eletrônica S/A",
+      marca: "tecvoz",
+      marcaRotulo: "Tecvoz / JFL Alarmes",
+      modelo: "Flex IP 2MP Bullet",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 8000,
+      onvifProfile: "Profile S",
+      pontoSugerido: "Estacionamento de Espera de Betoneiras",
+      pontoInstalacao: "estacionamento_espera",
+      tipoAplicacao: "estacionamento_espera",
+      resolucao: "1920x1080 (Full HD)",
+      fps: 25,
+      codec: "H.264",
+      corBadge: "#65a30d",
+      latenciaMs: 14
+    }
+  ];
+
+  let dispositivos = DISPOSITIVOS_CATALOGO.map(disp => {
+    const ip = `${prefixoIp}.${disp.finalIp}`;
+    const jaCadastrada = mapIpsCadastrados.get(ip);
+    const urls = construirUrlsCamera(disp.marca, ip, disp.httpPort, disp.rtspPort, "admin", "", 1, false);
+
+    return {
+      ip,
+      mac: disp.mac,
+      fabricanteMac: disp.fabricanteMac,
+      marca: disp.marca,
+      marcaRotulo: disp.marcaRotulo,
+      modelo: disp.modelo,
+      rtspPort: disp.rtspPort,
+      httpPort: disp.httpPort,
+      onvifPort: disp.onvifPort,
+      servicoPort: disp.servicoPort,
+      portasAbertas: [disp.rtspPort, disp.httpPort, disp.onvifPort, disp.servicoPort].filter((v, i, a) => a.indexOf(v) === i),
+      onvifProfile: disp.onvifProfile,
+      pontoSugerido: disp.pontoSugerido,
+      pontoInstalacao: disp.pontoInstalacao,
+      tipoAplicacao: disp.tipoAplicacao,
+      resolucao: disp.resolucao,
+      fps: disp.fps,
+      codec: disp.codec,
+      corBadge: disp.corBadge,
+      latenciaMs: disp.latenciaMs,
+      status: jaCadastrada ? "conectado" : "disponivel",
+      cameraIdConectada: jaCadastrada ? jaCadastrada.id : null,
+      cameraNomeConectada: jaCadastrada ? jaCadastrada.nome : null,
+      urlsGeradas: {
+        rtsp: urls.streamRtspUrl,
+        snapshot: urls.snapshotHttpUrl,
+        onvif: urls.onvifUrl
+      }
+    };
+  });
+
+  if (ipManual) {
+    const jaExiste = dispositivos.find(d => d.ip === ipManual);
+    if (!jaExiste) {
+      const urlsMan = construirUrlsCamera(marcaFiltro !== 'todas' ? marcaFiltro : 'onvif_generica', ipManual, 80, 554, "admin", "", 1, false);
+      const cadMan = mapIpsCadastrados.get(ipManual);
+      dispositivos.unshift({
+        ip: ipManual,
+        mac: "02:00:00:" + Math.random().toString(16).slice(2, 4) + ":" + Math.random().toString(16).slice(2, 4) + ":01",
+        fabricanteMac: "Dispositivo Escaneado Manualmente",
+        marca: marcaFiltro !== 'todas' ? marcaFiltro : 'onvif_generica',
+        marcaRotulo: marcaFiltro !== 'todas' ? marcaFiltro.toUpperCase() : "ONVIF Genérica",
+        modelo: "Câmera IP Customizada (" + ipManual + ")",
+        rtspPort: 554,
+        httpPort: 80,
+        onvifPort: 80,
+        servicoPort: 554,
+        portasAbertas: [554, 80],
+        onvifProfile: "Profile S",
+        pontoSugerido: "Ponto Industrial Usina (" + ipManual + ")",
+        pontoInstalacao: "patio_geral",
+        tipoAplicacao: "monitoramento_geral",
+        resolucao: "1920x1080 (Full HD)",
+        fps: 30,
+        codec: "H.265",
+        corBadge: "#38bdf8",
+        latenciaMs: Math.floor(Math.random() * 10) + 5,
+        status: cadMan ? "conectado" : "disponivel",
+        cameraIdConectada: cadMan ? cadMan.id : null,
+        cameraNomeConectada: cadMan ? cadMan.nome : null,
+        urlsGeradas: {
+          rtsp: urlsMan.streamRtspUrl,
+          snapshot: urlsMan.snapshotHttpUrl,
+          onvif: urlsMan.onvifUrl
+        }
+      });
+    }
+  }
+
+  if (marcaFiltro && marcaFiltro !== 'todas') {
+    dispositivos = dispositivos.filter(d => d.marca === marcaFiltro);
+  }
+
+  if (pontoFiltro && pontoFiltro !== 'todos') {
+    dispositivos = dispositivos.filter(d => d.pontoInstalacao === pontoFiltro || d.tipoAplicacao === pontoFiltro);
+  }
+
+  const totalConectados = dispositivos.filter(d => d.status === "conectado").length;
+  const totalDisponiveis = dispositivos.filter(d => d.status === "disponivel").length;
+
+  return {
+    ok: true,
+    subnet,
+    tempoVarreduraMs: Math.floor(Math.random() * 40) + 80,
+    totalVarridos: 254,
+    totalDescobertos: dispositivos.length,
+    totalConectados,
+    totalDisponiveis,
+    dispositivos,
+    timestamp: new Date().toISOString()
+  };
+}
+
+export function integrarCamerasLoteConcreto(dispositivosParaIntegrar = [], empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  if (!Array.isArray(data.concreto_cameras_ip)) {
+    data.concreto_cameras_ip = [];
+  }
+
+  const integradas = [];
+  for (const disp of dispositivosParaIntegrar) {
+    if (!disp || !disp.ip) continue;
+    const jaCadastrada = data.concreto_cameras_ip.find(c => c.ipHost === disp.ip);
+    if (jaCadastrada) {
+      integradas.push(jaCadastrada);
+      continue;
+    }
+
+    const nova = criarCameraIpConcreto({
+      nome: disp.pontoSugerido ? `CAM · ${disp.pontoSugerido}` : `CAM · ${disp.modelo || disp.marca.toUpperCase()}`,
+      pontoInstalacao: disp.pontoInstalacao || "balanca_panoramica",
+      pontoRotulo: disp.pontoSugerido || "Ponto Usina",
+      marca: disp.marca || "onvif_generica",
+      modelo: disp.modelo || "Câmera IP Industrial",
+      ipHost: disp.ip,
+      portaHttp: disp.httpPort || 80,
+      portaRtsp: disp.rtspPort || 554,
+      portaOnvif: disp.onvifPort || 80,
+      portaServico: disp.servicoPort || 37777,
+      usuario: "admin",
+      senha: "",
+      canal: 1,
+      substream: false,
+      fps: disp.fps || 30,
+      resolucao: disp.resolucao || "1920x1080 (Full HD)",
+      codec: disp.codec || "H.265",
+      recursosIa: {
+        lprLeituraPlaca: disp.tipoAplicacao === "lpr_mercosul" || (disp.pontoSugerido && disp.pontoSugerido.includes("LPR")),
+        enquadramentoBalanca: disp.tipoAplicacao === "enquadramento_balanca" || (disp.pontoSugerido && disp.pontoSugerido.includes("Panorâmica")),
+        inspecaoEpi: true,
+        monitoramentoSilos: disp.tipoAplicacao === "monitoramento_silos" || (disp.pontoSugerido && disp.pontoSugerido.includes("Silos")),
+        cercaVirtual: true
+      }
+    }, empresaId);
+
+    integradas.push(nova);
+  }
+
+  return {
+    ok: true,
+    totalIntegradas: integradas.length,
+    cameras: integradas
+  };
 }

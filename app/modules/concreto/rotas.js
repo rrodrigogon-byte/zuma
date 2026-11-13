@@ -66,6 +66,9 @@ import {
   atualizarTelemetriaBetoneira,
   listarCamerasIpConcreto,
   obterCameraIpPorId,
+  escanearRedeCamerasIpConcreto,
+  obterPresetsFabricantesCameras,
+  integrarCamerasLoteConcreto,
   criarCameraIpConcreto,
   atualizarCameraIpConcreto,
   excluirCameraIpConcreto,
@@ -844,6 +847,39 @@ router.post('/dosagem/calcular', (req, res) => {
       const empresaId = resolverEmpresa(req);
       const removido = excluirCameraIpConcreto(req.params.id, empresaId);
       return res.json({ ok: true, removido });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // Scanner de Rede de Câmeras IP (Varredura de Sub-rede / Portas ONVIF / RTSP / SDKs)
+  router.post('/cameras/scanner', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await escanearRedeCamerasIpConcreto(req.body, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // Presets de Fabricantes Homologados (19 marcas industriais)
+  router.get('/cameras/scanner/presets', (req, res) => {
+    try {
+      const presets = obterPresetsFabricantesCameras();
+      return res.json({ ok: true, presets });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // Integração em Lote de Câmeras Descobertas no Scanner
+  router.post('/cameras/integrar-lote', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const dispositivos = Array.isArray(req.body?.dispositivos) ? req.body.dispositivos : (Array.isArray(req.body) ? req.body : []);
+      const resultado = integrarCamerasLoteConcreto(dispositivos, empresaId);
+      return res.json(resultado);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
     }
