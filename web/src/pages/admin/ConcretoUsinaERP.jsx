@@ -6,6 +6,12 @@ import { api } from '../../lib/api';
 import './ConcretoUsinaERP.css';
 import ConcretoVendasFaturamento from './concreto/ConcretoVendasFaturamento';
 import ProgramacaoCargasAgenda from './concreto/ProgramacaoCargasAgenda';
+import ConcretoKyttoIACopilot from './concreto/ConcretoKyttoIACopilot';
+import ConcretoMapaGpsFrota from './concreto/ConcretoMapaGpsFrota';
+import ConcretoChecklistFrota from './concreto/ConcretoChecklistFrota';
+import ConcretoRecicladorSustentabilidade from './concreto/ConcretoRecicladorSustentabilidade';
+import ConcretoAuditoriaMetrologica from './concreto/ConcretoAuditoriaMetrologica';
+
 
 const CARGAS_PADRAO = [
   { id: "crg-1001", numero: 1001, obra: "Ed. Residencial Serra Dourada · lajes 4º pav.", cliente: "Construtora MT Horizon", fck: 30, brita: "Brita 1", slump: "14 ± 2 cm", volumeM3: 24, bomba: "BL-01 · Lança 32 m", valorTotal: 11160, status: "concluido",
@@ -27,6 +33,10 @@ export default function ConcretoUsinaERP() {
   const setSecaoAtiva = (s) => setSearchParams({ secao: s });
   const [busca, setBusca] = useState('');
   const [cargasAbertas, setCargasAbertas] = useState({ '#1002': true });
+  const [copilotAberto, setCopilotAberto] = useState(false);
+  const [subAbaFrota, setSubAbaFrota] = useState('telemetria'); // 'telemetria', 'gps', 'checklist'
+  const [subAbaCentral, setSubAbaCentral] = useState('dosadora'); // 'dosadora', 'auditoria'
+
 
   // Estados de dados da usina
   const [cargas, setCargas] = useState(CARGAS_PADRAO);
@@ -593,6 +603,17 @@ export default function ConcretoUsinaERP() {
 
           <button 
             type="button" 
+            className="btn-serrano pri"
+            onClick={() => setCopilotAberto(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, padding: '6px 14px', borderRadius: 6, fontSize: 12, boxShadow: '0 2px 6px rgba(234, 88, 12, 0.4)' }}
+            title="Abrir Assistente Técnico KyttoIA para dosagem, pega e normas NBR"
+          >
+            <span>🤖</span>
+            <span>Copilot KyttoIA</span>
+            <span style={{ fontSize: 9, background: 'rgba(255,255,255,0.25)', padding: '2px 4px', borderRadius: 4 }}>NBR 7212</span>
+          </button>
+          <button 
+            type="button" 
             className="serrano-theme-toggle"
             onClick={() => setThemeDark(prev => !prev)}
             title="Alternar entre Modo Dia e Sala de Controle"
@@ -923,6 +944,41 @@ export default function ConcretoUsinaERP() {
 
         {/* ─── ABA 2: PRODUÇÃO & CENTRAL DOSADORA NBR 7212 ─── */}
         {secaoAtiva === 'producao-central' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', gap: 8, background: 'var(--surface-2)', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--joint)' }}>
+              <button
+                type="button"
+                className="btn-serrano"
+                style={{
+                  background: subAbaCentral === 'dosadora' ? 'var(--serrano-orange)' : 'transparent',
+                  color: subAbaCentral === 'dosadora' ? '#fff' : 'var(--text)',
+                  borderColor: subAbaCentral === 'dosadora' ? 'var(--serrano-orange)' : 'var(--joint)',
+                  fontWeight: 600,
+                  fontSize: 12
+                }}
+                onClick={() => setSubAbaCentral('dosadora')}
+              >
+                🏭 Central Dosadora Convicta NBR 7212
+              </button>
+              <button
+                type="button"
+                className="btn-serrano"
+                style={{
+                  background: subAbaCentral === 'auditoria' ? 'var(--serrano-orange)' : 'transparent',
+                  color: subAbaCentral === 'auditoria' ? '#fff' : 'var(--text)',
+                  borderColor: subAbaCentral === 'auditoria' ? 'var(--serrano-orange)' : 'var(--joint)',
+                  fontWeight: 600,
+                  fontSize: 12
+                }}
+                onClick={() => setSubAbaCentral('auditoria')}
+              >
+                📊 Auditoria Metrológica das 4 Balanças (NBR 7212)
+              </button>
+            </div>
+
+            {subAbaCentral === 'auditoria' ? (
+              <ConcretoAuditoriaMetrologica />
+            ) : (
           <div className="serrano-grid-2col">
             <div className="serrano-card">
               <div className="serrano-card-h">
@@ -1030,6 +1086,8 @@ export default function ConcretoUsinaERP() {
                 </div>
               </div>
             </div>
+          </div>
+            )}
           </div>
         )}
 
@@ -1528,7 +1586,8 @@ export default function ConcretoUsinaERP() {
                   { id: 'silos-patio', label: 'Silos 96t & Pátio de Agregados', icon: '🏭' },
                   { id: 'central-processo', label: 'Central Dosadora & Bateladas', icon: '⚡' },
                   { id: 'balanca-entradas', label: 'Entradas na Balança Rodoviária 80t', icon: '⚖️' },
-                  { id: 'tanques-aditivos', label: 'Aditivos Químicos & Água Chiller', icon: '🧪' }
+                  { id: 'tanques-aditivos', label: 'Aditivos Químicos & Água Chiller', icon: '🧪' },
+                  { id: 'reciclador-ecologico', label: 'Reciclador Ecológico & Sobras (CONAMA)', icon: '♻️' }
                 ].map(sub => (
                   <button
                     key={sub.id}
@@ -2041,6 +2100,35 @@ export default function ConcretoUsinaERP() {
 
         {/* ─── ABA 1C: FROTA & TELEMETRIA ─── */}
         {secaoAtiva === 'operacao-frota' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* Sub-navegação da Frota */}
+            <div style={{ display: 'flex', gap: 8, background: 'var(--surface-2)', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--joint)', flexWrap: 'wrap' }}>
+              {[
+                { id: 'telemetria', label: 'Telemetria de Sensores (RPM)', icon: '🚛' },
+                { id: 'gps', label: 'Rastreamento GPS Tangará da Serra', icon: '🗺️' },
+                { id: 'checklist', label: 'Checklist Pré-Operacional NR-11/12', icon: '📋' }
+              ].map(sub => (
+                <button
+                  key={sub.id}
+                  type="button"
+                  className="btn-serrano"
+                  style={{
+                    background: subAbaFrota === sub.id ? 'var(--serrano-orange)' : 'transparent',
+                    color: subAbaFrota === sub.id ? '#fff' : 'var(--text)',
+                    borderColor: subAbaFrota === sub.id ? 'var(--serrano-orange)' : 'var(--joint)',
+                    fontWeight: 600,
+                    fontSize: 12
+                  }}
+                  onClick={() => setSubAbaFrota(sub.id)}
+                >
+                  {sub.icon} {sub.label}
+                </button>
+              ))}
+            </div>
+
+            {subAbaFrota === 'gps' && <ConcretoMapaGpsFrota />}
+            {subAbaFrota === 'checklist' && <ConcretoChecklistFrota />}
+            {subAbaFrota === 'telemetria' && (
           <div className="serrano-card">
             <div className="serrano-card-h">
               <div>
@@ -2163,6 +2251,8 @@ export default function ConcretoUsinaERP() {
                 })}
               </div>
             </div>
+          </div>
+            )}
           </div>
         )}
 {/* ─── ABA 2B: ORDENS DE PRODUÇÃO (OPS) ─── */}
@@ -3297,6 +3387,12 @@ export default function ConcretoUsinaERP() {
           </div>
         </div>
       )}
+      {/* COPILOT KYTTOIA INDUSTRIAL MODAL */}
+      <ConcretoKyttoIACopilot 
+        isOpen={copilotAberto} 
+        onClose={() => setCopilotAberto(false)} 
+      />
+
     </div>
   );
 }

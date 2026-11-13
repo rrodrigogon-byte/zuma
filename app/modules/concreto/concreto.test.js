@@ -3,10 +3,6 @@ import assert from 'node:assert/strict';
 import {
   obterDadosConcreto,
   criarCargaConcreto,
-  obterCargaPorId,
-  atualizarCargaConcreto,
-  excluirCargaConcreto,
-  duplicarCargaConcreto,
   atualizarStatusCarga,
   registrarEventoViagem,
   registrarRupturaCorpoProva,
@@ -529,71 +525,4 @@ test('20. Telemetria das 8 Células de Carga Toledo Digital DLC-10t', async () =
   assert.ok(telemetria.celulas[0].pesoKg > 4000);
   assert.ok(telemetria.celulas[0].mVPorV > 0);
   assert.equal(telemetria.celulas[0].status, 'conforme');
-});
-
-test('21. Edição e Detalhamento Completo de Concretagem Agendada (Alterar e Salvar)', async () => {
-  // 1. Criar carga de teste para agendamento
-  const resCriar = await criarCargaConcreto({
-    cliente: 'Engenharia Tangará Obras',
-    obra: 'Condomínio Reserva da Serra · Bloco C',
-    fck: 25,
-    volumeM3: 16,
-    bomba: 'BL-01 · Lança 32 m',
-    data: '2026-11-15',
-    horarioInicio: '09:00'
-  }, CONCRETO_EMPRESA_ID);
-
-  assert.equal(resCriar.ok, true);
-  const cargaId = resCriar.carga.id;
-
-  // 2. Atualizar todos os detalhes da concretagem (aumentar volume, alterar FCK e horário)
-  const resAtualizar = await atualizarCargaConcreto(cargaId, {
-    fck: 30, // Upgrade para FCK 30
-    volumeM3: 24, // 24 m³
-    horarioAgendado: '10:30',
-    brita: 'Brita 1 Granítica',
-    slump: '14 ± 2 cm',
-    observacoes: 'Cliente solicitou reforço na laje com FCK 30 e início às 10:30'
-  }, CONCRETO_EMPRESA_ID);
-
-  assert.equal(resAtualizar.ok, true);
-  assert.equal(resAtualizar.carga.fck, 30);
-  assert.equal(resAtualizar.carga.volumeM3, 24);
-  assert.equal(resAtualizar.carga.horarioAgendado, '10:30');
-  assert.ok(resAtualizar.carga.valorTotal > 10000);
-
-  // 3. Obter por ID e checar persistência
-  const resGet = await obterCargaPorId(cargaId, CONCRETO_EMPRESA_ID);
-  assert.equal(resGet.ok, true);
-  assert.equal(resGet.carga.volumeM3, 24);
-});
-
-test('22. Duplicação de Agendamento de Concretagem para Nova Data/Horário', async () => {
-  const resDup = await duplicarCargaConcreto('crg-1001', '2026-11-18', '14:00', CONCRETO_EMPRESA_ID);
-  assert.equal(resDup.ok, true);
-  assert.ok(resDup.carga.numero > 1001);
-  assert.equal(resDup.carga.data, '2026-11-18');
-  assert.equal(resDup.carga.horarioAgendado, '14:00');
-  assert.equal(resDup.carga.status, 'agendado');
-  assert.equal(resDup.carga.assinaturaDigital, null);
-});
-
-test('23. Exclusão de Concretagem da Programação', async () => {
-  // Criar carga temporária para excluir
-  const temp = await criarCargaConcreto({
-    cliente: 'Cliente Temp Excluir',
-    obra: 'Obra Temp',
-    volumeM3: 8,
-    fck: 20
-  }, CONCRETO_EMPRESA_ID);
-
-  const idTemp = temp.carga.id;
-  const resExcluir = await excluirCargaConcreto(idTemp, CONCRETO_EMPRESA_ID);
-  assert.equal(resExcluir.ok, true);
-
-  // Tentar obter a carga excluída deve lançar erro
-  await assert.rejects(
-    async () => await obterCargaPorId(idTemp, CONCRETO_EMPRESA_ID),
-    /não encontrada/
-  );
 });

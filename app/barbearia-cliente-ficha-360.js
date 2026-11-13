@@ -14,7 +14,7 @@ export function obterFichaCompletaCliente(empresaId, clienteRef, opcoes = {}) {
 
   // 1. Localizar o cliente no Kytto
   let cliente = null;
-  if (qRef && qRef !== 'busca') {
+  if (qRef) {
     cliente = clientesKytto.obterCliente(empresaId, qRef);
   }
 
@@ -182,30 +182,25 @@ export function obterFichaCompletaCliente(empresaId, clienteRef, opcoes = {}) {
         servicosDisponiveis: (cob.servicosNomes || []).join(', ') || 'Procedimentos do Plano',
         quantidade: `${cob.sessoesRestantes || 0}/${cob.sessoesNoCiclo || cob.totalSessoes || 0}`,
         sessoesRestantes: cob.sessoesRestantes || 0,
-        sessoesTotal: cob.sessoesNoCiclo || cob.totalSessoes || 2,
         validade: cob.cicloFim ? cob.cicloFim.slice(0, 10) : 'Sem validade fixa',
         status: cob.utilizavel ? 'ativo' : 'esgotado',
-        origem: 'kytto',
       });
     }
   } catch (e) {}
 
-  // Se tiver pacotes no histórico Avec ou pacotes personalizados no cliente
-  const pacotesSalvos = cliente?.pacotesCustomizados || dadosAvec?.pacotes || [];
-  if (Array.isArray(pacotesSalvos)) {
-    for (const p of pacotesSalvos) {
+  // Se tiver pacotes no histórico Avec do cliente
+  if (dadosAvec && Array.isArray(dadosAvec.pacotes)) {
+    for (const p of dadosAvec.pacotes) {
       pacotes.push({
-        id: p.id || `avec-pct-${p.comanda || Math.random()}`,
-        venda: p.data || p.venda || '',
-        comanda: p.comanda ? (String(p.comanda).startsWith('Nº') ? p.comanda : `Nº ${p.comanda}`) : '—',
-        pacote: p.nome || p.pacote || 'Pacote 2 procedimentos',
-        servicosDisponiveis: p.servicos || p.servicosDisponiveis || 'Procedimento Pacote',
-        quantidade: p.quantidade || `${p.disponiveis || p.sessoesRestantes || 1}/${p.total || p.sessoesTotal || 2}`,
-        sessoesRestantes: Number(p.disponiveis ?? p.sessoesRestantes ?? 1),
-        sessoesTotal: Number(p.total ?? p.sessoesTotal ?? 2),
-        validade: p.validade || '2026-12-31',
-        status: (Number(p.disponiveis ?? p.sessoesRestantes ?? 1) > 0) ? 'ativo' : 'utilizado',
-        origem: p.origem || 'avec',
+        id: `avec-pct-${p.comanda || Math.random()}`,
+        venda: p.data || '',
+        comanda: p.comanda ? `Nº ${p.comanda}` : '—',
+        pacote: p.nome || 'Pacote de Procedimentos',
+        servicosDisponiveis: p.servicos || p.nome || 'Serviços do Pacote',
+        quantidade: `${p.disponiveis || 0}/${p.total || 0}`,
+        sessoesRestantes: p.disponiveis || 0,
+        validade: p.validade || 'Vencido',
+        status: p.disponiveis > 0 ? 'ativo' : 'utilizado',
       });
     }
   }
@@ -215,7 +210,6 @@ export function obterFichaCompletaCliente(empresaId, clienteRef, opcoes = {}) {
   try {
     const contas = clientesKytto.listarContasReceber(empresaId, { clienteId: clienteFinal.id });
     for (const c of contas) {
-      if (c.status === 'cancelada') continue;
       creditosMovimentacoes.push({
         id: c.id,
         dataHoraComanda: c.criadoEm || c.dataVencimento || '',
@@ -228,27 +222,24 @@ export function obterFichaCompletaCliente(empresaId, clienteRef, opcoes = {}) {
         status: c.status, // pendente, atrasada, paga, cancelada
         vencimento: c.dataVencimento ? c.dataVencimento.slice(0, 10) : '',
         dataPagamento: c.dataPagamento || null,
-        origem: 'kytto',
       });
     }
   } catch (e) {}
 
   // Se houver histórico de débitos Avec
-  const dividasSalvas = cliente?.dividasAvec || dadosAvec?.dividas || [];
-  if (Array.isArray(dividasSalvas)) {
-    for (const d of dividasSalvas) {
+  if (dadosAvec && Array.isArray(dadosAvec.dividas)) {
+    for (const d of dadosAvec.dividas) {
       creditosMovimentacoes.push({
-        id: d.id || `avec-div-${d.comanda || Math.random()}`,
+        id: `avec-div-${d.comanda || Math.random()}`,
         dataHoraComanda: d.data || '',
-        comanda: d.comanda ? (String(d.comanda).startsWith('Nº') ? d.comanda : `Nº ${d.comanda}`) : '—',
+        comanda: d.comanda ? `Nº ${d.comanda}` : '—',
         dataRegistro: d.data || '',
         descricao: d.descricao || `Dívida da comanda Nº ${d.comanda || ''}`,
-        tipo: d.paga ? 'credito' : 'divida',
+        tipo: 'divida',
         valor: -Math.abs(Number(d.valor || 0)),
         valorAbsoluto: Math.abs(Number(d.valor || 0)),
         status: d.paga ? 'paga' : 'pendente',
         vencimento: '',
-        origem: 'avec',
       });
     }
   }
@@ -263,6 +254,7 @@ export function obterFichaCompletaCliente(empresaId, clienteRef, opcoes = {}) {
     }
   }
 
+  // Se o saldo do cliente for maior, respeitar o maior
   const saldoDevedorFinal = Math.max(clienteFinal.saldoDevedor, totalDividaPendente);
   const limiteCredito = clienteFinal.limiteCreditoMensal > 0 ? clienteFinal.limiteCreditoMensal : 500;
   const creditoDisponivel = Math.max(0, limiteCredito - saldoDevedorFinal);
@@ -376,136 +368,4 @@ export function registrarMovimentoCreditoCliente(empresaId, clienteId, payload =
 
     return obterFichaCompletaCliente(empresaId, cliente.id);
   }
-}
-
-/**
- * Atualiza um lançamento de débito ou crédito (edição de descrição, valor, status).
- */
-export function atualizarMovimentoCreditoCliente(empresaId, clienteId, movimentoId, payload = {}) {
-  const root = db();
-  const cliente = clientesKytto.obterCliente(empresaId, clienteId);
-  if (!cliente) throw new Error('Cliente não encontrado.');
-
-  const contas = clientesKytto.listarContasReceber(empresaId, { clienteId: cliente.id }) || [];
-  const conta = contas.find((c) => c.id === movimentoId);
-
-  if (conta) {
-    const dados = {};
-    if (payload.descricao !== undefined) dados.descricao = String(payload.descricao).trim();
-    if (payload.numeroComanda !== undefined) dados.comandaNumero = String(payload.numeroComanda).trim();
-    if (payload.status !== undefined) dados.status = String(payload.status).trim();
-    if (payload.valor !== undefined && Number.isFinite(Number(payload.valor))) dados.valor = Math.abs(Number(payload.valor));
-    clientesKytto.atualizarContaReceber(empresaId, conta.id, dados);
-  } else {
-    if (!cliente.dividasAvec) cliente.dividasAvec = [];
-    const d = cliente.dividasAvec.find((item) => (item.id === movimentoId || `avec-div-${item.comanda}` === movimentoId));
-    if (d) {
-      if (payload.descricao !== undefined) d.descricao = payload.descricao;
-      if (payload.status !== undefined) d.paga = payload.status === 'paga';
-      if (payload.valor !== undefined) d.valor = Math.abs(Number(payload.valor));
-      cliente.atualizadoEm = agora();
-      save();
-    }
-  }
-
-  return obterFichaCompletaCliente(empresaId, cliente.id);
-}
-
-/**
- * Exclui ou estorna um lançamento de débito ou crédito.
- */
-export function excluirMovimentoCreditoCliente(empresaId, clienteId, movimentoId) {
-  const root = db();
-  const cliente = clientesKytto.obterCliente(empresaId, clienteId);
-  if (!cliente) throw new Error('Cliente não encontrado.');
-
-  const store = root?.clientesKytto?.empresas?.[empresaId];
-  if (store?.contasReceber?.[movimentoId]) {
-    const conta = store.contasReceber[movimentoId];
-    if (conta.status !== 'paga') {
-      cliente.saldoDevedor = Math.max(0, Number(cliente.saldoDevedor || 0) - Number(conta.valor || 0));
-    }
-    delete store.contasReceber[movimentoId];
-    cliente.atualizadoEm = agora();
-    save();
-  } else {
-    if (cliente.dividasAvec) {
-      cliente.dividasAvec = cliente.dividasAvec.filter((item) => item.id !== movimentoId && `avec-div-${item.comanda}` !== movimentoId);
-      cliente.atualizadoEm = agora();
-      save();
-    }
-  }
-
-  return obterFichaCompletaCliente(empresaId, cliente.id);
-}
-
-/**
- * Consome 1 procedimento/sessão de um pacote do cliente.
- */
-export function consumirSessaoPacoteCliente(empresaId, clienteId, pacoteId, payload = {}) {
-  const root = db();
-  const cliente = clientesKytto.obterCliente(empresaId, clienteId);
-  if (!cliente) throw new Error('Cliente não encontrado.');
-
-  if (!cliente.pacotesCustomizados) {
-    cliente.pacotesCustomizados = [
-      {
-        id: pacoteId || 'pct-01',
-        venda: '2026-10-08',
-        comanda: 'Nº 194',
-        pacote: 'Pacote 2 procedimentos',
-        servicosDisponiveis: 'Procedimento Pacote',
-        sessoesTotal: 2,
-        sessoesRestantes: 1,
-        validade: '2026-11-07',
-        status: 'ativo',
-      },
-    ];
-  }
-
-  let p = cliente.pacotesCustomizados.find((item) => item.id === pacoteId);
-  if (!p && cliente.pacotesCustomizados.length > 0) p = cliente.pacotesCustomizados[0];
-
-  if (p) {
-    const restantes = Math.max(0, Number(p.sessoesRestantes || 1) - 1);
-    p.sessoesRestantes = restantes;
-    p.quantidade = `${restantes}/${p.sessoesTotal || 2}`;
-    if (restantes <= 0) p.status = 'utilizado';
-    cliente.atualizadoEm = agora();
-    save();
-  }
-
-  return obterFichaCompletaCliente(empresaId, cliente.id);
-}
-
-/**
- * Atribui um novo pacote ou plano ao cliente.
- */
-export function adicionarPacoteCliente(empresaId, clienteId, payload = {}) {
-  const root = db();
-  const cliente = clientesKytto.obterCliente(empresaId, clienteId);
-  if (!cliente) throw new Error('Cliente não encontrado.');
-
-  if (!cliente.pacotesCustomizados) cliente.pacotesCustomizados = [];
-
-  const total = Number(payload.sessoesTotal || payload.total || 2);
-  const novo = {
-    id: `pct-${Date.now()}`,
-    venda: new Date().toISOString().slice(0, 10),
-    comanda: payload.numeroComanda ? (String(payload.numeroComanda).startsWith('Nº') ? payload.numeroComanda : `Nº ${payload.numeroComanda}`) : 'Balcão',
-    pacote: payload.pacoteNome || payload.nome || 'Pacote 2 procedimentos',
-    servicosDisponiveis: payload.servicosDisponiveis || 'Procedimento Pacote (Corte / Barba)',
-    sessoesTotal: total,
-    sessoesRestantes: total,
-    quantidade: `${total}/${total}`,
-    validade: payload.validade || new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10),
-    status: 'ativo',
-    origem: 'kytto',
-  };
-
-  cliente.pacotesCustomizados.push(novo);
-  cliente.atualizadoEm = agora();
-  save();
-
-  return obterFichaCompletaCliente(empresaId, cliente.id);
 }

@@ -2,10 +2,6 @@ import { Router } from 'express';
 import {
   obterDadosConcreto,
   criarCargaConcreto,
-  obterCargaPorId,
-  atualizarCargaConcreto,
-  excluirCargaConcreto,
-  duplicarCargaConcreto,
   atualizarStatusCarga,
   registrarEventoViagem,
   registrarRupturaCorpoProva,
@@ -49,6 +45,14 @@ import {
   emitirNotaFiscalConcreto,
   entregarNotaFiscal,
   gerarDanfeHtml,
+  obterRecomendacoesKyttoIA,
+  consultarKyttoIAConcreto,
+  listarChecklistsFrota,
+  salvarChecklistVeiculo,
+  obterDadosRecicladorConcreto,
+  registrarConcretoResidual,
+  obterAuditoriaMetrologicaBalancas,
+  obterRotasGpsFrota,
   obterTelemetriaCelulasToledo
 } from './servico.js';
 import { CONCRETO_EMPRESA_ID } from '../../concreto-usina-seed.js';
@@ -156,51 +160,6 @@ export function criarRotasConcreto() {
     try {
       const empresaId = resolverEmpresa(req);
       const resultado = await criarCargaConcreto(req.body, empresaId);
-      return res.status(201).json(resultado);
-    } catch (e) {
-      return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
-  // 6b. Obter carga detalhada por ID
-  router.get('/cargas/:id', async (req, res) => {
-    try {
-      const empresaId = resolverEmpresa(req);
-      const resultado = await obterCargaPorId(req.params.id, empresaId);
-      return res.json(resultado);
-    } catch (e) {
-      return res.status(404).json({ ok: false, error: e.message });
-    }
-  });
-
-  // 6c. Atualizar / Editar carga de concretagem agendada
-  router.put('/cargas/:id', async (req, res) => {
-    try {
-      const empresaId = resolverEmpresa(req);
-      const resultado = await atualizarCargaConcreto(req.params.id, req.body, empresaId);
-      return res.json(resultado);
-    } catch (e) {
-      return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
-  // 6d. Excluir carga de concretagem agendada
-  router.delete('/cargas/:id', async (req, res) => {
-    try {
-      const empresaId = resolverEmpresa(req);
-      const resultado = await excluirCargaConcreto(req.params.id, empresaId);
-      return res.json(resultado);
-    } catch (e) {
-      return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
-  // 6e. Duplicar agendamento de carga de concretagem
-  router.post('/cargas/:id/duplicar', async (req, res) => {
-    try {
-      const empresaId = resolverEmpresa(req);
-      const { data, horario } = req.body || {};
-      const resultado = await duplicarCargaConcreto(req.params.id, data, horario, empresaId);
       return res.status(201).json(resultado);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
@@ -621,6 +580,85 @@ router.post('/dosagem/calcular', (req, res) => {
       const peso = req.query.peso ? Number(req.query.peso) : 0;
       const telemetria = obterTelemetriaCelulasToledo(peso);
       return res.json(telemetria);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+
+  // 41. Copilot KyttoIA Industrial - Diagnósticos e Consultas Técnicas NBR 7212
+  router.get('/ia/recomendacoes', async (req, res) => {
+    try {
+      const resultado = await obterRecomendacoesKyttoIA(resolverEmpresa(req));
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post('/ia/consultar', async (req, res) => {
+    try {
+      const { pergunta, contexto } = req.body || {};
+      const resultado = await consultarKyttoIAConcreto(pergunta, contexto, resolverEmpresa(req));
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 42. Checklist Digital Pré-Operacional da Frota (NR-11 / NR-12)
+  router.get('/frota/checklists', async (req, res) => {
+    try {
+      const resultado = await listarChecklistsFrota(resolverEmpresa(req));
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post('/frota/checklists', async (req, res) => {
+    try {
+      const resultado = await salvarChecklistVeiculo(req.body, resolverEmpresa(req));
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 43. Gestão de Concreto Residual e Reciclador Ecológico (CONAMA / NBR 15575)
+  router.get('/sustentabilidade/reciclador', async (req, res) => {
+    try {
+      const resultado = await obterDadosRecicladorConcreto(resolverEmpresa(req));
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post('/sustentabilidade/reciclador/registrar', async (req, res) => {
+    try {
+      const resultado = await registrarConcretoResidual(req.body, resolverEmpresa(req));
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 44. Auditoria de Precisão Metrológica das 4 Balanças da Central Convicta (NBR 7212)
+  router.get('/central/metrologia-auditoria', async (req, res) => {
+    try {
+      const resultado = await obterAuditoriaMetrologicaBalancas(resolverEmpresa(req));
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 45. Rastreamento GPS da Frota em Tangará da Serra/MT
+  router.get('/frota/gps-rotas', async (req, res) => {
+    try {
+      const resultado = await obterRotasGpsFrota(resolverEmpresa(req));
+      return res.json(resultado);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
     }
