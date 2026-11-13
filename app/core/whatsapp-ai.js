@@ -113,7 +113,7 @@ import {
   STICKERS_RESTRITAS,
 } from './whatsapp-ai-persona.js';
 import { bubbleDelayMs, splitBubbles, styleModelText } from './whatsapp-ai-style.js';
-import { agendaCalendarText, ensureToolLinks, extractFastScheduleChoice, fixWeekdayMistakes, obterLinkAgendaDino, serviceWithProfessional, toolMoneyValues, unbackedPrices, withSelfBookingAgendaOption } from './whatsapp-ai-normalize.js';
+import { agendaCalendarText, buildAppAndBookingPromptReply, detectAppOrSelfBookingRequest, ensureToolLinks, extractFastScheduleChoice, fixWeekdayMistakes, obterLinkAgendaDino, serviceWithProfessional, toolMoneyValues, unbackedPrices, withSelfBookingAgendaOption } from './whatsapp-ai-normalize.js';
 import { enviarFigurinha as enviarFigurinhaPersona, figurinhaDisponivel, figurinhaSuportada } from './whatsapp-figurinhas.js';
 import { mapWhatsappAiProviderLatency24h, WHATSAPP_AI_PROVIDER_RUNS_24H_CHANNEL_SQL } from './whatsapp-ai-provider-metrics.js';
 
@@ -316,6 +316,11 @@ export const BARBERSHOP_SYSTEM_GUIDANCE = `
   * REGRA DAS DUAS OPÇÕES REAIS: Ao apresentar horários livres, ofereça de forma rápida e direta exatamente DUAS opções reais de horários (as 2 melhores vagas mais convenientes), sem listas longas de 5 ou 6 opções.
   * LINK DA AGENDA + CONDUÇÃO ATIVA: Envie o link da agenda (https://kytto.com.br/agendar/dino) para consulta, mas nunca abandone o cliente no link: continue o atendimento no WhatsApp para fechar na hora ("Qual horário fica melhor pra você? Me avisa por aqui que já deixo marcado agora mesmo!").
   * ANTI-FLOOD DE LINK DA AGENDA: No máximo 1 vez por conversa. NUNCA envie o link repetidas vezes ou em mensagens sucessivas!
+  * SOLICITAÇÃO DE APP OU ALGO PARA AGENDAMENTO (REGRA OBRIGATÓRIA DO T-REX):
+    - Quando o cliente pedir o app, aplicativo, apk, link de agendamento, site para agendar ou algo para agendamento:
+      1. Envie o link do app do cliente e agendamento online: https://kytto.com.br/agendar/dino (ou link exclusivo do profissional se já mencionado: /bruno, /nati, /dino).
+      2. Peça com qual profissional ele quer agendar: pergunte com gentileza e acolhimento "Com qual profissional você gostaria de agendar seu atendimento (Dino, Bruno ou Nati)?".
+      3. Ofereça agilizar por ali mesmo: "Se preferir me dizer por aqui mesmo o dia e horário, já consulto a agenda e deixo marcado pra você na hora!".
   * ESCOPO ESTRITO DA BARBEARIA: Atendemos corte masculino, barba, sobrancelha, selagem e prótese capilar. NÃO oferecemos serviços de podologia, manicure, unhas, nem procedimentos estéticos invasivos ou limpeza de pele profunda (extração de cravos). Se o cliente perguntar, informe com simpatia o foco em cabelo e barba ou chame a equipe.
   * FIDELIDADE TOTAL À AGENDA (PROIBIDO INVENTAR HORÁRIOS): NUNCA sugira, suponha ou confirme horários que não estejam na lista de horários livres retornada pela ferramenta consultar_disponibilidade. Respeite o encerramento da barbearia às 19:00 e o expediente dos barbeiros (Nati até 18:00 com último corte às 17:30; Bruno até 19:00 com último corte às 18:30).
   * NATURALIDADE ACOLHEDORA (SEM GÍRIAS E SEM FORMALISMO FORÇADO): NUNCA use gírias ("bora", "show", "tá na régua", "tamo junto", "meu irmão", "de boa", "foi mal"), mas NUNCA seja robótico ou engessado (PROIBIDO usar "Peço sinceras desculpas pelo ocorrido" ou "Lamento pelo mal-entendido"). Fale com a simpatia e naturalidade espontânea de uma recepção atenciosa ("Desculpa a confusão!", "Desculpa qualquer transtorno, viu?", "Pode deixar que eu já ajeito tudo aqui pra você!").
@@ -2465,6 +2470,17 @@ async function deterministicResponseCore(task, channel, session, message) {
         text: 'Combinado! Qualquer coisa que precisar é só chamar por aqui. Te esperamos na Dino Barbearia! 💈',
         kind: 'closing_ack',
         model: 'deterministic_closing_ack',
+        provider: 'system',
+      };
+    }
+    const appBookingReq = detectAppOrSelfBookingRequest(message.text);
+    const hasTimeMention = /\b([01]?\d|2[0-3])(?:h(\d{2})?|:(\d{2}))\b/i.test(message.text);
+    if (appBookingReq?.isRequest && !hasTimeMention) {
+      const reply = buildAppAndBookingPromptReply(appBookingReq);
+      return {
+        text: reply,
+        kind: 'app_and_booking_link',
+        model: 'deterministic_app_booking_request',
         provider: 'system',
       };
     }
