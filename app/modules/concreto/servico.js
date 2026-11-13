@@ -1735,7 +1735,7 @@ export async function assinarEntregaCarga(cargaId, dadosAssinatura, empresaId = 
   const densidadeAparente = Math.round(pesoLiquidoKg / volumeM3);
 
   const ticketPesagem = {
-    numeroTicket: `TKT-BAL-${carga.numero || 1001}`,
+    numeroTicket: `TKT-BAL-${carga.numero}`,
     balanca: 'Balança Rodoviária 80t Toledo · Usina Serrano (Rodovia MT-358 km 08)',
     operadorBalanca: 'Paulo Cezar (Matrícula 042 - Certificação IPEM-MT)',
     dataHoraPesagem: `${dataAtualCuiaba} ${horaAtualCuiaba}`,
@@ -1748,6 +1748,25 @@ export async function assinarEntregaCarga(cargaId, dadosAssinatura, empresaId = 
     volumeCalculadoM3: volumeM3,
     afericaoIpem: 'Portaria INMETRO/IPEM-MT nº 148/2026 · Válida até 08/2027'
   };
+
+  // Normalizar fotos recebidas
+  const fotosNormalizadas = Array.isArray(dadosAssinatura.fotos) ? [...dadosAssinatura.fotos] : [];
+  if (dadosAssinatura.fotoSlumpBase64) {
+    fotosNormalizadas.push({
+      id: 'foto-slump',
+      titulo: 'Teste de Slump (Tronco de Cone)',
+      imagemBase64: dadosAssinatura.fotoSlumpBase64,
+      timestamp: `${dataAtualCuiaba} ${horaAtualCuiaba}`
+    });
+  }
+  if (dadosAssinatura.fotoDescargaBase64) {
+    fotosNormalizadas.push({
+      id: 'foto-descarga',
+      titulo: 'Descarga no Canteiro / Bomba',
+      imagemBase64: dadosAssinatura.fotoDescargaBase64,
+      timestamp: `${dataAtualCuiaba} ${horaAtualCuiaba}`
+    });
+  }
 
   // Registrar assinatura digital
   carga.assinaturaEntrega = {
@@ -1764,7 +1783,7 @@ export async function assinarEntregaCarga(cargaId, dadosAssinatura, empresaId = 
     volumeEfetivoM3: Number(dadosAssinatura.volumeEfetivoM3) || volumeM3,
     observacoes,
     geolocalizacao: dadosAssinatura.geolocalizacao || null,
-    fotos: Array.isArray(dadosAssinatura.fotos) ? dadosAssinatura.fotos : [],
+    fotos: fotosNormalizadas,
     hashSha256,
     codigoAutenticidade,
     termoAceite: 'Declaro para os devidos fins que o concreto usinado especificado neste romaneio foi conferido e recebido na obra em conformidade com as normas ABNT NBR 7212 e NBR 8953, atestando consistência de abatimento (slump) e volume.'
@@ -2112,18 +2131,20 @@ export async function gerarHtmlRomaneioOficial(cargaId, empresaId = CONCRETO_EMP
     </div>
 
     <!-- FOTOS DE COMPROVAÇÃO DE CAMPO & GEOLOCALIZAÇÃO -->
-    ${ass && ass.fotos && ass.fotos.length > 0 ? `
+    ${ass && ((ass.fotos && ass.fotos.length > 0) || ass.geolocalizacao) ? `
       <div class="box" style="margin-top: 15px; background: #FAF5FF; border-left: 4px solid #A855F7;">
         <div class="section-title" style="color: #7E22CE;">5. Comprovação Fotográfica em Campo (Slump Test &amp; Descarga)</div>
+        ${ass.fotos && ass.fotos.length > 0 ? `
         <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px;">
           ${ass.fotos.map((f, idx) => `
             <div style="flex: 1; min-width: 140px; max-width: 200px; background: #FFF; border: 1px solid #E9D5FF; border-radius: 6px; padding: 6px; text-align: center;">
-              <img src="${f.url || f.base64}" style="width: 100%; height: 110px; object-fit: cover; border-radius: 4px; display: block;" alt="Foto de Campo" />
+              <img src="${f.url || f.base64 || f.imagemBase64}" style="width: 100%; height: 110px; object-fit: cover; border-radius: 4px; display: block;" alt="Foto de Campo" />
               <div style="font-size: 10px; font-weight: 700; color: #581C87; margin-top: 4px;">${f.titulo || `Foto ${idx+1}`}</div>
               <div style="font-size: 8px; color: #9333EA;">${f.timestamp || 'Registrado na Obra'}</div>
             </div>
           `).join('')}
         </div>
+        ` : ''}
         ${ass.geolocalizacao ? `
           <div style="margin-top: 8px; font-size: 10px; color: #6B21A8; display: flex; align-items: center; gap: 6px;">
             <span>📍 <b>Localização GPS da Assinatura:</b> Lat ${ass.geolocalizacao.latitude?.toFixed(5)}, Long ${ass.geolocalizacao.longitude?.toFixed(5)} (Precisão: ±${ass.geolocalizacao.precisao || 5}m) · ${ass.geolocalizacao.enderecoAproximado || 'Tangará da Serra/MT'}</span>
