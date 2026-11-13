@@ -59,22 +59,11 @@ import {
   otimizarTracoSustentavel,
   calcularCurvaMaturidadeAstmC1074,
   obterComparativoResistenciaNbr5739PorTraco,
-  listarCamerasIpConcreto,
-  obterCameraIpPorId,
-  criarCameraIpConcreto,
-  atualizarCameraIpConcreto,
-  excluirCameraIpConcreto,
-  construirUrlsCamera,
-  testarConexaoCameraIp,
-  capturarSnapshotCameraIp,
-  analisarFrameVisionKyttoIa,
-  listarEventosVisionConcreto,
-  reconhecerEventoVision,
   analisarEscalaProgramacaoKyttoIA,
   aplicarEscalaSugeridaKyttoIA,
   obterTelemetriaFrotaTempoReal,
   atualizarTelemetriaBetoneira
-} from "./servico.js";
+} from './servico.js';
 import { CONCRETO_EMPRESA_ID } from '../../concreto-usina-seed.js';
 
 export function criarRotasConcreto() {
@@ -750,86 +739,10 @@ router.post('/dosagem/calcular', (req, res) => {
     }
   });
 
-  // 51. Otimizador KyttoIA de Escala de Betoneiras & Previsão de Gargalos
-  router.post("/programacao/escala-kyttoia/analisar", async (req, res) => {
+  // 50. Otimizador KyttoIA de Escala de Betoneiras & Previsão de Gargalos
+  router.post('/programacao/escala-kyttoia/analisar', async (req, res) => {
     try {
       const resultado = await analisarEscalaProgramacaoKyttoIA(req.body, resolverEmpresa(req));
-      return res.json(resultado);
-    } catch (e) {
-      return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
-  router.post("/programacao/escala-kyttoia/aplicar", async (req, res) => {
-    try {
-      const { sugestoes } = req.body;
-      const resultado = await aplicarEscalaSugeridaKyttoIA(sugestoes, resolverEmpresa(req));
-      return res.json(resultado);
-    } catch (e) {
-      return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
-  // 52. Câmeras IP Industriais & Vision AI da Concreteira
-  router.get("/cameras", (req, res) => {
-    try {
-      const cameras = listarCamerasIpConcreto(resolverEmpresa(req));
-      return res.json({ ok: true, cameras, total: cameras.length });
-    } catch (e) {
-      return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
-  router.post("/cameras", (req, res) => {
-    try {
-      const camera = criarCameraIpConcreto(req.body, resolverEmpresa(req));
-      return res.status(201).json({ ok: true, camera });
-    } catch (e) {
-      return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
-  router.get("/cameras/:id", (req, res) => {
-    try {
-      const camera = obterCameraIpPorId(req.params.id, resolverEmpresa(req));
-      if (!camera) return res.status(404).json({ ok: false, error: "Câmera não encontrada" });
-      return res.json({ ok: true, camera });
-    } catch (e) {
-      return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
-  router.put("/cameras/:id", (req, res) => {
-    try {
-      const camera = atualizarCameraIpConcreto(req.params.id, req.body, resolverEmpresa(req));
-      if (!camera) return res.status(404).json({ ok: false, error: "Câmera não encontrada" });
-      return res.json({ ok: true, camera });
-    } catch (e) {
-      return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
-  router.delete("/cameras/:id", (req, res) => {
-    try {
-      const sucesso = excluirCameraIpConcreto(req.params.id, resolverEmpresa(req));
-      return res.json({ ok: sucesso });
-    } catch (e) {
-      return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
-  router.post("/cameras/:id/testar", (req, res) => {
-    try {
-      const resultado = testarConexaoCameraIp(req.params.id, resolverEmpresa(req));
-      return res.json(resultado);
-    } catch (e) {
-      return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
-  router.post("/cameras/testar-conexao", (req, res) => {
-    try {
-      const resultado = testarConexaoCameraIp(req.body, resolverEmpresa(req));
       return res.json(resultado);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
@@ -864,7 +777,6 @@ router.post('/dosagem/calcular', (req, res) => {
       return res.status(400).json({ ok: false, error: e.message });
     }
   });
-
 
   return router;
 }

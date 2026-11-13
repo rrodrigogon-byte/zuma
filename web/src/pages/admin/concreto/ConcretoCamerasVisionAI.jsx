@@ -152,6 +152,43 @@ const CAMERAS_SEED = [
   }
 ];
 
+
+const EVENTOS_SEED = [
+  {
+    id: "evt-01",
+    cameraNome: "CAM-01 · Balança 80t (Totem LPR Entrada)",
+    pontoRotulo: "Balança 80t - Totem LPR Entrada",
+    tipo: "lpr_reconhecimento",
+    titulo: "Placa Reconhecida · BT-01 (RRA-4E80)",
+    descricao: "Betoneira BT-01 identificada automaticamente na 1ª pesagem. Enquadramento 100% OK.",
+    confianca: 99.6,
+    dataHora: new Date().toLocaleDateString("pt-BR") + " 17:42:10",
+    snapshotUrl: "/assets/cftv/cftv_cam01_lpr_entrada.jpg"
+  },
+  {
+    id: "evt-02",
+    cameraNome: "CAM-04 · Pátio & Silos 96t (Manobras)",
+    pontoRotulo: "Pátio de Betoneiras & Silos 96t",
+    tipo: "epi_conformidade",
+    titulo: "Inspeção de EPI · Conforme",
+    descricao: "Capacete e colete refletivo detectados em todos os operadores no pátio de dosagem.",
+    confianca: 98.4,
+    dataHora: new Date().toLocaleDateString("pt-BR") + " 17:41:50",
+    snapshotUrl: "/assets/cftv/cftv_cam04_patio_silos.jpg"
+  },
+  {
+    id: "evt-03",
+    cameraNome: "CAM-03 · Balança 80t (Cancela Saída)",
+    pontoRotulo: "Balança 80t - Cancela Saída",
+    tipo: "auditoria_ticket",
+    titulo: "Saída Liberada · Ticket #8942",
+    descricao: "Semáforo verde ativado. Ticket térmico NBR 7212 emitido com 33.480 kg brutos.",
+    confianca: 99.9,
+    dataHora: new Date().toLocaleDateString("pt-BR") + " 17:40:02",
+    snapshotUrl: "/assets/cftv/cftv_cam03_cancela_saida.jpg"
+  }
+];
+
 import React, { useState, useEffect } from "react";
 import { api } from "../../../lib/api";
 
@@ -159,11 +196,11 @@ export default function ConcretoCamerasVisionAI({
   onVoltar,
   empresaAtivaId = "emp-concreto-serrano-01"
 }) {
-  const [cameras, setCameras] = useState([]);
-  const [eventos, setEventos] = useState([]);
-  const [carregando, setCarregando] = useState(true);
+  const [cameras, setCameras] = useState(CAMERAS_SEED);
+  const [eventos, setEventos] = useState(EVENTOS_SEED);
+  const [carregando, setCarregando] = useState(false);
   const [visualizacao, setVisualizacao] = useState("grid"); // "grid", "foco", "tabela", "eventos", "guia"
-  const [cameraFocada, setCameraFocada] = useState(null);
+  const [cameraFocada, setCameraFocada] = useState(CAMERAS_SEED[0]);
   const [modalCameraAberto, setModalCameraAberto] = useState(false);
   const [cameraEditando, setCameraEditando] = useState(null);
   const [modalGuiaAberto, setModalGuiaAberto] = useState(false);
