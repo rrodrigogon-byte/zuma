@@ -13,6 +13,7 @@ import ConcretoRecicladorSustentabilidade from './concreto/ConcretoRecicladorSus
 import ConcretoAuditoriaMetrologica from './concreto/ConcretoAuditoriaMetrologica';
 import ConcretoCamerasVisionAI from './concreto/ConcretoCamerasVisionAI';
 import ConcretoLaboratorioTecnologico from './concreto/ConcretoLaboratorioTecnologico';
+import ConcretoAppCampoPainel from './concreto/ConcretoAppCampoPainel';
 
 
 const CARGAS_PADRAO = [
@@ -631,6 +632,7 @@ export default function ConcretoUsinaERP() {
         <nav className="serrano-nav-tabs" aria-label="Navegação da Usina">
           {[
             { id: "operacao-despacho", label: "Despacho ao Vivo", icon: "🚚", count: cargas.length },
+            { id: "app-campo-assinatura", label: "App PWA & Canhoto em Campo", icon: "📱", count: cargas.filter(c => !c.assinaturaEntrega).length },
             { id: "operacao-programacao", label: "Programação de Cargas", icon: "📅" },
             { id: "operacao-frota", label: "Frota & Telemetria", icon: "🚛", count: frota.length },
             { id: "producao-central", label: "Central Dosadora NBR 7212", icon: "🏭" },
@@ -1669,6 +1671,15 @@ export default function ConcretoUsinaERP() {
           <ConcretoCamerasVisionAI
             empresaAtivaId={empresaAtiva || empresa?.id}
             onVoltar={() => setSecaoAtiva('operacao-despacho')}
+          />
+        )}
+
+        {/* ─── ABA: APP PWA & CANHOTO DIGITAL EM CAMPO (APK / TOUCH) ─── */}
+        {secaoAtiva === 'app-campo-assinatura' && (
+          <ConcretoAppCampoPainel
+            cargas={cargas}
+            frota={frota}
+            onRecarregar={carregarDados}
           />
         )}
 

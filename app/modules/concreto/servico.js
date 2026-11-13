@@ -1756,11 +1756,15 @@ export async function assinarEntregaCarga(cargaId, dadosAssinatura, empresaId = 
     recebedorNome,
     recebedorDocumento,
     recebedorCargo,
+    recebedorTelefoneWhatsApp: dadosAssinatura.recebedorTelefoneWhatsApp || null,
     dataHoraAssinatura: `${dataAtualCuiaba} às ${horaAtualCuiaba}`,
     dataHoraIso: isoAtual,
     slumpMedidoCm,
     aguaAdicionadaObraLitros,
+    volumeEfetivoM3: Number(dadosAssinatura.volumeEfetivoM3) || volumeM3,
     observacoes,
+    geolocalizacao: dadosAssinatura.geolocalizacao || null,
+    fotos: Array.isArray(dadosAssinatura.fotos) ? dadosAssinatura.fotos : [],
     hashSha256,
     codigoAutenticidade,
     termoAceite: 'Declaro para os devidos fins que o concreto usinado especificado neste romaneio foi conferido e recebido na obra em conformidade com as normas ABNT NBR 7212 e NBR 8953, atestando consistência de abatimento (slump) e volume.'
@@ -2106,6 +2110,27 @@ export async function gerarHtmlRomaneioOficial(cargaId, empresaId = CONCRETO_EMP
         `}
       </div>
     </div>
+
+    <!-- FOTOS DE COMPROVAÇÃO DE CAMPO & GEOLOCALIZAÇÃO -->
+    ${ass && ass.fotos && ass.fotos.length > 0 ? `
+      <div class="box" style="margin-top: 15px; background: #FAF5FF; border-left: 4px solid #A855F7;">
+        <div class="section-title" style="color: #7E22CE;">5. Comprovação Fotográfica em Campo (Slump Test &amp; Descarga)</div>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px;">
+          ${ass.fotos.map((f, idx) => `
+            <div style="flex: 1; min-width: 140px; max-width: 200px; background: #FFF; border: 1px solid #E9D5FF; border-radius: 6px; padding: 6px; text-align: center;">
+              <img src="${f.url || f.base64}" style="width: 100%; height: 110px; object-fit: cover; border-radius: 4px; display: block;" alt="Foto de Campo" />
+              <div style="font-size: 10px; font-weight: 700; color: #581C87; margin-top: 4px;">${f.titulo || `Foto ${idx+1}`}</div>
+              <div style="font-size: 8px; color: #9333EA;">${f.timestamp || 'Registrado na Obra'}</div>
+            </div>
+          `).join('')}
+        </div>
+        ${ass.geolocalizacao ? `
+          <div style="margin-top: 8px; font-size: 10px; color: #6B21A8; display: flex; align-items: center; gap: 6px;">
+            <span>📍 <b>Localização GPS da Assinatura:</b> Lat ${ass.geolocalizacao.latitude?.toFixed(5)}, Long ${ass.geolocalizacao.longitude?.toFixed(5)} (Precisão: ±${ass.geolocalizacao.precisao || 5}m) · ${ass.geolocalizacao.enderecoAproximado || 'Tangará da Serra/MT'}</span>
+          </div>
+        ` : ''}
+      </div>
+    ` : ''}
 
     <!-- RODAPÉ DE VALIDAÇÃO E HASH -->
     <div style="margin-top: 14px; padding-top: 8px; border-top: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; font-size: 9px; color: #64748B;">

@@ -2306,6 +2306,94 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
     }
   });
 
+  // [kytto-concreto] Rotas públicas do PWA e APK para Assinatura em Campo
+  app.get("/api/public/concreto/cargas-ativas", async (req, res) => {
+    try {
+      const data = db();
+      const { CONCRETO_CARGAS_INICIAIS } = await import("./concreto-usina-seed.js");
+      const cargas = data.concreto_cargas || CONCRETO_CARGAS_INICIAIS;
+      return res.json({ ok: true, cargas });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  app.get("/api/public/concreto/cargas/:id", async (req, res) => {
+    try {
+      const data = db();
+      const { CONCRETO_CARGAS_INICIAIS } = await import("./concreto-usina-seed.js");
+      const cargas = data.concreto_cargas || CONCRETO_CARGAS_INICIAIS;
+      const carga = cargas.find(c => c.id === req.params.id || String(c.numero) === String(req.params.id));
+      if (!carga) return res.status(404).json({ ok: false, error: "Carga não encontrada" });
+      return res.json({ ok: true, carga });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  app.post("/api/public/concreto/cargas/:id/assinar-pwa", async (req, res) => {
+    try {
+      const { assinarEntregaCarga } = await import("./modules/concreto/servico.js");
+      const resultado = await assinarEntregaCarga(req.params.id, req.body);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  app.post("/api/public/concreto/cargas/:id/upload-foto", async (req, res) => {
+    try {
+      const { fotoBase64, tipo, titulo, timestamp, localizacao } = req.body || {};
+      if (!fotoBase64) return res.status(400).json({ ok: false, error: "Imagem não fornecida" });
+
+      const fotoObj = {
+        id: `foto-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        tipo: tipo || "descarga",
+        titulo: titulo || "Foto de Campo",
+        base64: fotoBase64,
+        timestamp: timestamp || new Date().toLocaleString("pt-BR"),
+        localizacao: localizacao || "Canteiro de Obras"
+      };
+
+      const data = db();
+      data.concreto_cargas ||= [];
+      const carga = data.concreto_cargas.find(c => c.id === req.params.id || String(c.numero) === String(req.params.id));
+      if (carga) {
+        carga.assinaturaEntrega ||= {};
+        carga.assinaturaEntrega.fotos ||= [];
+        carga.assinaturaEntrega.fotos.push(fotoObj);
+        save();
+      }
+
+      return res.json({ ok: true, foto: fotoObj });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  app.get("/api/public/concreto/cargas/:id/canhoto-digital-html", async (req, res) => {
+    try {
+      const { gerarHtmlRomaneioOficial } = await import("./modules/concreto/servico.js");
+      const resRomaneio = await gerarHtmlRomaneioOficial(req.params.id);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.send(resRomaneio.html || resRomaneio);
+    } catch (e) {
+      return res.status(400).send(`<h3>Erro ao gerar Canhoto Digital: ${e.message}</h3>`);
+    }
+  });
+
+  app.get("/api/public/concreto/download-apk", (req, res) => {
+    const fs = require('fs');
+    const path = require('path');
+    const apkFile = path.resolve(__dirname, '../web/public/downloads/Serrano-Concreto-Campo.apk');
+    if (fs.existsSync(apkFile)) {
+      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+      res.setHeader('Content-Disposition', 'attachment; filename="Serrano-Concreto-Campo.apk"');
+      return fs.createReadStream(apkFile).pipe(res);
+    }
+    return res.status(404).send('APK em preparação de compilação.');
+  });
+
   // [kytto-concreto] Módulo de Concreto Usinado, Cargas, Central e Usina
   const concretoRouter = criarRotasConcreto();
   app.use('/api/admin/concreto', auth, requireStaff, concretoRouter);
