@@ -1,18 +1,19 @@
 import React from 'react';
 import { FileText, X, Printer, Download, Share2, CheckCircle2, ShieldCheck, QrCode } from 'lucide-react';
 
-export default function DanfeModal({ isOpen, onClose, docData }) {
-  if (!isOpen || !docData) return null;
+export default function DanfeModal({ isOpen, onClose, docData, documentData }) {
+  const data = docData || documentData;
+  if (!isOpen || !data) return null;
 
   const doc = {
-    numero: docData.id || 'NFE-2026-08912',
-    tipo: docData.tipo || 'NF-e 55',
-    serie: '001',
-    dataEmissao: new Date().toLocaleDateString('pt-BR'),
-    horaEmissao: docData.hora || '13:36:00',
-    chave: docData.chave || '5126081498200100412855001000008912100089125',
-    protocolo: docData.protocolo || '151260009840118',
-    status: 'AUTORIZADA SEFAZ-MT',
+    numero: data.id || data.numero || 'NFE-2026-08912',
+    tipo: data.tipo || 'NF-e 55',
+    serie: data.serie || '001',
+    dataEmissao: data.dataEmissao || new Date().toLocaleDateString('pt-BR'),
+    horaEmissao: data.horaEmissao || data.hora || '13:36:00',
+    chave: data.chaveAcesso || data.chave || '5126081498200100412855001000008912100089125',
+    protocolo: data.protocoloAutorizacao || data.protocolo || '151260009840118',
+    status: (data.status || 'AUTORIZADA SEFAZ-MT').toUpperCase(),
     emitente: {
       razao: 'SERRANO CONCRETO & MINERAÇÃO LTDA',
       fantasia: 'SERRANO CONCRETO CCO',
@@ -25,34 +26,34 @@ export default function DanfeModal({ isOpen, onClose, docData }) {
       telefone: '(65) 3326-8800'
     },
     destinatario: {
-      razao: docData.cliente || 'CONSTRUTORA ALVORADA LTDA',
-      cnpj: '08.412.981/0001-92',
-      ie: '13.912.441-2',
-      endereco: docData.endereco || 'Av. Brasil, 1420 — Canteiro Residencial Manacá',
-      municipio: 'Tangará da Serra',
-      uf: 'MT',
-      cep: '78300-000'
+      razao: data.destinatario?.razaoSocial || data.destinatario?.razao || data.cliente || 'CONSTRUTORA ALVORADA LTDA',
+      cnpj: data.destinatario?.cnpj || data.cnpj || '08.412.981/0001-92',
+      ie: data.destinatario?.ie || data.ie || '13.912.441-2',
+      endereco: data.destinatario?.endereco || data.endereco || 'Av. Brasil, 1420 — Canteiro Residencial Manacá',
+      municipio: data.destinatario?.municipio || data.municipio || 'Tangará da Serra',
+      uf: data.destinatario?.uf || data.uf || 'MT',
+      cep: data.destinatario?.cep || data.cep || '78300-000'
     },
     transporte: {
       modalidade: '0 - Transporte por Conta do Remetente (CIF)',
-      placa: docData.placa || 'QBF-6M02',
+      placa: data.veiculo?.placa || data.placa || 'QBF-6M02',
       uf: 'MT',
       rntrc: '04918290',
-      motorista: docData.motorista || 'Valdir Silveira',
-      pesoBrutoKg: docData.brutoKg || 33540,
-      taraKg: docData.taraKg || 12920,
-      pesoLiquidoKg: (docData.brutoKg || 33540) - (docData.taraKg || 12920)
+      motorista: data.veiculo?.motorista || data.motorista || 'Valdir Silveira',
+      pesoBrutoKg: data.brutoKg || 33540,
+      taraKg: data.taraKg || 12920,
+      pesoLiquidoKg: data.produto?.pesoLiquidoKg || data.liquidoKg || ((data.brutoKg || 33540) - (data.taraKg || 12920))
     },
     itens: [
       {
         codigo: 'CNC-FCK30B',
-        descricao: docData.produto || 'CONCRETO USINADO FCK 30 MPA BOMBEÁVEL - ABNT NBR 7212',
+        descricao: data.produto?.descricao || data.produto || 'CONCRETO USINADO FCK 30 MPA BOMBEÁVEL - ABNT NBR 7212',
         ncm: '3824.50.00',
         cfop: '5102',
         unidade: 'M3',
-        quantidade: docData.volumeM3 || 10.0,
+        quantidade: data.produto?.volumeM3 || data.volumeM3 || 10.0,
         valorUnitario: 485.00,
-        valorTotal: (docData.volumeM3 || 10.0) * 485.00
+        valorTotal: (data.produto?.volumeM3 || data.volumeM3 || 10.0) * 485.00
       }
     ]
   };
@@ -64,17 +65,18 @@ export default function DanfeModal({ isOpen, onClose, docData }) {
   };
 
   const handleDownloadXml = () => {
+    const cleanChave = doc.chave.replace(/\s+/g, '');
     const xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
 <nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">
   <NFe xmlns="http://www.portalfiscal.inf.br/nfe">
-    <infNFe Id="NFe${doc.chave}" versao="4.00">
+    <infNFe Id="NFe${cleanChave}" versao="4.00">
       <ide>
         <cUF>51</cUF>
         <cNF>00008912</cNF>
         <natOp>Venda de Concreto Usinado Industrial</natOp>
         <mod>55</mod>
         <serie>1</serie>
-        <nNF>${doc.numero.replace(/\D/g, '')}</nNF>
+        <nNF>${doc.numero.replace(/\D/g, '') || '8912'}</nNF>
         <dhEmi>${new Date().toISOString()}</dhEmi>
         <tpNF>1</tpNF>
         <idDest>1</idDest>
@@ -122,7 +124,7 @@ export default function DanfeModal({ isOpen, onClose, docData }) {
     <infProt>
       <tpAmb>1</tpAmb>
       <verAplic>SEFAZ-MT_4.00</verAplic>
-      <chNFe>${doc.chave}</chNFe>
+      <chNFe>${cleanChave}</chNFe>
       <dhRecbto>${new Date().toISOString()}</dhRecbto>
       <nProt>${doc.protocolo}</nProt>
       <digVal>KyttoIA-SEFAZ-VERIFIED</digVal>
@@ -136,7 +138,7 @@ export default function DanfeModal({ isOpen, onClose, docData }) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${doc.chave}.xml`;
+    link.download = `${cleanChave}.xml`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -233,7 +235,7 @@ export default function DanfeModal({ isOpen, onClose, docData }) {
               <div>
                 <span className="font-bold text-stone-700 block text-[9px]">CHAVE DE ACESSO:</span>
                 <span className="font-mono text-[9px] font-bold tracking-tight block text-stone-900 select-all">
-                  {doc.chave.replace(/(\d{4})/g, '$1 ').trim()}
+                  {doc.chave.replace(/\s+/g, '').replace(/(\d{4})/g, '$1 ').trim()}
                 </span>
                 {/* Simulated Barcode */}
                 <div className="h-7 w-full bg-stone-900 mt-1 flex items-center justify-around px-2">

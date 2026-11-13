@@ -304,6 +304,8 @@ export default function App() {
           onOpenArrivalModal={() => setShowArrivalModal(true)}
           onOpenAnomalyModal={() => setShowAnomalyModal(true)}
           stats={stats}
+          weighbridges={weighbridges}
+          onOpenTicket={() => handleOpenTicket(ticketsHistory[0])}
         />
       )}
 
@@ -484,6 +486,7 @@ export default function App() {
       {isTicketModalOpen && (
         <TicketModal 
           ticketData={activeTicketData}
+          onOpenDanfe={handleOpenDanfe}
           onClose={() => setIsTicketModalOpen(false)}
         />
       )}

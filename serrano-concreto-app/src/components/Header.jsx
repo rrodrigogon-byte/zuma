@@ -21,15 +21,21 @@ export default function Header({
   currentTime, 
   simSpeed, 
   setSimSpeed, 
+  onSpeedChange,
   isPaused, 
   setIsPaused, 
+  onTogglePause,
   onTriggerArrival, 
+  onOpenArrivalModal,
   onTriggerException, 
+  onOpenAnomalyModal,
   onOpenCopilot,
   selectedUnit,
   setSelectedUnit,
   onOpenTicket,
   isLiveTimeMode = true,
+  isRealTime,
+  onToggleRealTime,
   setIsLiveTimeMode
 }) {
   const [liveClockStr, setLiveClockStr] = useState('');
@@ -44,7 +50,13 @@ export default function Header({
     return () => clearInterval(timer);
   }, []);
 
-  const displayTime = isLiveTimeMode ? (liveClockStr || currentTime) : currentTime;
+  const isLive = isRealTime !== undefined ? isRealTime : isLiveTimeMode;
+  const displayTime = isLive ? (liveClockStr || currentTime) : currentTime;
+  const triggerArrival = onTriggerArrival || onOpenArrivalModal;
+  const triggerException = onTriggerException || onOpenAnomalyModal;
+  const handleToggleRealTime = onToggleRealTime || ((val) => setIsLiveTimeMode && setIsLiveTimeMode(val));
+  const handleSpeed = onSpeedChange || setSimSpeed;
+  const handlePause = onTogglePause || (() => setIsPaused && setIsPaused(!isPaused));
 
   return (
     <header className="bg-white border-b border-concrete-200 sticky top-0 z-30 px-4 py-2.5 shadow-sm">
@@ -81,7 +93,7 @@ export default function Header({
           <div 
             onClick={() => onOpenTicket && onOpenTicket('bal01')}
             className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg border text-xs cursor-pointer transition-all ${
-              weighbridges.bal01.statusPista === 'ocupada'
+              weighbridges?.bal01?.statusPista === 'ocupada'
                 ? 'bg-amber-50/70 border-amber-300 hover:border-amber-400'
                 : 'bg-stone-50 border-stone-200 hover:border-stone-300'
             }`}
@@ -89,7 +101,7 @@ export default function Header({
           >
             <div className="relative">
               <span className={`w-2.5 h-2.5 rounded-full block ${
-                weighbridges.bal01.statusPista === 'ocupada' ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'
+                weighbridges?.bal01?.statusPista === 'ocupada' ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'
               }`} />
             </div>
             <div>
@@ -99,13 +111,13 @@ export default function Header({
                 <span className="font-semibold text-stone-600">Balança Usina</span>
               </div>
               <div className="text-[10px] text-stone-500">
-                {weighbridges.bal01.statusPista === 'ocupada' 
-                  ? `${weighbridges.bal01.veiculoAtual?.placa || 'Veículo'} · ${weighbridges.bal01.veiculoAtual?.tipoOperacao || 'Pesagem'}` 
+                {weighbridges?.bal01?.statusPista === 'ocupada' 
+                  ? `${weighbridges?.bal01?.veiculoAtual?.placa || 'Veículo'} · ${weighbridges?.bal01?.veiculoAtual?.tipoOperacao || 'Pesagem'}` 
                   : 'pista livre · fila 0'}
               </div>
             </div>
             <div className="font-mono font-bold text-sm text-stone-900 bg-white px-2 py-0.5 rounded border border-stone-200 shadow-inner">
-              {weighbridges.bal01.pesoAtualKg.toLocaleString('pt-BR')} <span className="text-[10px] font-sans font-normal text-stone-500">kg</span>
+              {weighbridges?.bal01?.pesoAtualKg.toLocaleString('pt-BR')} <span className="text-[10px] font-sans font-normal text-stone-500">kg</span>
             </div>
           </div>
 
@@ -113,7 +125,7 @@ export default function Header({
           <div 
             onClick={() => onOpenTicket && onOpenTicket('bal02')}
             className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg border text-xs cursor-pointer transition-all ${
-              weighbridges.bal02.statusPista === 'ocupada'
+              weighbridges?.bal02?.statusPista === 'ocupada'
                 ? 'bg-amber-50/70 border-amber-300 hover:border-amber-400'
                 : 'bg-stone-50 border-stone-200 hover:border-stone-300'
             }`}
@@ -121,7 +133,7 @@ export default function Header({
           >
             <div className="relative">
               <span className={`w-2.5 h-2.5 rounded-full block ${
-                weighbridges.bal02.statusPista === 'ocupada' ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'
+                weighbridges?.bal02?.statusPista === 'ocupada' ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'
               }`} />
             </div>
             <div>
@@ -131,13 +143,13 @@ export default function Header({
                 <span className="font-semibold text-stone-600">Balança Mineração</span>
               </div>
               <div className="text-[10px] text-stone-500">
-                {weighbridges.bal02.statusPista === 'ocupada' 
+                {weighbridges?.bal02?.statusPista === 'ocupada' 
                   ? 'Veículo em pesagem' 
                   : 'pista livre · fila 0'}
               </div>
             </div>
             <div className="font-mono font-bold text-sm text-stone-900 bg-white px-2 py-0.5 rounded border border-stone-200 shadow-inner">
-              {weighbridges.bal02.pesoAtualKg.toLocaleString('pt-BR')} <span className="text-[10px] font-sans font-normal text-stone-500">kg</span>
+              {weighbridges?.bal02?.pesoAtualKg.toLocaleString('pt-BR')} <span className="text-[10px] font-sans font-normal text-stone-500">kg</span>
             </div>
           </div>
 
@@ -150,9 +162,9 @@ export default function Header({
           <div className="flex items-center gap-1 bg-stone-100 p-0.5 rounded-lg text-[10px] font-bold border border-stone-200">
             <button
               type="button"
-              onClick={() => setIsLiveTimeMode && setIsLiveTimeMode(true)}
+              onClick={() => handleToggleRealTime(true)}
               className={`px-2 py-0.5 rounded-md flex items-center gap-1 transition-all ${
-                isLiveTimeMode ? 'bg-emerald-600 text-white shadow-xs' : 'text-stone-600 hover:text-stone-900'
+                isLive ? 'bg-emerald-600 text-white shadow-xs' : 'text-stone-600 hover:text-stone-900'
               }`}
               title="Horário Oficial em Tempo Real de Tangará da Serra (GMT-4)"
             >
@@ -161,9 +173,9 @@ export default function Header({
             </button>
             <button
               type="button"
-              onClick={() => setIsLiveTimeMode && setIsLiveTimeMode(false)}
+              onClick={() => handleToggleRealTime(false)}
               className={`px-2 py-0.5 rounded-md transition-all ${
-                !isLiveTimeMode ? 'bg-stone-800 text-white shadow-xs' : 'text-stone-600 hover:text-stone-900'
+                !isLive ? 'bg-stone-800 text-white shadow-xs' : 'text-stone-600 hover:text-stone-900'
               }`}
               title="Modo Simulação Acelerada para Testes"
             >
@@ -178,7 +190,7 @@ export default function Header({
             <div className="h-3 w-px bg-stone-300 mx-0.5" />
             
             {/* Speed Multipliers */}
-            <div className={`flex items-center gap-1 ${isLiveTimeMode ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className={`flex items-center gap-1 ${isLive ? 'opacity-40 pointer-events-none' : ''}`}>
               {[
                 { speed: 1, label: '1x' },
                 { speed: 10, label: '10x' },
@@ -187,7 +199,7 @@ export default function Header({
               ].map(({ speed, label }) => (
                 <button
                   key={speed}
-                  onClick={() => { setSimSpeed(speed); setIsPaused(false); }}
+                  onClick={() => { handleSpeed && handleSpeed(speed); }}
                   className={`px-1.5 py-0.5 text-[11px] font-semibold rounded transition-colors ${
                     !isPaused && simSpeed === speed 
                       ? 'bg-stone-800 text-white shadow-xs' 
@@ -199,7 +211,7 @@ export default function Header({
               ))}
 
               <button
-                onClick={() => setIsPaused(!isPaused)}
+                onClick={handlePause}
                 className={`p-1 rounded text-stone-600 hover:bg-stone-200 ${isPaused ? 'text-amber-600 font-bold' : ''}`}
                 title={isPaused ? "Retomar simulação" : "Pausar simulação"}
               >
@@ -211,7 +223,7 @@ export default function Header({
           {/* Quick Simulation Trigger Buttons */}
           <div className="flex items-center gap-1">
             <button
-              onClick={onTriggerArrival}
+              onClick={triggerArrival}
               className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-lg border border-stone-300 transition-colors shadow-2xs active:scale-98"
               title="Registrar chegada de caminhão na portaria via totem/LPR"
             >
@@ -219,7 +231,7 @@ export default function Header({
               <span>+ Chegada</span>
             </button>
             <button
-              onClick={onTriggerException}
+              onClick={triggerException}
               className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg border border-rose-200 transition-colors shadow-2xs active:scale-98"
               title="Disparar auditoria forense / simular anomalia de pesagem"
             >
