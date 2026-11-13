@@ -6136,7 +6136,6 @@ app.get('/api/admin/barbearia/agenda-periodo', (req, res) => {
     }
     // Histórico importado do Avec (somente leitura), ligado aos profissionais ativos.
     // Não entra quando o filtro de status pede algo diferente de "concluído".
-    const statusPedido = String(req.query?.status || '');
     const historico = req.query?.historico === '0' || (statusPedido && statusPedido !== 'concluido') ? [] : agendaHistoricaAvec({
       historico: barbeariaErpKytto.listarHistoricoAtendimentos(empresaId, { de, ate, lojaId }),
       comandas: barbeariaErpKytto.listarHistoricoComandas(empresaId, { de, ate, lojaId }),
