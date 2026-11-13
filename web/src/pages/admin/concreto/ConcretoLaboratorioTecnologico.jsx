@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../../lib/auth';
 import { api } from '../../../lib/api';
+import ConcretoGraficosResistenciaNBR5739 from './ConcretoGraficosResistenciaNBR5739';
 
 export default function ConcretoLaboratorioTecnologico({ ensaios = [], onAtualizarDados, onAbrirRomaneio }) {
   const { token } = useAuth();
@@ -161,6 +162,7 @@ export default function ConcretoLaboratorioTecnologico({ ensaios = [], onAtualiz
         <div style={{ display: 'flex', gap: 8, marginTop: 20, borderBottom: '1px solid var(--joint)', paddingBottom: 10, flexWrap: 'wrap' }}>
           {[
             { id: 'estatistica', label: '📊 Controle Estatístico NBR 12655 (Shewhart & CUSUM)' },
+            { id: 'comparativo-tracos', label: '📈 Gráficos Comparativos NBR 5739 (Por Traço)' },
             { id: 'sustentavel', label: '🌿 Traços Sustentáveis & Carbono ESG (Meta BOxCrete)' },
             { id: 'maturidade', label: '⏳ Maturidade In-Situ & Desforma (ASTM C1074)' },
             { id: 'lotes', label: '📋 Lotes & Rupturas NBR 5739' },
@@ -364,6 +366,12 @@ export default function ConcretoLaboratorioTecnologico({ ensaios = [], onAtualiz
             </div>
           </div>
         </div>
+      )}
+
+      
+      {/* ─── SUB-ABA: GRÁFICOS COMPARATIVOS NBR 5739 POR TRAÇO ─── */}
+      {subAba === 'comparativo-tracos' && (
+        <ConcretoGraficosResistenciaNBR5739 />
       )}
 
       {/* ─── SUB-ABA 2: TRAÇOS SUSTENTÁVEIS & CARBONO ESG (META BOxCrete) ─── */}

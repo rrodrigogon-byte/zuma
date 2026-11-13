@@ -57,7 +57,8 @@ import {
   calcularCartasControleEstatisticoNbr12655,
   gerarHtmlLaudoAceitacaoEstatistica,
   otimizarTracoSustentavel,
-  calcularCurvaMaturidadeAstmC1074
+  calcularCurvaMaturidadeAstmC1074,
+  obterComparativoResistenciaNbr5739PorTraco
 } from './servico.js';
 import { CONCRETO_EMPRESA_ID } from '../../concreto-usina-seed.js';
 
@@ -723,5 +724,15 @@ router.post('/dosagem/calcular', (req, res) => {
     }
   });
 
+
+  // 50. Comparativo de Resistência NBR 5739 dos Corpos de Prova por Traço
+  router.get('/laboratorio/resistencia-por-traco', (req, res) => {
+    try {
+      const resultado = obterComparativoResistenciaNbr5739PorTraco(resolverEmpresa(req));
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
   return router;
 }
