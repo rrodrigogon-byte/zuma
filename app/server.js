@@ -2572,6 +2572,9 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
         PALATARE_KDS_FILA, 
         PALATARE_DELIVERY_ZONAS, 
         PALATARE_METRICAS_BI,
+        PALATARE_ENGENHARIA_CMV,
+        PALATARE_PIZZA_CLUB,
+        PALATARE_TELEMETRIA_FORNO,
         PALATARE_EMPRESA_ID: empId
       } = await import('./palatare-pizzaria-seed.js');
       
@@ -2582,6 +2585,9 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
       const kds = data.palatare_kds || PALATARE_KDS_FILA;
       const delivery = data.palatare_delivery || PALATARE_DELIVERY_ZONAS;
       const metricas = data.palatare_metricas || PALATARE_METRICAS_BI;
+      const engenharia = data.palatare_engenharia || PALATARE_ENGENHARIA_CMV;
+      const pizzaClub = data.palatare_pizza_club || PALATARE_PIZZA_CLUB;
+      const telemetriaForno = data.palatare_forno || PALATARE_TELEMETRIA_FORNO;
 
       return res.json({ 
         ok: true, 
@@ -2591,7 +2597,10 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
         rodizio, 
         kds, 
         delivery, 
-        metricas 
+        metricas,
+        engenharia,
+        pizzaClub,
+        telemetriaForno
       });
     } catch (e) {
       return res.status(500).json({ error: e.message });
