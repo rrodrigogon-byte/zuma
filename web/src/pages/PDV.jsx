@@ -396,7 +396,7 @@ export default function PDV() {
 
   const tabsExibidas = ehConcreto ? [
     { key: "balanca", icon: "⚖️", label: "Balança 80t" },
-    { key: "concreto-vendas", icon: "🚚", label: "Balcão Concreto" },
+    { key: "concreto-vendas", icon: "🚚", label: "Expedição da Usina" },
     { key: "vendas", icon: "📊", label: "Histórico & Caixa" },
     { key: "offline", icon: "📡", label: "Contingência" },
   ] : TABS;
@@ -1350,7 +1350,7 @@ export default function PDV() {
         <div style={{ padding: "20px 16px 80px", maxWidth: 1100, margin: "0 auto", color: "#FFF4EC" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
             <div>
-              <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: "#FF9B72" }}>Balcão de Concreto Usinado & Agregados</h2>
+              <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: "#FF9B72" }}>Expedição de Concreto Usinado & Agregados</h2>
               <small style={{ color: "rgba(255,244,236,0.6)" }}>Tangará da Serra / MT · Usina Convicta & Mineração Serrano</small>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
