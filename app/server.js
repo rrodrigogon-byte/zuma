@@ -361,6 +361,9 @@ app.get('/install.sh', (req, res) => {
   return res.status(404).send('#!/bin/bash\necho "Script de instalacao nao encontrado."\nexit 1\n');
 });
 
+let cachedCommerceSchemaReadiness = null;
+let lastCommerceSchemaCheckAt = 0;
+
 app.get('/health', async (req, res) => {
   const persistencia = protecaoDados.situacao().status;
   const assets = staticAssetReadiness();
@@ -385,8 +388,26 @@ app.get('/health', async (req, res) => {
     });
   }
   try {
-    const schema = await checkCommerceSchemaReadiness(commerceDb);
-    if (!schema.ready) return res.status(503).json({ status: 'not_ready', code: schema.code });
+    let schema = cachedCommerceSchemaReadiness;
+    if (!schema || Date.now() - lastCommerceSchemaCheckAt > 60000) {
+      try {
+        const check = await checkCommerceSchemaReadiness(commerceDb);
+        if (check?.ready) {
+          cachedCommerceSchemaReadiness = check;
+          lastCommerceSchemaCheckAt = Date.now();
+          schema = check;
+        } else {
+          schema = check;
+        }
+      } catch (checkErr) {
+        if (cachedCommerceSchemaReadiness?.ready) {
+          schema = cachedCommerceSchemaReadiness;
+        } else {
+          throw checkErr;
+        }
+      }
+    }
+    if (!schema?.ready) return res.status(503).json({ status: 'not_ready', code: schema?.code || 'COMMERCE_SCHEMA_NOT_READY' });
     try {
       const [msgRes, filaRes, chRes] = await Promise.all([
         commerceDb.queryRead(
