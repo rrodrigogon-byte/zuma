@@ -46,14 +46,14 @@ export default function ProgramacaoCargasAgenda({
 
   // Carregar análise da KyttoIA automaticamente ao trocar data ou ao montar
   const handleAnalisarKyttoIA = async (abrirModal = false) => {
+    if (abrirModal) {
+      setModalKyttoIAAberto(true);
+    }
     setCarregandoKyttoIA(true);
     try {
       const res = await api.post('/api/admin/concreto/programacao/escala-kyttoia/analisar', { data: dataSelecionada });
       if (res?.ok) {
         setAnaliseKyttoIA(res);
-        if (abrirModal) {
-          setModalKyttoIAAberto(true);
-        }
       }
     } catch (err) {
       console.warn('Falha ao analisar escala com KyttoIA:', err);
