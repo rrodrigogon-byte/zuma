@@ -11,6 +11,7 @@ import ConcretoMapaGpsFrota from './concreto/ConcretoMapaGpsFrota';
 import ConcretoChecklistFrota from './concreto/ConcretoChecklistFrota';
 import ConcretoRecicladorSustentabilidade from './concreto/ConcretoRecicladorSustentabilidade';
 import ConcretoAuditoriaMetrologica from './concreto/ConcretoAuditoriaMetrologica';
+import HoldingGrupoPalatare from './concreto/HoldingGrupoPalatare';
 
 
 const CARGAS_PADRAO = [
@@ -879,7 +880,7 @@ export default function ConcretoUsinaERP() {
             { id: "suprimentos-silos", label: "Mineração & Silos 96t", icon: "⛏️", count: silos.length },
             { id: "vendas-faturamento", label: "Vendas & Notas Fiscais", icon: "📑" },
             { id: "comercial-propostas", label: "Orçamentos & Propostas", icon: "💼", count: propostas.length },
-            { id: "empresa-holding", label: "Holding & Dados Fiscais", icon: "🏢" },
+            { id: "empresa-holding", label: "Grupo Palatare · Holding", icon: "🏢" },
           ].map(tab => (
             <button
               key={tab.id}
@@ -896,6 +897,9 @@ export default function ConcretoUsinaERP() {
           ))}
         </nav>
 
+        {/* Cabeçalho e KPIs de Despacho ao Vivo - Exibidos somente na aba de despacho */}
+        {secaoAtiva === 'operacao-despacho' && (
+          <>
         <div className="serrano-ph">
           <div>
             <h1>Despacho ao vivo</h1>
@@ -954,6 +958,8 @@ export default function ConcretoUsinaERP() {
             <span>Usinado + bombeamento</span>
           </div>
         </div>
+          </>
+        )}
 
         {/* ─── ESCALA DA FROTA / GANTT INDUSTRIAL (07h às 17h) ─── */}
         {secaoAtiva === 'operacao-despacho' && (
@@ -2317,38 +2323,9 @@ export default function ConcretoUsinaERP() {
           </div>
         )}
 
-        {/* ─── ABA 6: HOLDING & DADOS FISCAIS SEFAZ ─── */}
+        {/* ─── ABA: GRUPO PALATARE · HOLDING & GOVERNANÇA CORPORATIVA ─── */}
         {secaoAtiva === 'empresa-holding' && (
-          <div className="serrano-grid-2col">
-            <div className="serrano-card">
-              <div className="serrano-card-h">
-                <h3>Serrano Concreto &amp; Mineração · Dados Oficiais</h3>
-              </div>
-              <div style={{ padding: 20, display: 'grid', gap: 12 }}>
-                <div><small style={{ color: 'var(--text-muted)' }}>Razão Social:</small> <b style={{ display: 'block' }}>SERRANO CONCRETO USINADO &amp; MINERAÇÃO LTDA</b></div>
-                <div><small style={{ color: 'var(--text-muted)' }}>CNPJ Matriz:</small> <b style={{ display: 'block', fontFamily: 'var(--font-data)' }}>51.499.928/0001-01</b></div>
-                <div><small style={{ color: 'var(--text-muted)' }}>CNPJ Usinado:</small> <b style={{ display: 'block', fontFamily: 'var(--font-data)' }}>53.798.485/0001-77</b></div>
-                <div><small style={{ color: 'var(--text-muted)' }}>Inscrição Estadual (SEFAZ-MT):</small> <b style={{ display: 'block', fontFamily: 'var(--font-data)' }}>14.229.191-9</b></div>
-                <div><small style={{ color: 'var(--text-muted)' }}>Registro ANTT (RNTRC):</small> <b style={{ display: 'block', fontFamily: 'var(--font-data)' }}>056256077</b></div>
-                <div><small style={{ color: 'var(--text-muted)' }}>Responsável Técnica (RT):</small> <b style={{ display: 'block', color: 'var(--status-ok)' }}>Engª Karin Prestes (CREA-MT 027300)</b></div>
-              </div>
-            </div>
-
-            <div className="serrano-card">
-              <div className="serrano-card-h">
-                <h3>Holding Serrano &amp; Palatare Participações S/A</h3>
-              </div>
-              <div style={{ padding: 20, display: 'grid', gap: 12 }}>
-                <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-                  Consolidação corporativa do Grupo Serrano &amp; Palatare, unificando a usina dosadora de concreto, mineração de agregados do Rio Sepotuba e a rede de restaurantes e food service em Tangará da Serra/MT.
-                </p>
-                <div style={{ background: 'var(--surface-2)', padding: 14, borderRadius: 8 }}>
-                  <b style={{ display: 'block', fontSize: 14 }}>Barramento SEFAZ-MT: Ativo e Sincronizado</b>
-                  <small style={{ color: 'var(--status-ok)' }}>● Emissão autorizada de CT-e, Romaneios NBR 7212 e MDF-e de frota própria</small>
-                </div>
-              </div>
-            </div>
-          </div>
+          <HoldingGrupoPalatare setSecaoAtiva={setSecaoAtiva} />
         )}
 
 

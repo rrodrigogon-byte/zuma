@@ -542,10 +542,12 @@ export const NAV_RESTAURANTE_GROUPS = [
     ],
   },
   {
-    label: 'Grupo Serrano & Palatare', aberto: true,
+    label: 'Grupo Palatare', aberto: true,
     items: [
+      { to: '/admin/pizzaria', icon: '🍕', label: 'Palatare Pizzaria & Restaurante' },
       { to: '/admin/concreto', icon: '🚚', label: 'Serrano Concreto Usinado' },
-      { to: '/admin/consolidacao-grupo', icon: '🏢', label: 'Holding & Consolidação' },
+      { to: '/admin/concreto?secao=empresa-holding', icon: '🏢', label: 'Holding Grupo Palatare' },
+      { to: '/admin/consolidacao-grupo', icon: '🏛️', label: 'Consolidação Holding' },
     ],
   },
 ]
@@ -590,7 +592,8 @@ export const NAV_CONCRETO_GROUPS = [
   {
     label: "Empresa", aberto: true,
     items: [
-      { to: "/admin/concreto?secao=empresa-holding", icon: "🏢", label: "Holding & Dados Fiscais" },
+      { to: "/admin/concreto?secao=empresa-holding", icon: "🏢", label: "Grupo Palatare · Holding & Fiscais" },
+      { to: "/admin/pizzaria", icon: "🍕", label: "Palatare Pizzaria & Restaurante" },
       { to: "/admin/financeiro", icon: "💰", label: "Financeiro & Medições" },
       { to: "/admin/notas", icon: "🧾", label: "Notas Fiscais (NF-e / MDF-e)" },
       { to: "/admin/cadastros-mestres", icon: "🗂️", label: "Motoristas & Fornecedores" },
