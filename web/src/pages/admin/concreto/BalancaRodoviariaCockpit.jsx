@@ -140,16 +140,72 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
     },
     {
       id: 'cam07',
-      nome: 'CAM-07 · Balança Extra (Positivo Seg IP)',
-      marca: 'positivo',
-      modelo: 'Smart Câmera IP Wi-Fi 1080p',
-      ip: '192.168.1.126',
+      nome: 'CAM-07 · Balança 80t (Células de Carga C1-C8 Toledo Prix)',
+      marca: 'bosch',
+      modelo: 'Dinion IP Starlight 7000 HD',
+      ip: '192.168.1.130',
       portaRtsp: 554,
       portaHttp: 80,
       ponto: 'balanca',
-      codec: 'H.264 · 25 FPS',
-      foto: '/assets/cftv/cftv_cam03_cancela_saida.jpg',
-      status: 'Conectada · ONVIF Porta 8899',
+      codec: 'H.265 · 30 FPS',
+      foto: '/assets/cftv/cftv_cam07_bosch_celulas.jpg',
+      status: '8 Células Calibradas RBC / IPEM',
+      statusCor: '#10B981'
+    },
+    {
+      id: 'cam08',
+      nome: 'CAM-08 · Balança 80t (Totem Motorista Autoatendimento)',
+      marca: 'toledo_prix_lpr',
+      modelo: 'Totem Prix 9094 / Indicador 720i',
+      ip: '192.168.1.135',
+      portaRtsp: 554,
+      portaHttp: 80,
+      ponto: 'balanca',
+      codec: 'H.264 · 30 FPS',
+      foto: '/assets/cftv/cftv_cam09_toledo_totem.jpg',
+      status: 'RFID & Leitor Biométrico Ativo',
+      statusCor: '#10B981'
+    },
+    {
+      id: 'cam09',
+      nome: 'CAM-09 · Balança 80t (Traseira Veicular & Descarga)',
+      marca: 'hikvision',
+      modelo: 'DS-2CD2T47G2P-LSU (AcuSense)',
+      ip: '192.168.1.132',
+      portaRtsp: 554,
+      portaHttp: 80,
+      ponto: 'balanca',
+      codec: 'H.265 · 30 FPS',
+      foto: '/assets/cftv/cftv_cam08_avigilon_traseira.jpg',
+      status: 'Enquadramento Traseiro 100% OK',
+      statusCor: '#10B981'
+    },
+    {
+      id: 'cam10',
+      nome: 'CAM-10 · Termografia FLIR (Motores & Silos)',
+      marca: 'flir',
+      modelo: 'FLIR A700 Smart Thermal Sensor',
+      ip: '192.168.1.150',
+      portaRtsp: 554,
+      portaHttp: 80,
+      ponto: 'patio',
+      codec: 'Radiométrica · 30 FPS',
+      foto: '/assets/cftv/cftv_cam12_flir_termica.jpg',
+      status: 'Gradiente Térmico Normal (61.3°C / 78.6°C)',
+      statusCor: '#10B981'
+    },
+    {
+      id: 'cam11',
+      nome: 'CAM-11 · Baias de Agregados (Britas 0, 1 e Areia)',
+      marca: 'tplink_vigi',
+      modelo: 'VIGI C340-W 4MP Outdoor',
+      ip: '192.168.1.138',
+      portaRtsp: 554,
+      portaHttp: 80,
+      ponto: 'patio',
+      codec: 'H.265+ · 25 FPS (2K)',
+      foto: '/assets/cftv/cftv_cam11_tplink_vigi_baias.jpg',
+      status: 'Carregamento Moega em Andamento',
       statusCor: '#10B981'
     }
   ];
@@ -1396,7 +1452,7 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
           {/* FILTROS DE PONTO */}
           <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
             {[
-              { id: 'todos', label: 'Todos os 7 Canais' },
+              { id: 'todos', label: `Todos os ${LISTA_CAMERAS_COCKPIT.length} Canais Operacionais` },
               { id: 'balanca', label: 'Balança 80t (Pista &amp; Cancela)' },
               { id: 'patio', label: 'Pátio &amp; Central Dosadora' },
               { id: 'mineracao', label: 'Mineração Areia (Sepotuba)' },
