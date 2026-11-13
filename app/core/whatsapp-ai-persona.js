@@ -240,7 +240,7 @@ export function personaGreeting(persona, { text = '', seed = '', customerName = 
   const perguntas = persona?.segmento === 'suplementos'
     ? ['Tá procurando algum suplemento hoje?', 'Whey, creatina ou outra coisa? Me fala que eu vejo aqui.', 'Em que posso te ajudar no treino hoje?']
     : [
-        'Qual dia e horário você prefere? Posso ver duas opções pra você ou você pode conferir direto na agenda: https://kytto.com.br/agendar/dino',
+        'Qual dia e hora prefere? Ou agende: https://kytto.com.br/agendar/dino',
         'Me diz o dia e hora ou agende: https://kytto.com.br/agendar/dino',
         'Qual dia/hora quer marcar? Agenda: https://kytto.com.br/agendar/dino',
       ];
@@ -252,7 +252,7 @@ export function personaGreeting(persona, { text = '', seed = '', customerName = 
 export function personaIntroduction(persona, storeName) {
   const loja = clean(storeName, 120) || 'unidade';
   if (persona.id === 'trex') {
-    return `Olá! Aqui é o T-Rex, da equipe da ${loja}! Estou por aqui para agilizar seu atendimento com total praticidade.`;
+    return `Aqui é o T-Rex da ${loja}! Sou novo por aqui na equipe e tô na área pra te apoiar e agilizar seu atendimento.`;
   }
   const finalidade = 'Uso esta conversa só pra te atender e chamo a equipe quando você quiser.';
   if (persona.revelarIa === 'na_apresentacao') return `Aqui é o ${persona.nome}, assistente digital da ${loja}. ${finalidade}`;

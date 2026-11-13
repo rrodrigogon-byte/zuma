@@ -347,8 +347,11 @@ async function resolveAgendaId(scope, value, field, { allowAny = false, professi
   // 4. Se for UUID e a lista estiver vazia (fallback extremo postgres)
   if (UUID_REGEX.test(normalized) && !lista.length) return normalized;
 
-  // 5. Se já era ID formal com prefixo conhecido (ex: srv-xxx, prof-xxx)
-  if (AGENDA_ID_REGEX.test(normalized)) return normalized;
+  // 5. Se já era ID formal com prefixo conhecido (ex: srv-xxx, prof-xxx), valida na lista antes de retornar
+  if (AGENDA_ID_REGEX.test(normalized)) {
+    const achadoFormal = lista.find((it) => it.id === normalized);
+    if (achadoFormal?.id || !lista.length) return normalized;
+  }
   const nomes = (candidatos.length ? candidatos : lista).slice(0, 12).map((entry) => sanitizeUntrustedBusinessText(entry?.nome, 80)).filter(Boolean);
   throw new WhatsappAiToolError(
     candidatos.length > 1
@@ -897,8 +900,10 @@ function addDaysIso(dateIso, days) {
 function periodOf(time) {
   const hour = Number(String(time || '').split(':')[0]);
   if (!Number.isFinite(hour)) return 'qualquer';
-  // 0h às 5h59 é madrugada: "de manhã" não pode virar meia-noite (o Dino atende 24x7).
-  if (hour < 6) return 'madrugada';
+  const minutes = minutesOf(time);
+  // Horários antes das 07h30 (ex.: 06h00, 06h30, 07h00) são classificados como madrugada/extra
+  // na rotina padrão da barbearia, para não serem oferecidos como primeiras opções diurnas.
+  if (minutes < 7 * 60 + 30) return 'madrugada';
   if (hour < 12) return 'manha';
   if (hour < 18) return 'tarde';
   return 'noite';
@@ -910,7 +915,13 @@ function periodOf(time) {
 const ORDEM_PERIODO = { manha: 0, tarde: 0, noite: 1, madrugada: 2, qualquer: 3 };
 export function priorizarHorarioComercial(slots = []) {
   return [...slots]
-    .map((time, index) => ({ time, index, peso: ORDEM_PERIODO[periodOf(time)] ?? 3 }))
+    .map((time, index) => {
+      const mins = minutesOf(time);
+      const pesoBase = ORDEM_PERIODO[periodOf(time)] ?? 3;
+      const ehPadrao = mins >= 8 * 60 && mins <= 18 * 60 + 30;
+      const peso = ehPadrao ? pesoBase : pesoBase + 2;
+      return { time, index, peso };
+    })
     .sort((a, b) => a.peso - b.peso || a.index - b.index)
     .map((item) => item.time);
 }
@@ -951,11 +962,11 @@ export async function earliestSlots({ fetchDay, fromDate, days = 7, period = 'qu
       .filter((time) => !(offset === 0 && notBefore && String(time) <= notBefore))
       .filter((time) => !(offset === 0 && notAfter && String(time) >= notAfter))
       .filter((time) => wanted === 'qualquer' || periodOf(time) === wanted);
-    if (wanted === 'qualquer') {
-      // Madrugada só entra no dia se não houver horário comercial nem noturno.
+    if (wanted === 'qualquer' || wanted === 'manha') {
+      // Madrugada/cedo (< 07h30) só entra no dia se não houver horário comercial padrão (>= 07h30).
       const comerciais = priorizarHorarioComercial(candidates);
-      const temDiurnoOuNoite = comerciais.some((time) => periodOf(time) !== 'madrugada');
-      candidates = temDiurnoOuNoite ? comerciais.filter((time) => periodOf(time) !== 'madrugada') : comerciais;
+      const temComercialPadrao = comerciais.some((time) => minutesOf(time) >= 7 * 60 + 30);
+      candidates = temComercialPadrao ? comerciais.filter((time) => minutesOf(time) >= 7 * 60 + 30) : comerciais;
     }
     // "lá pelas 16h": os horários mais próximos do pedido, no máximo 3 por dia.
     const target = minutesOf(aroundTime);
@@ -1465,7 +1476,13 @@ async function toolPrepareAppointment(context, args = {}) {
   }
   let customerName = '';
   try {
-    customerName = requireCustomerName(args.customerName, scope.customerName, {
+    customerName = requireCustomerName(
+      args.customerName,
+      scope.customerName,
+      context?.sessionSnapshot?.nome,
+      context?.customerProfile?.nome,
+      context?.customerName,
+      {
       purpose: 'agendamento',
       repeat: { serviceId, professionalId, date, time, ...(Array.isArray(args.extraServiceIds) && args.extraServiceIds.length ? { extraServiceIds: args.extraServiceIds.slice(0, 3) } : {}) },
     });
@@ -2014,7 +2031,7 @@ async function toolPrepareOrder(context, args = {}) {
     shippingMethodId: method.rows[0].id,
     items,
     customer: {
-      nome: requireCustomerName(args.customerName, scope.customerName, { purpose: 'pedido' }),
+      nome: requireCustomerName(args.customerName, scope.customerName, context?.sessionSnapshot?.nome, context?.customerProfile?.nome, context?.customerName, { purpose: 'pedido' }),
       telefone: scope.phone,
     },
     note: `Pedido preparado pelo atendimento WhatsApp${entrega ? ' para entrega' : ' para retirada'}.${semEstoque ? ' Item sob encomenda: prazo de 10 dias.' : ''}`,
@@ -2112,12 +2129,20 @@ async function toolPreparePromotion(context, args = {}) {
 // O cliente (e o modelo) usa o "Código" da confirmação (ex.: 5D0FDE32), não o id interno
 // (age-...). Em 30/10 "pode cancelar esse corte de amanhã" voltou "não encontrei" logo depois
 // de marcar. Aceita id, código ou, se o contato tem um único horário futuro, esse horário.
-export function findOwnAppointment(appointments = [], ref = '', fallbackText = '') {
+export function findOwnAppointment(appointments = [], ref = '', fallbackText = '', options = {}) {
   const lista = (appointments || [])
     .filter((item) => !['cancelado', 'concluido', 'nao_compareceu'].includes(String(item?.status)))
     .sort((a, b) => new Date(a.dataHora).valueOf() - new Date(b.dataHora).valueOf());
   const alvo = String(ref || '').trim();
   const getIsoDate = (item) => item.dataAgenda || (item.dataHora ? localDateIso(new Date(item.dataHora)) : '');
+
+  // 0. Se houver id de agendamento lembrado na sessão e nenhum alvo explícito foi passado, usa o agendamento focal!
+  const lembreteId = options?.lastReminderAppointmentId || (options?.sessionSnapshot?.estado?.ultimoAgendamentoLembradoId);
+  if (lembreteId && !alvo) {
+    const achadoLembrete = lista.find((item) => item.id === lembreteId);
+    if (achadoLembrete) return achadoLembrete;
+  }
+
   const matchPorDataOuDia = (texto) => {
     const t = String(texto || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
     if (!t) return null;
@@ -2156,7 +2181,26 @@ export function findOwnAppointment(appointments = [], ref = '', fallbackText = '
           const iso = getIsoDate(it);
           return iso && new Date(`${iso}T12:00:00Z`).getUTCDay() === dow;
         });
-        if (m.length >= 1) return m[0];
+        if (m.length === 1) return m[0];
+        if (m.length > 1) {
+          // Se houver mais de um no mesmo dia, desempata pelo horário mencionado
+          const horaMatch = t.match(/\b(\d{1,2})\s*[:h]\s*(\d{2})?\b/);
+          if (horaMatch) {
+            const hh = horaMatch[1].padStart(2, '0');
+            const mm = horaMatch[2] ? horaMatch[2].padStart(2, '0') : '00';
+            const targetHora = `${hh}:${mm}`;
+            const mHora = m.filter((it) => (it.horaLocal || (it.dataHora ? localTimeHHMM(new Date(it.dataHora)) : '')) === targetHora);
+            if (mHora.length === 1) return mHora[0];
+          }
+          // Ou pelo profissional mencionado
+          for (const prof of ['dino', 'bruno', 'nati', 'david']) {
+            if (new RegExp(`\\b${prof}\\b`, 'i').test(t)) {
+              const mProf = m.filter((it) => String(it.profissional?.nome || '').toLowerCase().includes(prof));
+              if (mProf.length === 1) return mProf[0];
+            }
+          }
+          return m[0];
+        }
       }
     }
     return null;
@@ -2173,9 +2217,52 @@ export function findOwnAppointment(appointments = [], ref = '', fallbackText = '
     if (lista.length === 1 && /^(sim|confirmo|confirmar|ok)$/i.test(alvo)) return lista[0];
     return null;
   }
+
+  const matchPorHora = (texto) => {
+    const t = String(texto || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+    if (!t) return null;
+    const horaMatch = t.match(/\b(\d{1,2})\s*[:h]\s*(\d{2})?\b/);
+    if (!horaMatch) return null;
+    const hh = horaMatch[1].padStart(2, '0');
+    const mm = horaMatch[2] ? horaMatch[2].padStart(2, '0') : '00';
+    const target = `${hh}:${mm}`;
+    const m = lista.filter((it) => {
+      const hora = it.horaLocal || (it.dataHora ? localTimeHHMM(new Date(it.dataHora)) : '');
+      return hora === target;
+    });
+    if (m.length === 1) return m[0];
+    return null;
+  };
+
+  const matchPorProfissionalOuServico = (texto) => {
+    const t = String(texto || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+    if (!t) return null;
+    for (const prof of ['dino', 'bruno', 'nati', 'david']) {
+      if (new RegExp(`\\b${prof}\\b`, 'i').test(t)) {
+        const m = lista.filter((it) => String(it.profissional?.nome || '').toLowerCase().includes(prof));
+        if (m.length === 1) return m[0];
+      }
+    }
+    return null;
+  };
+
+  // Se o assistente enviou um lembrete com detalhes, tenta casar com o horário do lembrete
+  if (options?.lastAssistantText) {
+    const porHoraAssistente = matchPorHora(options.lastAssistantText);
+    const porProfAssistente = matchPorProfissionalOuServico(options.lastAssistantText);
+    if (porHoraAssistente && porProfAssistente && porHoraAssistente.id === porProfAssistente.id) {
+      return porHoraAssistente;
+    }
+    if (porHoraAssistente) return porHoraAssistente;
+  }
+
   if (fallbackText) {
-    const porTexto = matchPorDataOuDia(fallbackText);
-    if (porTexto) return porTexto;
+    const porData = matchPorDataOuDia(fallbackText);
+    if (porData) return porData;
+    const porHora = matchPorHora(fallbackText);
+    if (porHora) return porHora;
+    const porProf = matchPorProfissionalOuServico(fallbackText);
+    if (porProf) return porProf;
   }
   if (lista.length > 1 && fallbackText) {
     const hojeIso = localDateIso();
@@ -2201,7 +2288,16 @@ async function toolPrepareReschedule(context, args = {}) {
   const scope = contextScope(context);
   const date = normalizeAgendaDate(args.date, localDateIso()) || cleanText(args.date, 10);
   const appointments = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 20, toleranceHours: 6 });
-  const appointment = findOwnAppointment(appointments, cleanText(args.appointmentId, 80), `${context?.customerText || ''} ${context?.recentUserText || ''}`);
+  const appointment = findOwnAppointment(
+    appointments,
+    cleanText(args.appointmentId, 80),
+    `${context?.customerText || ''} ${context?.recentUserText || ''}`,
+    {
+      lastReminderAppointmentId: context?.lastReminderAppointmentId || context?.sessionSnapshot?.estado?.ultimoAgendamentoLembradoId,
+      lastAssistantText: context?.lastAssistantText,
+      sessionSnapshot: context?.sessionSnapshot,
+    }
+  );
   if (!appointment) throw appointmentNotFound(appointments);
   const appointmentId = appointment.id;
   const targetProfId = args.professionalId
@@ -2264,7 +2360,16 @@ async function toolPrepareCancellation(context, args = {}) {
   }
   const scope = contextScope(context);
   const appointments = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 20, toleranceHours: 6 });
-  const appointment = findOwnAppointment(appointments, cleanText(args.appointmentId, 80), context?.customerText || '');
+  const appointment = findOwnAppointment(
+    appointments,
+    cleanText(args.appointmentId, 80),
+    context?.customerText || '',
+    {
+      lastReminderAppointmentId: context?.lastReminderAppointmentId || context?.sessionSnapshot?.estado?.ultimoAgendamentoLembradoId,
+      lastAssistantText: context?.lastAssistantText,
+      sessionSnapshot: context?.sessionSnapshot,
+    }
+  );
   if (!appointment) throw appointmentNotFound(appointments);
   const appointmentId = appointment.id;
   return savePreparedAction(scope, 'cancelamento', { appointmentId }, `Cancelamento de ${appointment.servico.nome} com ${appointment.profissional.nome}, ${appointment.dataAgenda && appointment.horaLocal ? friendlyWhen(appointment.dataAgenda, appointment.horaLocal) : new Intl.DateTimeFormat('pt-BR', { timeZone: AGENDA_TZ, dateStyle: 'short', timeStyle: 'short' }).format(new Date(appointment.dataHora))}.`);
@@ -2752,7 +2857,7 @@ async function toolScheduleReturnReminder(context, args = {}) {
     dataPrevista: dataAlvo,
     dataFormatada: `${dia}/${mes}/${ano}`,
     servico,
-    mensagemHumana: `Perfeito! Deixei agendado: entraremos em contato no dia ${dia}/${mes}/${ano} para lembrar da renovação do seu ${servico} e manter seu corte impecável!`
+    mensagemHumana: `Perfeito! Deixei anotado com carinho: entraremos em contato no dia ${dia}/${mes}/${ano} para lembrar da renovação do seu ${servico} e manter seu corte impecável!`
   };
 }
 
