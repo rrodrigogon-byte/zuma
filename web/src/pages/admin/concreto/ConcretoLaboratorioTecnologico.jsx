@@ -757,7 +757,7 @@ export default function ConcretoLaboratorioTecnologico({ ensaios = [], onAtualiz
                   type="button"
                   style={{ background: '#ea580c', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: 4, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
                   onClick={() => {
-                    const url = `/api/admin/concreto/laboratorio/laudos/${loteLaudoSelecionado}/aceitacao-html?token=${encodeURIComponent(token || '')}`;
+                    const url = `/api/concreto/laudos/${loteLaudoSelecionado}/aceitacao-html`;
                     window.open(url, '_blank');
                   }}
                 >
@@ -776,7 +776,7 @@ export default function ConcretoLaboratorioTecnologico({ ensaios = [], onAtualiz
             <div style={{ flex: 1, overflowY: 'auto', background: '#f8fafc', padding: 10 }}>
               <iframe
                 title="Laudo Oficial NBR 12655"
-                src={`/api/admin/concreto/laboratorio/laudos/${loteLaudoSelecionado}/aceitacao-html?token=${encodeURIComponent(token || '')}`}
+                src={`/api/concreto/laudos/${loteLaudoSelecionado}/aceitacao-html`}
                 style={{ width: '100%', height: '75vh', border: 'none', borderRadius: 6, background: '#fff' }}
               />
             </div>
