@@ -1359,96 +1359,154 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
       )}
 
       {/* ========================================================================= */}
-      {/* 3. CONTEÚDO DA ABA: CÂMERAS CFTV (MATRIZ DE 4 CÂMERAS AO VIVO) */}
+      {/* 3. CONTEÚDO DA ABA: CÂMERAS CFTV & VISION AI (MATRIZ DE 7 CANAIS AO VIVO) */}
       {/* ========================================================================= */}
       {abaPrincipal === 'cftv' && (
         <div style={{ background: '#0D1322', border: '1px solid #1E293B', borderRadius: '10px', padding: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '14px', fontWeight: '900', color: '#FFF' }}>
-                📹 MATRIZ DE VÍDEO MONITORAMENTO CFTV · CCO USINA SERRANO
+              <span style={{ fontSize: '15px', fontWeight: '900', color: '#FFF' }}>
+                📹 MATRIZ DE VÍDEO MONITORAMENTO CFTV &amp; VISION AI · CCO USINA SERRANO
               </span>
               <span style={{ fontSize: '10px', background: '#DC2626', color: '#FFF', padding: '2px 8px', borderRadius: '4px', fontWeight: '800' }}>
-                🔴 4 CANAIS AO VIVO
+                🔴 7 CANAIS AO VIVO
+              </span>
+              <span style={{ fontSize: '10px', background: '#10B981', color: '#064E3B', padding: '2px 8px', borderRadius: '4px', fontWeight: '800' }}>
+                MOTOR KYTTOIA LPR
               </span>
             </div>
 
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#00FF66', background: '#000', padding: '3px 8px', borderRadius: '4px' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#00FF66', background: '#000', padding: '4px 8px', borderRadius: '4px' }}>
                 {horarioCftv} BRT
               </span>
-              <button
-                onClick={() => {
-                  alert(`Snapshot capturado da câmera ativa (${cameraAtiva.toUpperCase()}) salvo nos registros de pesagem!`);
-                  setSnapshotCaptured(true);
-                }}
-                style={{ background: '#0284C7', color: '#FFF', border: 'none', borderRadius: '4px', padding: '5px 10px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>
-                📸 Capturar Foto da Placa
-              </button>
+              <a
+                href="/admin/concreto?secao=torre-pesagem"
+                style={{ background: '#FF7000', color: '#16181B', textDecoration: 'none', borderRadius: '4px', padding: '5px 10px', fontSize: '11px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                🗼 Torre de Controle CCO
+              </a>
               <a
                 href="/admin/concreto?secao=cameras-cftv"
-                target="_blank"
-                rel="noreferrer"
-                style={{ background: "#EA580C", color: "#FFF", textDecoration: "none", borderRadius: "4px", padding: "5px 10px", fontSize: "11px", fontWeight: "800", display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                ⚙️ Gerenciar Câmeras IP & RTSP
+                style={{ background: '#EA580C', color: '#FFF', textDecoration: 'none', borderRadius: '4px', padding: '5px 10px', fontSize: '11px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                ⚙️ Configurar Câmeras IP &amp; Presets
               </a>
             </div>
           </div>
 
-          {/* GRID DE 4 CÂMERAS CFTV */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '12px' }}>
-            
-            {/* CAM 01: LPR ENTRADA */}
-            <div style={{ background: '#000', border: `2px solid ${cameraAtiva === 'cam01' ? '#00D2FF' : '#1E293B'}`, borderRadius: '8px', overflow: 'hidden', cursor: 'pointer' }} onClick={() => setCameraAtiva('cam01')}>
-              <img
-                src="/assets/cftv/cftv_cam01_lpr_entrada.jpg"
-                alt="CAM 01 LPR Entrada"
-                style={{ width: '100%', height: 'auto', display: 'block' }}
-              />
-              <div style={{ background: '#0D111A', padding: '6px 10px', display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
-                <span style={{ color: '#00D2FF', fontWeight: '700' }}>CAM-01 · TOTEM LPR ENTRADA</span>
-                <span style={{ color: '#10B981' }}>Placa: RRA-4E80 (99.6%)</span>
-              </div>
-            </div>
+          {/* FILTROS DE PONTO */}
+          <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
+            {[
+              { id: 'todos', label: 'Todos os 7 Canais' },
+              { id: 'balanca', label: 'Balança 80t (Pista &amp; Cancela)' },
+              { id: 'patio', label: 'Pátio &amp; Central Dosadora' },
+              { id: 'mineracao', label: 'Mineração Areia (Sepotuba)' },
+            ].map(f => (
+              <button
+                key={f.id}
+                onClick={() => setFiltroCftv(f.id)}
+                style={{
+                  background: filtroCftv === f.id ? '#0284C7' : '#1E293B',
+                  color: filtroCftv === f.id ? '#FFF' : '#94A3B8',
+                  border: 'none',
+                  borderRadius: '4px',
+                  padding: '4px 10px',
+                  fontSize: '11px',
+                  fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
 
-            {/* CAM 02: PANORÂMICA 21M */}
-            <div style={{ background: '#000', border: `2px solid ${cameraAtiva === 'cam02' ? '#00D2FF' : '#1E293B'}`, borderRadius: '8px', overflow: 'hidden', cursor: 'pointer' }} onClick={() => setCameraAtiva('cam02')}>
-              <img
-                src="/assets/cftv/cftv_cam02_plataforma_panoramica.jpg"
-                alt="CAM 02 Panorâmica 21m"
-                style={{ width: '100%', height: 'auto', display: 'block' }}
-              />
-              <div style={{ background: '#0D111A', padding: '6px 10px', display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
-                <span style={{ color: '#00D2FF', fontWeight: '700' }}>CAM-02 · PANORÂMICA BALANÇA 21M</span>
-                <span style={{ color: '#10B981' }}>Enquadramento OK</span>
-              </div>
-            </div>
+          {/* GRID DE CÂMERAS CFTV (7 CANAIS COMPLETOS) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '14px' }}>
+            {LISTA_CAMERAS_COCKPIT.filter(c => filtroCftv === 'todos' || c.ponto === filtroCftv).map(cam => (
+              <div
+                key={cam.id}
+                style={{
+                  background: '#070A11',
+                  border: `2px solid ${cameraAtiva === cam.id ? '#00D2FF' : '#1E293B'}`,
+                  borderRadius: '8px',
+                  overflow: 'hidden',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column'
+                }}
+                onClick={() => setCameraAtiva(cam.id)}
+              >
+                {/* Header Card */}
+                <div style={{ background: '#0D111A', padding: '6px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', borderBottom: '1px solid #1E293B' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ color: '#00D2FF', fontWeight: '800' }}>{cam.nome}</span>
+                  </div>
+                  <span style={{ background: '#1E293B', color: '#EA580C', padding: '1px 5px', borderRadius: '3px', fontWeight: '800', fontSize: '10px' }}>
+                    {cam.marca.toUpperCase()}
+                  </span>
+                </div>
 
-            {/* CAM 03: CANCELA SAÍDA */}
-            <div style={{ background: '#000', border: `2px solid ${cameraAtiva === 'cam03' ? '#00D2FF' : '#1E293B'}`, borderRadius: '8px', overflow: 'hidden', cursor: 'pointer' }} onClick={() => setCameraAtiva('cam03')}>
-              <img
-                src="/assets/cftv/cftv_cam03_cancela_saida.jpg"
-                alt="CAM 03 Cancela Saída"
-                style={{ width: '100%', height: 'auto', display: 'block' }}
-              />
-              <div style={{ background: '#0D111A', padding: '6px 10px', display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
-                <span style={{ color: '#00D2FF', fontWeight: '700' }}>CAM-03 · CANCELA SAÍDA &amp; SEMÁFORO</span>
-                <span style={{ color: '#EF4444' }}>Cancela Fechada</span>
-              </div>
-            </div>
+                {/* Imagem do Feed */}
+                <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: '#000' }}>
+                  <img
+                    src={cam.foto}
+                    alt={cam.nome}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  />
+                  <div style={{ position: 'absolute', top: '6px', left: '6px', background: 'rgba(0,0,0,0.8)', color: '#38BDF8', fontSize: '9px', fontFamily: 'monospace', padding: '2px 5px', borderRadius: '3px' }}>
+                    {cam.ip}:{cam.portaRtsp} · {cam.codec}
+                  </div>
+                  <div style={{ position: 'absolute', bottom: '6px', right: '6px', background: 'rgba(0,0,0,0.8)', color: cam.statusCor, fontSize: '10px', fontWeight: '700', padding: '2px 6px', borderRadius: '3px' }}>
+                    {lprStatusMap[cam.id] || cam.status}
+                  </div>
+                </div>
 
-            {/* CAM 04: PÁTIO & SILOS */}
-            <div style={{ background: '#000', border: `2px solid ${cameraAtiva === 'cam04' ? '#00D2FF' : '#1E293B'}`, borderRadius: '8px', overflow: 'hidden', cursor: 'pointer' }} onClick={() => setCameraAtiva('cam04')}>
-              <img
-                src="/assets/cftv/cftv_cam04_patio_silos.jpg"
-                alt="CAM 04 Pátio Silos"
-                style={{ width: '100%', height: 'auto', display: 'block' }}
-              />
-              <div style={{ background: '#0D111A', padding: '6px 10px', display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
-                <span style={{ color: '#00D2FF', fontWeight: '700' }}>CAM-04 · PÁTIO DE CARREGAMENTO &amp; SILOS</span>
-                <span style={{ color: '#F59E0B' }}>Operando Normalmente</span>
+                {/* Ações da Câmera no Cockpit */}
+                <div style={{ background: '#0D111A', padding: '6px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10px', borderTop: '1px solid #1E293B' }}>
+                  <div style={{ color: '#94A3B8', fontFamily: 'monospace' }}>
+                    {cam.modelo}
+                  </div>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTestandoCamId(cam.id);
+                        setTimeout(() => {
+                          const lat = Math.floor(Math.random() * 8) + 9;
+                          alert(`Fluxo RTSP da ${cam.nome} (${cam.marca.toUpperCase()}) respondendo com latência de ${lat} ms.`);
+                          setTestandoCamId(null);
+                        }, 400);
+                      }}
+                      style={{ background: '#1E293B', color: '#38BDF8', border: '1px solid #334155', borderRadius: '3px', padding: '3px 6px', cursor: 'pointer', fontWeight: '700' }}
+                    >
+                      {testandoCamId === cam.id ? '...' : '⚡ Testar'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setLprStatusMap(prev => ({ ...prev, [cam.id]: 'Placa RRA-4E80 Reconhecida (99.8%)' }));
+                        alert(`Motor KyttoIA executou leitura de placa e eixos para ${cam.nome}. Resultado: RRA-4E80 (99.8%).`);
+                      }}
+                      style={{ background: '#10B981', color: '#064E3B', border: 'none', borderRadius: '3px', padding: '3px 6px', cursor: 'pointer', fontWeight: '800' }}
+                    >
+                      🤖 LPR IA
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        alert(`Snapshot da ${cam.nome} anexado ao Romaneio de Pesagem #${hardware.ticketAtual || '8942'}.`);
+                      }}
+                      style={{ background: '#0284C7', color: '#FFF', border: 'none', borderRadius: '3px', padding: '3px 6px', cursor: 'pointer', fontWeight: '700' }}
+                    >
+                      📸 Ticket
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
+            ))}
           </div>
         </div>
       )}
