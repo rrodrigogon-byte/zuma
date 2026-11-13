@@ -40,8 +40,9 @@ export default function ConcretoLaboratorioTecnologico({ ensaios = [], onAtualiz
     try {
       setCarregandoEstat(true);
       const res = await api.get('/api/admin/concreto/laboratorio/estatistica-nbr12655');
-      if (res.data?.ok) {
-        setDadosEstatistica(res.data);
+      const data = res?.data || res;
+      if (data?.ok) {
+        setDadosEstatistica(data);
       }
     } catch (err) {
       console.error('Erro ao carregar estatística NBR 12655:', err);
@@ -53,8 +54,9 @@ export default function ConcretoLaboratorioTecnologico({ ensaios = [], onAtualiz
   async function executarOtimizacaoSustentavel(params) {
     try {
       const res = await api.post('/api/admin/concreto/tracos/otimizar-sustentavel', params);
-      if (res.data?.ok) {
-        setResultadoSustentavel(res.data);
+      const data = res?.data || res;
+      if (data?.ok) {
+        setResultadoSustentavel(data);
       }
     } catch (err) {
       console.error('Erro ao otimizar traço sustentável:', err);
@@ -64,8 +66,9 @@ export default function ConcretoLaboratorioTecnologico({ ensaios = [], onAtualiz
   async function executarCalculoMaturidade(params) {
     try {
       const res = await api.post('/api/admin/concreto/laboratorio/maturidade-curva', params);
-      if (res.data?.ok) {
-        setResultadoMaturidade(res.data);
+      const data = res?.data || res;
+      if (data?.ok) {
+        setResultadoMaturidade(data);
       }
     } catch (err) {
       console.error('Erro ao calcular maturidade ASTM C1074:', err);
@@ -757,7 +760,7 @@ export default function ConcretoLaboratorioTecnologico({ ensaios = [], onAtualiz
                   type="button"
                   style={{ background: '#ea580c', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: 4, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
                   onClick={() => {
-                    const url = `/api/admin/concreto/laboratorio/laudos/${loteLaudoSelecionado}/aceitacao-html?token=${encodeURIComponent(token || '')}`;
+                    const url = `/api/concreto/laudos/${loteLaudoSelecionado}/aceitacao-html`;
                     window.open(url, '_blank');
                   }}
                 >
@@ -776,7 +779,7 @@ export default function ConcretoLaboratorioTecnologico({ ensaios = [], onAtualiz
             <div style={{ flex: 1, overflowY: 'auto', background: '#f8fafc', padding: 10 }}>
               <iframe
                 title="Laudo Oficial NBR 12655"
-                src={`/api/admin/concreto/laboratorio/laudos/${loteLaudoSelecionado}/aceitacao-html?token=${encodeURIComponent(token || '')}`}
+                src={`/api/concreto/laudos/${loteLaudoSelecionado}/aceitacao-html`}
                 style={{ width: '100%', height: '75vh', border: 'none', borderRadius: 6, background: '#fff' }}
               />
             </div>

@@ -934,17 +934,27 @@ export default function SorteiosCampanhas({ embed = false }) {
                                 {(g.hashAuditoria || '').slice(0, 16)}...
                               </td>
                               <td>
-                                <button
-                                  type="button"
-                                  className="btn-outline-ouro"
-                                  style={{ fontSize: '11px', padding: '4px 8px' }}
-                                  onClick={async () => {
-                                    setCampanhaSelecionada(c);
-                                    handleNotificarGanhador();
-                                  }}
-                                >
-                                  <Send size={12} /> WhatsApp
-                                </button>
+                                <div style={{ display: 'flex', gap: '6px' }}>
+                                  <button
+                                    type="button"
+                                    className="btn-outline-ouro"
+                                    style={{ fontSize: '11px', padding: '4px 8px' }}
+                                    onClick={() => setCertificadoGanhador({ ...g, campanha: c })}
+                                  >
+                                    📜 Certificado A4
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn-outline-ouro"
+                                    style={{ fontSize: '11px', padding: '4px 8px' }}
+                                    onClick={async () => {
+                                      setCampanhaSelecionada(c);
+                                      handleNotificarGanhador();
+                                    }}
+                                  >
+                                    <Send size={12} /> WhatsApp
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))

@@ -2272,6 +2272,40 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
     }
     return varejoRouter(req, res, next);
   });
+  // [kytto-concreto] Rotas públicas de impressão e visualização de documentos oficiais
+  app.get("/api/concreto/laudos/:id/aceitacao-html", async (req, res) => {
+    try {
+      const { gerarHtmlLaudoAceitacaoEstatistica } = await import("./modules/concreto/servico.js");
+      const html = await gerarHtmlLaudoAceitacaoEstatistica(req.params.id);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.send(html);
+    } catch (e) {
+      return res.status(400).send(`<h3>Erro ao gerar Laudo NBR 12655: ${e.message}</h3>`);
+    }
+  });
+
+  app.get("/api/concreto/cargas/:id/romaneio-html", async (req, res) => {
+    try {
+      const { gerarHtmlRomaneioOficial } = await import("./modules/concreto/servico.js");
+      const html = await gerarHtmlRomaneioOficial(req.params.id);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.send(html);
+    } catch (e) {
+      return res.status(400).send(`<h3>Erro ao gerar Romaneio NBR 7212: ${e.message}</h3>`);
+    }
+  });
+
+  app.get("/api/concreto/balanca/tickets/:id/html", async (req, res) => {
+    try {
+      const { gerarHtmlTicketBalanca } = await import("./modules/concreto/servico.js");
+      const html = await gerarHtmlTicketBalanca(req.params.id);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.send(html);
+    } catch (e) {
+      return res.status(400).send(`<h3>Erro ao gerar Ticket Balança: ${e.message}</h3>`);
+    }
+  });
+
   // [kytto-concreto] Módulo de Concreto Usinado, Cargas, Central e Usina
   const concretoRouter = criarRotasConcreto();
   app.use('/api/admin/concreto', auth, requireStaff, concretoRouter);
@@ -2572,6 +2606,9 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
         PALATARE_KDS_FILA, 
         PALATARE_DELIVERY_ZONAS, 
         PALATARE_METRICAS_BI,
+        PALATARE_ENGENHARIA_CMV,
+        PALATARE_PIZZA_CLUB,
+        PALATARE_TELEMETRIA_FORNO,
         PALATARE_EMPRESA_ID: empId
       } = await import('./palatare-pizzaria-seed.js');
       
@@ -2582,6 +2619,9 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
       const kds = data.palatare_kds || PALATARE_KDS_FILA;
       const delivery = data.palatare_delivery || PALATARE_DELIVERY_ZONAS;
       const metricas = data.palatare_metricas || PALATARE_METRICAS_BI;
+      const engenharia = data.palatare_engenharia || PALATARE_ENGENHARIA_CMV;
+      const pizzaClub = data.palatare_pizza_club || PALATARE_PIZZA_CLUB;
+      const telemetriaForno = data.palatare_forno || PALATARE_TELEMETRIA_FORNO;
 
       return res.json({ 
         ok: true, 
@@ -2591,7 +2631,10 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
         rodizio, 
         kds, 
         delivery, 
-        metricas 
+        metricas,
+        engenharia,
+        pizzaClub,
+        telemetriaForno
       });
     } catch (e) {
       return res.status(500).json({ error: e.message });
@@ -2655,6 +2698,190 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
       return res.json({ ok: true, mesa });
     } catch (e) {
       return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Abrir nova mesa de rodízio
+  app.post('/api/admin/palatare/rodizio/abrir-mesa', auth, requireStaff, async (req, res) => {
+    try {
+      const data = db();
+      data.palatare_rodizio ||= { mesasEmRodizioHoje: [] };
+      data.palatare_rodizio.mesasEmRodizioHoje ||= [];
+      const mesaNumero = parseInt(req.body?.mesaNumero) || 1;
+      const adultos = parseInt(req.body?.adultos) || 2;
+      const criancas = parseInt(req.body?.criancas) || 0;
+      
+      const jaExiste = data.palatare_rodizio.mesasEmRodizioHoje.find(m => Number(m.mesaNumero) === mesaNumero);
+      if (jaExiste) {
+        jaExiste.statusMesa = 'servindo';
+        jaExiste.adultos = adultos;
+        jaExiste.criancas = criancas;
+        jaExiste.subtotalConsumo = (adultos * 59.90) + (criancas * 29.90);
+        save();
+        return res.json({ ok: true, mesa: jaExiste, reaberta: true });
+      }
+
+      const novaMesa = {
+        mesaNumero,
+        horarioInicio: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        adultos,
+        criancas,
+        fatiasServidas: 0,
+        statusMesa: 'servindo',
+        subtotalConsumo: (adultos * 59.90) + (criancas * 29.90),
+        saboresMaisAclamados: []
+      };
+
+      data.palatare_rodizio.mesasEmRodizioHoje.push(novaMesa);
+      save();
+      return res.status(201).json({ ok: true, mesa: novaMesa });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── ROTAS PÚBLICAS DO CARDÁPIO & AUTOATENDIMENTO QR DE MESA (PALATARE & KYTTO) ──
+  const resolverMesaPublica = async (token) => {
+    const limpo = String(token || '').trim().toLowerCase();
+    const numeroMesa = parseInt(limpo.replace(/\D/g, '')) || 4;
+    const { PALATARE_CARDAPIO_INICIAL } = await import('./palatare-pizzaria-seed.js');
+    const cardapioMapeado = PALATARE_CARDAPIO_INICIAL.map((p, idx) => ({
+      id: `prod-palatare-${idx + 1}`,
+      nome: p.nome,
+      marca: 'Palatare',
+      tipo: 'artesanal',
+      cat: p.categoria || 'Pizzas Especiais',
+      preco: Number(p.preco || 0),
+      unidade: p.unidade || 'un',
+      setor: p.setor || 'cozinha',
+      emoji: p.categoria?.includes('Doces') ? '🍓' : p.categoria?.includes('Bebidas') ? '🍷' : '🍕',
+      descricao: p.descricao || '',
+      gruposModificadores: [
+        {
+          id: 'grp-borda',
+          nome: 'Borda Recheada Especial',
+          obrigatorio: false,
+          maximo: 1,
+          opcoes: [
+            { id: 'borda-catupiry', nome: 'Borda Catupiry Legítimo', precoAdicional: 14.00 },
+            { id: 'borda-cheddar', nome: 'Borda Cheddar Cremoso', precoAdicional: 14.00 },
+            { id: 'borda-chocolate', nome: 'Borda Chocolate ao Leite', precoAdicional: 16.00 }
+          ]
+        }
+      ]
+    }));
+
+    return {
+      mesa: { numero: numeroMesa, nome: `Mesa ${String(numeroMesa).padStart(2, '0')} · Salão Gourmet` },
+      empresa: {
+        nome: 'Palatare Pizzaria & Restaurante',
+        razaoSocial: 'Palatare Pizzaria & Restaurante LTDA',
+        grupo: 'Grupo Palatare',
+        cidade: 'Tangará da Serra - MT',
+        telefone: '(65) 3326-1000'
+      },
+      configuracao: { confirmarGarcom: false, minutosSessao: 120, limiteItensPorPedido: 20 },
+      cardapio: cardapioMapeado
+    };
+  };
+
+  app.get('/api/public/mesa/:token', async (req, res) => {
+    try {
+      const contexto = await resolverMesaPublica(req.params.token);
+      res.set('Cache-Control', 'no-store').json({ ok: true, ...contexto });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/public/mesa/:token/sessao', async (req, res) => {
+    try {
+      const contexto = await resolverMesaPublica(req.params.token);
+      const tokenSessao = `sessao-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      res.set('Cache-Control', 'no-store').status(201).json({
+        ok: true,
+        sessao: { token: tokenSessao, expiraEm: new Date(Date.now() + 7200000).toISOString() },
+        ...contexto
+      });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/public/mesa/:token/pedidos', async (req, res) => {
+    try {
+      const contexto = await resolverMesaPublica(req.params.token);
+      const itensRecebidos = Array.isArray(req.body?.itens) ? req.body.itens : [];
+      if (!itensRecebidos.length) return res.status(400).json({ erro: 'Nenhum item selecionado no pedido.' });
+
+      const data = db();
+      data.palatare_kds ||= [];
+      
+      const itensMapeados = itensRecebidos.map(it => {
+        const prod = contexto.cardapio.find(p => p.id === it.produtoId) || {};
+        return {
+          nome: prod.nome || 'Pizza Personalizada Palatare',
+          qtd: it.qtd || 1,
+          preco: prod.preco || 79.00,
+          obs: it.obs || '',
+          tamanho: 'Grande (8 Fatias)',
+          sabores: [{ nome: prod.nome || 'Pizza Especial', obs: it.obs || '' }]
+        };
+      });
+
+      const totalCalculado = itensMapeados.reduce((s, it) => s + (it.preco * it.qtd), 0);
+      const pedidoId = `kds-qr-${Date.now().toString().slice(-4)}`;
+      const comandaNum = `CMD-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      const novoPedidoKds = {
+        id: pedidoId,
+        comanda: comandaNum,
+        origem: `Mesa ${String(contexto.mesa.numero).padStart(2, '0')} (Autoatendimento QR Code)`,
+        tipo: 'salao',
+        cliente: `Cliente Mesa ${contexto.mesa.numero}`,
+        horarioRecebido: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        tempoDecorridoMinutos: 0,
+        tempoEstimadoMinutos: 8,
+        status: 'na_bancada',
+        praca: 'Bancada do Pizzaiolo',
+        itens: itensMapeados,
+        total: totalCalculado,
+        criadoEm: new Date().toISOString()
+      };
+
+      data.palatare_kds.unshift(novoPedidoKds);
+      save();
+
+      return res.status(201).json({
+        ok: true,
+        pedidoId,
+        comandaId: comandaNum,
+        status: 'novo',
+        aguardandoConfirmacao: false,
+        total: totalCalculado
+      });
+    } catch (e) {
+      return res.status(500).json({ erro: e.message });
+    }
+  });
+
+  app.post('/api/public/mesa/:token/chamar-garcom', async (req, res) => {
+    try {
+      const contexto = await resolverMesaPublica(req.params.token);
+      const data = db();
+      data.palatare_chamados ||= [];
+      const chamado = {
+        id: `ch-${Date.now()}`,
+        mesaNumero: contexto.mesa.numero,
+        tipo: req.body?.tipo || 'garcom',
+        mensagem: req.body?.mensagem || 'Cliente solicitou atendimento na mesa',
+        criadoEm: new Date().toISOString()
+      };
+      data.palatare_chamados.unshift(chamado);
+      save();
+      return res.status(201).json({ ok: true, chamadoId: chamado.id, mensagem: `Garçom notificado para a Mesa ${contexto.mesa.numero}!` });
+    } catch (e) {
+      return res.status(500).json({ erro: e.message });
     }
   });
 

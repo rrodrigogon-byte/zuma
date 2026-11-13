@@ -33,20 +33,25 @@ import {
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { HOLDING_PALATARE_EMPRESA_ID, SERRANO_CONCRETO_EMPRESA_ID } from '../../lib/palatare-constants';
 
 const TABS = [
   { id: 'montador', label: 'Montador de Pizzas', icon: Pizza, badge: 'Multi-Sabores' },
   { id: 'rodizio', label: 'Rodízio Inteligente', icon: Utensils, badge: 'Ter, Qua, Sex' },
+  { id: 'engenharia', label: 'Engenharia & CMV', icon: DollarSign, badge: 'Matriz BCG +100%' },
+  { id: 'clube', label: 'Pizza Club (Assinaturas)', icon: Award, badge: 'MRR Recorrente' },
+  { id: 'autoatendimento', label: 'Autoatendimento QR Mesa', icon: Sparkles, badge: 'Upsell KyttoIA' },
+  { id: 'forno', label: 'Telemetria Forno 400°C', icon: Flame, badge: 'Eficiência Térmica' },
   { id: 'kds', label: 'KDS Forno a Lenha', icon: ChefHat, badge: '400°C Ao Vivo' },
   { id: 'delivery', label: 'Delivery Tangará', icon: Truck, badge: 'Zonas & Motoboy' },
   { id: 'crm', label: 'Clientes 360° & CRM', icon: Users, badge: 'RFV & Paladar' },
   { id: 'bi', label: 'Inteligência de Vendas', icon: TrendingUp, badge: 'Curva ABC' },
-  { id: 'grupo', label: 'Grupo Serrano & Palatare', icon: Building2, badge: 'Holding' },
+  { id: 'grupo', label: 'Holding Grupo Palatare', icon: Building2, badge: 'Holding' },
 ];
 
 export default function PalatarePizzariaSuite() {
   const navigate = useNavigate();
-  const { user, empresaAtiva } = useAuth();
+  const { user, empresaAtiva, trocarEmpresa } = useAuth();
   
   // Obter tab inicial da URL
   const queryParams = new URLSearchParams(window.location.search);
@@ -82,6 +87,27 @@ export default function PalatarePizzariaSuite() {
   const [filtroBairro, setFiltroBairro] = useState('todos');
   const [clienteModalWhats, setClienteModalWhats] = useState(null);
   const [mensagemWhatsEditada, setMensagemWhatsEditada] = useState('');
+
+  // Estados dos Novos Módulos de Expansão (+100%)
+  const [gramaturaQueijoSimulador, setGramaturaQueijoSimulador] = useState(280);
+  const [mesaQrSimulador, setMesaQrSimulador] = useState('4');
+  const [itensQrMesa, setItensQrMesa] = useState(['Pizza de Picanha Especial (Grande 8 Fatias)']);
+  const [upsellQrAdicionado, setUpsellQrAdicionado] = useState(false);
+  const [pedidoQrEnviado, setPedidoQrEnviado] = useState(false);
+  const [modalDisplayMesa, setModalDisplayMesa] = useState(null);
+  const [modalComandaMesaRodizio, setModalComandaMesaRodizio] = useState(null);
+  const [modalComandaMontador, setModalComandaMontador] = useState(false);
+  const [modalAbrirMesaRodizio, setModalAbrirMesaRodizio] = useState(false);
+  const [novaMesaRodizioNum, setNovaMesaRodizioNum] = useState('5');
+  const [novaMesaAdultos, setNovaMesaAdultos] = useState(2);
+  const [novaMesaCriancas, setNovaMesaCriancas] = useState(0);
+  const [modalNovoAssinante, setModalNovoAssinante] = useState(false);
+  const [novoAssinanteNome, setNovoAssinanteNome] = useState('');
+  const [novoAssinanteTelefone, setNovoAssinanteTelefone] = useState('');
+  const [novoAssinantePlano, setNovoAssinantePlano] = useState('Plano Famiglia');
+  const [modalConfigDelivery, setModalConfigDelivery] = useState(null);
+  const [taxaDeliveryEditada, setTaxaDeliveryEditada] = useState(12);
+  const [tempoDeliveryEditado, setTempoDeliveryEditado] = useState('35-45 min');
 
   // Carregar dados da suíte da Palatare
   const carregarDados = async () => {
@@ -1019,6 +1045,29 @@ export default function PalatarePizzariaSuite() {
                 Lançar Fornada no KDS
               </button>
 
+              <button
+                type="button"
+                onClick={() => setModalComandaMontador(true)}
+                style={{
+                  width: '100%',
+                  marginTop: 10,
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  color: '#FFF',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  padding: '10px 16px',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6
+                }}
+              >
+                🧾 Visualizar Comanda de Produção (80mm)
+              </button>
+
             </div>
 
           </div>
@@ -1074,14 +1123,21 @@ export default function PalatarePizzariaSuite() {
 
           {/* MESAS ATIVAS NO RODÍZIO DE HOJE */}
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
               <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#FFF' }}>
                 Mesas Ativas no Salão ({dadosSuite?.rodizio?.mesasEmRodizioHoje?.length || 4} mesas)
               </h3>
-              <div style={{ display: 'flex', gap: 12, fontSize: 12 }}>
+              <div style={{ display: 'flex', gap: 12, fontSize: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 8, borderRadius: 4, background: '#10B981' }} /> 🟢 Servindo Fatias</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 8, borderRadius: 4, background: '#F59E0B' }} /> 🟡 Pausa / Conversando</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 8, borderRadius: 4, background: '#EF4444' }} /> 🔴 Conta Pedida</span>
+                <button
+                  type="button"
+                  onClick={() => setModalAbrirMesaRodizio(true)}
+                  style={{ background: '#FF6B2C', color: '#FFF', border: 'none', padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 800, cursor: 'pointer', boxShadow: '0 2px 8px rgba(255, 107, 44, 0.4)' }}
+                >
+                  + Abrir Mesa no Rodízio
+                </button>
               </div>
             </div>
 
@@ -1211,7 +1267,7 @@ export default function PalatarePizzariaSuite() {
 
                       <button
                         type="button"
-                        onClick={() => alert(`Pré-conta Mesa ${mesa.mesaNumero}:\nSubtotal: R$ ${mesa.subtotalConsumo?.toFixed(2)}\nTaxa de Serviço 10% (opcional): R$ ${(mesa.subtotalConsumo * 0.1).toFixed(2)}\nTotal Final: R$ ${(mesa.subtotalConsumo * 1.1).toFixed(2)}\n\nCupom pronto para impressão 80mm!`)}
+                        onClick={() => setModalComandaMesaRodizio(mesa)}
                         style={{
                           background: '#10B981',
                           color: '#064E3B',
@@ -1223,7 +1279,7 @@ export default function PalatarePizzariaSuite() {
                           cursor: 'pointer'
                         }}
                       >
-                        Pré-Conta
+                        🧾 Fechar Conta (80mm)
                       </button>
                     </div>
 
@@ -1515,7 +1571,11 @@ export default function PalatarePizzariaSuite() {
 
                 <button
                   type="button"
-                  onClick={() => alert(`Zona ${zona.bairro} configurada.\nTaxa: R$ ${zona.taxa.toFixed(2)}\nTempo estimado: ${zona.tempoEstimadoMinutos}\nStatus: Ativo no WhatsApp e Cardápio Digital.`)}
+                  onClick={() => {
+                    setModalConfigDelivery(zona);
+                    setTaxaDeliveryEditada(zona.taxa);
+                    setTempoDeliveryEditado(zona.tempoEstimadoMinutos);
+                  }}
                   style={{
                     background: 'rgba(255,255,255,0.06)',
                     color: '#FFF',
@@ -1533,6 +1593,679 @@ export default function PalatarePizzariaSuite() {
             ))}
           </div>
 
+          {/* GESTÃO DE MOTOBOYS & ROTEIRIZAÇÃO EM TEMPO REAL */}
+          <div style={{ background: '#1A1210', border: '1px solid rgba(255, 107, 44, 0.3)', borderRadius: 14, padding: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 900, color: '#FFF' }}>
+                  🛵 Frota de Motoboys em Tempo Real · Tangará da Serra
+                </h3>
+                <span style={{ fontSize: 12, color: '#C8B6A6' }}>
+                  Telemetria de entregas com agrupamento inteligente por proximidade de rota (Batch Delivery)
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => alert('Rotas otimizadas com sucesso! Pedidos do Jardim Europa e Tarumã agrupados na mesma viagem do motoboy.')}
+                style={{ background: '#FF6B2C', color: '#FFF', border: 'none', padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}
+              >
+                🚀 Otimizar Roteirização Agrupada
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+              {[
+                { nome: 'Cleber Santos', moto: 'Honda CG 160 Fan · QBD-8902', status: 'Em rota (Jardim Europa)', cor: '#10B981', carga: '2 Grandes + 1 Refri', retorno: '12 min', fone: '(65) 99981-3344' },
+                { nome: 'Rafael Nogueira', moto: 'Yamaha Fazer 250 · RKT-3310', status: 'Na base (Aguardando Fornada)', cor: '#F59E0B', carga: '0 pedidos no baú', retorno: 'Imediato', fone: '(65) 99922-8811' },
+                { nome: 'Marcos Vinícius', moto: 'Honda Titan 160 · NJW-7140', status: 'Retornando da Vila Alta', cor: '#3B82F6', carga: 'Baú vazio', retorno: '4 min', fone: '(65) 99877-6622' }
+              ].map((m, idx) => (
+                <div key={idx} style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <strong style={{ color: '#FFF', fontSize: 14 }}>{m.nome}</strong>
+                    <span style={{ fontSize: 10, fontWeight: 800, color: m.cor, background: `${m.cor}22`, border: `1px solid ${m.cor}`, padding: '2px 8px', borderRadius: 6 }}>
+                      {m.status}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#A8998C', marginTop: 4 }}>🏍️ {m.moto} · 📞 {m.fone}</div>
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                    <span style={{ color: '#C8B6A6' }}>📦 {m.carga}</span>
+                    <span style={{ color: '#34D399', fontWeight: 700 }}>⏱️ Volta: {m.retorno}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* ABA: ENGENHARIA DE CARDÁPIO & GESTÃO DE CMV (+100% EFICIÊNCIA) */}
+      {/* ------------------------------------------------------------- */}
+      {tabAtiva === 'engenharia' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%)',
+            border: '1px solid rgba(16, 185, 129, 0.35)',
+            borderRadius: 16,
+            padding: 24,
+            boxShadow: '0 8px 30px rgba(0,0,0,0.4)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+              <div>
+                <span style={{ fontSize: 11, fontWeight: 800, color: '#34D399', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  CONTROLE CIENTÍFICO DE CUSTOS &amp; RENTABILIDADE
+                </span>
+                <h2 style={{ margin: '4px 0 0', fontSize: 24, fontWeight: 900, color: '#FFF' }}>
+                  Engenharia de Cardápio &amp; Gestão de CMV
+                </h2>
+                <p style={{ margin: '6px 0 0', fontSize: 13, color: '#94A3B8', maxWidth: 740, lineHeight: 1.5 }}>
+                  Classificação pela Matriz BCG e controle rigoroso de gramatura de queijo e insumos nobres. A padronização da Ficha Técnica recupera até <b>R$ 7.200,00 por mês</b> em desperdício invisível de muçarela.
+                </p>
+              </div>
+              <span style={{ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid #10B981', color: '#34D399', padding: '6px 14px', borderRadius: 8, fontWeight: 800, fontSize: 12 }}>
+                Meta de CMV: 26,0% (Redução de 8,2 p.p.)
+              </span>
+            </div>
+
+            {/* 4 Cards de Métricas de CMV */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginTop: 20 }}>
+              <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 11, color: '#94A3B8', fontWeight: 700 }}>CMV GERAL ATUAL</div>
+                <div style={{ fontSize: 26, fontWeight: 900, color: '#F87171', margin: '4px 0' }}>34,2%</div>
+                <div style={{ fontSize: 11, color: '#94A3B8' }}>Sem balança de bancada</div>
+              </div>
+
+              <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 11, color: '#34D399', fontWeight: 700 }}>CMV META CALIBRADA</div>
+                <div style={{ fontSize: 26, fontWeight: 900, color: '#34D399', margin: '4px 0' }}>26,0%</div>
+                <div style={{ fontSize: 11, color: '#34D399' }}>-8,2 p.p. de economia pura</div>
+              </div>
+
+              <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 11, color: '#FBBF24', fontWeight: 700 }}>ECONOMIA MENSAL QUEIJO</div>
+                <div style={{ fontSize: 26, fontWeight: 900, color: '#FBBF24', margin: '4px 0' }}>R$ 7.200,00</div>
+                <div style={{ fontSize: 11, color: '#94A3B8' }}>180 kg muçarela/mês</div>
+              </div>
+
+              <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 11, color: '#60A5FA', fontWeight: 700 }}>LUCRO EXTRA ANUAL ESTIMADO</div>
+                <div style={{ fontSize: 26, fontWeight: 900, color: '#60A5FA', margin: '4px 0' }}>+R$ 114.000</div>
+                <div style={{ fontSize: 11, color: '#94A3B8' }}>Impacto acumulado no EBITDA</div>
+              </div>
+            </div>
+          </div>
+
+          {/* SIMULADOR INTERATIVO DE PESAGEM E FICHA TÉCNICA */}
+          <div style={{ background: '#1A1210', border: '1px solid rgba(255, 107, 44, 0.3)', borderRadius: 14, padding: 22 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#FFF' }}>
+                  ⚖️ Simulador de Ficha Técnica &amp; Gramatura de Queijo
+                </h3>
+                <span style={{ fontSize: 12, color: '#C8B6A6' }}>
+                  Ajuste a gramatura de muçarela e veja o impacto instantâneo no custo, no CMV e no lucro por pizza
+                </span>
+              </div>
+              <span style={{ background: '#FF6B2C', color: '#FFF', padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 800 }}>
+                Pizza Grande (8 fatias) · Preço Venda R$ 89,00
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20, alignItems: 'center' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 800, color: '#FFF', marginBottom: 8 }}>
+                  Gramatura de Muçarela na Pizza: <span style={{ color: '#FF6B2C', fontSize: 18 }}>{gramaturaQueijoSimulador}g</span>
+                  {gramaturaQueijoSimulador === 280 ? ' (Padrão Calibrado)' : gramaturaQueijoSimulador > 280 ? ' (Sobrepeso / Desperdício)' : ' (Abaixo do Padrão)'}
+                </label>
+                <input
+                  type="range"
+                  min="200"
+                  max="380"
+                  step="10"
+                  value={gramaturaQueijoSimulador}
+                  onChange={(e) => setGramaturaQueijoSimulador(Number(e.target.value))}
+                  style={{ width: '100%', accentColor: '#FF6B2C', cursor: 'pointer' }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#A8998C', marginTop: 4 }}>
+                  <span>200g (Econômica)</span>
+                  <span style={{ color: '#34D399', fontWeight: 800 }}>280g (Ideal Palatare)</span>
+                  <span>380g (Manual sem balança)</span>
+                </div>
+
+                <div style={{ marginTop: 14, fontSize: 12, color: '#C8B6A6', lineHeight: 1.5 }}>
+                  <div>• Custo Farinha 00 &amp; Massa 48h: <b>R$ 3,20</b></div>
+                  <div>• Custo Molho San Marzano italiano: <b>R$ 2,50</b></div>
+                  <div>• Custo Proteína Nobre (Picanha/Filé): <b>R$ 12,00</b></div>
+                  <div>• Custo Embalagem Térmica &amp; Lenha: <b>R$ 4,50</b></div>
+                  <div>• Custo Queijo ({gramaturaQueijoSimulador}g @ R$ 40/kg): <b style={{ color: '#FF6B2C' }}>R$ {((gramaturaQueijoSimulador / 1000) * 40).toFixed(2)}</b></div>
+                </div>
+              </div>
+
+              {(() => {
+                const custoQueijo = (gramaturaQueijoSimulador / 1000) * 40;
+                const custoTotal = 3.20 + 2.50 + 12.00 + 4.50 + custoQueijo;
+                const precoVenda = 89.00;
+                const margemBruta = precoVenda - custoTotal;
+                const cmv = (custoTotal / precoVenda) * 100;
+                const economiaVsManual = ((370 - gramaturaQueijoSimulador) / 1000) * 40;
+
+                return (
+                  <div style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: 18 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: '#A8998C' }}>CUSTO TOTAL DE INSUMOS</div>
+                        <div style={{ fontSize: 22, fontWeight: 900, color: '#FFF' }}>R$ {custoTotal.toFixed(2)}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: '#A8998C' }}>MARGEM BRUTA (R$)</div>
+                        <div style={{ fontSize: 22, fontWeight: 900, color: '#34D399' }}>R$ {margemBruta.toFixed(2)}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: '#A8998C' }}>CMV CALCULADO</div>
+                        <div style={{ fontSize: 22, fontWeight: 900, color: cmv <= 27 ? '#34D399' : '#F87171' }}>{cmv.toFixed(1)}%</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: '#A8998C' }}>ECONOMIA POR PIZZA</div>
+                        <div style={{ fontSize: 22, fontWeight: 900, color: economiaVsManual > 0 ? '#FBBF24' : '#FFF' }}>
+                          {economiaVsManual > 0 ? `+R$ ${economiaVsManual.toFixed(2)}` : 'R$ 0,00'}
+                        </div>
+                      </div>
+                    </div>
+                    {economiaVsManual > 0 && (
+                      <div style={{ background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: 6, padding: '8px 12px', fontSize: 11, color: '#FBBF24' }}>
+                        Economia de <b>R$ {(economiaVsManual * 2000).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</b> por mês em escala de 2.000 pizzas!
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+
+          {/* MATRIZ BCG DE PERFORMANCE DO CARDÁPIO */}
+          <div style={{ background: '#140D09', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: 14, padding: 22 }}>
+            <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 900, color: '#FFF' }}>
+              🎯 Matriz BCG de Performance do Cardápio Palatare
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 }}>
+              {(dadosSuite?.engenharia?.matrizBcg || [
+                { sabor: "Pizza Filé Mignon ao Gorgonzola", categoria: "Estrela (Star)", icone: "⭐", precoVenda: 92.00, custoInsumos: 23.90, margemContribuicao: 68.10, cmvPercentual: 26.0, gramaturaQueijoPadrao: "280g", estrategia: "Manter destaque fotográfico no cardápio e sugerir harmonização com Cabernet Sauvignon Reserva." },
+                { sabor: "Pizza de Picanha Especial", categoria: "Estrela (Star)", icone: "⭐", precoVenda: 89.00, custoInsumos: 24.20, margemContribuicao: 64.80, cmvPercentual: 27.2, gramaturaQueijoPadrao: "280g", estrategia: "Carro-chefe aos sábados. Sugerir Chopp Artesanal 500ml." },
+                { sabor: "Pizza Carne Seca com Catupiry", categoria: "Estrela (Star)", icone: "⭐", precoVenda: 78.00, custoInsumos: 18.50, margemContribuicao: 59.50, cmvPercentual: 23.7, gramaturaQueijoPadrao: "260g", estrategia: "Excelente margem bruta de 76,3%. Promover no delivery." },
+                { sabor: "Pizza Calabresa Artesanal Especial", categoria: "Burro de Carga (Plowhorse)", icone: "🐴", precoVenda: 68.00, custoInsumos: 22.10, margemContribuicao: 45.90, cmvPercentual: 32.5, gramaturaQueijoPadrao: "270g", estrategia: "Reduzir queijo de 350g para 270g com balança, recuperando +R$ 3.800/mês." },
+                { sabor: "Pizza Palatare da Casa (Parma & Figos)", categoria: "Enigma (Puzzle)", icone: "🧩", precoVenda: 89.00, custoInsumos: 22.80, margemContribuicao: 66.20, cmvPercentual: 25.6, gramaturaQueijoPadrao: "240g", estrategia: "Oferecer degustação de 1 fatia no rodízio de sexta para incentivar pedidos à la carte." },
+                { sabor: "Pizza Doce Nutella com Morangos Frescos", categoria: "Estrela Doce (Star)", icone: "⭐", precoVenda: 62.00, custoInsumos: 14.80, margemContribuicao: 47.20, cmvPercentual: 23.9, gramaturaQueijoPadrao: "160g Nutella", estrategia: "Upsell automático de sobremesa ao fechar a mesa ou no carrinho mobile." }
+              ]).map((item, idx) => (
+                <div key={idx} style={{
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: 10,
+                  padding: 16,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  gap: 10
+                }}>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 18 }}>{item.icone}</span>
+                      <span style={{
+                        fontSize: 10,
+                        fontWeight: 800,
+                        color: item.cmvPercentual <= 27 ? '#34D399' : '#FBBF24',
+                        background: 'rgba(255, 255, 255, 0.06)',
+                        padding: '2px 8px',
+                        borderRadius: 4
+                      }}>
+                        CMV: {item.cmvPercentual}%
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: '#FFF', margin: '6px 0 2px' }}>
+                      {item.sabor}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#FF6B2C', fontWeight: 700 }}>
+                      {item.categoria} · {item.gramaturaQueijoPadrao}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 10, fontSize: 12 }}>
+                    <div>
+                      <span style={{ color: '#A8998C', display: 'block', fontSize: 10 }}>Preço Venda:</span>
+                      <b style={{ color: '#FFF' }}>R$ {item.precoVenda.toFixed(2)}</b>
+                    </div>
+                    <div>
+                      <span style={{ color: '#A8998C', display: 'block', fontSize: 10 }}>Custo Insumos:</span>
+                      <b style={{ color: '#F87171' }}>R$ {item.custoInsumos.toFixed(2)}</b>
+                    </div>
+                    <div>
+                      <span style={{ color: '#A8998C', display: 'block', fontSize: 10 }}>Margem (R$):</span>
+                      <b style={{ color: '#34D399' }}>R$ {item.margemContribuicao.toFixed(2)}</b>
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'rgba(0,0,0,0.3)', padding: 8, borderRadius: 6, fontSize: 11, color: '#C8B6A6', fontStyle: 'italic' }}>
+                    💡 {item.estrategia}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* ABA: PALATARE PIZZA CLUB (RECEITA RECORRENTE MENSAL - MRR)     */}
+      {/* ------------------------------------------------------------- */}
+      {tabAtiva === 'clube' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(38, 20, 14, 0.95) 0%, rgba(20, 13, 9, 0.98) 100%)',
+            border: '1px solid rgba(212, 175, 55, 0.4)',
+            borderRadius: 16,
+            padding: 24,
+            boxShadow: '0 8px 30px rgba(0,0,0,0.4)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+              <div>
+                <span style={{ fontSize: 11, fontWeight: 800, color: '#D4AF37', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  RECEITA PREVISÍVEL &amp; FIDELIDADE DE ALTO LTV
+                </span>
+                <h2 style={{ margin: '4px 0 0', fontSize: 24, fontWeight: 900, color: '#FFF' }}>
+                  Palatare Pizza Club · Assinaturas Mensais
+                </h2>
+                <p style={{ margin: '6px 0 0', fontSize: 13, color: '#C8B6A6', maxWidth: 740, lineHeight: 1.5 }}>
+                  Transformação de compras transacionais em <b>receita recorrente garantida todo mês</b>. Planos de 2 a 4 pizzas por mês com débito automático no cartão, entrega grátis prioritária e cortesias exclusivas.
+                </p>
+              </div>
+              <span style={{ background: 'rgba(212, 175, 55, 0.15)', border: '1px solid #D4AF37', color: '#D4AF37', padding: '6px 14px', borderRadius: 8, fontWeight: 800, fontSize: 12 }}>
+                MRR Atual: R$ 14.890,00 / mês
+              </span>
+            </div>
+
+            {/* 4 Cards de Métricas do Clube */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginTop: 20 }}>
+              <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(212, 175, 55, 0.3)', borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 11, color: '#D4AF37', fontWeight: 700 }}>MRR ATUAL GARANTIDO</div>
+                <div style={{ fontSize: 26, fontWeight: 900, color: '#D4AF37', margin: '4px 0' }}>R$ 14.890</div>
+                <div style={{ fontSize: 11, color: '#C8B6A6' }}>Cai todo dia 1º no caixa</div>
+              </div>
+
+              <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 11, color: '#34D399', fontWeight: 700 }}>META DE 90 DIAS</div>
+                <div style={{ fontSize: 26, fontWeight: 900, color: '#34D399', margin: '4px 0' }}>R$ 34.500</div>
+                <div style={{ fontSize: 11, color: '#34D399' }}>150 assinantes ativos</div>
+              </div>
+
+              <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 11, color: '#C8B6A6', fontWeight: 700 }}>ASSINANTES ATIVOS</div>
+                <div style={{ fontSize: 26, fontWeight: 900, color: '#FFF', margin: '4px 0' }}>72 membros</div>
+                <div style={{ fontSize: 11, color: '#C8B6A6' }}>Tangará da Serra</div>
+              </div>
+
+              <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 11, color: '#60A5FA', fontWeight: 700 }}>RETENÇÃO / LTV MÉDIO</div>
+                <div style={{ fontSize: 26, fontWeight: 900, color: '#60A5FA', margin: '4px 0' }}>96,2%</div>
+                <div style={{ fontSize: 11, color: '#C8B6A6' }}>LTV Médio: R$ 2.480,00</div>
+              </div>
+            </div>
+          </div>
+
+          {/* 3 PLANOS DO CLUBE DE ASSINATURA */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
+            {(dadosSuite?.pizzaClub?.planos || [
+              { id: "plano-amici", nome: "Plano Amici (Dupla)", mensalidade: 139.00, beneficios: ["2 Pizzas Grandes por mês", "Entrega Grátis em Tangará da Serra", "1 Borda Recheada cortesia/mês", "Despacho prioritário"], assinantesAtivos: 34, mrrPlano: 4726.00 },
+              { id: "plano-famiglia", nome: "Plano Famiglia (Festa)", mensalidade: 249.00, beneficios: ["4 Pizzas Grandes por mês", "1 Pizza Doce Brotinho cortesia", "Entrega Grátis VIP", "10% Cashback no Salão"], assinantesAtivos: 28, mrrPlano: 6972.00 },
+              { id: "plano-connoisseur", nome: "Plano Gourmet & Adega Wine", mensalidade: 329.00, beneficios: ["4 Pizzas Especiais Grandes/mês", "1 Garrafa Vinho Tinto Cabernet Reserva/mês", "Mesa VIP sem fila no Salão e Rodízio", "Novos sabores antecipados"], assinantesAtivos: 10, mrrPlano: 3290.00 }
+            ]).map((plano, i) => (
+              <div key={i} style={{
+                background: '#1C130D',
+                border: plano.mensalidade === 249 ? '2px solid #FF6B2C' : '1px solid rgba(255, 255, 255, 0.12)',
+                borderRadius: 14,
+                padding: 20,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                position: 'relative'
+              }}>
+                {plano.mensalidade === 249 && (
+                  <span style={{ position: 'absolute', top: -10, right: 16, background: '#FF6B2C', color: '#FFF', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 10 }}>
+                    MAIS POPULAR
+                  </span>
+                )}
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 900, color: '#FFF', marginBottom: 4 }}>{plano.nome}</div>
+                  <div style={{ fontSize: 28, fontWeight: 900, color: '#D4AF37', margin: '6px 0' }}>
+                    R$ {plano.mensalidade.toFixed(2)} <span style={{ fontSize: 13, color: '#A8998C', fontWeight: 600 }}>/mês</span>
+                  </div>
+                  <ul style={{ margin: '14px 0', paddingLeft: 16, fontSize: 12, color: '#C8B6A6', display: 'grid', gap: 6 }}>
+                    {plano.beneficios.map((b, idx) => (
+                      <li key={idx}>✓ {b}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, color: '#34D399', fontWeight: 800 }}>
+                    ● {plano.assinantesAtivos} assinantes ativos
+                  </span>
+                  <span style={{ fontSize: 12, color: '#D4AF37', fontWeight: 700 }}>
+                    MRR: R$ {plano.mrrPlano.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* MEMBROS DESTAQUE DO CLUBE */}
+          <div style={{ background: '#140D09', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: 14, padding: 22 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 900, color: '#FFF' }}>
+                👑 Assinantes Recentes &amp; Próximas Entregas Programadas
+              </h3>
+              <button
+                type="button"
+                onClick={() => setModalNovoAssinante(true)}
+                style={{ background: '#D4AF37', color: '#000', border: 'none', padding: '6px 14px', borderRadius: 6, fontWeight: 800, fontSize: 12, cursor: 'pointer' }}
+              >
+                + Cadastrar Novo Assinante
+              </button>
+            </div>
+            <div style={{ display: 'grid', gap: 8 }}>
+              {(dadosSuite?.pizzaClub?.membrosDestaque || [
+                { id: "mem-01", nome: "Dr. Ricardo Mendonça", plano: "Plano Gourmet & Adega Wine", desde: "2026-06", proximaEntrega: "15/11/2026", status: "ativo" },
+                { id: "mem-02", nome: "Dra. Juliana Barreto", plano: "Plano Famiglia", desde: "2026-07", proximaEntrega: "18/11/2026", status: "ativo" },
+                { id: "mem-03", nome: "Thiago Brandão", plano: "Plano Amici", desde: "2026-08", proximaEntrega: "16/11/2026", status: "ativo" },
+                { id: "mem-04", nome: "Fernanda Castilho", plano: "Plano Famiglia", desde: "2026-09", proximaEntrega: "17/11/2026", status: "ativo" }
+              ]).map((m, idx) => (
+                <div key={idx} style={{ background: 'rgba(255,255,255,0.03)', padding: '10px 14px', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+                  <div>
+                    <b style={{ color: '#FFF' }}>{m.nome}</b>
+                    <span style={{ color: '#A8998C', marginLeft: 8 }}>· {m.plano}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <span style={{ color: '#34D399', fontSize: 11 }}>📅 Entrega: {m.proximaEntrega}</span>
+                    <span style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10B981', padding: '2px 8px', borderRadius: 4, fontWeight: 800, fontSize: 10 }}>
+                      Ativo
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* ABA: AUTOATENDIMENTO QR CODE NA MESA COM MOTOR UPSELL KYTTOIA */}
+      {/* ------------------------------------------------------------- */}
+      {tabAtiva === 'autoatendimento' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(30, 20, 45, 0.95) 0%, rgba(15, 10, 25, 0.98) 100%)',
+            border: '1px solid rgba(168, 85, 247, 0.4)',
+            borderRadius: 16,
+            padding: 24,
+            boxShadow: '0 8px 30px rgba(0,0,0,0.4)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+              <div>
+                <span style={{ fontSize: 11, fontWeight: 800, color: '#C084FC', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  AUTOATENDIMENTO INTELIGENTE &amp; UPSELL DINÂMICO
+                </span>
+                <h2 style={{ margin: '4px 0 0', fontSize: 24, fontWeight: 900, color: '#FFF' }}>
+                  Autoatendimento QR Code Mesa · Motor KyttoIA
+                </h2>
+                <p style={{ margin: '6px 0 0', fontSize: 13, color: '#D8B4FE', maxWidth: 740, lineHeight: 1.5 }}>
+                  O cliente senta à mesa no salão, aponta a câmera e faz o pedido em 45 segundos. O <b>Motor KyttoIA</b> sugere harmonização imediata de vinhos, chopps artesanais e sobremesas, elevando o tíquete médio em <b>+32,9%</b>.
+                </p>
+              </div>
+              <span style={{ background: 'rgba(168, 85, 247, 0.2)', border: '1px solid #A855F7', color: '#E9D5FF', padding: '6px 14px', borderRadius: 8, fontWeight: 800, fontSize: 12 }}>
+                20 Mesas Ativas com QR Code Dinâmico
+              </span>
+            </div>
+          </div>
+
+          {/* SELETOR DE MESA E DISPARO DE IMPRESSÃO DE DISPLAY */}
+          <div style={{ background: '#1A121F', border: '1px solid rgba(168, 85, 247, 0.3)', borderRadius: 12, padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <label style={{ fontSize: 13, fontWeight: 800, color: '#FFF' }}>Mesa Selecionada no Salão:</label>
+              <select
+                value={mesaQrSimulador}
+                onChange={(e) => setMesaQrSimulador(e.target.value)}
+                style={{ background: '#0F0906', border: '1px solid #A855F7', color: '#FFF', padding: '6px 12px', borderRadius: 8, fontWeight: 800, fontSize: 13 }}
+              >
+                {Array.from({ length: 20 }, (_, i) => (
+                  <option key={i+1} value={String(i+1)}>Mesa {String(i+1).padStart(2, '0')} · Salão Gourmet</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setModalDisplayMesa(mesaQrSimulador)}
+                style={{ background: '#A855F7', color: '#FFF', border: 'none', padding: '8px 16px', borderRadius: 8, fontWeight: 800, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 4px 12px rgba(168, 85, 247, 0.4)' }}
+              >
+                🖨️ Gerar Display Acrílico de Mesa (Mesa {mesaQrSimulador})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(`https://kytto.com.br/cardapio/mesa/palatare-m${mesaQrSimulador}`);
+                  alert(`Link do cardápio da Mesa ${mesaQrSimulador} copiado com sucesso!`);
+                }}
+                style={{ background: 'rgba(255,255,255,0.08)', color: '#FFF', border: '1px solid rgba(255,255,255,0.15)', padding: '8px 14px', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+              >
+                🔗 Copiar Link QR
+              </button>
+            </div>
+          </div>
+
+          {/* SIMULADOR DA TELA DO CLIENTE NO CELULAR */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 420px) 1fr', gap: 24 }}>
+            {/* Mockup do Smartphone */}
+            <div style={{
+              background: '#000000',
+              border: '6px solid #2D1A3E',
+              borderRadius: 28,
+              padding: 18,
+              boxShadow: '0 16px 40px rgba(0,0,0,0.7)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 14
+            }}>
+              <div style={{ textAlign: 'center', paddingBottom: 8, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: '#C084FC' }}>
+                  📱 Palatare Mobile · Salão Ao Vivo
+                </span>
+                <div style={{ fontSize: 16, fontWeight: 900, color: '#FFF' }}>
+                  Mesa {mesaQrSimulador.padStart(2, '0')} · Comanda #CMD-0892
+                </div>
+              </div>
+
+              {/* Itens na Mesa */}
+              <div style={{ background: '#1A121F', padding: 12, borderRadius: 10, fontSize: 12 }}>
+                <div style={{ fontSize: 11, color: '#A8998C', marginBottom: 4 }}>ITEM ESCOLHIDO PELO CLIENTE:</div>
+                <b style={{ color: '#FFF' }}>🍕 Pizza de Picanha Especial (Grande 8 Fatias)</b>
+                <div style={{ fontSize: 11, color: '#34D399', marginTop: 2 }}>Massa Napolitana 48h · R$ 89,00</div>
+              </div>
+
+              {/* BLOCO DE UPSELL INTELIGENTE KYTTOIA */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(88, 28, 135, 0.35) 0%, rgba(59, 7, 100, 0.5) 100%)',
+                border: '1px solid #A855F7',
+                borderRadius: 12,
+                padding: 12,
+                display: 'grid',
+                gap: 8
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 14 }}>✨</span>
+                  <b style={{ fontSize: 11, color: '#E9D5FF', textTransform: 'uppercase' }}>
+                    Sugestão de Harmonização KyttoIA
+                  </b>
+                </div>
+                <p style={{ margin: 0, fontSize: 11, color: '#DDD6FE', lineHeight: 1.4 }}>
+                  Clientes que pedem Picanha Especial adoram acompanhar com o <b>Chopp Pilsen Artesanal 500ml geladíssimo (+R$ 15,00)</b> ou a <b>Borda Vulcão com Fondue de Queijos (+R$ 22,00)</b>.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUpsellQrAdicionado(true);
+                    if (!itensQrMesa.includes('Chopp Pilsen Artesanal 500ml (+R$ 15,00)')) {
+                      setItensQrMesa([...itensQrMesa, 'Chopp Pilsen Artesanal 500ml (+R$ 15,00)', 'Borda Vulcão Fondue (+R$ 22,00)']);
+                    }
+                  }}
+                  style={{
+                    background: upsellQrAdicionado ? '#34D399' : '#A855F7',
+                    color: '#FFF',
+                    border: 'none',
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    fontWeight: 800,
+                    fontSize: 11,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {upsellQrAdicionado ? '✓ Harmonização Adicionada!' : '+ Adicionar Chopp & Borda Vulcão'}
+                </button>
+              </div>
+
+              {/* Resumo do Pedido do Cliente */}
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
+                  <span style={{ color: '#A8998C' }}>Subtotal da Mesa:</span>
+                  <b style={{ color: '#FFF' }}>R$ {upsellQrAdicionado ? '126,00' : '89,00'}</b>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPedidoQrEnviado(true);
+                    setTimeout(() => setPedidoQrEnviado(false), 4000);
+                  }}
+                  style={{
+                    width: '100%',
+                    background: pedidoQrEnviado ? '#10B981' : '#FF6B2C',
+                    color: '#FFF',
+                    border: 'none',
+                    padding: '10px 14px',
+                    borderRadius: 8,
+                    fontWeight: 900,
+                    fontSize: 13,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {pedidoQrEnviado ? '✓ Pedido Enviado ao Forno!' : '🚀 Enviar Pedido para o KDS'}
+                </button>
+              </div>
+            </div>
+
+            {/* Benefícios Operacionais e Impacto */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ background: '#1A1210', border: '1px solid rgba(255, 107, 44, 0.3)', borderRadius: 14, padding: 20 }}>
+                <h3 style={{ margin: '0 0 10px', fontSize: 17, fontWeight: 900, color: '#FFF' }}>
+                  📊 Como o Autoatendimento Aumenta o Faturamento em +32,9%
+                </h3>
+                <div style={{ display: 'grid', gap: 12, fontSize: 12.5, color: '#C8B6A6', lineHeight: 1.5 }}>
+                  <div>
+                    <b style={{ color: '#FFF' }}>1. Zero Espera para Pedir Novas Bebidas:</b> Em noites de salão lotado, o cliente não espera o garçom passar. Ele pede uma nova rodada de Chopp ou refrigerante em 15 segundos direto na mesa.
+                  </div>
+                  <div>
+                    <b style={{ color: '#FFF' }}>2. Imagens Apetitosas em Alta Resolução:</b> O cardápio digital exibe fotos suculentas do forno napolitano a 400°C e das pizzas doces de Nutella com morangos frescos, estimulando compras de impulso.
+                  </div>
+                  <div>
+                    <b style={{ color: '#FFF' }}>3. Liberação da Brigada de Garçons:</b> Os garçons deixam de ser "anotadores de pedido" e passam a ser anfitriões atenciosos focados em servir com rapidez e cordialidade.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* ABA: TELEMETRIA TÉRMICA FORNO A LENHA NAPOLITANO (400°C)       */}
+      {/* ------------------------------------------------------------- */}
+      {tabAtiva === 'forno' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(45, 18, 12, 0.95) 0%, rgba(20, 8, 5, 0.98) 100%)',
+            border: '1px solid rgba(255, 107, 44, 0.5)',
+            borderRadius: 16,
+            padding: 24,
+            boxShadow: '0 8px 30px rgba(0,0,0,0.4)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+              <div>
+                <span style={{ fontSize: 11, fontWeight: 800, color: '#FF6B2C', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  CONTROLE TÉRMICO EM TEMPO REAL &amp; LENHA ECOLÓGICA
+                </span>
+                <h2 style={{ margin: '4px 0 0', fontSize: 24, fontWeight: 900, color: '#FFF' }}>
+                  Telemetria do Forno a Lenha Napolitano (400°C)
+                </h2>
+                <p style={{ margin: '6px 0 0', fontSize: 13, color: '#C8B6A6', maxWidth: 740, lineHeight: 1.5 }}>
+                  Monitoramento de temperatura do lastro de pedra e da cúpula refratária. Cocção precisa em <b>98 segundos</b> que garante a borda aerada crocante por fora e macia por dentro.
+                </p>
+              </div>
+              <span style={{ background: 'rgba(255, 107, 44, 0.2)', border: '1px solid #FF6B2C', color: '#FF6B2C', padding: '6px 14px', borderRadius: 8, fontWeight: 800, fontSize: 12 }}>
+                ● Zona Ideal de Cocção: 412°C Ativa
+              </span>
+            </div>
+
+            {/* 4 Cards de Telemetria do Forno */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginTop: 20 }}>
+              <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255, 107, 44, 0.4)', borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 11, color: '#FF6B2C', fontWeight: 700 }}>TEMPERATURA LASTRO</div>
+                <div style={{ fontSize: 28, fontWeight: 900, color: '#FF6B2C', margin: '4px 0' }}>412°C</div>
+                <div style={{ fontSize: 11, color: '#34D399' }}>● Ponto Perfeito Napolitano</div>
+              </div>
+
+              <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 11, color: '#FBBF24', fontWeight: 700 }}>TEMPERATURA CÚPULA</div>
+                <div style={{ fontSize: 28, fontWeight: 900, color: '#FBBF24', margin: '4px 0' }}>445°C</div>
+                <div style={{ fontSize: 11, color: '#C8B6A6' }}>Gratinamento instantâneo</div>
+              </div>
+
+              <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 11, color: '#60A5FA', fontWeight: 700 }}>TEMPO MÉDIO DE FORNO</div>
+                <div style={{ fontSize: 28, fontWeight: 900, color: '#60A5FA', margin: '4px 0' }}>98 seg</div>
+                <div style={{ fontSize: 11, color: '#C8B6A6' }}>Ultra-rápido e crocante</div>
+              </div>
+
+              <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 11, color: '#34D399', fontWeight: 700 }}>PIZZAS FORNEADAS HOJE</div>
+                <div style={{ fontSize: 28, fontWeight: 900, color: '#34D399', margin: '4px 0' }}>74 pizzas</div>
+                <div style={{ fontSize: 11, color: '#C8B6A6' }}>Capacidade: 48 pizzas/h</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Sustentabilidade da Lenha & Isolamento Térmico */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div style={{ background: '#1A1210', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: 14, padding: 20 }}>
+              <h3 style={{ margin: '0 0 10px', fontSize: 16, fontWeight: 900, color: '#FFF' }}>
+                🌲 Lenha Ecológica de Reflorestamento Certificada
+              </h3>
+              <p style={{ fontSize: 12.5, color: '#C8B6A6', lineHeight: 1.5, margin: 0 }}>
+                A Palatare utiliza exclusivamente lenha de <b>eucalipto 100% reflorestado e seco em estufa</b>, garantindo combustão limpa, baixa emissão de fumaça e poder calorífico constante para manter a pedra nos 400°C sem oscilações térmicas.
+              </p>
+              <div style={{ marginTop: 12, fontSize: 12, color: '#34D399', fontWeight: 700 }}>
+                Consumo Diário Médio: 0,32 m³ de lenha certificada
+              </div>
+            </div>
+
+            <div style={{ background: '#1A1210', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: 14, padding: 20 }}>
+              <h3 style={{ margin: '0 0 10px', fontSize: 16, fontWeight: 900, color: '#FFF' }}>
+                🛡️ Eficiência Energética de 94,2%
+              </h3>
+              <p style={{ fontSize: 12.5, color: '#C8B6A6', lineHeight: 1.5, margin: 0 }}>
+                Isolamento térmico duplo com manta de lã de rocha e cimento refratário especial que retém o calor no interior do forno, reduzindo o consumo de biomassa e proporcionando conforto térmico à brigada de cozinha.
+              </p>
+              <div style={{ marginTop: 12, fontSize: 12, color: '#FF6B2C', fontWeight: 700 }}>
+                NBR 15930 · Conforto Térmico &amp; Segurança Operacional
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1857,7 +2590,10 @@ export default function PalatarePizzariaSuite() {
               <div style={{ display: 'flex', gap: 12 }}>
                 <button
                   type="button"
-                  onClick={() => navigate('/admin/concreto?secao=empresa-holding')}
+                  onClick={async () => {
+                    if (trocarEmpresa) await trocarEmpresa(HOLDING_PALATARE_EMPRESA_ID);
+                    navigate('/admin/concreto?secao=empresa-holding');
+                  }}
                   style={{
                     background: '#C5A059',
                     color: '#16181B',
@@ -1878,7 +2614,10 @@ export default function PalatarePizzariaSuite() {
 
                 <button
                   type="button"
-                  onClick={() => navigate('/admin/concreto')}
+                  onClick={async () => {
+                    if (trocarEmpresa) await trocarEmpresa(SERRANO_CONCRETO_EMPRESA_ID);
+                    navigate('/admin/concreto');
+                  }}
                   style={{
                     background: '#3B82F6',
                     color: '#FFF',
@@ -2060,6 +2799,711 @@ export default function PalatarePizzariaSuite() {
                 }}
               >
                 <Send size={16} /> Abrir WhatsApp Web / App
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL DE IMPRESSÃO DO DISPLAY DE MESA EM ACRÍLICO (QR CODE)  */}
+      {/* ------------------------------------------------------------- */}
+      {modalDisplayMesa && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          padding: 20
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            color: '#111827',
+            borderRadius: 20,
+            padding: '32px 28px',
+            maxWidth: 440,
+            width: '100%',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.8)',
+            textAlign: 'center',
+            border: '2px solid #E5E7EB',
+            position: 'relative'
+          }}>
+            <button
+              type="button"
+              onClick={() => setModalDisplayMesa(null)}
+              style={{
+                position: 'absolute',
+                top: 14,
+                right: 16,
+                background: 'none',
+                border: 'none',
+                fontSize: 20,
+                color: '#6B7280',
+                cursor: 'pointer'
+              }}
+            >
+              ✕
+            </button>
+
+            {/* CABEÇALHO DO DISPLAY */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 8 }}>
+              <img src="/palatare-logo.png" alt="Palatare" style={{ width: 44, height: 44, objectFit: 'contain' }} />
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: 16, fontWeight: 900, color: '#111827', letterSpacing: '-0.02em' }}>
+                  PALATARE
+                </div>
+                <div style={{ fontSize: 11, fontWeight: 800, color: '#FF6B2C', textTransform: 'uppercase' }}>
+                  Pizzaria &amp; Restaurante
+                </div>
+              </div>
+            </div>
+
+            <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 16 }}>
+              Tangará da Serra/MT · Forno a Lenha Napolitano (400°C)
+            </div>
+
+            {/* BADGE DA MESA */}
+            <div style={{
+              background: 'linear-gradient(135deg, #FF6B2C, #E05316)',
+              color: '#FFF',
+              borderRadius: 12,
+              padding: '10px 20px',
+              display: 'inline-block',
+              marginBottom: 16,
+              boxShadow: '0 4px 14px rgba(255, 107, 44, 0.4)'
+            }}>
+              <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block' }}>
+                CARDÁPIO DIGITAL NA MESA
+              </span>
+              <span style={{ fontSize: 24, fontWeight: 900, letterSpacing: '-0.02em' }}>
+                MESA {String(modalDisplayMesa).padStart(2, '0')}
+              </span>
+            </div>
+
+            {/* QR CODE GERADO */}
+            <div style={{
+              background: '#F9FAFB',
+              border: '2px dashed #D1D5DB',
+              borderRadius: 16,
+              padding: 16,
+              display: 'inline-block',
+              marginBottom: 16
+            }}>
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://kytto.com.br/cardapio/mesa/palatare-m${modalDisplayMesa}`}
+                alt={`QR Code Mesa ${modalDisplayMesa}`}
+                style={{ width: 180, height: 180, display: 'block', borderRadius: 8 }}
+              />
+              <span style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', marginTop: 8, display: 'block' }}>
+                Aponte a câmera do seu celular
+              </span>
+            </div>
+
+            {/* PASSOS DO CLIENTE */}
+            <div style={{ background: '#F3F4F6', borderRadius: 10, padding: 12, fontSize: 11.5, color: '#374151', textAlign: 'left', lineHeight: 1.5, marginBottom: 16 }}>
+              <div><b>1.</b> Monte sua pizza artesanal de fermentação 48h</div>
+              <div><b>2.</b> Escolha vinhos reserva ou chopp artesanal gelado</div>
+              <div><b>3.</b> Acompanhe a fornada a 400°C em tempo real</div>
+            </div>
+
+            {/* INFORMAÇÕES DE WI-FI */}
+            <div style={{ borderTop: '1px solid #E5E7EB', paddingTop: 10, marginBottom: 18, fontSize: 11, color: '#6B7280' }}>
+              📶 <strong>Wi-Fi:</strong> Palatare_Clientes &nbsp;|&nbsp; 🔑 <strong>Senha:</strong> pizzaforno400
+            </div>
+
+            {/* BOTÕES DE AÇÃO */}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <button
+                type="button"
+                onClick={() => setModalDisplayMesa(null)}
+                style={{ background: '#F3F4F6', color: '#374151', border: '1px solid #D1D5DB', padding: '10px 18px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Fechar
+              </button>
+
+              <button
+                type="button"
+                onClick={() => window.print()}
+                style={{
+                  background: '#FF6B2C',
+                  color: '#FFF',
+                  border: 'none',
+                  padding: '10px 22px',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontWeight: 900,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(255, 107, 44, 0.4)'
+                }}
+              >
+                🖨️ Imprimir Display (Ctrl+P)
+              </button>
+            </div>
+
+            <div style={{ fontSize: 9.5, color: '#9CA3AF', marginTop: 14 }}>
+              Grupo Palatare Participações S/A · Tecnologia Kytto &amp; KyttoIA
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL DE IMPRESSÃO DA COMANDA DE PRODUÇÃO (80MM ESC/POS)     */}
+      {/* ------------------------------------------------------------- */}
+      {modalComandaMontador && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          padding: 20
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            color: '#000000',
+            borderRadius: 16,
+            padding: '24px 22px',
+            maxWidth: 380,
+            width: '100%',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.8)',
+            fontFamily: 'Courier New, monospace',
+            fontSize: 12,
+            lineHeight: 1.4,
+            position: 'relative'
+          }}>
+            <button
+              type="button"
+              onClick={() => setModalComandaMontador(false)}
+              style={{ position: 'absolute', top: 12, right: 14, background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#666' }}
+            >
+              ✕
+            </button>
+
+            <div style={{ textAlign: 'center', borderBottom: '2px dashed #000', paddingBottom: 10, marginBottom: 10 }}>
+              <div style={{ fontSize: 15, fontWeight: 900 }}>PALATARE PIZZARIA</div>
+              <div style={{ fontSize: 11 }}>FORNO NAPOLITANO A LENHA (400°C)</div>
+              <div style={{ fontSize: 10 }}>Tangará da Serra - MT</div>
+            </div>
+
+            <div style={{ marginBottom: 10, fontSize: 11 }}>
+              <div><b>DATA:</b> {new Date().toLocaleDateString('pt-BR')} {new Date().toLocaleTimeString('pt-BR')}</div>
+              <div><b>DESTINO:</b> {tipoDestino.toUpperCase()} {tipoDestino === 'mesa' ? `# MESA ${numeroMesa}` : ''}</div>
+              <div><b>COMANDA:</b> #CMD-{Math.floor(1000 + Math.random() * 9000)}</div>
+            </div>
+
+            <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '8px 0', margin: '8px 0' }}>
+              <div style={{ fontSize: 13, fontWeight: 900 }}>
+                1x {tamanhoAtualObj.nome.toUpperCase()} ({tamanhoAtualObj.fatias} FATIAS)
+              </div>
+              <div style={{ paddingLeft: 6, marginTop: 4 }}>
+                {Array.from({ length: qtdSaboresAtivos }).map((_, i) => (
+                  <div key={i}>
+                    • {fracaoSel === '1_sabor' ? '100%' : fracaoSel === '2_sabores' ? '1/2' : fracaoSel === '3_sabores' ? '1/3' : '1/4'}: {saboresEscolhidos[i] ? saboresEscolhidos[i].split(' (')[0] : 'Sabor pendente'}
+                  </div>
+                ))}
+                <div>• MASSA: {tiposMassa.find(m => m.id === massaSel)?.nome}</div>
+                {bordaSel !== 'sem_borda' && (
+                  <div>• BORDA: {bordasRecheadas.find(b => b.id === bordaSel)?.nome}</div>
+                )}
+                {adicionaisSel.length > 0 && (
+                  <div>• ADICIONAIS: {adicionaisSel.map(id => adicionaisConfig.find(a => a.id === id)?.nome).join(', ')}</div>
+                )}
+                {exclusoesSel.length > 0 && (
+                  <div style={{ fontWeight: 900 }}>• OBS: {exclusoesSel.join(', ')}</div>
+                )}
+                {observacaoLivre && (
+                  <div style={{ fontWeight: 900 }}>• OBS LIVRE: {observacaoLivre}</div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 900, margin: '10px 0' }}>
+              <span>TOTAL PEDIDO:</span>
+              <span>R$ {precoCalculado.toFixed(2)}</span>
+            </div>
+
+            <div style={{ textAlign: 'center', borderTop: '2px dashed #000', paddingTop: 10, fontSize: 10, color: '#444' }}>
+              *** VIA DE PRODUÇÃO COZINHA / FORNO ***<br/>
+              GRUPO PALATARE · KYTTO SISTEMAS
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+              <button
+                type="button"
+                onClick={() => setModalComandaMontador(false)}
+                style={{ flex: 1, padding: '8px', border: '1px solid #999', background: '#EEE', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                style={{ flex: 1, padding: '8px', border: 'none', background: '#FF6B2C', color: '#FFF', borderRadius: 6, fontWeight: 900, cursor: 'pointer' }}
+              >
+                🖨️ Imprimir (80mm)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL DE PRÉ-CONTA / CONFERÊNCIA DA MESA DE RODÍZIO (80MM)   */}
+      {/* ------------------------------------------------------------- */}
+      {modalComandaMesaRodizio && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          padding: 20
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            color: '#000000',
+            borderRadius: 16,
+            padding: '24px 22px',
+            maxWidth: 380,
+            width: '100%',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.8)',
+            fontFamily: 'Courier New, monospace',
+            fontSize: 12,
+            lineHeight: 1.4,
+            position: 'relative'
+          }}>
+            <button
+              type="button"
+              onClick={() => setModalComandaMesaRodizio(null)}
+              style={{ position: 'absolute', top: 12, right: 14, background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#666' }}
+            >
+              ✕
+            </button>
+
+            <div style={{ textAlign: 'center', borderBottom: '2px dashed #000', paddingBottom: 10, marginBottom: 10 }}>
+              <div style={{ fontSize: 15, fontWeight: 900 }}>PALATARE PIZZARIA</div>
+              <div style={{ fontSize: 11 }}>RODÍZIO TRADICIONAL DE PIZZAS</div>
+              <div style={{ fontSize: 10 }}>CNPJ: 31.002.650/0001-08 · Tangará/MT</div>
+            </div>
+
+            <div style={{ marginBottom: 10, fontSize: 11 }}>
+              <div style={{ fontSize: 14, fontWeight: 900 }}>MESA #{String(modalComandaMesaRodizio.mesaNumero).padStart(2, '0')}</div>
+              <div><b>ENTRADA:</b> {modalComandaMesaRodizio.horarioInicio} | <b>FECHAMENTO:</b> {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+              <div><b>FATIAS CONSUMIDAS:</b> {modalComandaMesaRodizio.fatiasServidas} fatias</div>
+            </div>
+
+            <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '8px 0', margin: '8px 0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>{modalComandaMesaRodizio.adultos}x Rodízio Adulto (R$ 59,90)</span>
+                <span>R$ {(modalComandaMesaRodizio.adultos * 59.90).toFixed(2)}</span>
+              </div>
+              {modalComandaMesaRodizio.criancas > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>{modalComandaMesaRodizio.criancas}x Rodízio Infantil (R$ 29,90)</span>
+                  <span>R$ {(modalComandaMesaRodizio.criancas * 29.90).toFixed(2)}</span>
+                </div>
+              )}
+              {modalComandaMesaRodizio.subtotalConsumo > (modalComandaMesaRodizio.adultos * 59.90 + modalComandaMesaRodizio.criancas * 29.90) && (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Consumo Extra / Bebidas</span>
+                  <span>R$ {(modalComandaMesaRodizio.subtotalConsumo - (modalComandaMesaRodizio.adultos * 59.90 + modalComandaMesaRodizio.criancas * 29.90)).toFixed(2)}</span>
+                </div>
+              )}
+            </div>
+
+            <div style={{ margin: '8px 0', fontSize: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>SUBTOTAL:</span>
+                <span>R$ {modalComandaMesaRodizio.subtotalConsumo?.toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555' }}>
+                <span>SERVIÇO 10% (OPCIONAL):</span>
+                <span>R$ {(modalComandaMesaRodizio.subtotalConsumo * 0.1).toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 900, borderTop: '1px solid #000', paddingTop: 8, margin: '10px 0' }}>
+              <span>TOTAL A PAGAR:</span>
+              <span>R$ {(modalComandaMesaRodizio.subtotalConsumo * 1.1).toFixed(2)}</span>
+            </div>
+
+            <div style={{ textAlign: 'center', borderTop: '2px dashed #000', paddingTop: 10, fontSize: 10, color: '#444' }}>
+              *** CONFERÊNCIA DE MESA / NÃO É DOCUMENTO FISCAL ***<br/>
+              MUITO OBRIGADO PELA PREFERÊNCIA! VOLTE SEMPRE!<br/>
+              GRUPO PALATARE · KYTTO SISTEMAS
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+              <button
+                type="button"
+                onClick={() => setModalComandaMesaRodizio(null)}
+                style={{ flex: 1, padding: '8px', border: '1px solid #999', background: '#EEE', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                style={{ flex: 1, padding: '8px', border: 'none', background: '#10B981', color: '#064E3B', borderRadius: 6, fontWeight: 900, cursor: 'pointer' }}
+              >
+                🖨️ Imprimir Cupom
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL DE ABERTURA DE NOVA MESA NO RODÍZIO                    */}
+      {/* ------------------------------------------------------------- */}
+      {modalAbrirMesaRodizio && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          padding: 20
+        }}>
+          <div style={{
+            background: '#1C130D',
+            color: '#FFF',
+            borderRadius: 16,
+            padding: 24,
+            maxWidth: 420,
+            width: '100%',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.8)',
+            border: '1px solid rgba(255, 107, 44, 0.3)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#FF6B2C' }}>
+                🍽️ Abrir Nova Mesa no Rodízio
+              </h3>
+              <button
+                type="button"
+                onClick={() => setModalAbrirMesaRodizio(false)}
+                style={{ background: 'none', border: 'none', color: '#A8998C', fontSize: 18, cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#C8B6A6', marginBottom: 6 }}>
+                  Número da Mesa:
+                </label>
+                <select
+                  value={novaMesaRodizioNum}
+                  onChange={(e) => setNovaMesaRodizioNum(e.target.value)}
+                  style={{ width: '100%', background: '#140D09', border: '1px solid #FF6B2C', color: '#FFF', padding: '10px 12px', borderRadius: 8, fontWeight: 800, fontSize: 13 }}
+                >
+                  {Array.from({ length: 20 }, (_, i) => (
+                    <option key={i+1} value={String(i+1)}>Mesa {String(i+1).padStart(2, '0')} · Salão Gourmet</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#C8B6A6', marginBottom: 6 }}>
+                    Adultos (R$ 59,90):
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="30"
+                    value={novaMesaAdultos}
+                    onChange={(e) => setNovaMesaAdultos(Number(e.target.value))}
+                    style={{ width: '100%', background: '#140D09', border: '1px solid rgba(255,255,255,0.15)', color: '#FFF', padding: '10px 12px', borderRadius: 8, fontWeight: 800, fontSize: 13 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#C8B6A6', marginBottom: 6 }}>
+                    Crianças 5-10a (R$ 29,90):
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="20"
+                    value={novaMesaCriancas}
+                    onChange={(e) => setNovaMesaCriancas(Number(e.target.value))}
+                    style={{ width: '100%', background: '#140D09', border: '1px solid rgba(255,255,255,0.15)', color: '#FFF', padding: '10px 12px', borderRadius: 8, fontWeight: 800, fontSize: 13 }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ background: 'rgba(0,0,0,0.3)', padding: 12, borderRadius: 8, fontSize: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: '#A8998C' }}>Subtotal Inicial Estimado:</span>
+                <strong style={{ color: '#10B981', fontSize: 16 }}>
+                  R$ {((novaMesaAdultos * 59.90) + (novaMesaCriancas * 29.90)).toFixed(2)}
+                </strong>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button
+                type="button"
+                onClick={() => setModalAbrirMesaRodizio(false)}
+                style={{ flex: 1, background: 'rgba(255,255,255,0.08)', color: '#FFF', border: 'none', padding: '10px', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await api.post('/api/admin/palatare/rodizio/abrir-mesa', {
+                      mesaNumero: novaMesaRodizioNum,
+                      adultos: novaMesaAdultos,
+                      criancas: novaMesaCriancas
+                    });
+                    setModalAbrirMesaRodizio(false);
+                    carregarDados();
+                  } catch (e) {
+                    alert(e.message);
+                  }
+                }}
+                style={{ flex: 1, background: '#FF6B2C', color: '#FFF', border: 'none', padding: '10px', borderRadius: 8, fontWeight: 900, cursor: 'pointer', boxShadow: '0 4px 12px rgba(255, 107, 44, 0.4)' }}
+              >
+                Abrir Mesa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL DE CADASTRO DE NOVO ASSINANTE (PIZZA CLUB)             */}
+      {/* ------------------------------------------------------------- */}
+      {modalNovoAssinante && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          padding: 20
+        }}>
+          <div style={{
+            background: '#1A1210',
+            color: '#FFF',
+            borderRadius: 16,
+            padding: 24,
+            maxWidth: 440,
+            width: '100%',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.8)',
+            border: '1px solid rgba(212, 175, 55, 0.4)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#D4AF37' }}>
+                👑 Cadastrar Novo Membro VIP · Pizza Club
+              </h3>
+              <button
+                type="button"
+                onClick={() => setModalNovoAssinante(false)}
+                style={{ background: 'none', border: 'none', color: '#A8998C', fontSize: 18, cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gap: 12 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#C8B6A6', marginBottom: 4 }}>
+                  Nome Completo do Cliente:
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: Dr. Marcelo Guimarães"
+                  value={novoAssinanteNome}
+                  onChange={(e) => setNovoAssinanteNome(e.target.value)}
+                  style={{ width: '100%', background: '#140D09', border: '1px solid rgba(255,255,255,0.15)', color: '#FFF', padding: '10px 12px', borderRadius: 8, fontSize: 13 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#C8B6A6', marginBottom: 4 }}>
+                  WhatsApp para Confirmação de Entregas:
+                </label>
+                <input
+                  type="text"
+                  placeholder="(65) 99999-0000"
+                  value={novoAssinanteTelefone}
+                  onChange={(e) => setNovoAssinanteTelefone(e.target.value)}
+                  style={{ width: '100%', background: '#140D09', border: '1px solid rgba(255,255,255,0.15)', color: '#FFF', padding: '10px 12px', borderRadius: 8, fontSize: 13 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#C8B6A6', marginBottom: 4 }}>
+                  Plano de Assinatura Recorrente:
+                </label>
+                <select
+                  value={novoAssinantePlano}
+                  onChange={(e) => setNovoAssinantePlano(e.target.value)}
+                  style={{ width: '100%', background: '#140D09', border: '1px solid #D4AF37', color: '#FFF', padding: '10px 12px', borderRadius: 8, fontWeight: 800, fontSize: 13 }}
+                >
+                  <option value="Plano Amici">Plano Amici · R$ 139,00/mês (2 Pizzas + Frete Grátis)</option>
+                  <option value="Plano Famiglia">Plano Famiglia · R$ 249,00/mês (4 Pizzas + Refri 2L)</option>
+                  <option value="Plano Gourmet & Adega Wine">Plano Gourmet &amp; Adega Wine · R$ 329,00/mês (4 Pizzas + Vinho Tinto Reserva)</option>
+                </select>
+              </div>
+
+              <div style={{ background: 'rgba(212, 175, 55, 0.1)', border: '1px solid rgba(212, 175, 55, 0.3)', borderRadius: 8, padding: 10, fontSize: 11, color: '#FCD34D' }}>
+                💳 Cobrança mensal automática via Cartão de Crédito ou Pix Recorrente Kytto. Primeira fornada agendada para este sábado.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+              <button
+                type="button"
+                onClick={() => setModalNovoAssinante(false)}
+                style={{ flex: 1, background: 'rgba(255,255,255,0.08)', color: '#FFF', border: 'none', padding: '10px', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!novoAssinanteNome) return alert('Por favor, digite o nome do novo membro.');
+                  if (dadosSuite?.pizzaClub?.membrosDestaque) {
+                    dadosSuite.pizzaClub.membrosDestaque.unshift({
+                      id: `mem-${Date.now()}`,
+                      nome: novoAssinanteNome,
+                      plano: novoAssinantePlano,
+                      desde: '2026-11',
+                      proximaEntrega: '15/11/2026',
+                      status: 'ativo'
+                    });
+                  }
+                  setModalNovoAssinante(false);
+                  setNovoAssinanteNome('');
+                  setNovoAssinanteTelefone('');
+                  alert(`Membro VIP ${novoAssinanteNome} cadastrado com sucesso no ${novoAssinantePlano}! Receita recorrente MRR atualizada.`);
+                }}
+                style={{ flex: 1, background: '#D4AF37', color: '#000', border: 'none', padding: '10px', borderRadius: 8, fontWeight: 900, cursor: 'pointer' }}
+              >
+                Ativar Assinatura
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL DE CONFIGURAÇÃO DE TAXA & RAIO DE DELIVERY            */}
+      {/* ------------------------------------------------------------- */}
+      {modalConfigDelivery && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          padding: 20
+        }}>
+          <div style={{
+            background: '#1C130D',
+            color: '#FFF',
+            borderRadius: 16,
+            padding: 24,
+            maxWidth: 420,
+            width: '100%',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.8)',
+            border: '1px solid rgba(255, 107, 44, 0.3)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#FF6B2C' }}>
+                🛵 Configurar Zona: {modalConfigDelivery.bairro}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setModalConfigDelivery(null)}
+                style={{ background: 'none', border: 'none', color: '#A8998C', fontSize: 18, cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gap: 12 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#C8B6A6', marginBottom: 4 }}>
+                  Taxa de Entrega Fixa (R$):
+                </label>
+                <input
+                  type="number"
+                  step="0.50"
+                  value={taxaDeliveryEditada}
+                  onChange={(e) => setTaxaDeliveryEditada(Number(e.target.value))}
+                  style={{ width: '100%', background: '#140D09', border: '1px solid #FF6B2C', color: '#FFF', padding: '10px 12px', borderRadius: 8, fontWeight: 800, fontSize: 14 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#C8B6A6', marginBottom: 4 }}>
+                  Tempo Estimado de Trânsito:
+                </label>
+                <input
+                  type="text"
+                  value={tempoDeliveryEditado}
+                  onChange={(e) => setTempoDeliveryEditado(e.target.value)}
+                  style={{ width: '100%', background: '#140D09', border: '1px solid rgba(255,255,255,0.15)', color: '#FFF', padding: '10px 12px', borderRadius: 8, fontSize: 13 }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+              <button
+                type="button"
+                onClick={() => setModalConfigDelivery(null)}
+                style={{ flex: 1, background: 'rgba(255,255,255,0.08)', color: '#FFF', border: 'none', padding: '10px', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  modalConfigDelivery.taxa = taxaDeliveryEditada;
+                  modalConfigDelivery.tempoEstimadoMinutos = tempoDeliveryEditado;
+                  setModalConfigDelivery(null);
+                  alert(`Configuração do bairro ${modalConfigDelivery.bairro} salva: R$ ${taxaDeliveryEditada.toFixed(2)} (${tempoDeliveryEditado}).`);
+                }}
+                style={{ flex: 1, background: '#10B981', color: '#064E3B', border: 'none', padding: '10px', borderRadius: 8, fontWeight: 900, cursor: 'pointer' }}
+              >
+                Salvar Zona
               </button>
             </div>
           </div>

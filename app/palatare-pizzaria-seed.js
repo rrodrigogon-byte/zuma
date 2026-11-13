@@ -709,6 +709,134 @@ export const PALATARE_METRICAS_BI = {
   ]
 };
 
+// -------------------------------------------------------------
+// ENGENHARIA DE CARDÁPIO, FICHAS TÉCNICAS & GESTÃO DE CMV
+// -------------------------------------------------------------
+export const PALATARE_ENGENHARIA_CMV = {
+  cmvGeralAtual: 34.2,
+  cmvMetaOtimizada: 26.0,
+  economiaMensalQueijoEstimada: 7200.00,
+  quilosQueijoEconomizadosMes: 180,
+  matrizBcg: [
+    {
+      sabor: "Pizza Filé Mignon ao Gorgonzola",
+      categoria: "Estrela (Star)",
+      icone: "⭐",
+      precoVenda: 92.00,
+      custoInsumos: 23.90,
+      margemContribuicao: 68.10,
+      cmvPercentual: 26.0,
+      classificacao: "Alta Rentabilidade & Altíssima Venda",
+      gramaturaQueijoPadrao: "280g (Muçarela artesanal)",
+      ingredientesPrincipais: "280g Muçarela, 180g Filé Mignon grelhado, 60g Gorgonzola dolce, 100g Pelati San Marzano",
+      estrategia: "Manter destaque fotográfico no cardápio e sugerir harmonização com Cabernet Sauvignon Reserva."
+    },
+    {
+      sabor: "Pizza de Picanha Especial",
+      categoria: "Estrela (Star)",
+      icone: "⭐",
+      precoVenda: 89.00,
+      custoInsumos: 24.20,
+      margemContribuicao: 64.80,
+      cmvPercentual: 27.2,
+      classificacao: "Alta Rentabilidade & Altíssima Venda",
+      gramaturaQueijoPadrao: "280g (Muçarela artesanal)",
+      ingredientesPrincipais: "280g Muçarela, 190g Lâminas de picanha grelhada, alho dourado crocante, vinagrete da casa",
+      estrategia: "Carro-chefe aos sábados. Sugerir Chopp Artesanal 500ml."
+    },
+    {
+      sabor: "Pizza Carne Seca com Catupiry",
+      categoria: "Estrela (Star)",
+      icone: "⭐",
+      precoVenda: 78.00,
+      custoInsumos: 18.50,
+      margemContribuicao: 59.50,
+      cmvPercentual: 23.7,
+      classificacao: "Altíssima Margem & Alta Venda",
+      gramaturaQueijoPadrao: "260g (Muçarela + 80g Catupiry)",
+      ingredientesPrincipais: "260g Muçarela, 160g Carne seca na manteiga de garrafa, 80g Catupiry Original, cebola roxa",
+      estrategia: "Excelente margem bruta de 76,3%. Promover no delivery."
+    },
+    {
+      sabor: "Pizza Calabresa Artesanal Especial",
+      categoria: "Burro de Carga (Plowhorse)",
+      icone: "🐴",
+      precoVenda: 68.00,
+      custoInsumos: 22.10,
+      margemContribuicao: 45.90,
+      cmvPercentual: 32.5,
+      classificacao: "Alta Venda & Margem Moderada",
+      gramaturaQueijoPadrao: "270g (Calibrado)",
+      ingredientesPrincipais: "270g Muçarela, 180g Calabresa defumada artesanal, cebola roxa, orégano",
+      estrategia: "Reduzir o excesso de queijo de 350g para 270g exatos com balança, recuperando +R$ 3.800/mês."
+    },
+    {
+      sabor: "Pizza Palatare da Casa (Parma, Figos & Rúcula)",
+      categoria: "Enigma (Puzzle)",
+      icone: "🧩",
+      precoVenda: 89.00,
+      custoInsumos: 22.80,
+      margemContribuicao: 66.20,
+      cmvPercentual: 25.6,
+      classificacao: "Altíssima Margem & Venda a Estimular",
+      gramaturaQueijoPadrao: "240g (Muçarela de Búfala)",
+      ingredientesPrincipais: "240g Búfala, 120g Presunto di Parma, figos caramelizados no balsâmico, rúcula",
+      estrategia: "Oferecer degustação de 1 fatia no rodízio de sexta para despertar desejo de compra à la carte."
+    },
+    {
+      sabor: "Pizza Doce Nutella com Morangos Frescos",
+      categoria: "Estrela Doce (Star)",
+      icone: "⭐",
+      precoVenda: 62.00,
+      custoInsumos: 14.80,
+      margemContribuicao: 47.20,
+      cmvPercentual: 23.9,
+      classificacao: "Margem Altíssima de Sobremesa",
+      gramaturaQueijoPadrao: "Sem muçarela (160g Nutella pura)",
+      ingredientesPrincipais: "Massa napolitana fina, 160g Nutella original, 120g Morangos frescos, raspas belgas",
+      estrategia: "Upsell automático ao fechar a conta ou no carrinho digital mobile."
+    }
+  ]
+};
+
+// -------------------------------------------------------------
+// PALATARE PIZZA CLUB - ASSINATURAS RECORRENTES & FIDELIDADE
+// -------------------------------------------------------------
+export const PALATARE_PIZZA_CLUB = {
+  mrrAtual: 14890.00,
+  mrrMeta90Dias: 34500.00,
+  totalAssinantes: 72,
+  metaAssinantes: 150,
+  ticketMedioClube: 206.80,
+  taxaRetencaoClube: "96.2%",
+  planos: [
+    { id: "plano-amici", nome: "Plano Amici (Dupla)", mensalidade: 139.00, beneficios: ["2 Pizzas Grandes por mês", "Entrega Grátis em Tangará da Serra", "1 Borda Recheada cortesia/mês", "Despacho prioritário"], assinantesAtivos: 34, mrrPlano: 4726.00 },
+    { id: "plano-famiglia", nome: "Plano Famiglia (Festa)", mensalidade: 249.00, beneficios: ["4 Pizzas Grandes por mês", "1 Pizza Doce Brotinho cortesia", "Entrega Grátis VIP", "10% Cashback no Salão"], assinantesAtivos: 28, mrrPlano: 6972.00 },
+    { id: "plano-connoisseur", nome: "Plano Gourmet & Adega Wine", mensalidade: 329.00, beneficios: ["4 Pizzas Especiais Grandes/mês", "1 Garrafa Vinho Tinto Cabernet Reserva/mês", "Mesa VIP sem fila no Salão e Rodízio", "Novos sabores antecipados"], assinantesAtivos: 10, mrrPlano: 3290.00 }
+  ],
+  membrosDestaque: [
+    { id: "mem-01", nome: "Dr. Ricardo Mendonça", plano: "Plano Gourmet & Adega Wine", desde: "2026-06", proximaEntrega: "15/11/2026", status: "ativo" },
+    { id: "mem-02", nome: "Dra. Juliana Barreto", plano: "Plano Famiglia", desde: "2026-07", proximaEntrega: "18/11/2026", status: "ativo" },
+    { id: "mem-03", nome: "Thiago Brandão", plano: "Plano Amici", desde: "2026-08", proximaEntrega: "16/11/2026", status: "ativo" },
+    { id: "mem-04", nome: "Fernanda Castilho", plano: "Plano Famiglia", desde: "2026-09", proximaEntrega: "17/11/2026", status: "ativo" }
+  ]
+};
+
+// -------------------------------------------------------------
+// TELEMETRIA DO FORNO A LENHA NAPOLITANO (400°C)
+// -------------------------------------------------------------
+export const PALATARE_TELEMETRIA_FORNO = {
+  temperaturaLastro: "412°C",
+  temperaturaCupula: "445°C",
+  statusTermico: "Zona Ideal Napolitana (400°C - 450°C)",
+  tempoMedioCoccaoSegundos: 98,
+  pizzasForneadasHoje: 74,
+  capacidadeHoraPizzas: 48,
+  consumoLenhaHojeM3: "0,32 m³",
+  tipoLenha: "Eucalipto de Reflorestamento Certificado (Seco em Estufa)",
+  eficienciaEnergetica: "94.2% (Isolamento Refratário Duplo)"
+};
+
 export const PALATARE_CARDAPIO_INICIAL = [
   // Destaques da Casa & Rodízio Oficial
   { nome: "Rodízio de Pizzas Tradicional Palatare (Ter, Qua e Sex)", categoria: "Rodízio & Experiências", setor: "cozinha", preco: 59.90, unidade: "pessoa", estoque: 100, minimo: 10, ordem: 5, descricao: "Mais de 30 sabores doces e salgados assados no ponto perfeito, massas artesanais e calzones servidos à vontade à mesa." },
@@ -801,6 +929,9 @@ export async function provisionarPalatarePizzaria({ commerceDb } = {}) {
     rootDb.palatare_kds = PALATARE_KDS_FILA;
     rootDb.palatare_delivery = PALATARE_DELIVERY_ZONAS;
     rootDb.palatare_metricas = PALATARE_METRICAS_BI;
+    rootDb.palatare_engenharia = PALATARE_ENGENHARIA_CMV;
+    rootDb.palatare_pizza_club = PALATARE_PIZZA_CLUB;
+    rootDb.palatare_forno = PALATARE_TELEMETRIA_FORNO;
 
     // Usuários da Palatare no JSON
     rootDb.usuarios ||= [];

@@ -4412,3 +4412,150 @@ export function calcularCurvaMaturidadeAstmC1074(dados = {}, empresaId = CONCRET
     curvaMaturidade: pontos
   };
 }
+
+// =====================================================================
+
+// =====================================================================
+// 25. GESTÃO COMPLETA DE LABORATÓRIO E CORPOS DE PROVA (NBR 5738 / 5739)
+// =====================================================================
+export async function criarLoteEnsaio(dados, empresaId = CONCRETO_EMPRESA_ID) {
+  const ensaios = ENSAIOS_INICIAIS;
+  const novoId = "ens-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6);
+  const dataMoldagem = dados.dataMoldagem || new Date().toISOString().slice(0, 10);
+  const dMold = new Date(dataMoldagem + "T12:00:00Z");
+
+  const calcData = (dias) => {
+    const d = new Date(dMold);
+    d.setDate(d.getDate() + dias);
+    return d.toISOString().slice(0, 10);
+  };
+
+  const loteNumero = dados.lote || ("LOTE-" + (ensaios.length + 101));
+  const corposProva = [
+    { id: "CP-1", codigo: loteNumero + "-CP1", idadeDias: 7, dataPrevista: calcData(7), dataRuptura: null, forcaKn: null, tensaoMpa: null, status: "aguardando", percentualFck: null },
+    { id: "CP-2", codigo: loteNumero + "-CP2", idadeDias: 7, dataPrevista: calcData(7), dataRuptura: null, forcaKn: null, tensaoMpa: null, status: "aguardando", percentualFck: null },
+    { id: "CP-3", codigo: loteNumero + "-CP3", idadeDias: 28, dataPrevista: calcData(28), dataRuptura: null, forcaKn: null, tensaoMpa: null, status: "aguardando", percentualFck: null },
+    { id: "CP-4", codigo: loteNumero + "-CP4", idadeDias: 28, dataPrevista: calcData(28), dataRuptura: null, forcaKn: null, tensaoMpa: null, status: "aguardando", percentualFck: null }
+  ];
+
+  const novoLote = {
+    id: novoId,
+    empresaId,
+    lote: loteNumero,
+    cliente: dados.cliente || "Cliente Balcão / Construtora",
+    obra: dados.obra || "Obra Geral",
+    traco: dados.traco || "FCK 30 - Brita 1 - Slump 12±2",
+    fckProjeto: Number(dados.fckProjeto) || 30,
+    slumpMedidoCm: Number(dados.slumpMedidoCm) || 12,
+    volumeM3: Number(dados.volumeM3) || 8,
+    dataMoldagem,
+    laboratorista: dados.laboratorista || "Engenharia de Controle Tecnológico",
+    tipoCura: dados.tipoCura || "Câmara Úmida Climatizada 100% UR",
+    status: "em_ensaio",
+    laudoAprovado: false,
+    observacoes: dados.observacoes || "",
+    corposProva
+  };
+
+  ensaios.unshift(novoLote);
+  return { ok: true, ensaio: novoLote };
+}
+
+export async function atualizarLoteEnsaio(id, dados, empresaId = CONCRETO_EMPRESA_ID) {
+  const ensaio = ENSAIOS_INICIAIS.find(e => e.id === id);
+  if (!ensaio) throw new Error("Lote de ensaio não encontrado.");
+  if (dados.cliente) ensaio.cliente = dados.cliente;
+  if (dados.obra) ensaio.obra = dados.obra;
+  if (dados.traco) ensaio.traco = dados.traco;
+  if (dados.fckProjeto) ensaio.fckProjeto = Number(dados.fckProjeto);
+  if (dados.slumpMedidoCm) ensaio.slumpMedidoCm = Number(dados.slumpMedidoCm);
+  if (dados.tipoCura) ensaio.tipoCura = dados.tipoCura;
+  if (dados.laboratorista) ensaio.laboratorista = dados.laboratorista;
+  if (dados.observacoes !== undefined) ensaio.observacoes = dados.observacoes;
+  return { ok: true, ensaio };
+}
+
+export async function excluirLoteEnsaio(id, empresaId = CONCRETO_EMPRESA_ID) {
+  const idx = ENSAIOS_INICIAIS.findIndex(e => e.id === id);
+  if (idx === -1) throw new Error("Lote de ensaio não encontrado.");
+  const [removido] = ENSAIOS_INICIAIS.splice(idx, 1);
+  return { ok: true, removido };
+}
+
+export async function atualizarCorpoProva(loteId, cpId, dados, empresaId = CONCRETO_EMPRESA_ID) {
+  const lote = ENSAIOS_INICIAIS.find(e => e.id === loteId);
+  if (!lote) throw new Error("Lote de ensaio não encontrado.");
+  const cp = lote.corposProva?.find(c => c.id === cpId || c.codigo === cpId || c.id.endsWith(cpId) || c.codigo.endsWith(cpId));
+  if (!cp) throw new Error("Corpo de prova não encontrado.");
+  if (dados.forcaKn != null) {
+    cp.forcaKn = Number(dados.forcaKn);
+    // Área nominal CP 10x20cm: A = π * r² = 78.5398 cm² => Tensão = forcaKn / 7.854
+    cp.tensaoMpa = Number((cp.forcaKn / 7.854).toFixed(1));
+  }
+  if (dados.tensaoMpa != null) cp.tensaoMpa = Number(dados.tensaoMpa);
+  if (dados.dataRuptura) cp.dataRuptura = dados.dataRuptura;
+  if (dados.tipoFratura || dados.tipoRuptura) cp.tipoFratura = dados.tipoFratura || dados.tipoRuptura;
+  if (dados.idadeDias != null) cp.idadeDias = Number(dados.idadeDias);
+  if (cp.tensaoMpa && lote.fckProjeto) {
+    cp.percentualFck = Math.round((cp.tensaoMpa / lote.fckProjeto) * 100);
+    cp.status = "rompido";
+  }
+
+  // Avaliação do lote com NBR 12655
+  const cps28 = lote.corposProva.filter(c => c.idadeDias === 28 && c.tensaoMpa);
+  if (cps28.length >= 2) {
+    const fckEst = Math.min(...cps28.map(c => c.tensaoMpa));
+    lote.fckEstimado28d = fckEst;
+    if (fckEst >= lote.fckProjeto) {
+      lote.status = "aprovado";
+      lote.laudoAprovado = true;
+    } else {
+      lote.status = "reprovado";
+      lote.laudoAprovado = false;
+    }
+  }
+
+  return { ok: true, corpoProva: cp, ensaio: lote, lote };
+}
+
+export function gerarLaudoTecnicoImpressaoHtml(loteId, empresaId = CONCRETO_EMPRESA_ID) {
+  const lote = ENSAIOS_INICIAIS.find(e => e.id === loteId) || ENSAIOS_INICIAIS[0];
+  const dados = obterDadosConcreto(empresaId);
+  const cps = lote.corposProva || [];
+
+  return '<!DOCTYPE html>' +
+'<html lang="pt-BR">' +
+'<head>' +
+'  <meta charset="utf-8" />' +
+'  <title>Certificado de Controle Tecnológico NBR 5739 - ' + lote.lote + '</title>' +
+'  <style>' +
+'    body { font-family: Inter, sans-serif; margin: 0; padding: 24px; color: #0f172a; font-size: 13px; }' +
+'    .laudo-container { max-width: 800px; margin: 0 auto; border: 2px solid #0f172a; padding: 24px; border-radius: 8px; }' +
+'    .header { display: flex; justify-content: space-between; border-bottom: 2px solid #0f172a; padding-bottom: 16px; margin-bottom: 16px; }' +
+'  </style>' +
+'</head>' +
+'<body>' +
+'  <div class="laudo-container">' +
+'    <div class="header">' +
+'      <div>' +
+'        <div style="font-weight: 900; font-size: 16px; color: #ea580c;">SERRANO CONCRETO USINADO</div>' +
+'        <div style="font-size: 11px; color: #64748b;">CNPJ: ' + (dados?.empresa?.cnpj || '13.567.890/0001-22') + ' · CREA-MT 027300</div>' +
+'      </div>' +
+'      <div style="text-align: right;">' +
+'        <h1 style="font-size: 18px; margin: 0;">Certificado de Controle Tecnológico</h1>' +
+'        <div style="font-weight: 700;">Lote: ' + lote.lote + '</div>' +
+'      </div>' +
+'    </div>' +
+'    <p>Cliente: <strong>' + lote.cliente + '</strong> · Obra: <strong>' + lote.obra + '</strong> · FCK: <strong>' + lote.fckProjeto + ' MPa</strong></p>' +
+'    <p>Responsável Técnica: <strong>Engª Karin Prestes</strong> (CREA-MT 027300)</p>' +
+'    <p>Observações: ' + (lote.observacoes || 'Conforme ensaios NBR 5738 e NBR 5739.') + '</p>' +
+'    <table>' +
+'      <thead><tr><th>CP</th><th>Idade</th><th>Prevista</th><th>Ruptura</th><th>Carga (kN)</th><th>Tensão (MPa)</th><th>Status</th></tr></thead>' +
+'      <tbody>' +
+        cps.map(c => '<tr><td>' + c.codigo + '</td><td>' + c.idadeDias + 'd</td><td>' + c.dataPrevista + '</td><td>' + (c.dataRuptura || '—') + '</td><td>' + (c.forcaKn || '—') + '</td><td style="font-weight: 800; color: #ea580c;">' + (c.tensaoMpa ? c.tensaoMpa + ' MPa' : '—') + '</td><td>' + (c.status === 'rompido' ? 'CONFORME' : 'AGUARDANDO') + '</td></tr>').join('') +
+'      </tbody>' +
+'    </table>' +
+'  </div>' +
+'</body>' +
+'</html>';
+}
