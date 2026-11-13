@@ -5622,7 +5622,7 @@ export function analisarFrameVisionKyttoIa(id, empresaId = CONCRETO_EMPRESA_ID) 
       tipoRotulo: "Placa LPR Identificada pelo Motor KyttoIA",
       placaDetectada: "RRA-4E80",
       tipoPlaca: "Mercosul Caminhão Comercial",
-      veiculoDescricao: "Betoneira BT-01 Constellation 26.280 (Serrano)",
+      veiculoDescricao: "Betoneira Mercedes-Benz Arocs 3345 (Serrano)",
       motorista: "Marcos Silveira (CNH 04928173921)",
       confianca: 99.7,
       severidade: "info",
@@ -5630,9 +5630,10 @@ export function analisarFrameVisionKyttoIa(id, empresaId = CONCRETO_EMPRESA_ID) 
       episDetectados: ["capacete_amarelo", "colete_refletivo_laranja"],
       detalhes: "Placa Mercosul RRA-4E80 lida com 99.7% de precisão. Motorista com EPI regular.",
       boundingBoxes: [
-        { label: "Placa LPR RRA-4E80 (99.7%)", x: 42, y: 76, w: 16, h: 8, color: "#10b981" },
-        { label: "Caminhão Betoneira BT-01", x: 20, y: 25, w: 60, h: 65, color: "#3b82f6" },
-        { label: "EPI Conforme: Capacete & Colete", x: 48, y: 35, w: 12, h: 22, color: "#f59e0b" }
+        { label: "Placa LPR: RRA-4E80 (99.7%)", x: 51, y: 73, w: 7, h: 4, color: "#10b981" },
+        { label: "Betoneira Mercedes Arocs", x: 33, y: 31, w: 37, h: 54, color: "#3b82f6" },
+        { label: "EPI Conforme: Colete Refletivo", x: 55, y: 39, w: 8, h: 12, color: "#f59e0b" },
+        { label: "Silos de Cimento S1 & S2", x: 58, y: 0, w: 30, h: 36, color: "#8b5cf6" }
       ]
     };
   } else if (camera.pontoInstalacao === "balanca_panoramica_21m" || camera.id === "cam-02-panoramica") {
@@ -5646,9 +5647,9 @@ export function analisarFrameVisionKyttoIa(id, empresaId = CONCRETO_EMPRESA_ID) 
       distribuicaoEixosKg: [8370, 8365, 8375, 8370],
       detalhes: "Todos os eixos centralizados sobre as 8 células Toledo Prix. Tolerância metrológica 100% OK.",
       boundingBoxes: [
-        { label: "Plataforma 21m Enquadrada 100%", x: 10, y: 30, w: 80, h: 50, color: "#10b981" },
-        { label: "Sensor Óptico 1 (Livre)", x: 12, y: 25, w: 8, h: 10, color: "#06b6d4" },
-        { label: "Sensor Óptico 2 (Livre)", x: 80, y: 25, w: 8, h: 10, color: "#06b6d4" }
+        { label: "Plataforma 21m 80t Nivelada", x: 24, y: 52, w: 60, h: 10, color: "#10b981" },
+        { label: "Betoneira 32t Enquadrada 100%", x: 34, y: 26, w: 41, h: 29, color: "#3b82f6" },
+        { label: "Cabine CCO Balança 80 Ton", x: 84, y: 34, w: 10, h: 30, color: "#06b6d4" }
       ]
     };
   } else if (camera.marca === "flir" || camera.pontoInstalacao === "termografia_silos") {
@@ -5657,11 +5658,13 @@ export function analisarFrameVisionKyttoIa(id, empresaId = CONCRETO_EMPRESA_ID) 
       tipoRotulo: "Termografia FLIR & Temperatura NBR 7212",
       confianca: 99.4,
       severidade: "info",
-      detalhes: "Temperatura da massa de concreto no tambor em 28.4°C (Conforme NBR 7212 - Limite máximo 32.0°C). Silos em gradiente térmico estável.",
+      detalhes: "Termografia de motores e redutores da usina. Mancais em 61.3°C e redutor em 78.6°C (dentro da faixa segura de operação).",
+      temperaturaMax: 78.6,
+      temperaturaMedia: 65.5,
       boundingBoxes: [
-        { label: "Tambor Betoneira 28.4°C (NBR 7212 OK)", x: 65, y: 35, w: 25, h: 30, color: "#ef4444" },
-        { label: "Silo 1 CP II-F (31.2°C)", x: 22, y: 22, w: 14, h: 55, color: "#f97316" },
-        { label: "Silo 2 CP V-ARI (29.8°C)", x: 42, y: 22, w: 14, h: 55, color: "#eab308" }
+        { label: "Motor Elétrico M1 (61.3°C)", x: 2, y: 30, w: 30, h: 35, color: "#ef4444" },
+        { label: "Redutor de Carga (78.6°C)", x: 34, y: 33, w: 28, h: 35, color: "#f97316" },
+        { label: "Motor Auxiliar M2 (56.8°C)", x: 67, y: 39, w: 18, h: 25, color: "#eab308" }
       ]
     };
   } else if (camera.marca === "bosch" || (camera.nome && camera.nome.includes("Células"))) {
@@ -5670,11 +5673,11 @@ export function analisarFrameVisionKyttoIa(id, empresaId = CONCRETO_EMPRESA_ID) 
       tipoRotulo: "Inspeção Visual Células Toledo Prix C1-C8",
       confianca: 99.8,
       severidade: "info",
-      detalhes: "8 Células Toledo Prix digitais inspecionadas visualmente sem desvios ou obstruções. Certificação IPEM-MT ativa.",
+      detalhes: "Células Toledo Prix digitais sob a longarina metálica inspecionadas visualmente sem desvios. Certificação IPEM-MT ativa.",
       boundingBoxes: [
-        { label: "Plataforma 21m Nivelada", x: 12, y: 36, w: 76, h: 34, color: "#10b981" },
-        { label: "Células C1-C4 (Eixo Diant.)", x: 18, y: 38, w: 32, h: 10, color: "#38bdf8" },
-        { label: "Células C5-C8 (Eixo Tras.)", x: 52, y: 38, w: 32, h: 10, color: "#38bdf8" }
+        { label: "Longarina Aço Estrutural", x: 20, y: 4, w: 62, h: 90, color: "#10b981" },
+        { label: "Célula Digital Toledo Prix C1", x: 48, y: 64, w: 12, h: 16, color: "#38bdf8" },
+        { label: "Rodado Caminhão 32.000 kg", x: 33, y: 0, w: 44, h: 38, color: "#f59e0b" }
       ]
     };
   } else if (camera.marca === "toledo_prix_lpr" || camera.pontoInstalacao === "balanca_autoatendimento") {
