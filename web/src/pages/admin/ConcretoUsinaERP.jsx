@@ -4,6 +4,7 @@ import { useAuth } from '../../lib/auth';
 import { useToast } from '../../hooks/useToast';
 import { api } from '../../lib/api';
 import './ConcretoUsinaERP.css';
+import ConcretoFinanceiroUsina from './concreto/ConcretoFinanceiroUsina';
 import ConcretoVendasFaturamento from './concreto/ConcretoVendasFaturamento';
 import ProgramacaoCargasAgenda from './concreto/ProgramacaoCargasAgenda';
 import ConcretoKyttoIACopilot from './concreto/ConcretoKyttoIACopilot';
@@ -667,6 +668,7 @@ export default function ConcretoUsinaERP() {
             { id: "producao-op", label: "Ordens de Produção", icon: "📋" },
             { id: "producao-laboratorio", label: "Laboratório & CPs (NBR 5739)", icon: "🔬", count: ensaios.length },
             { id: "suprimentos-silos", label: "Mineração & Silos 96t", icon: "⛏️", count: silos.length },
+            { id: "financeiro-usina", label: "Financeiro & Fluxo de Caixa", icon: "💰" },
             { id: "vendas-faturamento", label: "Vendas & Notas Fiscais", icon: "📑" },
             { id: "comercial-propostas", label: "Orçamentos & Propostas", icon: "💼", count: propostas.length },
             { id: "empresa-holding", label: "Holding & Dados Fiscais", icon: "🏢" },
@@ -2030,6 +2032,11 @@ export default function ConcretoUsinaERP() {
             onAbrirRomaneio={(c) => { setModalRomaneioAberto(c); setAbaRomaneio('romaneio'); }}
             onAbrirTicketBalanca={(c) => { setModalRomaneioAberto(c); setAbaRomaneio('balanca'); }}
           />
+        )}
+
+        {/* ─── ABA 11: FINANCEIRO, FLUXO DE CAIXA & MEDIÇÕES DE OBRAS ─── */}
+        {(secaoAtiva === 'financeiro-usina' || secaoAtiva === 'financeiro') && (
+          <ConcretoFinanceiroUsina cargas={cargas} />
         )}
       </main>
 
