@@ -29,7 +29,12 @@ import {
   gerarHtmlTicketBalanca,
   listarMedicoesObras,
   criarMedicaoObra,
-  atualizarStatusMedicao
+  atualizarStatusMedicao,
+  criarLoteEnsaio,
+  atualizarLoteEnsaio,
+  excluirLoteEnsaio,
+  atualizarCorpoProva,
+  gerarLaudoTecnicoImpressaoHtml
 } from './servico.js';
 import { CONCRETO_EMPRESA_ID } from '../../concreto-usina-seed.js';
 
@@ -367,6 +372,59 @@ export function criarRotasConcreto() {
       return res.json(resultado);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+
+  // ─── ROTAS COMPLETAS DE LABORATÓRIO & CONTROLE TECNOLÓGICO NBR 5738/5739 ───
+  router.post('/ensaios', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await criarLoteEnsaio(req.body, empresaId);
+      return res.status(201).json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.put('/ensaios/:id', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await atualizarLoteEnsaio(req.params.id, req.body, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.delete('/ensaios/:id', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await excluirLoteEnsaio(req.params.id, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.put('/ensaios/:loteId/corpos-prova/:cpId', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await atualizarCorpoProva(req.params.loteId, req.params.cpId, req.body, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.get('/ensaios/:loteId/laudo-imprimir', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const html = gerarLaudoTecnicoImpressaoHtml(req.params.loteId, empresaId);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    } catch (e) {
+      return res.status(404).send('<h1>Erro 404</h1><p>' + e.message + '</p>');
     }
   });
 

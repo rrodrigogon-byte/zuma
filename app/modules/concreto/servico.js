@@ -2149,3 +2149,279 @@ export async function atualizarStatusMedicao(medicaoId, status) {
   save();
   return { ok: true, medicao };
 }
+
+
+// =====================================================================
+// 13. GESTÃO COMPLETA DE LABORATÓRIO & ENSAIOS DE CPs (NBR 5738 / NBR 5739)
+// =====================================================================
+
+export async function criarLoteEnsaio(dados, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  if (!Array.isArray(data.concreto_ensaios)) data.concreto_ensaios = [];
+
+  const numeroSeq = data.concreto_ensaios.length + 91;
+  const loteCodigo = dados.lote || ('CP-2026-' + String(numeroSeq).padStart(3, '0'));
+  const fck = Number(dados.fckProjeto) || 30;
+  const dataMold = dados.dataMoldagem || new Date().toISOString().slice(0, 10);
+
+  const corposProvaPadrao = Array.isArray(dados.corposProva) && dados.corposProva.length > 0 
+    ? dados.corposProva 
+    : [
+        { id: 'CP-1', idadeDias: 7, dataRuptura: null, forcaKn: null, tensaoMpa: null, percentualFck: null, tipoFratura: null },
+        { id: 'CP-2', idadeDias: 7, dataRuptura: null, forcaKn: null, tensaoMpa: null, percentualFck: null, tipoFratura: null },
+        { id: 'CP-3', idadeDias: 28, dataRuptura: null, forcaKn: null, tensaoMpa: null, percentualFck: null, tipoFratura: null },
+        { id: 'CP-4', idadeDias: 28, dataRuptura: null, forcaKn: null, tensaoMpa: null, percentualFck: null, tipoFratura: null }
+      ];
+
+  const novoEnsaio = {
+    id: 'cp-2026-' + String(numeroSeq).padStart(3, '0'),
+    lote: loteCodigo,
+    empresaId,
+    cargaId: dados.cargaId || null,
+    romaneioNumero: dados.romaneioNumero || null,
+    cliente: dados.cliente || 'Construtora Parceira',
+    obra: dados.obra || 'Estrutura de Concreto Armado',
+    endereco: dados.endereco || 'Tangará da Serra/MT',
+    fckProjeto: fck,
+    slumpMedidoCm: Number(dados.slumpMedidoCm) || 14,
+    slumpProjeto: dados.slumpProjeto || '14 ± 2 cm',
+    dataMoldagem: dataMold,
+    tipoCura: dados.tipoCura || 'Câmara Úmida 100% UR (NBR 5738)',
+    prensa: dados.prensa || 'Prensa Eletro-Hidráulica Automatizada 100t (EMIC / Solocap)',
+    laboratorista: dados.laboratorista || 'Técnico Marcos Siqueira',
+    responsavelTecnico: dados.responsavelTecnico || 'Engª Karin Prestes (CREA-MT 027300/D)',
+    status: dados.status || 'em_cura',
+    corposProva: corposProvaPadrao,
+    fckEstimado28d: null,
+    laudoAprovado: null,
+    laudoNumero: 'LAUDO-2026/' + String(numeroSeq).padStart(3, '0') + '-EM-CURA',
+    observacoes: dados.observacoes || 'Corpos de prova moldados conforme ABNT NBR 5738. Cura inicial em câmara climatizada.'
+  };
+
+  data.concreto_ensaios.unshift(novoEnsaio);
+  save();
+  return { ok: true, ensaio: novoEnsaio };
+}
+
+export async function atualizarLoteEnsaio(loteId, dados, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const ensaio = (data.concreto_ensaios || []).find(e => e.id === loteId || e.lote === loteId);
+  if (!ensaio) throw new Error('Lote de ensaio ' + loteId + ' não encontrado.');
+
+  if (dados.cliente !== undefined) ensaio.cliente = dados.cliente;
+  if (dados.obra !== undefined) ensaio.obra = dados.obra;
+  if (dados.endereco !== undefined) ensaio.endereco = dados.endereco;
+  if (dados.fckProjeto !== undefined) ensaio.fckProjeto = Number(dados.fckProjeto);
+  if (dados.slumpMedidoCm !== undefined) ensaio.slumpMedidoCm = Number(dados.slumpMedidoCm);
+  if (dados.slumpProjeto !== undefined) ensaio.slumpProjeto = dados.slumpProjeto;
+  if (dados.dataMoldagem !== undefined) ensaio.dataMoldagem = dados.dataMoldagem;
+  if (dados.tipoCura !== undefined) ensaio.tipoCura = dados.tipoCura;
+  if (dados.prensa !== undefined) ensaio.prensa = dados.prensa;
+  if (dados.laboratorista !== undefined) ensaio.laboratorista = dados.laboratorista;
+  if (dados.responsavelTecnico !== undefined) ensaio.responsavelTecnico = dados.responsavelTecnico;
+  if (dados.observacoes !== undefined) ensaio.observacoes = dados.observacoes;
+  if (dados.status !== undefined) ensaio.status = dados.status;
+
+  // Recalcular médias se houver corpos de prova preenchidos
+  const cps28d = (ensaio.corposProva || []).filter(c => c.idadeDias === 28 && c.tensaoMpa != null);
+  if (cps28d.length >= 2) {
+    const soma = cps28d.reduce((acc, c) => acc + c.tensaoMpa, 0);
+    const media28d = +(soma / cps28d.length).toFixed(1);
+    ensaio.fckEstimado28d = media28d;
+    ensaio.laudoAprovado = media28d >= ensaio.fckProjeto;
+    ensaio.status = ensaio.laudoAprovado ? 'aprovado' : 'divergente';
+    ensaio.laudoNumero = 'LAUDO-2026/' + ensaio.lote.replace(/\D/g, '') + '-NBR5739';
+  }
+
+  save();
+  return { ok: true, ensaio };
+}
+
+export async function excluirLoteEnsaio(loteId, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const idx = (data.concreto_ensaios || []).findIndex(e => e.id === loteId || e.lote === loteId);
+  if (idx === -1) throw new Error('Lote de ensaio ' + loteId + ' não encontrado.');
+
+  const removido = data.concreto_ensaios.splice(idx, 1)[0];
+  save();
+  return { ok: true, removido };
+}
+
+export async function atualizarCorpoProva(loteId, cpId, dados, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const ensaio = (data.concreto_ensaios || []).find(e => e.id === loteId || e.lote === loteId);
+  if (!ensaio) throw new Error('Lote de ensaio ' + loteId + ' não encontrado.');
+
+  let cp = ensaio.corposProva?.find(c => c.id === cpId);
+  if (!cp) {
+    cp = { id: cpId, idadeDias: Number(dados.idadeDias) || 28 };
+    if (!Array.isArray(ensaio.corposProva)) ensaio.corposProva = [];
+    ensaio.corposProva.push(cp);
+  }
+
+  if (dados.idadeDias !== undefined) cp.idadeDias = Number(dados.idadeDias);
+  if (dados.dataRuptura !== undefined) cp.dataRuptura = dados.dataRuptura;
+  if (dados.tipoFratura !== undefined) cp.tipoFratura = dados.tipoFratura;
+
+  if (dados.tensaoMpa !== undefined || dados.forcaKn !== undefined) {
+    const tensao = dados.tensaoMpa !== undefined 
+      ? Number(dados.tensaoMpa) 
+      : Number(dados.forcaKn) / 7.854;
+    const forca = dados.forcaKn !== undefined 
+      ? Number(dados.forcaKn) 
+      : tensao * 7.854;
+
+    cp.tensaoMpa = +tensao.toFixed(1);
+    cp.forcaKn = +forca.toFixed(1);
+    cp.percentualFck = +((cp.tensaoMpa / ensaio.fckProjeto) * 100).toFixed(1);
+  }
+
+  const cps28d = ensaio.corposProva.filter(c => c.idadeDias === 28 && c.tensaoMpa != null);
+  if (cps28d.length >= 2) {
+    const soma = cps28d.reduce((acc, c) => acc + c.tensaoMpa, 0);
+    const media28d = +(soma / cps28d.length).toFixed(1);
+    ensaio.fckEstimado28d = media28d;
+    ensaio.laudoAprovado = media28d >= ensaio.fckProjeto;
+    ensaio.status = ensaio.laudoAprovado ? 'aprovado' : 'divergente';
+    ensaio.laudoNumero = 'LAUDO-2026/' + ensaio.lote.replace(/\D/g, '') + '-NBR5739';
+  } else {
+    ensaio.status = 'em_cura';
+  }
+
+  save();
+  return { ok: true, ensaio, corpoProva: cp };
+}
+
+export function gerarLaudoTecnicoImpressaoHtml(loteId, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const ensaio = (data.concreto_ensaios || []).find(e => e.id === loteId || e.lote === loteId);
+  if (!ensaio) throw new Error('Lote de ensaio ' + loteId + ' não encontrado.');
+
+  const emp = data.empresas?.find(e => e.id === empresaId) || CONCRETO_DADOS_EMPRESA;
+  const aprovado = ensaio.fckEstimado28d ? ensaio.fckEstimado28d >= ensaio.fckProjeto : false;
+
+  const linhasCp = (ensaio.corposProva || []).map(cp => {
+    return '<tr>' +
+      '<td><b>' + cp.id + '</b></td>' +
+      '<td>' + cp.idadeDias + ' dias</td>' +
+      '<td>' + (cp.dataRuptura || 'Aguardando') + '</td>' +
+      '<td>' + (cp.forcaKn ? cp.forcaKn.toFixed(1) + ' kN' : '—') + '</td>' +
+      '<td><b>' + (cp.tensaoMpa ? cp.tensaoMpa.toFixed(1) + ' MPa' : 'Em cura') + '</b></td>' +
+      '<td>' + (cp.percentualFck ? cp.percentualFck + '%' : '—') + '</td>' +
+      '<td>' + (cp.tipoFratura || (cp.tensaoMpa ? 'Cônica / Normal' : '—')) + '</td>' +
+    '</tr>';
+  }).join('');
+
+  const parecerBox = aprovado
+    ? '<div class="status-aprovado">' +
+        '<b>✓ CONCRETO ESTRUTURAL HOMOLOGADO E APROVADO</b>' +
+        '<span>A resistência média aos 28 dias atingiu <b>' + ensaio.fckEstimado28d + ' MPa</b>, correspondendo a <b>' + (((ensaio.fckEstimado28d / ensaio.fckProjeto) * 100).toFixed(1)) + '%</b> do FCK de projeto (' + ensaio.fckProjeto + ' MPa). Lote rigorosamente em conformidade com os critérios de aceitação da ABNT NBR 12655.</span>' +
+      '</div>'
+    : '<div class="status-aguardando">' +
+        '<b>⏳ CONTROLE TECNOLÓGICO EM ANDAMENTO</b>' +
+        '<span>Corpos de prova em processo de cura normativa climatizada. Aguardando idade de controle de 28 dias para fechamento definitivo do laudo.</span>' +
+      '</div>';
+
+  return '<!DOCTYPE html>' +
+'<html lang="pt-BR">' +
+'<head>' +
+  '<meta charset="UTF-8">' +
+  '<title>Laudo Técnico de Ensaio NBR 5739 · ' + ensaio.lote + '</title>' +
+  '<style>' +
+    '@page { size: A4 portrait; margin: 15mm; }' +
+    'body { font-family: Segoe UI, Arial, sans-serif; color: #111; margin: 0; padding: 20px; background: #fff; line-height: 1.4; font-size: 13px; }' +
+    '.header { border-bottom: 3px solid #ff6600; padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }' +
+    '.logo-box h1 { margin: 0; font-size: 20px; color: #111; letter-spacing: -0.5px; }' +
+    '.logo-box span { color: #ff6600; font-weight: 800; }' +
+    '.logo-box small { display: block; color: #666; font-size: 11px; margin-top: 2px; }' +
+    '.laudo-badge { text-align: right; }' +
+    '.laudo-badge b { font-size: 15px; color: #222; }' +
+    '.laudo-badge div { font-size: 11px; color: #666; }' +
+    '.title-banner { background: #f4f5f7; border-left: 4px solid #ff6600; padding: 10px 14px; margin-bottom: 16px; }' +
+    '.title-banner h2 { margin: 0; font-size: 15px; text-transform: uppercase; color: #222; }' +
+    '.title-banner small { color: #666; font-size: 11px; }' +
+    '.grid-dados { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; background: #fafafa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; }' +
+    '.d-item { font-size: 12px; }' +
+    '.d-item span { color: #666; display: block; font-size: 10px; text-transform: uppercase; font-weight: 700; }' +
+    '.d-item b { color: #111; font-size: 12px; }' +
+    'table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 12px; }' +
+    'th { background: #222; color: #fff; padding: 8px 10px; text-align: left; font-size: 11px; text-transform: uppercase; }' +
+    'td { border-bottom: 1px solid #e5e7eb; padding: 8px 10px; }' +
+    'tr:nth-child(even) { background: #f9fafb; }' +
+    '.status-aprovado { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; padding: 12px; border-radius: 6px; text-align: center; margin-bottom: 18px; }' +
+    '.status-aprovado b { font-size: 15px; display: block; margin-bottom: 4px; }' +
+    '.status-aguardando { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; padding: 12px; border-radius: 6px; text-align: center; margin-bottom: 18px; }' +
+    '.footer-assinaturas { margin-top: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 30px; text-align: center; }' +
+    '.linha-assinatura { border-top: 1px solid #222; padding-top: 6px; margin-top: 40px; font-size: 11px; }' +
+    '.no-print { text-align: right; margin-bottom: 15px; }' +
+    '.btn-print { background: #ff6600; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 13px; }' +
+    '@media print { .no-print { display: none; } body { padding: 0; } }' +
+  '</style>' +
+'</head>' +
+'<body>' +
+  '<div class="no-print">' +
+    '<button class="btn-print" onclick="window.print()">🖨️ Imprimir Laudo Técnico (A4)</button>' +
+  '</div>' +
+  '<div class="header">' +
+    '<div class="logo-box">' +
+      '<h1>SERRANO <span>CONCRETO</span></h1>' +
+      '<small>Serrano Mineração e Usina de Concreto Ltda · CNPJ: ' + (emp.cnpj || '13.567.890/0001-20') + '</small>' +
+      '<small>Rodovia MT-358, Km 12 · Tangará da Serra/MT · Tel: (65) 3311-2000</small>' +
+    '</div>' +
+    '<div class="laudo-badge">' +
+      '<b>' + (ensaio.laudoNumero || 'LAUDO NBR 5739') + '</b>' +
+      '<div>Lote: <b>' + ensaio.lote + '</b></div>' +
+      '<div>Data de Emissão: ' + new Date().toLocaleDateString('pt-BR') + '</div>' +
+    '</div>' +
+  '</div>' +
+  '<div class="title-banner">' +
+    '<h2>Certificado de Controle Tecnológico & Ensaio de Ruptura à Compressão</h2>' +
+    '<small>Normas Regulamentadoras: ABNT NBR 5738 (Moldagem e Cura de CP) e ABNT NBR 5739 (Ensaio de Compressão Axial)</small>' +
+  '</div>' +
+  '<div class="grid-dados">' +
+    '<div class="d-item"><span>Cliente</span><b>' + ensaio.cliente + '</b></div>' +
+    '<div class="d-item"><span>Obra / Local de Aplicação</span><b>' + ensaio.obra + '</b></div>' +
+    '<div class="d-item"><span>Endereço da Obra</span><b>' + (ensaio.endereco || 'Tangará da Serra/MT') + '</b></div>' +
+    '<div class="d-item"><span>Data de Moldagem</span><b>' + ensaio.dataMoldagem + '</b></div>' +
+    '<div class="d-item"><span>FCK Especificado (Projeto)</span><b>' + ensaio.fckProjeto + ' MPa</b></div>' +
+    '<div class="d-item"><span>Slump Test Medido (Tronco de Cone)</span><b>' + ensaio.slumpMedidoCm + ' cm (Espec.: ' + (ensaio.slumpProjeto || '14 ± 2 cm') + ')</b></div>' +
+    '<div class="d-item"><span>Tipo de Cura Adotado</span><b>' + (ensaio.tipoCura || 'Câmara Úmida Climatizada 100% UR') + '</b></div>' +
+    '<div class="d-item"><span>Prensa Eletro-Hidráulica</span><b>' + (ensaio.prensa || 'Prensa Automatizada 100t') + '</b></div>' +
+  '</div>' +
+  '<table>' +
+    '<thead>' +
+      '<tr>' +
+        '<th>Identificação CP</th>' +
+        '<th>Idade de Ensaio</th>' +
+        '<th>Data da Ruptura</th>' +
+        '<th>Carga Ruptura (kN)</th>' +
+        '<th>Tensão Obtida (MPa)</th>' +
+        '<th>% do FCK Projeto</th>' +
+        '<th>Tipo de Ruptura (NBR 5739)</th>' +
+      '</tr>' +
+    '</thead>' +
+    '<tbody>' +
+      linhasCp +
+    '</tbody>' +
+  '</table>' +
+  parecerBox +
+  '<div style="font-size: 11px; color: #555; margin-bottom: 25px;">' +
+    '<b>Observações Técnicas do Laboratório:</b> ' + (ensaio.observacoes || 'Corpos de prova cilíndricos 10x20 cm moldados, identificados e capeados conforme ABNT NBR 5738. Velocidade de carregamento da prensa de acordo com a ABNT NBR 5739.') +
+  '</div>' +
+  '<div class="footer-assinaturas">' +
+    '<div>' +
+      '<div class="linha-assinatura">' +
+        '<b>' + (ensaio.laboratorista || 'Marcos Siqueira') + '</b><br>' +
+        'Laboratorista de Controle Tecnológico' +
+      '</div>' +
+    '</div>' +
+    '<div>' +
+      '<div class="linha-assinatura">' +
+        '<b>' + (ensaio.responsavelTecnico || 'Engª Karin Prestes') + '</b><br>' +
+        'Engenheira Civil Responsável Técnica · CREA-MT 027300/D' +
+      '</div>' +
+    '</div>' +
+  '</div>' +
+'</body>' +
+'</html>';
+}
