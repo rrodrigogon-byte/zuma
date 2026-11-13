@@ -200,6 +200,7 @@ import { provisionarPalatarePizzaria, PALATARE_EMPRESA_ID, PALATARE_DADOS_EMPRES
 import { provisionarConcretoUsina, CONCRETO_EMPRESA_ID, CONCRETO_DADOS_EMPRESA, CONCRETO_SILOS_INICIAIS, CONCRETO_BAIAS_INICIAIS, CONCRETO_TANQUES_ADITIVOS, CONCRETO_ENTRADAS_SUPRIMENTOS, CONCRETO_BATELADAS_PROCESSO } from './concreto-usina-seed.js';
 import { criarRotasConcreto } from './modules/concreto/rotas.js';
 import { criarRotasDeliveryMarketplaces, criarRotasWebhooksDelivery } from './modules/pizzaria/rotas-delivery-marketplaces.js';
+import { criarRotasPizzariaSuite, criarRotasPizzariaPublico } from './modules/pizzaria/rotas-pizzaria-suite.js';
 import { sincronizarTenantsEquipes } from './tenant-provisioning.js';
 import { executarHigienizacaoGapsProducao } from './core/higienizar-gaps-producao.js';
 import { sincronizarBloqueioNoPostgres, desativarBloqueioNoPostgres, inicializarBloqueiosEquipe } from './core/barbearia-bloqueios-sync.js';
@@ -1665,6 +1666,11 @@ const deliveryMarketplacesRouter = criarRotasDeliveryMarketplaces({ auth, requir
 app.use(['/api/admin/pizzaria/delivery', '/api/admin/palatare/delivery'], auth, requireStaff, deliveryMarketplacesRouter);
 app.use('/api/webhooks/delivery', criarRotasWebhooksDelivery());
 
+const pizzariaSuiteRouter = criarRotasPizzariaSuite();
+const pizzariaPublicoRouter = criarRotasPizzariaPublico();
+app.use(['/api/admin/palatare', '/api/admin/pizzaria'], auth, requireStaff, pizzariaSuiteRouter);
+app.use(['/api/publico/palatare', '/api/publico/pizzaria'], pizzariaPublicoRouter);
+
 // Commerce Core PostgreSQL fica opt-in até DATABASE_URL, migrations, tenant e
 // checklist de rollout estarem aprovados. O runtime legado continua intacto.
 if(process.env.COMMERCE_CORE_ENABLED === '1'){
@@ -2691,185 +2697,6 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
       return res.status(500).json({ error: e.message });
     }
 
-  });
-
-  // [kytto-palatare] Módulo de Pizzaria Suite, Montador de Pizzas & CRM Gastronômico 360°
-  app.get('/api/admin/palatare/dados', auth, requireStaff, async (req, res) => {
-    try {
-      const data = db();
-      const { 
-        PALATARE_DADOS_EMPRESA: defEmpresa, 
-        PALATARE_CLIENTES_CRM, 
-        PALATARE_CONFIG_MONTADOR, 
-        PALATARE_RODIZIO_CONFIG, 
-        PALATARE_KDS_FILA, 
-        PALATARE_DELIVERY_ZONAS, 
-        PALATARE_METRICAS_BI,
-        PALATARE_ENGENHARIA_CMV,
-        PALATARE_PIZZA_CLUB,
-        PALATARE_TELEMETRIA_FORNO,
-        PALATARE_IMPLANTACAO_CHECKLIST,
-        PALATARE_EMPRESA_ID: empId
-      } = await import('./palatare-pizzaria-seed.js');
-      
-      const empresa = data.empresas?.[empId] || defEmpresa;
-      const clientes = data.palatare_clientes || PALATARE_CLIENTES_CRM;
-      const montador = data.palatare_montador || PALATARE_CONFIG_MONTADOR;
-      const rodizio = data.palatare_rodizio || PALATARE_RODIZIO_CONFIG;
-      const kds = data.palatare_kds || PALATARE_KDS_FILA;
-      const delivery = data.palatare_delivery || PALATARE_DELIVERY_ZONAS;
-      const metricas = data.palatare_metricas || PALATARE_METRICAS_BI;
-      const engenharia = data.palatare_engenharia || PALATARE_ENGENHARIA_CMV;
-      const pizzaClub = data.palatare_pizza_club || PALATARE_PIZZA_CLUB;
-      const telemetriaForno = data.palatare_forno || PALATARE_TELEMETRIA_FORNO;
-      const implantacao = data.palatare_implantacao || PALATARE_IMPLANTACAO_CHECKLIST;
-
-      return res.json({ 
-        ok: true, 
-        empresa, 
-        clientes, 
-        montador, 
-        rodizio, 
-        kds, 
-        delivery, 
-        metricas,
-        engenharia,
-        pizzaClub,
-        telemetriaForno,
-        implantacao
-      });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // Salvar novo pedido do montador de pizzas
-  app.post('/api/admin/palatare/pedidos', auth, requireStaff, async (req, res) => {
-    try {
-      const data = db();
-      data.palatare_kds ||= [];
-      const novoPedido = {
-        id: `kds-${Date.now().toString().slice(-4)}`,
-        comanda: `CMD-${Math.floor(1000 + Math.random() * 9000)}`,
-        origem: req.body?.origem || 'Balcão / Pedido Rápido',
-        tipo: req.body?.tipo || 'salao',
-        cliente: req.body?.cliente || 'Cliente Balcão',
-        horarioRecebido: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        tempoDecorridoMinutos: 0,
-        tempoEstimadoMinutos: req.body?.tempoEstimado || 8,
-        status: 'na_bancada',
-        praca: 'Bancada do Pizzaiolo',
-        itens: req.body?.itens || [],
-        total: req.body?.total || 0,
-        criadoEm: new Date().toISOString()
-      };
-      data.palatare_kds.unshift(novoPedido);
-      save();
-      return res.status(201).json({ ok: true, pedido: novoPedido });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // Alternar status de tarefa da implantação
-  app.patch('/api/admin/palatare/implantacao/tarefa/:id', auth, requireStaff, async (req, res) => {
-    try {
-      const data = db();
-      const { PALATARE_IMPLANTACAO_CHECKLIST } = await import('./palatare-pizzaria-seed.js');
-      data.palatare_implantacao ||= JSON.parse(JSON.stringify(PALATARE_IMPLANTACAO_CHECKLIST));
-      
-      let encontrada = null;
-      for (const frente of data.palatare_implantacao.frentes) {
-        const t = frente.tarefas.find(item => item.id === req.params.id);
-        if (t) {
-          t.concluida = req.body?.concluida !== undefined ? Boolean(req.body.concluida) : !t.concluida;
-          t.data = new Date().toLocaleDateString('pt-BR');
-          encontrada = t;
-          
-          // Recalcular progresso da frente
-          const concluidas = frente.tarefas.filter(x => x.concluida).length;
-          frente.progresso = Math.round((concluidas / frente.tarefas.length) * 100);
-          break;
-        }
-      }
-      
-      if (!encontrada) return res.status(404).json({ error: 'Tarefa de implantação não encontrada' });
-      save();
-      return res.json({ ok: true, tarefa: encontrada, implantacao: data.palatare_implantacao });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // Atualizar status do KDS (na_bancada -> no_forno -> finalizacao -> saiu_entrega/entregue)
-  app.patch('/api/admin/palatare/kds/:id/status', auth, requireStaff, async (req, res) => {
-    try {
-      const data = db();
-      const pedido = (data.palatare_kds || []).find(p => p.id === req.params.id);
-      if (!pedido) return res.status(404).json({ error: 'Pedido não encontrado no KDS' });
-      pedido.status = req.body?.status || pedido.status;
-      if (req.body?.praca) pedido.praca = req.body.praca;
-      save();
-      return res.json({ ok: true, pedido });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // Atualizar status de mesa no rodízio
-  app.patch('/api/admin/palatare/rodizio/:mesa/status', auth, requireStaff, async (req, res) => {
-    try {
-      const data = db();
-      const rodizio = data.palatare_rodizio || {};
-      const mesas = rodizio.mesasEmRodizioHoje || [];
-      const mesa = mesas.find(m => String(m.mesaNumero) === String(req.params.mesa));
-      if (!mesa) return res.status(404).json({ error: 'Mesa não encontrada no rodízio' });
-      if (req.body?.statusMesa) mesa.statusMesa = req.body.statusMesa;
-      if (req.body?.adicionarFatias) mesa.fatiasServidas = (mesa.fatiasServidas || 0) + Number(req.body.adicionarFatias);
-      save();
-      return res.json({ ok: true, mesa });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // Abrir nova mesa de rodízio
-  app.post('/api/admin/palatare/rodizio/abrir-mesa', auth, requireStaff, async (req, res) => {
-    try {
-      const data = db();
-      data.palatare_rodizio ||= { mesasEmRodizioHoje: [] };
-      data.palatare_rodizio.mesasEmRodizioHoje ||= [];
-      const mesaNumero = parseInt(req.body?.mesaNumero) || 1;
-      const adultos = parseInt(req.body?.adultos) || 2;
-      const criancas = parseInt(req.body?.criancas) || 0;
-      
-      const jaExiste = data.palatare_rodizio.mesasEmRodizioHoje.find(m => Number(m.mesaNumero) === mesaNumero);
-      if (jaExiste) {
-        jaExiste.statusMesa = 'servindo';
-        jaExiste.adultos = adultos;
-        jaExiste.criancas = criancas;
-        jaExiste.subtotalConsumo = (adultos * 59.90) + (criancas * 29.90);
-        save();
-        return res.json({ ok: true, mesa: jaExiste, reaberta: true });
-      }
-
-      const novaMesa = {
-        mesaNumero,
-        horarioInicio: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        adultos,
-        criancas,
-        fatiasServidas: 0,
-        statusMesa: 'servindo',
-        subtotalConsumo: (adultos * 59.90) + (criancas * 29.90),
-        saboresMaisAclamados: []
-      };
-
-      data.palatare_rodizio.mesasEmRodizioHoje.push(novaMesa);
-      save();
-      return res.status(201).json({ ok: true, mesa: novaMesa });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
   });
 
   // [kytto-pizzaria-delivery] Rotas movidas para escopo global do server (disponíveis com ou sem Commerce Core)

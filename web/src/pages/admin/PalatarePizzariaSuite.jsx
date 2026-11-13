@@ -36,6 +36,7 @@ import { useAuth } from '../../lib/auth';
 import { PALATARE_PIZZARIA_EMPRESA_ID } from '../../lib/palatare-constants';
 import { HOLDING_PALATARE_EMPRESA_ID, SERRANO_CONCRETO_EMPRESA_ID } from '../../lib/palatare-constants';
 import PizzariaHubDeliveryMulticanal from './pizzaria/PizzariaHubDeliveryMulticanal';
+import PizzariaIntegracoesAvancadas from './pizzaria/PizzariaIntegracoesAvancadas';
 
 const TABS = [
   { id: 'montador', label: 'Montador de Pizzas', icon: Pizza, badge: 'Multi-Sabores' },
@@ -61,6 +62,7 @@ export default function PalatarePizzariaSuite() {
   const queryParams = new URLSearchParams(window.location.search);
   const initialTab = queryParams.get('tab') || 'montador';
   const [tabAtiva, setTabAtiva] = useState(initialTab);
+  const [pedidoIntegracaoModal, setPedidoIntegracaoModal] = useState(null);
 
   // Garantir sincronização da empresa ativa ao entrar na Palatare Pizzaria
   useEffect(() => {
@@ -1447,12 +1449,35 @@ export default function PalatarePizzariaSuite() {
                       <Clock size={14} /> Tempo no forno: {pedido.tempoDecorridoMinutos}m / 8m estimados
                     </div>
 
+                    <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                      <button
+                        type="button"
+                        onClick={() => setPedidoIntegracaoModal(pedido)}
+                        style={{
+                          flex: 1,
+                          background: 'rgba(255, 107, 44, 0.15)',
+                          color: '#FF6B2C',
+                          border: '1px solid rgba(255, 107, 44, 0.3)',
+                          padding: '6px 8px',
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 4
+                        }}
+                      >
+                        🖨️ Térmica & NFC-e
+                      </button>
+                    </div>
                     <button
                       type="button"
                       onClick={() => handleAvancarKds(pedido.id, 'no_forno')}
                       style={{
                         width: '100%',
-                        marginTop: 12,
+                        marginTop: 8,
                         background: '#D97706',
                         color: '#FFF',
                         border: 'none',
@@ -1494,12 +1519,35 @@ export default function PalatarePizzariaSuite() {
                     </div>
                     <div style={{ fontSize: 12, color: '#FF6B2C', fontWeight: 700, marginTop: 4 }}>{pedido.origem} · {pedido.cliente}</div>
                     
+                    <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                      <button
+                        type="button"
+                        onClick={() => setPedidoIntegracaoModal(pedido)}
+                        style={{
+                          flex: 1,
+                          background: 'rgba(16, 185, 129, 0.15)',
+                          color: '#10B981',
+                          border: '1px solid rgba(16, 185, 129, 0.3)',
+                          padding: '6px 8px',
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 4
+                        }}
+                      >
+                        🛵 Despacho & Térmica
+                      </button>
+                    </div>
                     <button
                       type="button"
                       onClick={() => handleAvancarKds(pedido.id, 'finalizacao')}
                       style={{
                         width: '100%',
-                        marginTop: 12,
+                        marginTop: 8,
                         background: '#10B981',
                         color: '#064E3B',
                         border: 'none',
