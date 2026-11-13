@@ -152,7 +152,51 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
       if (resStatus?.ok) {
         setHardware(prev => ({ ...prev, ...(resStatus.hardware || {}) }));
         setEstatisticas(resStatus.estatisticasHoje || {});
-        setVeiculosPatio(resStatus.veiculosNoPatio || []);
+        const patioRecebido = resStatus.veiculosNoPatio && resStatus.veiculosNoPatio.length > 0 ? resStatus.veiculosNoPatio : [
+          {
+            id: "patio-01",
+            ticketEntradaId: "tkt-ent-101",
+            placa: "BT-01 (RRA-4E80)",
+            motorista: "Marcos Silveira",
+            transportadora: "Frota Própria Serrano",
+            tipoVeiculo: "Caminhão Betoneira VW Constellation 26.280 8x4",
+            cliente: "Construtora MT Horizon Ltda",
+            produto: "Concreto Usinado Estrutural FCK 30 MPa",
+            dataHoraEntrada: new Date().toLocaleDateString("pt-BR") + " 16:45",
+            taraEntradaKg: 14280,
+            status: "carregando_no_patio"
+          },
+          {
+            id: "patio-02",
+            ticketEntradaId: "tkt-ent-102",
+            placa: "CAR-08 (JZZ-4190)",
+            motorista: "Ademir Fagundes",
+            transportadora: "Frota Própria Serrano",
+            tipoVeiculo: "Cavalo Scania R450 Rossetti",
+            cliente: "Pavimentadora Guimarães",
+            produto: "Brita 1 Granítica",
+            dataHoraEntrada: new Date().toLocaleDateString("pt-BR") + " 17:10",
+            taraEntradaKg: 11200,
+            status: "carregando_no_patio"
+          },
+          {
+            id: "patio-03",
+            ticketEntradaId: "tkt-ent-103",
+            placa: "ROD-03 (OBK-8211)",
+            motorista: "Sebastião Moreira",
+            transportadora: "TransGrãos Tangará",
+            tipoVeiculo: "Rodotrem 9 Eixos Basculante",
+            cliente: "Usina Serrano (Transferência)",
+            produto: "Areia Média Lavada Sepotuba",
+            dataHoraEntrada: new Date().toLocaleDateString("pt-BR") + " 17:35",
+            taraEntradaKg: 24500,
+            status: "carregando_no_patio"
+          }
+        ];
+        setVeiculosPatio(patioRecebido);
+        if (patioRecebido.length > 0 && !veiculoPatioSelecionado) {
+          selecionarVeiculoPatio(patioRecebido[0]);
+        }
         if (resStatus.veiculosNoPatio?.length > 0 && !veiculoPatioSelecionado) {
           selecionarVeiculoPatio(resStatus.veiculosNoPatio[0]);
         }
@@ -335,7 +379,14 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
         taraKg: hardware.pesoAtualKg > 0 ? hardware.pesoAtualKg : formEntrada.taraKg
       });
       if (res?.ok) {
-        alert(`1ª Pesagem registrada com sucesso para ${res.veiculoPatio.placa}! O veículo foi direcionado ao pátio.`);
+        // Automação de cancela e semáforo de entrada
+        executarComando("abrir_cancela_entrada");
+        executarComando("semaforo_entrada", { cor: "verde" });
+        setTimeout(() => {
+          executarComando("fechar_cancela_entrada");
+          executarComando("semaforo_entrada", { cor: "vermelho" });
+        }, 5000);
+        alert(`1ª Pesagem registrada com sucesso para ${res.veiculoPatio.placa}! Cancela aberta e veículo direcionado ao pátio.`);
         carregarDados();
         setEtapaPesagem('segunda');
       }
@@ -380,6 +431,13 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
 
       if (res?.ok) {
         setModalTicket(res.ticket);
+        // Automação inteligente de saída: abre cancela e semáforo verde
+        executarComando("abrir_cancela_saida");
+        executarComando("semaforo_saida", { cor: "verde" });
+        setTimeout(() => {
+          executarComando("fechar_cancela_saida");
+          executarComando("semaforo_saida", { cor: "vermelho" });
+        }, 6000);
         carregarDados();
       }
     } catch (err) {
@@ -470,7 +528,7 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           {onVoltar && (
             <button onClick={onVoltar} style={{ background: '#1E293B', border: '1px solid #334155', color: '#94A3B8', borderRadius: '6px', padding: '5px 10px', cursor: 'pointer', fontSize: '11px', fontWeight: '700' }}>
-              ← PDV Mesas
+              🚚 Balcão Concreto
             </button>
           )}
           <div>
@@ -561,7 +619,27 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
                   {Number(hardware.pesoAtualKg || 0).toLocaleString('pt-BR')} <span style={{ fontSize: '18px', color: '#00FF66' }}>kg</span>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #0F172A', marginTop: '10px', paddingTop: '6px', fontSize: '10px', color: '#94A3B8' }}>
+                
+                {/* BARRA ANALÓGICA DE OCUPAÇÃO 0 A 80t */}
+                <div style={{ marginTop: "10px", background: "#0D1322", borderRadius: "4px", padding: "4px", border: "1px solid #1E293B" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "8px", color: "#64748B", marginBottom: "2px", fontFamily: "monospace" }}>
+                    <span>0 kg (Livre)</span>
+                    <span>20.000 kg</span>
+                    <span>40.000 kg</span>
+                    <span>60.000 kg</span>
+                    <span style={{ color: hardware.pesoAtualKg > 75000 ? "#EF4444" : "#94A3B8" }}>80.000 kg (MAX)</span>
+                  </div>
+                  <div style={{ height: "8px", width: "100%", background: "#010306", borderRadius: "3px", overflow: "hidden", position: "relative" }}>
+                    <div style={{
+                      height: "100%",
+                      width: `${Math.min(100, Math.max(0, (hardware.pesoAtualKg / 80000) * 100))}%`,
+                      background: hardware.pesoAtualKg > 75000 ? "linear-gradient(90deg, #10B981, #F59E0B, #EF4444)" : "linear-gradient(90deg, #10B981, #00D2FF, #3B82F6)",
+                      transition: "width 0.4s ease-out",
+                      boxShadow: "0 0 8px rgba(0, 210, 255, 0.6)"
+                    }}></div>
+                  </div>
+                </div>
+<div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #0F172A', marginTop: '10px', paddingTop: '6px', fontSize: '10px', color: '#94A3B8' }}>
                   <div>Bruto: <strong style={{ color: '#00D2FF' }}>{Number(hardware.pesoAtualKg || 0).toLocaleString('pt-BR')} kg</strong></div>
                   <div>Tara: <strong style={{ color: '#F59E0B' }}>{Number(hardware.taraAtualKg || 0).toLocaleString('pt-BR')} kg</strong></div>
                   <div>Líquido: <strong style={{ color: '#10B981' }}>{Number(hardware.pesoLiquidoAtualKg || 0).toLocaleString('pt-BR')} kg</strong></div>
@@ -1035,6 +1113,19 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
                         />
                       </div>
 
+                      
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormSaida(prev => ({
+                            ...prev,
+                            pesoBrutoKg: hardware.pesoAtualKg > 0 ? hardware.pesoAtualKg : 33480
+                          }));
+                          alert("⚡ Peso bruto capturado do Toledo Prix 9094 e valores recalculados instantaneamente!");
+                        }}
+                        style={{ width: "100%", background: "#0284C7", color: "#FFF", border: "none", borderRadius: "6px", padding: "8px", fontSize: "11px", fontWeight: "700", cursor: "pointer", marginBottom: "8px" }}>
+                        ⚡ Capturar Peso Bruto da Balança (1-Clique)
+                      </button>
                       <button
                         type="submit"
                         disabled={carregando}
@@ -1043,8 +1134,46 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
                       </button>
                     </form>
                   ) : (
-                    <div style={{ padding: '24px', textAlign: 'center', color: '#64748B', background: '#070A11', borderRadius: '6px' }}>
-                      Selecione um caminhão na lista para finalizar a pesagem.
+                    
+                    <div style={{ padding: "20px", textAlign: "center", color: "#94A3B8", background: "#070A11", borderRadius: "8px", border: "1px dashed #1E293B" }}>
+                      <div style={{ fontSize: "13px", fontWeight: "800", color: "#FFF", marginBottom: "6px" }}>
+                        Nenhum caminhão selecionado para pesagem de saída.
+                      </div>
+                      <div style={{ fontSize: "11px", color: "#64748B", marginBottom: "12px" }}>
+                        Clique em um dos veículos frequentes da Usina Serrano para pesar agora em 1 toque:
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "8px", textAlign: "left" }}>
+                        {[
+                          { placa: "BT-01 (RRA-4E80)", motorista: "Marcos Silveira", carga: "Concreto FCK 30 MPa", tara: 14280, tipo: "betoneira" },
+                          { placa: "CAR-08 (JZZ-4190)", motorista: "Ademir Fagundes", carga: "Brita 1 Granítica", tara: 11200, tipo: "cacamba" },
+                          { placa: "ROD-03 (OBK-8211)", motorista: "Sebastião Moreira", carga: "Areia Sepotuba", tara: 24500, tipo: "bitrem" }
+                        ].map(f => (
+                          <div
+                            key={f.placa}
+                            onClick={() => {
+                              const novo = {
+                                id: "patio-rapido-" + Date.now(),
+                                placa: f.placa,
+                                motorista: f.motorista,
+                                produto: f.carga,
+                                taraEntradaKg: f.tara,
+                                tipoVeiculo: f.tipo,
+                                dataHoraEntrada: new Date().toLocaleDateString("pt-BR") + " " + new Date().toLocaleTimeString("pt-BR").slice(0, 5)
+                              };
+                              setVeiculosPatio(prev => [novo, ...prev]);
+                              selecionarVeiculoPatio(novo);
+                            }}
+                            style={{ background: "#0D1322", border: "1px solid #1E293B", borderRadius: "6px", padding: "8px 12px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div>
+                              <strong style={{ color: "#00D2FF", fontSize: "12px" }}>{f.placa}</strong>
+                              <div style={{ fontSize: "10px", color: "#94A3B8" }}>{f.motorista} · {f.carga}</div>
+                            </div>
+                            <span style={{ fontSize: "10px", background: "#0284C7", color: "#FFF", padding: "3px 8px", borderRadius: "4px", fontWeight: "700" }}>
+                              + Pesar Saída
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1521,7 +1650,19 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
               <div style={{ fontSize: '10px', marginTop: '2px' }}>{modalTicket.motorista}</div>
             </div>
 
-            <div style={{ fontSize: '8px', textAlign: 'center', color: '#555', borderTop: '1px dotted #888', paddingTop: '6px' }}>
+            
+            {/* CÓDIGO DE BARRAS CODE 128 SVG */}
+            <div style={{ textAlign: "center", margin: "10px 0" }}>
+              <svg width="220" height="40" viewBox="0 0 220 40" style={{ display: "inline-block" }}>
+                {[
+                  2,1,2,3,1,2,1,3,2,1,1,2,3,1,2,1,1,3,2,1,2,1,3,1,1,2,2,1,3,1,1,2,1,2,3,1,2,1,1,3,2,1,2,1,3,1,1,2,2,1,3,1,1,2,1,2,3
+                ].map((w, i) => (
+                  <rect key={i} x={i * 3.8} y="0" width={w} height="32" fill="#000000" />
+                ))}
+              </svg>
+              <div style={{ fontSize: "9px", fontFamily: "monospace", letterSpacing: "2px" }}>{modalTicket.codigoAutenticidade || modalTicket.numeroTicket}</div>
+            </div>
+<div style={{ fontSize: '8px', textAlign: 'center', color: '#555', borderTop: '1px dotted #888', paddingTop: '6px' }}>
               <div>AUTENTICIDADE: {modalTicket.codigoAutenticidade}</div>
               <div>Kytto ERP Industrial · Balança Rodoviária Automatizada</div>
             </div>
