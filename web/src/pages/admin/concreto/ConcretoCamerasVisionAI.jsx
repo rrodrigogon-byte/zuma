@@ -1,4 +1,159 @@
+
+const CAMERAS_SEED = [
+  {
+    id: "cam-01-lpr",
+    nome: "CAM-01 · Balança 80t (Totem LPR Entrada)",
+    pontoInstalacao: "balanca_entrada_lpr",
+    pontoRotulo: "Balança 80t - Totem LPR Entrada",
+    marca: "intelbras",
+    modelo: "VIP 7250 LPR IA",
+    ipHost: "192.168.1.120",
+    portaRtsp: 554,
+    portaHttp: 80,
+    usuario: "admin",
+    canal: 1,
+    substream: true,
+    streamRtspUrl: "rtsp://admin:****@192.168.1.120:554/cam/realmonitor?channel=1&subtype=1",
+    snapshotHttpUrl: "http://admin:****@192.168.1.120/cgi-bin/snapshot.cgi?channel=1",
+    hlsStreamUrl: "/assets/cftv/cftv_cam01_lpr_entrada.jpg",
+    status: "online",
+    fps: 30,
+    resolucao: "1920x1080 (Full HD)",
+    iaAtiva: true,
+    recursosIa: ["lpr_mercosul", "deteccao_veiculo", "ocr_placas"],
+    ultimaLeituraPlaca: "BT-01 (RRA-4E80)",
+    confiancaUltimaPlaca: 99.6,
+    dataHoraUltimaLeitura: new Date().toLocaleDateString("pt-BR") + " 17:42:10"
+  },
+  {
+    id: "cam-02-panoramica",
+    nome: "CAM-02 · Plataforma 21m (Panorâmica)",
+    pontoInstalacao: "balanca_panoramica",
+    pontoRotulo: "Balança 80t - Panorâmica 21m",
+    marca: "hikvision",
+    modelo: "DS-2CD2T87G2-L (ColorVu 4K)",
+    ipHost: "192.168.1.121",
+    portaRtsp: 554,
+    portaHttp: 80,
+    usuario: "admin",
+    canal: 1,
+    substream: true,
+    streamRtspUrl: "rtsp://admin:****@192.168.1.121:554/Streaming/Channels/102",
+    snapshotHttpUrl: "http://admin:****@192.168.1.121/ISAPI/Streaming/channels/101/picture",
+    hlsStreamUrl: "/assets/cftv/cftv_cam02_plataforma_panoramica.jpg",
+    status: "online",
+    fps: 25,
+    resolucao: "3840x2160 (4K UHD)",
+    iaAtiva: true,
+    recursosIa: ["enquadramento_plataforma", "posicionamento_eixos", "detector_sobrepeso"],
+    ultimaLeituraPlaca: "Enquadramento 100% OK · 8 Células Toledo",
+    confiancaUltimaPlaca: 99.8,
+    dataHoraUltimaLeitura: new Date().toLocaleDateString("pt-BR") + " 17:42:15"
+  },
+  {
+    id: "cam-03-cancela-saida",
+    nome: "CAM-03 · Balança 80t (Cancela Saída)",
+    pontoInstalacao: "balanca_cancela_saida",
+    pontoRotulo: "Balança 80t - Cancela Saída",
+    marca: "intelbras",
+    modelo: "VIP 3230 B G3",
+    ipHost: "192.168.1.122",
+    portaRtsp: 554,
+    portaHttp: 80,
+    usuario: "admin",
+    canal: 1,
+    substream: true,
+    streamRtspUrl: "rtsp://admin:****@192.168.1.122:554/cam/realmonitor?channel=1&subtype=1",
+    snapshotHttpUrl: "http://admin:****@192.168.1.122/cgi-bin/snapshot.cgi?channel=1",
+    hlsStreamUrl: "/assets/cftv/cftv_cam03_cancela_saida.jpg",
+    status: "online",
+    fps: 30,
+    resolucao: "1920x1080 (Full HD)",
+    iaAtiva: true,
+    recursosIa: ["monitor_cancela", "semaforo_saida", "auditoria_ticket"],
+    ultimaLeituraPlaca: "Saída Liberada · Ticket #8942",
+    confiancaUltimaPlaca: 99.9,
+    dataHoraUltimaLeitura: new Date().toLocaleDateString("pt-BR") + " 17:40:02"
+  },
+  {
+    id: "cam-04-patio-betoneiras",
+    nome: "CAM-04 · Pátio & Silos 96t (Manobras)",
+    pontoInstalacao: "patio_betoneiras",
+    pontoRotulo: "Pátio de Betoneiras & Silos 96t",
+    marca: "dahua",
+    modelo: "DH-IPC-HFW5842E-Z4E",
+    ipHost: "192.168.1.123",
+    portaRtsp: 554,
+    portaHttp: 80,
+    usuario: "admin",
+    canal: 1,
+    substream: true,
+    streamRtspUrl: "rtsp://admin:****@192.168.1.123:554/cam/realmonitor?channel=1&subtype=1",
+    snapshotHttpUrl: "http://admin:****@192.168.1.123/cgi-bin/snapshot.cgi?channel=1",
+    hlsStreamUrl: "/assets/cftv/cftv_cam04_patio_silos.jpg",
+    status: "online",
+    fps: 25,
+    resolucao: "1920x1080 (Full HD)",
+    iaAtiva: true,
+    recursosIa: ["epi_capacete_colete", "fila_carregamento", "sensor_movimento"],
+    ultimaLeituraPlaca: "EPIs 100% em Conformidade",
+    confiancaUltimaPlaca: 98.4,
+    dataHoraUltimaLeitura: new Date().toLocaleDateString("pt-BR") + " 17:41:50"
+  },
+  {
+    id: "cam-05-central-dosadora",
+    nome: "CAM-05 · Central Dosadora NBR 7212",
+    pontoInstalacao: "central_dosadora",
+    pontoRotulo: "Central Dosadora e Caçamba de Pesagem",
+    marca: "axis",
+    modelo: "P1455-LE Industrial",
+    ipHost: "192.168.1.124",
+    portaRtsp: 554,
+    portaHttp: 80,
+    usuario: "root",
+    canal: 1,
+    substream: true,
+    streamRtspUrl: "rtsp://root:****@192.168.1.124:554/axis-media/media.amp",
+    snapshotHttpUrl: "http://root:****@192.168.1.124/axis-cgi/jpg/image.cgi",
+    hlsStreamUrl: "/assets/cftv/cftv_cam05_central_dosadora.jpg",
+    status: "online",
+    fps: 30,
+    resolucao: "1920x1080 (Full HD)",
+    iaAtiva: true,
+    recursosIa: ["fluxo_agregados", "descarga_cimento", "sensor_poeira"],
+    ultimaLeituraPlaca: "Batelada #1042 Concluída",
+    confiancaUltimaPlaca: 99.2,
+    dataHoraUltimaLeitura: new Date().toLocaleDateString("pt-BR") + " 17:38:12"
+  },
+  {
+    id: "cam-06-mineracao-draga",
+    nome: "CAM-06 · Mineração Sepotuba (Draga & Pátio)",
+    pontoInstalacao: "mineracao_areia",
+    pontoRotulo: "Mineração de Areia e Britador",
+    marca: "hikvision",
+    modelo: "DS-2CD2047G2-LU/SL",
+    ipHost: "192.168.1.125",
+    portaRtsp: 554,
+    portaHttp: 80,
+    usuario: "admin",
+    canal: 1,
+    substream: true,
+    streamRtspUrl: "rtsp://admin:****@192.168.1.125:554/Streaming/Channels/102",
+    snapshotHttpUrl: "http://admin:****@192.168.1.125/ISAPI/Streaming/channels/101/picture",
+    hlsStreamUrl: "/assets/cftv/cftv_cam06_mineracao_areia.jpg",
+    status: "online",
+    fps: 20,
+    resolucao: "2560x1440 (2K QHD)",
+    iaAtiva: true,
+    recursosIa: ["nivel_pilha_areia", "esteira_alimentadora", "seguranca_perimetro"],
+    ultimaLeituraPlaca: "Draga 01 em Operação Contínua",
+    confiancaUltimaPlaca: 98.9,
+    dataHoraUltimaLeitura: new Date().toLocaleDateString("pt-BR") + " 17:42:01"
+  }
+];
+
 import React, { useState, useEffect } from "react";
+import { api } from "../../../lib/api";
 
 export default function ConcretoCamerasVisionAI({
   onVoltar,
@@ -125,7 +280,7 @@ export default function ConcretoCamerasVisionAI({
   const handleTestarCamera = async (camId) => {
     try {
       setTestandoId(camId);
-      const res = await fetch(`/api/admin/concreto/cameras/${camId}/testar`, { method: "POST" });
+      const res = await api.post(`/api/admin/concreto/cameras/${camId}/testar`, {});
       const data = await res.json();
       if (data.ok) {
         setCameras(prev => prev.map(c => c.id === camId ? { ...c, status: "online", latenciaMs: data.latenciaMs, ultimoPingEm: data.testadoEm } : c));
@@ -140,11 +295,7 @@ export default function ConcretoCamerasVisionAI({
   const handleTestarFormulario = async () => {
     try {
       setTestandoId("form");
-      const res = await fetch("/api/admin/concreto/cameras/testar-conexao", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formCamera)
-      });
+      const res = await api.post("/api/admin/concreto/cameras/testar-conexao", formCamera);
       const data = await res.json();
       setTesteResultado(data);
     } catch (e) {
@@ -157,7 +308,7 @@ export default function ConcretoCamerasVisionAI({
   const handleAnalisarKyttoIa = async (camId) => {
     try {
       setAnalisandoId(camId);
-      const res = await fetch(`/api/admin/concreto/cameras/${camId}/analisar`, { method: "POST" });
+      const res = await api.post(`/api/admin/concreto/cameras/${camId}/analisar`, {});
       const data = await res.json();
       if (data.ok) {
         setAnaliseResultado({ camId, ...data });
@@ -236,17 +387,9 @@ export default function ConcretoCamerasVisionAI({
 
       let res;
       if (cameraEditando) {
-        res = await fetch(`/api/admin/concreto/cameras/${cameraEditando.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
+        res = await api.put(`/api/admin/concreto/cameras/${cameraEditando.id}`, payload);
       } else {
-        res = await fetch("/api/admin/concreto/cameras", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
+        res = await api.post("/api/admin/concreto/cameras", payload);
       }
 
       if (res.ok) {
@@ -261,7 +404,7 @@ export default function ConcretoCamerasVisionAI({
   const handleExcluirCamera = async (camId) => {
     if (!window.confirm("Deseja realmente remover esta câmera IP da concreteira?")) return;
     try {
-      const res = await fetch(`/api/admin/concreto/cameras/${camId}`, { method: "DELETE" });
+      const res = await api.delete(`/api/admin/concreto/cameras/${camId}`);
       if (res.ok) {
         carregarDados();
       }
