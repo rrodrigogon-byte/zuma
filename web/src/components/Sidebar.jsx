@@ -8,6 +8,12 @@ import { itemVisivelNoPerfil } from '../lib/perfis-menu'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
 import { applyThemeMode, DINO_BARBERSHOP_LOGO, isClubeBrandContext, isDinoBrandContext, isStalloneBrandContext, isRestauranteBrandContext, isConcretoBrandContext, PALATARE_LOGO, CONCRETO_LOGO, STALLONE_LOGO, storedThemeMode } from '../lib/brand'
+import {
+  HOLDING_PALATARE_EMPRESA_ID,
+  PALATARE_PIZZARIA_EMPRESA_ID,
+  SERRANO_CONCRETO_EMPRESA_ID,
+  isGrupoPalatareEmpresa
+} from '../lib/palatare-constants'
 import { DINO_STORE, isDinoDedicatedHost } from '../lib/dino-scope'
 import { empresaSemUnidade, sincronizarContextoComercial } from '../lib/contexto-comercial'
 import { useMenuEmGaveta } from '../lib/modo-menu'
@@ -542,10 +548,12 @@ export const NAV_RESTAURANTE_GROUPS = [
     ],
   },
   {
-    label: 'Grupo Serrano & Palatare', aberto: true,
+    label: 'Grupo Palatare', aberto: true,
     items: [
+      { to: '/admin/pizzaria', icon: '🍕', label: 'Palatare Pizzaria & Restaurante' },
       { to: '/admin/concreto', icon: '🚚', label: 'Serrano Concreto Usinado' },
-      { to: '/admin/consolidacao-grupo', icon: '🏢', label: 'Holding & Consolidação' },
+      { to: '/admin/concreto?secao=empresa-holding', icon: '🏢', label: 'Holding Grupo Palatare' },
+      { to: '/admin/consolidacao-grupo', icon: '🏛️', label: 'Consolidação Holding' },
     ],
   },
 ]
@@ -590,7 +598,8 @@ export const NAV_CONCRETO_GROUPS = [
   {
     label: "Empresa", aberto: true,
     items: [
-      { to: "/admin/concreto?secao=empresa-holding", icon: "🏢", label: "Holding & Dados Fiscais" },
+      { to: "/admin/concreto?secao=empresa-holding", icon: "🏢", label: "Grupo Palatare · Holding & Fiscais" },
+      { to: "/admin/pizzaria", icon: "🍕", label: "Palatare Pizzaria & Restaurante" },
       { to: "/admin/financeiro", icon: "💰", label: "Financeiro & Medições" },
       { to: "/admin/notas", icon: "🧾", label: "Notas Fiscais (NF-e / MDF-e)" },
       { to: "/admin/cadastros-mestres", icon: "🗂️", label: "Motoristas & Fornecedores" },
@@ -845,11 +854,12 @@ export default function Sidebar() {
   const pendentes = usePendingOrders(isStaff)
   const isDino = isDinoDedicatedHost() || isDinoBrandContext(empresaAtiva)
   const isStallone = !isDino && isStalloneBrandContext(empresaAtiva)
-  const isRestaurante = !isDino && !isStallone && isRestauranteBrandContext(empresaAtiva)
+  const isHolding = !isDino && !isStallone && (empresaAtiva?.id === HOLDING_PALATARE_EMPRESA_ID || empresaAtiva?.tipoNegocio === 'holding')
+  const isRestaurante = !isDino && !isStallone && !isHolding && isRestauranteBrandContext(empresaAtiva)
   const location = useLocation()
   const naRotaConcreto = location.pathname.startsWith('/admin/concreto') || location.pathname.startsWith('/admin/usina-concreto')
-  const isConcreto = (!isDino && !isStallone && !isRestaurante && isConcretoBrandContext(empresaAtiva)) || naRotaConcreto
-  const isClube = !isDino && !isStallone && !isRestaurante && !isConcreto && isClubeBrandContext(empresaAtiva)
+  const isConcreto = (!isDino && !isStallone && !isHolding && !isRestaurante && isConcretoBrandContext(empresaAtiva)) || naRotaConcreto
+  const isClube = !isDino && !isStallone && !isHolding && !isRestaurante && !isConcreto && isClubeBrandContext(empresaAtiva)
   const [themeMode, setThemeMode] = useState(() => storedThemeMode())
   const contextoSemUnidade = Boolean(user && isStaff && empresaAtiva?.id) && (empresaSemUnidade(lojasAcessiveis, empresaAtiva?.id) || !lojaAtiva?.id)
   // Corrige no carregamento o contexto antigo do navegador em que a unidade perdeu o
@@ -983,6 +993,17 @@ export default function Sidebar() {
                 className="sidebar-brand-dino"
               />
             )}
+            {isHolding && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+                <div style={{ width: 38, height: 38, borderRadius: 8, background: "#C5A059", color: "#16181B", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 16 }}>
+                  🏢
+                </div>
+                <div>
+                  <div style={{ color: "#FFFFFF", fontWeight: 800, fontSize: 13, lineHeight: 1.1 }}>GRUPO PALATARE</div>
+                  <div style={{ color: "#C5A059", fontWeight: 700, fontSize: 9, textTransform: "uppercase", letterSpacing: "0.5px" }}>Holding Participações</div>
+                </div>
+              </div>
+            )}
             {isRestaurante && (
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
                 <img
@@ -1030,12 +1051,166 @@ export default function Sidebar() {
 
         {user && !recolhido && (
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)', display: 'grid', gap: 10 }}>
-            {empresasAcessiveis.length > 1 && <label htmlFor="empresa-ativa" style={{ display: 'grid', gap: 6, fontSize: 10, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.8px' }}>
-              Empresa ativa
-              <select id="empresa-ativa" value={empresaAtiva?.id || ''} onChange={(event) => trocarEmpresa(event.target.value)} style={{ width: '100%', padding: '8px 9px', borderRadius: 7, border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--cream)', fontSize: 12, fontWeight: 700 }}>
-                {empresasAcessiveis.map((empresa) => <option key={empresa.id} value={empresa.id}>{empresa.nome || empresa.slug || empresa.id}</option>)}
-              </select>
-            </label>}
+            {empresasAcessiveis.length >= 1 && (() => {
+              const empresasPalatare = empresasAcessiveis.filter(e => isGrupoPalatareEmpresa(e.id) || isGrupoPalatareEmpresa(e.nome));
+              const outrasEmpresas = empresasAcessiveis.filter(e => !isGrupoPalatareEmpresa(e.id) && !isGrupoPalatareEmpresa(e.nome));
+              return (
+                <label htmlFor="empresa-ativa" style={{ display: 'grid', gap: 6, fontSize: 10, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.8px' }}>
+                  Empresa ativa
+                  <select
+                    id="empresa-ativa"
+                    value={empresaAtiva?.id || ''}
+                    onChange={(event) => {
+                      const novaId = event.target.value;
+                      trocarEmpresa(novaId);
+                      if (novaId === HOLDING_PALATARE_EMPRESA_ID) {
+                        navigate('/admin/concreto?secao=empresa-holding');
+                      } else if (novaId === PALATARE_PIZZARIA_EMPRESA_ID) {
+                        navigate('/admin/pizzaria');
+                      } else if (novaId === SERRANO_CONCRETO_EMPRESA_ID) {
+                        navigate('/admin/concreto');
+                      }
+                    }}
+                    style={{
+                      width: '100%', padding: '8px 9px', borderRadius: 7,
+                      border: '1px solid var(--line)', background: 'var(--surface-2)',
+                      color: 'var(--cream)', fontSize: 12, fontWeight: 700
+                    }}
+                  >
+                    {empresasPalatare.length > 0 ? (
+                      <>
+                        <optgroup label="🏢 GRUPO PALATARE (HOLDING)">
+                          {empresasPalatare.map((emp) => (
+                            <option key={emp.id} value={emp.id}>
+                              {emp.id === HOLDING_PALATARE_EMPRESA_ID ? '🏢 ' : emp.id === PALATARE_PIZZARIA_EMPRESA_ID ? '🍕 ' : '🚚 '}
+                              {emp.nome || emp.nomeFantasia || emp.razaoSocial}
+                              {emp.id === HOLDING_PALATARE_EMPRESA_ID ? ' (Controladora)' : ''}
+                            </option>
+                          ))}
+                        </optgroup>
+                        {outrasEmpresas.length > 0 && (
+                          <optgroup label="OUTRAS EMPRESAS">
+                            {outrasEmpresas.map((emp) => (
+                              <option key={emp.id} value={emp.id}>
+                                {emp.nome || emp.slug || emp.id}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </>
+                    ) : (
+                      empresasAcessiveis.map((empresa) => (
+                        <option key={empresa.id} value={empresa.id}>
+                          {empresa.nome || empresa.slug || empresa.id}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </label>
+              );
+            })()}
+
+            {/* Switcher Rápido Multinegócio do Grupo Palatare */}
+            {(isRestaurante || isConcreto || isHolding || isGrupoPalatareEmpresa(empresaAtiva?.id)) && (
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid rgba(197, 160, 89, 0.25)',
+                borderRadius: 8,
+                padding: '8px 10px',
+                display: 'grid',
+                gap: 6
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 9, fontWeight: 800, color: '#C5A059', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                    Holding Grupo Palatare
+                  </span>
+                  <span style={{ fontSize: 9, color: 'var(--muted)', background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: 4 }}>
+                    Multinegócio
+                  </span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      trocarEmpresa(HOLDING_PALATARE_EMPRESA_ID);
+                      navigate('/admin/concreto?secao=empresa-holding');
+                    }}
+                    style={{
+                      background: (empresaAtiva?.id === HOLDING_PALATARE_EMPRESA_ID || isHolding) ? '#C5A059' : 'rgba(255,255,255,0.05)',
+                      color: (empresaAtiva?.id === HOLDING_PALATARE_EMPRESA_ID || isHolding) ? '#000' : 'var(--cream)',
+                      border: (empresaAtiva?.id === HOLDING_PALATARE_EMPRESA_ID || isHolding) ? '1px solid #C5A059' : '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: 6,
+                      padding: '6px 2px',
+                      fontSize: 10,
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 2,
+                      transition: 'all .15s'
+                    }}
+                    title="Holding Grupo Palatare (Controladora de Alexandre Palatare)"
+                  >
+                    <span style={{ fontSize: 13 }}>🏢</span>
+                    <span>Holding</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      trocarEmpresa(PALATARE_PIZZARIA_EMPRESA_ID);
+                      navigate('/admin/pizzaria');
+                    }}
+                    style={{
+                      background: empresaAtiva?.id === PALATARE_PIZZARIA_EMPRESA_ID ? '#EF4444' : 'rgba(255,255,255,0.05)',
+                      color: empresaAtiva?.id === PALATARE_PIZZARIA_EMPRESA_ID ? '#FFF' : 'var(--cream)',
+                      border: empresaAtiva?.id === PALATARE_PIZZARIA_EMPRESA_ID ? '1px solid #EF4444' : '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: 6,
+                      padding: '6px 2px',
+                      fontSize: 10,
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 2,
+                      transition: 'all .15s'
+                    }}
+                    title="Palatare Pizzaria & Restaurante"
+                  >
+                    <span style={{ fontSize: 13 }}>🍕</span>
+                    <span>Pizzaria</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      trocarEmpresa(SERRANO_CONCRETO_EMPRESA_ID);
+                      navigate('/admin/concreto');
+                    }}
+                    style={{
+                      background: empresaAtiva?.id === SERRANO_CONCRETO_EMPRESA_ID ? '#FF7000' : 'rgba(255,255,255,0.05)',
+                      color: empresaAtiva?.id === SERRANO_CONCRETO_EMPRESA_ID ? '#16181B' : 'var(--cream)',
+                      border: empresaAtiva?.id === SERRANO_CONCRETO_EMPRESA_ID ? '1px solid #FF7000' : '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: 6,
+                      padding: '6px 2px',
+                      fontSize: 10,
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 2,
+                      transition: 'all .15s'
+                    }}
+                    title="Serrano Concreto Usinado & Mineração"
+                  >
+                    <span style={{ fontSize: 13 }}>🚚</span>
+                    <span>Concreto</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {lojasDaEmpresa.length > 0 && <div>
             <label htmlFor="loja-ativa" style={{
               display: 'block', marginBottom: 6, fontSize: 10, fontWeight: 800,

@@ -33,8 +33,40 @@ const somenteDigitos = (v) => String(v ?? '').replace(/\D/g, '');
 
 
 export const EMPRESA_DINO_ID = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+export const HOLDING_PALATARE_EMPRESA_ID = 'c0c0ac01-8e50-4b61-8c79-de4aaa916da0';
 
 const EMPRESAS_CANONICAS_PADRAO = [
+  {
+    id: "c0c0ac01-8e50-4b61-8c79-de4aaa916da0",
+    nome: "Holding Grupo Palatare",
+    nomeFantasia: "Grupo Palatare",
+    razaoSocial: "Holding Grupo Palatare Participações S/A",
+    cnpj: "51.499.928/0001-01",
+    cnpjNormalizado: "51499928000101",
+    inscricaoEstadual: "14.229.191-9",
+    inscricaoMunicipal: "92381",
+    tipoNegocio: "holding",
+    segmento: "holding_corporativa",
+    grupoId: "grp-serrano-palatare-03",
+    grupoNome: "Grupo Palatare",
+    isHolding: true,
+    fundador: "Alexandre Palatare",
+    responsavel: "Alexandre Palatare (Fundador & Diretor-Presidente)",
+    telefone: "(65) 99999-0090",
+    email: "holding@palatare.com.br",
+    website: "https://kytto.com.br/admin/concreto?secao=empresa-holding",
+    logoUrl: "/brand/palatare-holding-logo.png",
+    enderecoCidade: "Tangará da Serra",
+    enderecoEstado: "MT",
+    endereco: "Tangará da Serra/MT",
+    ativa: true,
+    permitirEstoqueNegativo: false,
+    totalLojas: 1,
+    empresasFilhas: [
+      "c1c1ac01-8e50-4b61-8c79-de4aaa916da9",
+      "c2c2ac01-8e50-4b61-8c79-de4aaa916da2"
+    ]
+  },
   {
     id: "c2c2ac01-8e50-4b61-8c79-de4aaa916da2",
     nome: "Serrano Concreto Usinado",
@@ -337,10 +369,22 @@ export async function listarEmpresas(db, { incluirInativas = false, empresaIdFil
   }
 
   // Garante a presença canônica das empresas (respeitando o filtro de tenant!)
+  const grupoPalatareIds = [
+    'c0c0ac01-8e50-4b61-8c79-de4aaa916da0',
+    'c1c1ac01-8e50-4b61-8c79-de4aaa916da9',
+    'c2c2ac01-8e50-4b61-8c79-de4aaa916da2',
+    'palatare',
+    'concreto',
+    'serrano',
+    'holding'
+  ];
+  const ehFiltroPalatare = listaFiltro && listaFiltro.some(x => grupoPalatareIds.includes(x));
+
   for (const empCanonica of EMPRESAS_CANONICAS_PADRAO) {
     const canId = String(empCanonica.id || '').toLowerCase();
     if (listaFiltro && listaFiltro.length > 0) {
       const permitido = listaFiltro.includes(canId) ||
+        (ehFiltroPalatare && grupoPalatareIds.includes(canId)) ||
         (listaFiltro.includes('d0d0ac01-8e50-4b61-8c79-de4aaa916da6') && canId === 'dino') ||
         (listaFiltro.includes('dino') && canId === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
       if (!permitido) continue;

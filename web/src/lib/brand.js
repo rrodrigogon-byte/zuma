@@ -156,6 +156,18 @@ export function isConcretoBrandContext(...contexts) {
   })
 }
 
+export function isHoldingBrandContext(...contexts) {
+  return contexts.some((context) => {
+    const values = context && typeof context === "object"
+      ? [context.tipoNegocio, context.tipo_negocio, context.segmento, context.vertical, context.brandKey, context.brand_key, context.slug, context.codigo, context.alias, context.nome, context.nome_fantasia, context.razaoSocial]
+      : [context]
+    return values.some((value) => {
+      const v = String(value || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      return /\bholding\b|\bholding palatare\b|\bgrupo palatare\b|\bparticipacoes\b/.test(v)
+    })
+  })
+}
+
 export const isDinoBrand = (brand) => brand === "dino" 
 export const isStalloneBrand = (brand) => brand === 'stallone'
 /** Marcas com loja de tema escolhível (sistema/claro/escuro) guardado no navegador. */

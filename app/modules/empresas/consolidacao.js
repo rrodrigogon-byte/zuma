@@ -30,14 +30,14 @@ const GRUPOS_PADRAO = [
   },
   {
     id: 'grp-serrano-palatare-03',
-    nome: 'Grupo Serrano & Palatare',
-    slug: 'grupo-serrano-palatare',
+    nome: 'Grupo Palatare',
+    slug: 'grupo-palatare',
     cnpj: '51.499.928/0001-01',
     cnpjFormatado: '51.499.928/0001-01',
-    razaoSocial: 'Serrano & Palatare Participações S/A',
-    responsavel: 'Diretoria Executiva do Grupo',
-    segmentoPrincipal: 'Concreto Usinado & Gastronomia de Alto Padrão',
-    descricao: 'Grupo empresarial integrando Serrano Concreto Usinado e Palatare Pizzaria & Restaurante.',
+    razaoSocial: 'Holding Grupo Palatare Participações S/A',
+    responsavel: 'Alexandre Palatare (Fundador & Diretor-Presidente)',
+    segmentoPrincipal: 'Holding Multinegócio · Gastronomia de Alto Padrão, Concreto Usinado & Mineração',
+    descricao: 'Holding controladora fundada por Alexandre Palatare, proprietária integral da Palatare Pizzaria & Restaurante e da Serrano Concreto Usinado & Mineração em Tangará da Serra/MT.',
     ativo: true,
   }
 ];
@@ -107,7 +107,7 @@ const MULTI_BUSINESS_MAP = {
   // Palatare Pizzaria & Restaurante
   'c1c1ac01-8e50-4b61-8c79-de4aaa916da9': {
     grupoId: 'grp-serrano-palatare-03',
-    grupoNome: 'Grupo Serrano & Palatare',
+    grupoNome: 'Grupo Palatare',
     segmento: 'gastronomia_pizzaria',
     nomeExibicao: 'Palatare Pizzaria & Restaurante · Forno a Lenha, Rodízio e Delivery',
     icone: 'pizza',
@@ -119,9 +119,9 @@ const MULTI_BUSINESS_MAP = {
   // Serrano Concreto Usinado
   'c2c2ac01-8e50-4b61-8c79-de4aaa916da2': {
     grupoId: 'grp-serrano-palatare-03',
-    grupoNome: 'Grupo Serrano & Palatare',
+    grupoNome: 'Grupo Palatare',
     segmento: 'concreto_usinado_industria',
-    nomeExibicao: 'Serrano Concreto Usinado · Central Dosadora e Bombas Lança',
+    nomeExibicao: 'Serrano Concreto Usinado & Mineração · Central Dosadora e Bombas Lança',
     icone: 'truck',
     modulosAtivos: ['programacao_cargas', 'tracos_fck', 'dosagem_concreto', 'frota_betoneiras', 'corpos_de_prova'],
     permiteComandaBar: false,

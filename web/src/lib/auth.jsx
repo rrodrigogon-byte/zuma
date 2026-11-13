@@ -4,6 +4,13 @@ import { esquecerRazaoAtivo } from './razao-estado'
 import { empresaDaLoja, mesclarLojas, normalizarLojas, pertenceAEmpresa, repararLojasSemEmpresa, selecionarLojaAutomatica, substituirLojas } from './context-selection'
 import { DINO_COMPANY, DINO_STORE, isDinoDedicatedHost } from './dino-scope'
 import { isDinoBrandContext } from './brand'
+import {
+  HOLDING_PALATARE_EMPRESA,
+  GRUPO_PALATARE_EMPRESAS,
+  GRUPO_PALATARE_LOJAS,
+  GRUPO_PALATARE_IDS,
+  isGrupoPalatareEmpresa
+} from './palatare-constants'
 
 const AuthContext = createContext(null)
 
@@ -27,12 +34,12 @@ function readEmpresaAtivaInicial() {
 
 function readEmpresasAcessiveisInicial() {
   const user = readStorage('sp_user')
-  const base = empresasComFallbackDino(readStorage('sp_empresas_acessiveis', []))
+  const base = garantirEmpresasCanonicas(readStorage('sp_empresas_acessiveis', []))
   return filtrarEmpresasPorUsuario(base, user)
 }
 
 function filtrarEmpresasPorUsuario(empresas, user) {
-  const lista = Array.isArray(empresas) ? empresas : []
+  const lista = garantirEmpresasCanonicas(Array.isArray(empresas) ? empresas : [])
   if (!user) return lista
 
   const ident = String(user.email || user.username || user.login || '').trim().toLowerCase()
@@ -67,6 +74,14 @@ function filtrarEmpresasPorUsuario(empresas, user) {
     return dinoOnly.length > 0 ? dinoOnly : [DINO_COMPANY]
   }
 
+  // Usuário Palatare / Concreto / Alexandre Palatare: visualiza todas as 3 empresas do Grupo Palatare
+  const isPalatareOuConcreto = ident.includes('palatare') || ident.includes('concreto') || ident.includes('serrano') || ident.includes('alexandre') ||
+    GRUPO_PALATARE_IDS.includes(String(user.empresaId || '').toLowerCase());
+  if (isPalatareOuConcreto) {
+    const grupoPalatareOnly = lista.filter((e) => isGrupoPalatareEmpresa(e.id) || isGrupoPalatareEmpresa(e.nome));
+    return grupoPalatareOnly.length > 0 ? grupoPalatareOnly : GRUPO_PALATARE_EMPRESAS;
+  }
+
   if (user.empresaId) {
     const doUsuario = lista.filter((e) => String(e.id || '').toLowerCase() === String(user.empresaId).toLowerCase())
     if (doUsuario.length > 0) return doUsuario
@@ -75,17 +90,34 @@ function filtrarEmpresasPorUsuario(empresas, user) {
   return lista
 }
 
-function empresasComFallbackDino(empresas) {
-  const lista = Array.isArray(empresas) ? empresas : []
-  if (!isDinoDedicatedHost() || lista.some((empresa) => isDinoBrandContext(empresa))) return lista
-  return [...lista, DINO_COMPANY]
+function garantirEmpresasCanonicas(empresas) {
+  let lista = Array.isArray(empresas) ? [...empresas] : []
+  if (isDinoDedicatedHost() && !lista.some((empresa) => isDinoBrandContext(empresa))) {
+    lista.push(DINO_COMPANY)
+  }
+  // Garante SEMPRE as 3 empresas canônicas do Grupo Palatare
+  for (const empGp of GRUPO_PALATARE_EMPRESAS) {
+    const jaTem = lista.some((e) => String(e.id || '').toLowerCase() === empGp.id.toLowerCase());
+    if (!jaTem) {
+      lista.push(empGp);
+    }
+  }
+  return lista
 }
 
-function lojasComFallbackDino(lojas) {
+function garantirLojasCanonicas(lojas) {
   // Entradas antigas da loja Dino gravadas sem vínculo de empresa são reparadas aqui.
-  const lista = repararLojasSemEmpresa(Array.isArray(lojas) ? lojas : [], [DINO_STORE])
-  if (!isDinoDedicatedHost() || lista.some((loja) => String(loja?.id || '') === DINO_STORE.id)) return lista
-  return [...lista, DINO_STORE]
+  let lista = repararLojasSemEmpresa(Array.isArray(lojas) ? lojas : [], [DINO_STORE])
+  if (isDinoDedicatedHost() && !lista.some((loja) => String(loja?.id || '') === DINO_STORE.id)) {
+    lista.push(DINO_STORE)
+  }
+  for (const lojaGp of GRUPO_PALATARE_LOJAS) {
+    const jaTem = lista.some((l) => String(l.id || '').toLowerCase() === lojaGp.id.toLowerCase());
+    if (!jaTem) {
+      lista.push(lojaGp);
+    }
+  }
+  return lista
 }
 
 function selecionarLojaDoContexto(lojas, empresa, atual = null) {
@@ -97,7 +129,7 @@ function selecionarLojaDoContexto(lojas, empresa, atual = null) {
 function readLojaAtivaInicial() {
   const empresa = readEmpresaAtivaInicial()
   const lojasArmazenadas = normalizarLojas(readStorage('sp_lojas_acessiveis', []))
-  const lojas = lojasComFallbackDino(lojasArmazenadas)
+  const lojas = garantirLojasCanonicas(lojasArmazenadas)
   const atual = readStorage('sp_loja_ativa')
   const selecionada = empresa?.id ? selecionarLojaDoContexto(lojas, empresa, atual) : null
   try {
@@ -125,7 +157,7 @@ export function AuthProvider({ children }) {
   const [empresasAcessiveis, setEmpresasAcessiveis] = useState(readEmpresasAcessiveisInicial)
   const [lojaAtiva, setLojaAtiva] = useState(readLojaAtivaInicial)
   const [lojasAcessiveis, setLojasAcessiveis] = useState(() => {
-    return lojasComFallbackDino(normalizarLojas(readStorage('sp_lojas_acessiveis', [])))
+    return garantirLojasCanonicas(normalizarLojas(readStorage('sp_lojas_acessiveis', [])))
   })
   const lojasAcessiveisRef = useRef(lojasAcessiveis)
   useEffect(() => { lojasAcessiveisRef.current = lojasAcessiveis }, [lojasAcessiveis])

@@ -1847,14 +1847,35 @@ export default function PalatarePizzariaSuite() {
                   HOLDING EMPRESARIAL INTEGRADA
                 </span>
                 <h2 style={{ margin: '4px 0 0', fontSize: 26, fontWeight: 900, color: '#FFF' }}>
-                  Grupo Serrano & Palatare
+                  Grupo Palatare
                 </h2>
                 <p style={{ margin: '8px 0 0', fontSize: 14, color: '#94A3B8', maxWidth: 700, lineHeight: 1.5 }}>
-                  Unificação corporativa e tecnológica entre a <strong>Serrano Concreto Usinado</strong> (Central Dosadora & FCK) e a <strong>Palatare Pizzaria & Restaurante</strong> (Gastronomia & Delivery de Alto Padrão).
+                  Holding controladora fundada por <strong>Alexandre Palatare</strong>, unificando a <strong>Palatare Pizzaria &amp; Restaurante</strong> (Gastronomia &amp; Delivery) e a <strong>Serrano Concreto Usinado &amp; Mineração</strong> (Central Dosadora NBR 7212, Silos 96t e Frota de Betoneiras).
                 </p>
               </div>
 
               <div style={{ display: 'flex', gap: 12 }}>
+                <button
+                  type="button"
+                  onClick={() => navigate('/admin/concreto?secao=empresa-holding')}
+                  style={{
+                    background: '#C5A059',
+                    color: '#16181B',
+                    border: 'none',
+                    padding: '12px 20px',
+                    borderRadius: 10,
+                    fontSize: 14,
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    boxShadow: '0 4px 16px rgba(197, 160, 89, 0.4)'
+                  }}
+                >
+                  🏢 Holding Grupo Palatare
+                </button>
+
                 <button
                   type="button"
                   onClick={() => navigate('/admin/concreto')}
