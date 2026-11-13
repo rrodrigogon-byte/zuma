@@ -388,10 +388,11 @@ export default function App() {
                         setActiveTab('pesagem');
                       }
                     }}
-                    onSelectSilo={() => setActiveTab('relatorios')}
-                    onOpenBalancaCockpit={() => setActiveTab('pesagem')}
-                  />
-                </div>
+                   onSelectSilo={() => setActiveTab('relatorios')}
+                   onOpenBalancaCockpit={() => setActiveTab('pesagem')}
+                   onNavigateTab={setActiveTab}
+                 />
+               </div>
 
                 <div className="xl:col-span-4">
                   <LiveFeed 
@@ -468,10 +469,13 @@ export default function App() {
       <CopilotModal 
         isOpen={isCopilotOpen}
         onClose={() => setIsCopilotOpen(false)}
-        stats={stats}
-        silos={silos}
-        vehicles={vehicles}
-      />
+       stats={stats}
+       silos={silos}
+       vehicles={vehicles}
+       onNavigateTab={setActiveTab}
+       onOpenDecisionModal={handleOpenDecisionModal}
+       onOpenDanfe={handleOpenDanfe}
+     />
 
       {/* 2. Exception Decision Modal */}
       {isDecisionModalOpen && (
