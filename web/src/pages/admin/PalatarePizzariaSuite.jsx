@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { PALATARE_PIZZARIA_EMPRESA_ID } from '../../lib/palatare-constants';
 import { HOLDING_PALATARE_EMPRESA_ID, SERRANO_CONCRETO_EMPRESA_ID } from '../../lib/palatare-constants';
 import PizzariaHubDeliveryMulticanal from './pizzaria/PizzariaHubDeliveryMulticanal';
 
