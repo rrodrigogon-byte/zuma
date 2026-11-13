@@ -16,6 +16,7 @@ import ConcretoCamerasVisionAI from './concreto/ConcretoCamerasVisionAI';
 import ConcretoLaboratorioTecnologico from './concreto/ConcretoLaboratorioTecnologico';
 import ConcretoAppCampoPainel from './concreto/ConcretoAppCampoPainel';
 import HoldingGrupoPalatare from './concreto/HoldingGrupoPalatare';
+import TorreDeControlePesagemSerrano from './concreto/TorreDeControlePesagemSerrano';
 import { HOLDING_PALATARE_EMPRESA_ID, SERRANO_CONCRETO_EMPRESA_ID } from '../../lib/palatare-constants';
 
 
@@ -36,7 +37,7 @@ export default function ConcretoUsinaERP() {
   const [themeDark, setThemeDark] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const secaoParam = searchParams.get('secao') || searchParams.get('tab') || 'operacao-despacho';
-  const secaoAtiva = (secaoParam === 'app-campo' || secaoParam === 'app-campo-assinatura') ? 'app-campo-assinatura' : secaoParam;
+  const secaoAtiva = (secaoParam === 'app-campo' || secaoParam === 'app-campo-assinatura') ? 'app-campo-assinatura' : (secaoParam === 'torre' || secaoParam === 'torre-controle' || secaoParam === 'torre-pesagem') ? 'torre-pesagem' : secaoParam;
   const setSecaoAtiva = (s) => {
     const sNorm = (s === 'app-campo' || s === 'app-campo-assinatura') ? 'app-campo-assinatura' : s;
     setSearchParams({ secao: sNorm });
@@ -661,6 +662,7 @@ export default function ConcretoUsinaERP() {
         <nav className="serrano-nav-tabs" aria-label="Navegação da Usina">
           {[
             { id: "operacao-despacho", label: "Despacho ao Vivo", icon: "🚚", count: cargas.length },
+            { id: "torre-pesagem", label: "Torre de Controle & Balança", icon: "🗼" },
             { id: "app-campo-assinatura", label: "App PWA & Canhoto em Campo", icon: "📱", count: cargas.filter(c => !c.assinaturaEntrega).length },
             { id: "operacao-programacao", label: "Programação de Cargas", icon: "📅" },
             { id: "operacao-frota", label: "Frota & Telemetria", icon: "🚛", count: frota.length },
@@ -1696,6 +1698,13 @@ export default function ConcretoUsinaERP() {
 
         {/* ─── ABA 6: HOLDING & DADOS FISCAIS SEFAZ ─── */}
         
+        {/* ─── ABA: TORRE DE CONTROLE DE PESAGEM & GÊMEO DIGITAL ─── */}
+        {(secaoAtiva === 'torre-pesagem' || secaoAtiva === 'torre-controle') && (
+          <TorreDeControlePesagemSerrano
+            onVoltar={() => setSecaoAtiva('operacao-despacho')}
+          />
+        )}
+
         {/* ─── ABA 11: CÂMERAS IP INDUSTRIAIS & VISION AI (LPR / BALANÇA / SILOS) ─── */}
         {secaoAtiva === 'cameras-cftv' && (
           <ConcretoCamerasVisionAI

@@ -616,10 +616,12 @@ export const NAV_CONCRETO_GROUPS = [
     label: "Operação", aberto: true,
     items: [
       { to: "/admin/concreto?secao=operacao-despacho", icon: "🚚", label: "Despacho ao Vivo" },
+      { to: "/admin/concreto?secao=torre-pesagem", icon: "🗼", label: "Torre de Controle & Balança" },
       { to: "/admin/concreto?secao=app-campo-assinatura", icon: "📱", label: "App PWA & Canhoto em Campo" },
       { to: "/admin/concreto?secao=operacao-programacao", icon: "📅", label: "Programação de Cargas" },
       { to: "/admin/concreto?secao=operacao-frota", icon: "🚛", label: "Frota & Telemetria" },
-      { to: "/pdv", icon: "⚖️", label: "Balança Rodoviária & Balcão" },
+      { to: "/pdv", icon: "⚖️", label: "Balança Rodoviária 80t" },
+      { to: "/admin/concreto?secao=cameras-cftv", icon: "📹", label: "Câmeras & Vision AI" },
     ],
   },
   {
@@ -1464,7 +1466,8 @@ export default function Sidebar() {
                 : isConcreto
                 ? [
                     { to: "/admin/concreto", icon: "🚚", label: "Expedição & Cargas", badge: true },
-                    { to: "/pdv", icon: "⚖️", label: "Balança & Balcão", badge: false },
+                    { to: "/admin/concreto?secao=torre-pesagem", icon: "🗼", label: "Torre de Controle", badge: false },
+                    { to: "/pdv", icon: "⚖️", label: "Balança Rodoviária 80t", badge: false },
                     { to: "/admin/concreto?secao=cameras-cftv", icon: "📹", label: "Câmeras & Vision AI", badge: false },
                   ]
                 : isClube

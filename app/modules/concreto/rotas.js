@@ -62,7 +62,16 @@ import {
   analisarEscalaProgramacaoKyttoIA,
   aplicarEscalaSugeridaKyttoIA,
   obterTelemetriaFrotaTempoReal,
-  atualizarTelemetriaBetoneira
+  atualizarTelemetriaBetoneira,
+  listarCamerasIpConcreto,
+  obterCameraIpPorId,
+  criarCameraIpConcreto,
+  atualizarCameraIpConcreto,
+  excluirCameraIpConcreto,
+  testarConexaoCameraIp,
+  analisarFrameVisionKyttoIa,
+  listarEventosVisionConcreto,
+  reconhecerEventoVision
 } from './servico.js';
 import { CONCRETO_EMPRESA_ID } from '../../concreto-usina-seed.js';
 
@@ -773,6 +782,108 @@ router.post('/dosagem/calcular', (req, res) => {
     try {
       const resultado = await atualizarTelemetriaBetoneira(req.params.codigo, req.body, resolverEmpresa(req));
       return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 52. Câmeras IP Industriais & Vision AI (RTSP / ONVIF / LPR / Toledo Prix)
+  router.get('/cameras', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const cameras = listarCamerasIpConcreto(empresaId);
+      return res.json({ ok: true, cameras });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.get('/cameras/:id', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const camera = obterCameraIpPorId(req.params.id, empresaId);
+      return res.json({ ok: true, camera });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post('/cameras', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const camera = criarCameraIpConcreto(req.body, empresaId);
+      return res.status(201).json({ ok: true, camera });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.put('/cameras/:id', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const camera = atualizarCameraIpConcreto(req.params.id, req.body, empresaId);
+      return res.json({ ok: true, camera });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.delete('/cameras/:id', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const removido = excluirCameraIpConcreto(req.params.id, empresaId);
+      return res.json({ ok: true, removido });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post('/cameras/testar-conexao', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = testarConexaoCameraIp(req.body, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post('/cameras/:id/testar', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = testarConexaoCameraIp(req.params.id, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post('/cameras/:id/analisar', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = analisarFrameVisionKyttoIa(req.params.id, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.get('/cameras-eventos', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const eventos = listarEventosVisionConcreto(empresaId);
+      return res.json({ ok: true, eventos });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post('/cameras-eventos/:id/reconhecer', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const operador = req.body?.operador || req.user?.nome || 'Operador CCO Serrano';
+      const ok = reconhecerEventoVision(req.params.id, empresaId, operador);
+      return res.json({ ok });
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
     }

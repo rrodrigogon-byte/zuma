@@ -5304,6 +5304,14 @@ export function construirUrlsCamera(marca, ipHost, portaHttp = 80, portaRtsp = 5
   const hostRtsp = String(ipHost || "192.168.1.100") + ":" + String(portaRtsp || 554);
   const hostHttp = String(ipHost || "192.168.1.100") + (Number(portaHttp) !== 80 ? ":" + portaHttp : "");
 
+  if (m === "positivo") {
+    return {
+      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/live/ch" + (canal ? (canal - 1) : 0),
+      snapshotHttpUrl: "http://" + auth + hostHttp + "/snapshot.jpg",
+      marcaRotulo: "Positivo Casa Inteligente / Segurança"
+    };
+  }
+
   if (m === "intelbras" || m === "dahua") {
     return {
       streamRtspUrl: "rtsp://" + auth + hostRtsp + "/cam/realmonitor?channel=" + (canal || 1) + "&subtype=" + sub,
@@ -5318,6 +5326,30 @@ export function construirUrlsCamera(marca, ipHost, portaHttp = 80, portaRtsp = 5
       streamRtspUrl: "rtsp://" + auth + hostRtsp + "/Streaming/Channels/" + ch,
       snapshotHttpUrl: "http://" + auth + hostHttp + "/ISAPI/Streaming/channels/" + ch + "/picture",
       marcaRotulo: m === "hikvision" ? "Hikvision ColorVu" : "HiLook Series"
+    };
+  }
+
+  if (m === "giga" || m === "multilaser") {
+    return {
+      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/ch0" + (canal || 1) + (substream ? "_sub.264" : ".264"),
+      snapshotHttpUrl: "http://" + auth + hostHttp + "/cgi-bin/snapshot.cgi",
+      marcaRotulo: "Giga Security / Multilaser Pro"
+    };
+  }
+
+  if (m === "tecvoz" || m === "jfl") {
+    return {
+      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/user=" + (usuario || "admin") + "&password=" + (senha || "") + "&channel=" + (canal || 1) + "&stream=" + sub + ".sdp",
+      snapshotHttpUrl: "http://" + auth + hostHttp + "/snapshot.jpg",
+      marcaRotulo: "Tecvoz / JFL Alarmes"
+    };
+  }
+
+  if (m === "uniview" || m === "unv") {
+    return {
+      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/unicast/c" + (canal || 1) + "/s" + sub + "/live",
+      snapshotHttpUrl: "http://" + auth + hostHttp + "/images/snapshot.jpg",
+      marcaRotulo: "Uniview (UNV)"
     };
   }
 
