@@ -5927,6 +5927,15 @@ function guardarRespostaCurta(chave, valor) {
   cacheRespostasCurtas.set(chave, { versao: estadoGravacao()?.alteracoes ?? null, em: Date.now(), valor });
 }
 
+function invalidarCachesBarbearia(empresaId) {
+  try {
+    cacheRespostasCurtas.clear();
+    _cacheIndicesBarbearia.clear();
+    _cacheRelacionamentoBarbearia.clear();
+    if (empresaId) _cacheClientesBarbearia.delete(String(empresaId));
+  } catch (_) {}
+}
+
 app.get('/api/admin/barbearia/analytics', async (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
@@ -6110,15 +6119,21 @@ app.get('/api/admin/barbearia/agenda-periodo', (req, res) => {
     const empresaId = legacyEmpresaId(req);
     const { de, ate } = intervaloDias(req.query?.de, req.query?.ate, 62);
     const lojaId = legacyLojaId(req);
-    const chaveCache = JSON.stringify(['agenda-periodo', empresaId, lojaId || '', de, ate, String(req.query?.profissionalId || ''), String(req.query?.status || ''), String(req.query?.historico || '')]);
+    const statusPedido = String(req.query?.status || '');
+    const incluirCancelados = req.query?.incluirCancelados === '1' || req.query?.incluirCancelados === 'true' || statusPedido === 'cancelado';
+    const chaveCache = JSON.stringify(['agenda-periodo', empresaId, lojaId || '', de, ate, String(req.query?.profissionalId || ''), statusPedido, String(req.query?.historico || ''), incluirCancelados ? '1' : '0']);
     const guardada = respostaCurtaGuardada(chaveCache, 15_000);
     if (guardada) return enviarJsonOtimizado(req, res, guardada);
     const indices = indicesAgendaBarbearia(empresaId);
-    const itens = listarAgendamentosBarbearia(empresaId, {
+    let itens = listarAgendamentosBarbearia(empresaId, {
       de, ate, lojaId,
       profissionalId: req.query?.profissionalId || undefined,
       status: req.query?.status || undefined,
     }, indices);
+    // Agendamentos cancelados são expurgados por padrão da visualização da grade da agenda
+    if (!incluirCancelados) {
+      itens = itens.filter(item => item && item.status !== 'cancelado' && item.status !== 'cancelado_falta_confirmacao' && item.status !== 'nao_compareceu');
+    }
     // Histórico importado do Avec (somente leitura), ligado aos profissionais ativos.
     // Não entra quando o filtro de status pede algo diferente de "concluído".
     const statusPedido = String(req.query?.status || '');
@@ -6434,6 +6449,7 @@ app.post('/api/admin/barbearia/agenda', async (req, res) => {
     } else {
       notificacao = await queueAppointmentNotifications({ empresaId, lojaId, legacyEmpresaId: empresaId }, agendamento, 'criado').catch(() => ({ queued: 0, skipped: true, reason: 'queue_unavailable' }));
     }
+    invalidarCachesBarbearia(empresaId);
     res.status(201).json({ ok: true, agendamento, notificacao, cliente: { id: vinculo.clienteId || null, criado: vinculo.criado } });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
@@ -6456,6 +6472,7 @@ app.patch('/api/admin/barbearia/agenda/:id', async (req, res) => {
       const contextoAnterior = { empresaId, lojaId: anterior.lojaId || lojaId, legacyEmpresaId: empresaId };
       listaEspera = await avisarListaEspera(contextoAnterior, vagaAnterior, captacaoKytto.candidatosParaVaga(empresaId, vagaAnterior, { lojaId: anterior.lojaId || lojaId })).catch(() => ({ queued: 0, skipped: true, reason: 'queue_unavailable' }));
     }
+    invalidarCachesBarbearia(empresaId);
     res.json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(empresaId, agendamento), notificacao, listaEspera });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
@@ -6640,6 +6657,7 @@ app.patch('/api/admin/barbearia/agenda/:id/status', async (req, res) => {
         avaliacao = { queued: 0, skipped: true, reason: 'queue_unavailable' };
       }
     }
+    invalidarCachesBarbearia(empresaId);
     audit(req, status === 'cancelado' ? 'BARBEARIA AGENDAMENTO CANCELADO' : 'BARBEARIA AGENDAMENTO STATUS', `${agendamento.id} status=${status} cliente="${agendamento.clienteNome || ''}" por="${dadosStatus.canceladoPor || req.user?.nome || 'atendente'}" motivo="${dadosStatus.motivoCancelamento || ''}"`.trim());
     res.json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(empresaId, agendamento), financeiro, notificacao, listaEspera, indicacao, avaliacao, cashback, vale, assinatura: assinatura ? { id: assinatura.assinatura.id, sessoesRestantes: assinatura.sessoesRestantes, usosNoCiclo: assinatura.usosNoCiclo } : null });
   } catch (error) { res.status(400).json({ error: error.message }); }

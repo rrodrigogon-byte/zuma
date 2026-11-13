@@ -685,6 +685,37 @@ export default function BarbeariaERP({ tabInicial } = {}) {
   const [dashboard, setDashboard] = useState(null);
   const [agendamentos, setAgendamentos] = useState([]);
   const [agendaRevisao, setAgendaRevisao] = useState(0);
+
+  // Sincronização em tempo real da agenda e expurgo de cancelados
+  useEffect(() => {
+    function expurgarCancelado(id) {
+      if (!id) return;
+      setAgendamentos((prev) => prev.filter((it) => it && String(it.id) !== String(id)));
+      setAgendaRevisao((n) => n + 1);
+    }
+    function handleEventoCancelado(e) {
+      const id = e?.detail?.agendamentoId || e?.detail?.id;
+      expurgarCancelado(id);
+    }
+    function handleStorage(e) {
+      if (e.key === "kytto:sync_agenda" && e.newValue) {
+        try {
+          const dados = JSON.parse(e.newValue);
+          if (dados?.tipo === "cancelado" && dados?.id) {
+            expurgarCancelado(dados.id);
+          }
+        } catch (_) {}
+      }
+    }
+    window.addEventListener("kytto:agenda_cancelada", handleEventoCancelado);
+    window.addEventListener("kytto:agenda_atualizada", handleEventoCancelado);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("kytto:agenda_cancelada", handleEventoCancelado);
+      window.removeEventListener("kytto:agenda_atualizada", handleEventoCancelado);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
   const [dadosCarregados, setDadosCarregados] = useState(false);
   const pedidoOverview = useRef(0);
   const [profissionais, setProfissionais] = useState([]);
@@ -2032,6 +2063,17 @@ export default function BarbeariaERP({ tabInicial } = {}) {
       )
     )
       return;
+
+    if (novoStatus === "cancelado") {
+      setAgendamentos((prev) => prev.filter((item) => item.id !== agendamento.id));
+      setAgendaRevisao((n) => n + 1);
+      window.dispatchEvent(new CustomEvent("kytto:agenda_cancelada", { detail: { id: agendamento.id, agendamento } }));
+      window.dispatchEvent(new CustomEvent("kytto:agenda_atualizada", { detail: { id: agendamento.id, status: "cancelado" } }));
+      try {
+        localStorage.setItem("kytto:sync_agenda", JSON.stringify({ tipo: "cancelado", id: agendamento.id, ts: Date.now() }));
+      } catch (_) {}
+    }
+
     await executar(
       () =>
         api.patch(`/api/admin/barbearia/agenda/${agendamento.id}/status`, {
@@ -2057,11 +2099,22 @@ export default function BarbeariaERP({ tabInicial } = {}) {
     const statusAnterior = agendamento.status;
 
     // Atualização otimista imediata para resposta instantânea ao arrastar
-    setAgendamentos((prev) =>
-      prev.map((item) =>
-        item.id === agendamento.id ? { ...item, status: novoStatus } : item,
-      ),
-    );
+    if (novoStatus === "cancelado") {
+      setAgendamentos((prev) =>
+        prev.filter((item) => item.id !== agendamento.id),
+      );
+      setAgendaRevisao((n) => n + 1);
+      window.dispatchEvent(new CustomEvent("kytto:agenda_cancelada", { detail: { id: agendamento.id, agendamento } }));
+      try {
+        localStorage.setItem("kytto:sync_agenda", JSON.stringify({ tipo: "cancelado", id: agendamento.id, ts: Date.now() }));
+      } catch (_) {}
+    } else {
+      setAgendamentos((prev) =>
+        prev.map((item) =>
+          item.id === agendamento.id ? { ...item, status: novoStatus } : item,
+        ),
+      );
+    }
 
     // Se for transição direta de agendado para concluído, passa por em_atendimento
     if (statusAnterior === "agendado" && novoStatus === "concluido") {
