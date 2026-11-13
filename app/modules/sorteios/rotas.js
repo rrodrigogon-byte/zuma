@@ -115,6 +115,26 @@ export function criarRotasSorteios({ legacyEmpresaId, audit } = {}) {
     }
   });
 
+  // Gerar bilhetes em lote para clientes que vieram no período (3 meses ou este mês)
+  router.post('/:id/gerar-por-periodo', async (req, res) => {
+    try {
+      const empresaId = getEmpresaId(req);
+      const resultado = await sorteiosServico.gerarBilhetesPorPeriodo({
+        empresaId,
+        campanhaId: req.params.id,
+        periodo: req.body.periodo || '3_meses',
+        regra: req.body.regra || '1_por_cliente',
+        emitidoPor: req.user?.nome || req.user?.email || 'Gerência Dino Barbearia',
+      });
+      if (typeof audit === 'function') {
+        audit(req, 'SORTEIO BILHETES EM LOTE POR PERIODO', `Campanha ${req.params.id} periodo=${req.body.periodo} total=${resultado.bilhetesGerados}`);
+      }
+      res.json(resultado);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
   // Executar o sorteio oficial ao vivo de forma auditada
   router.post('/:id/sortear', async (req, res) => {
     try {

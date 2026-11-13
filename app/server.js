@@ -7159,7 +7159,26 @@ async function posFaturamentoComanda(req, comanda) {
         barbeariaErpKytto.registrarBaixaLojaNoItemComanda(empresaId, comanda.id, item.id, { ok: false, erro: 'Sem permissão de estoque na loja virtual; peça à gestão para concluir a baixa.' });
         loja.push({ itemId: item.id, ok: false });
       }
-        // [kytto-sorteios] Emissão automática de Números da Sorte para o cliente
+    }
+    for (const item of itensLoja) {
+      try {
+        const movimento = await baixarEstoqueLoja(contexto, {
+          variantId: item.lojaVarianteId, locationId: item.lojaLocalEstoqueId, quantidade: item.quantidade,
+          chave: `barbearia-comanda:${comanda.id}:${item.id}`, observacao: `Venda na comanda ${comanda.id} da barbearia`,
+        });
+        barbeariaErpKytto.registrarBaixaLojaNoItemComanda(empresaId, comanda.id, item.id, { ok: true, movimento: { disponivel: movimento?.disponivel ?? null } });
+        loja.push({ itemId: item.id, ok: true });
+      } catch (error) {
+        const erro = falhaInfraComanda(error) ? 'Loja virtual indisponível no momento; use "Baixar estoque da loja" em instantes.' : error.message;
+        if (falhaInfraComanda(error)) console.error('[comanda] baixa da loja falhou:', error?.code || '', error?.message || error);
+        barbeariaErpKytto.registrarBaixaLojaNoItemComanda(empresaId, comanda.id, item.id, { ok: false, erro });
+        loja.push({ itemId: item.id, ok: false, erro });
+      }
+    }
+    audit(req, 'COMANDA BAIXA LOJA', `${comanda.id} itens=${itensLoja.length} ok=${loja.filter((x) => x.ok).length}`);
+  }
+
+  // [kytto-sorteios] Emissão automática de Números da Sorte para o cliente em toda comanda fechada
   let sorteio = null;
   try {
     const valorPagoTotal = Number(comanda.totalPago || comanda.totalFaturado || comanda.total || 0);
@@ -7182,26 +7201,8 @@ async function posFaturamentoComanda(req, comanda) {
   } catch (errSorteio) {
     console.warn('[comanda] emissao sorteio:', errSorteio.message);
   }
+
   return { planos, loja, sorteio };
-    }
-    for (const item of itensLoja) {
-      try {
-        const movimento = await baixarEstoqueLoja(contexto, {
-          variantId: item.lojaVarianteId, locationId: item.lojaLocalEstoqueId, quantidade: item.quantidade,
-          chave: `barbearia-comanda:${comanda.id}:${item.id}`, observacao: `Venda na comanda ${comanda.id} da barbearia`,
-        });
-        barbeariaErpKytto.registrarBaixaLojaNoItemComanda(empresaId, comanda.id, item.id, { ok: true, movimento: { disponivel: movimento?.disponivel ?? null } });
-        loja.push({ itemId: item.id, ok: true });
-      } catch (error) {
-        const erro = falhaInfraComanda(error) ? 'Loja virtual indisponível no momento; use "Baixar estoque da loja" em instantes.' : error.message;
-        if (falhaInfraComanda(error)) console.error('[comanda] baixa da loja falhou:', error?.code || '', error?.message || error);
-        barbeariaErpKytto.registrarBaixaLojaNoItemComanda(empresaId, comanda.id, item.id, { ok: false, erro });
-        loja.push({ itemId: item.id, ok: false, erro });
-      }
-    }
-    audit(req, 'COMANDA BAIXA LOJA', `${comanda.id} itens=${itensLoja.length} ok=${loja.filter((x) => x.ok).length}`);
-  }
-  return { planos, loja };
 }
 
 function avisosPosFaturamento(pos) {

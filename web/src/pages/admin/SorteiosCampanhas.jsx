@@ -76,6 +76,7 @@ export default function SorteiosCampanhas({ embed = false }) {
     motivo: 'Cortesia gerencial de balcão',
   });
   const [emitindoManual, setEmitindoManual] = useState(false);
+  const [gerandoPeriodo, setGerandoPeriodo] = useState(false);
   const [ultimoBilheteEmitidoManual, setUltimoBilheteEmitidoManual] = useState(null);
 
   // Áudio Sintético Web Audio API (Roleta e Vitória)
@@ -226,6 +227,33 @@ export default function SorteiosCampanhas({ embed = false }) {
       toast.error('Falha ao criar campanha: ' + err.message);
     } finally {
       setSalvandoCampanha(false);
+    }
+  };
+
+  // Gerar bilhetes em lote por período de atendimento (3 meses ou este mês)
+  const handleGerarPorPeriodo = async (periodo) => {
+    const campId = campanhaSelecionada?.id || campanhas[0]?.id;
+    if (!campId) {
+      toast.warning('Selecione uma campanha de sorteio ativa.');
+      return;
+    }
+    setGerandoPeriodo(true);
+    try {
+      const res = await api.post(`/api/admin/sorteios/${campId}/gerar-por-periodo`, {
+        periodo,
+        regra: '1_por_cliente',
+      });
+      if (res.ok) {
+        toast.success(res.mensagem || `Foram gerados ${res.bilhetesGerados} novos bilhetes com sucesso!`);
+        await carregarCampanhas();
+        await carregarBilhetes(campId);
+      } else {
+        toast.error(res.error || 'Erro ao gerar bilhetes.');
+      }
+    } catch (err) {
+      toast.error('Erro na geração em lote: ' + err.message);
+    } finally {
+      setGerandoPeriodo(false);
     }
   };
 
@@ -469,6 +497,95 @@ export default function SorteiosCampanhas({ embed = false }) {
             {/* ABA 1: LISTAGEM DE CAMPANHAS */}
             {abaAtiva === 'campanhas' && (
               <div>
+                {/* PAINEL DE IMPORTAÇÃO RÁPIDA POR PERÍODO (RESPOSTA AO CLIENTE) */}
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%)',
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  borderRadius: '16px',
+                  padding: '20px 24px',
+                  marginBottom: '24px',
+                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '20px' }}>🎲</span>
+                        <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#fbbf24' }}>
+                          Gerar Números da Sorte por Período de Atendimento (100% Automático)
+                        </h4>
+                        <span style={{ background: '#10b981', color: '#fff', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '12px' }}>
+                          Não precisa emitir em papel
+                        </span>
+                      </div>
+                      <p style={{ margin: 0, fontSize: '13px', color: '#94a3b8', maxWidth: '780px', lineHeight: 1.5 }}>
+                        O sistema seleciona os ganhadores <strong>automaticamente por sorteio digital auditado</strong>. Escolha o público que participará do sorteio (quem veio nos últimos 3 meses ou apenas este mês) e gere os bilhetes de todos com 1 clique:
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleGerarPorPeriodo('3_meses')}
+                        disabled={gerandoPeriodo}
+                        style={{
+                          background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '8px',
+                          padding: '10px 18px',
+                          fontWeight: 700,
+                          fontSize: '13px',
+                          cursor: gerandoPeriodo ? 'not-allowed' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+                        }}
+                      >
+                        <Sparkles size={16} />
+                        {gerandoPeriodo ? 'Gerando...' : '⚡ Quem veio nos últimos 3 meses (415 clientes)'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleGerarPorPeriodo('este_mes')}
+                        disabled={gerandoPeriodo}
+                        style={{
+                          background: 'linear-gradient(135deg, #38bdf8 0%, #0284c7 100%)',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '8px',
+                          padding: '10px 18px',
+                          fontWeight: 700,
+                          fontSize: '13px',
+                          cursor: gerandoPeriodo ? 'not-allowed' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 4px 12px rgba(2, 132, 199, 0.3)',
+                        }}
+                      >
+                        <Calendar size={16} />
+                        {gerandoPeriodo ? 'Gerando...' : '📅 Quem veio apenas este mês (295 clientes)'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{
+                    marginTop: '14px',
+                    paddingTop: '12px',
+                    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '16px',
+                    fontSize: '12px',
+                    color: '#cbd5e1',
+                    flexWrap: 'wrap',
+                  }}>
+                    <span>💡 <strong>Como funciona:</strong> O Kytto ERP gera números da sorte com hash seguro para cada cliente.</span>
+                    <span>📲 Os clientes podem consultar seus números em: <a href="https://kytto.com.br/sorteios/dino" target="_blank" rel="noreferrer" style={{ color: '#38bdf8', textDecoration: 'underline' }}>kytto.com.br/sorteios/dino</a></span>
+                  </div>
+                </div>
                 {campanhas.length === 0 ? (
                   <div className="sorteios-vazio">
                     <Gift size={48} className="text-amber-500" />

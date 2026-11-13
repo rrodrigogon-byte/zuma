@@ -156,7 +156,7 @@ export async function criarCampanha(empresaId, payload = {}) {
 
   // Tenta persistir no Postgres se a tabela existir
   try {
-    if (dbPg.hasManagedDatabaseUrl()) {
+    if (Boolean(process.env.DATABASE_URL || process.env.POSTGRES_URL)) {
       await dbPg.query(`
         INSERT INTO srt_campanhas (
           id, empresa_id, titulo, descricao, regulamento, premio_principal, premios,
@@ -259,7 +259,7 @@ export async function emitirBilhetes({
     camp = ativas[0] || null;
   }
 
-  if (!camp || camp.status !== 'ativa') {
+  if (!camp || ['encerrada', 'cancelada'].includes(camp.status)) {
     return { ok: false, motivo: 'Nenhuma campanha de sorteio ativa encontrada no momento.' };
   }
 
@@ -701,4 +701,154 @@ function ocultarTelefone(telefone) {
     return `(${num.slice(0, 2)}) *****-${num.slice(-4)}`;
   }
   return telefone;
+}
+
+
+/**
+ * Gera bilhetes retroativos para clientes que foram atendidos / interagiram em um determinado período
+ * Ex: '3_meses' (últimos 90 dias) ou 'este_mes' (mês de novembro/2026 até hoje).
+ */
+export async function gerarBilhetesPorPeriodo({
+  empresaId,
+  campanhaId,
+  periodo = '3_meses', // '3_meses' | 'este_mes' | 'tudo'
+  regra = '1_por_cliente', // '1_por_cliente' | '1_por_comanda'
+  emitidoPor = 'Importação Automática Dino',
+}) {
+  const empNorm = normalizarEmpresaId(empresaId);
+  const s = store(true);
+  
+  let camp = null;
+  if (campanhaId) {
+    camp = s.campanhas[String(campanhaId)];
+  } else {
+    const ativas = await listarCampanhas(empNorm, { status: 'ativa' });
+    camp = ativas[0] || null;
+  }
+  if (!camp) {
+    throw new Error('Campanha de sorteio não encontrada ou inativa.');
+  }
+
+  // Define data de corte
+  let dataCorte = new Date(Date.now() - 90 * 86400000); // 90 dias atrás padrão
+  if (periodo === 'este_mes') {
+    const agoraData = new Date();
+    dataCorte = new Date(agoraData.getFullYear(), agoraData.getMonth(), 1);
+  } else if (periodo === 'tudo') {
+    dataCorte = new Date(2025, 0, 1);
+  }
+
+  // 1. Busca clientes da tabela whatsapp_ai_sessions que interagiram desde dataCorte
+  let clientesParaGerar = [];
+  try {
+    if (Boolean(process.env.DATABASE_URL || process.env.POSTGRES_URL)) {
+      const res = await dbPg.query(`
+        SELECT 
+          COALESCE(nome, 'Cliente Barbearia Dino') as nome,
+          telefone,
+          MAX(ultima_interacao_em) as ultima_visita
+        FROM whatsapp_ai_sessions
+        WHERE ultima_interacao_em >= $1 AND telefone IS NOT NULL AND LENGTH(telefone) >= 8
+        GROUP BY COALESCE(nome, 'Cliente Barbearia Dino'), telefone
+        ORDER BY MAX(ultima_interacao_em) DESC
+      `, [dataCorte.toISOString()]);
+      clientesParaGerar = res.rows || [];
+    }
+  } catch (err) {
+    console.warn('[sorteio] falha ao buscar sessions pg:', err.message);
+  }
+
+  // Se não veio do banco ou veio pouco, mesclar com clientes cadastrados
+  if (clientesParaGerar.length === 0) {
+    try {
+      if (Boolean(process.env.DATABASE_URL || process.env.POSTGRES_URL)) {
+        const resCli = await dbPg.query(`
+          SELECT nome, telefone, celular, cpf, criado_em as ultima_visita
+          FROM clientes
+          WHERE criado_em >= $1 OR atualizado_em >= $1
+        `, [dataCorte.toISOString()]);
+        clientesParaGerar = (resCli.rows || []).map(r => ({
+          nome: r.nome,
+          telefone: r.celular || r.telefone,
+          cpf: r.cpf,
+          ultima_visita: r.ultima_visita,
+        }));
+      }
+    } catch (_) {}
+  }
+
+  // Fallback caso banco esteja offline: usar clientes do store local
+  if (clientesParaGerar.length === 0) {
+    const root = db();
+    const clientesKytto = Object.values(root?.clientesKytto?.clientes || {});
+    for (const cli of clientesKytto) {
+      clientesParaGerar.push({
+        nome: cli.nome,
+        telefone: cli.celular || cli.telefone,
+        cpf: cli.cpf,
+        ultima_visita: cli.atualizadoEm || cli.criadoEm,
+      });
+    }
+  }
+
+  // Identifica telefones que já possuem bilhetes nesta campanha
+  const bilhetesExistentes = Object.values(s.bilhetes || {}).filter(b => b.campanhaId === camp.id && b.status !== 'cancelado');
+  const telefonesComBilhete = new Set(bilhetesExistentes.map(b => (b.clienteTelefone || '').replace(/\D/g, '')).filter(Boolean));
+
+  let totalGerados = 0;
+  const novosBilhetes = [];
+  const agoraIso = agora();
+  let proximoSeq = bilhetesExistentes.length + 1;
+
+  for (const cli of clientesParaGerar) {
+    const telLimpo = String(cli.telefone || '').replace(/\D/g, '');
+    if (telLimpo && telefonesComBilhete.has(telLimpo)) {
+      continue; // Já tem bilhete nesta campanha
+    }
+
+    const seqAtual = proximoSeq + totalGerados;
+    const numeroSorte = formatarNumeroSorte(seqAtual, '01');
+    const bilheteId = id('blt');
+    const clienteId = telLimpo ? `cli-${telLimpo}` : id('cli');
+
+    const bilhete = {
+      id: bilheteId,
+      campanhaId: camp.id,
+      empresaId: empNorm,
+      numeroSorte,
+      numeroSequencial: seqAtual,
+      clienteId,
+      clienteNome: texto(cli.nome || 'Cliente Dino', 220),
+      clienteTelefone: texto(cli.telefone, 60),
+      origem: `importacao_${periodo}`,
+      motivo: `Clientes que vieram no período: ${periodo === 'este_mes' ? 'Mês Atual (Novembro/2026)' : 'Últimos 3 Meses'}`,
+      emitidoPor: texto(emitidoPor, 180),
+      geradoEm: agoraIso,
+      hashAutenticidade: calcularHashBilhete({ campanhaId: camp.id, numeroSorte, clienteId, geradoEm: agoraIso }),
+      status: 'ativo',
+      premiado: false,
+    };
+
+    s.bilhetes[bilheteId] = bilhete;
+    novosBilhetes.push(bilhete);
+    if (telLimpo) telefonesComBilhete.add(telLimpo);
+    totalGerados++;
+  }
+
+  camp.totalBilhetes = (camp.totalBilhetes || 0) + totalGerados;
+  camp.totalParticipantes = telefonesComBilhete.size;
+  camp.atualizadoEm = agoraIso;
+  save();
+
+  return {
+    ok: true,
+    campanhaId: camp.id,
+    campanhaTitulo: camp.titulo,
+    periodo,
+    clientesElegiveisEncontrados: clientesParaGerar.length,
+    bilhetesGerados: totalGerados,
+    totalBilhetesCampanha: camp.totalBilhetes,
+    totalParticipantesCampanha: camp.totalParticipantes,
+    mensagem: `Foram emitidos com sucesso ${totalGerados} novos bilhetes para clientes do período selecionado (${periodo === 'este_mes' ? 'Mês Atual' : 'Últimos 3 Meses'})!`,
+  };
 }
