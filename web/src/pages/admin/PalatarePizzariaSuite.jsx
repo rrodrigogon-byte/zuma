@@ -37,9 +37,11 @@ import { PALATARE_PIZZARIA_EMPRESA_ID } from '../../lib/palatare-constants';
 import { HOLDING_PALATARE_EMPRESA_ID, SERRANO_CONCRETO_EMPRESA_ID } from '../../lib/palatare-constants';
 import PizzariaHubDeliveryMulticanal from './pizzaria/PizzariaHubDeliveryMulticanal';
 import PizzariaIntegracoesAvancadas from './pizzaria/PizzariaIntegracoesAvancadas';
+import PalatareFinanceiroSuite from './pizzaria/PalatareFinanceiroSuite';
 
 const TABS = [
   { id: 'montador', label: 'Montador de Pizzas', icon: Pizza, badge: 'Multi-Sabores' },
+  { id: 'financeiro', label: 'Financeiro, CMV & DRE', icon: DollarSign, badge: 'DRE & DFC' },
   { id: 'hub_delivery', label: 'Hub Delivery Multicanal', icon: Truck, badge: 'iFood · Keeta · WhatsApp' },
   { id: 'rodizio', label: 'Rodízio Inteligente', icon: Utensils, badge: 'Ter, Qua, Sex' },
   { id: 'engenharia', label: 'Engenharia & CMV', icon: DollarSign, badge: 'Matriz BCG +100%' },
@@ -1714,6 +1716,13 @@ export default function PalatarePizzariaSuite() {
           </div>
 
         </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* ABA: GESTÃO FINANCEIRA, CONCILIAÇÃO TEF, CONTAS & DRE         */}
+      {/* ------------------------------------------------------------- */}
+      {tabAtiva === 'financeiro' && (
+        <PalatareFinanceiroSuite />
       )}
 
       {/* ------------------------------------------------------------- */}

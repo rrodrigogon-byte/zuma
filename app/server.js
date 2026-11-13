@@ -2449,6 +2449,87 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
     }
   });
 
+  // [kytto-concreto] Resumo Financeiro & Gestão de Caixa Serrano Concreto
+  app.get('/api/admin/concreto/financeiro/resumo', auth, requireStaff, async (req, res) => {
+    try {
+      return res.json({
+        ok: true,
+        empresa: 'Serrano Concreto Usinado & Mineração Ltda',
+        cnpj: '53.798.485/0001-77',
+        competencia: '11/2026',
+        saldoCaixaBancos: 428500.00,
+        contasReceber30d: 342800.00,
+        contasPagar30d: 391800.00,
+        saldoProjetadoFimMes: 379500.00,
+        faturamentoMensal: 850000.00,
+        volumeM3Faturado: 1830.0,
+        precoMedioPonderadoM3: 464.50,
+        custoMedioInsumosM3: 272.13,
+        margemBrutaM3: 169.12,
+        ebitdaMensal: 226000.00,
+        margemEbitdaPercent: 28.0,
+        lucroLiquidoMensal: 204000.00,
+        inadimplenciaPercent: 1.8,
+        breakEvenM3: 820,
+        cicloFinanceiroDias: { pmr: 28, pmp: 35, pme: 14, cicloCaixa: 7 }
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // [kytto-pizzaria] Resumo Financeiro, CMV & Conciliação Palatare Pizzaria
+  app.get('/api/admin/pizzaria/financeiro/resumo', auth, requireStaff, async (req, res) => {
+    try {
+      return res.json({
+        ok: true,
+        empresa: 'Palatare Pizzaria & Restaurante Ltda',
+        cnpj: '51.499.928/0001-91',
+        competencia: '11/2026',
+        faturamentoBruto: 320000.00,
+        faturamentoLiquido: 281600.00,
+        cmvPercentualRealizado: 30.0,
+        cmvValorRealizado: 84480.00,
+        margemContribuicao: 197120.00,
+        ebitdaMensal: 110000.00,
+        margemEbitdaPercent: 39.1,
+        lucroLiquidoMensal: 102000.00,
+        saldoCaixaBancos: 168200.00,
+        mrrPizzaClub: 24360.00,
+        membrosAtivosClub: 348,
+        ticketMedio: { salao: 138.50, rodizio: 89.90, delivery: 92.00 }
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // [kytto-holding] Financeiro Consolidado Conglomerado Grupo Palatare
+  app.get('/api/admin/holding/financeiro/consolidado', auth, requireStaff, async (req, res) => {
+    try {
+      return res.json({
+        ok: true,
+        holding: 'Grupo Palatare Participações S/A',
+        controlador: 'Alexandre Palatare (100% Capital Votante)',
+        faturamentoConsolidado: 1170000.00,
+        ebitdaConsolidado: 336000.00,
+        margemEbitdaConsolidada: 28.7,
+        lucroLiquidoConsolidado: 306000.00,
+        liquidezImediataConsolidada: 1113500.00,
+        payoutIsentoAlexandrePalatare: 290700.00,
+        cashPooling: {
+          ativo: true,
+          remuneracao: '102% CDI Automático',
+          saldoSerrano: 428500.00,
+          saldoPalatare: 168200.00,
+          saldoTesourariaHolding: 516800.00
+        }
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   // [kytto-concreto] Suprimentos, Silos de Cimento, Pátio de Agregados e Tanques
   app.get('/api/admin/concreto/suprimentos-silos', auth, requireStaff, async (req, res) => {
     try {
