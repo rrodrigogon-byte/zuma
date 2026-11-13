@@ -342,3 +342,11 @@ test('Cancelamento de comanda com pacote: cancela pacote na ficha do cliente e v
   assert.equal(assCancelada.status, 'cancelada', 'Assinatura deve ficar cancelada após comanda ser cancelada');
   assert.equal(comandaPlano.coberturasDoCliente(emp, cliId).length, 0, 'Cliente não pode manter plano ativo de comanda cancelada');
 });
+
+test("PDV Concreteira: abas especializadas Balança 80t e Balcão Concreto sem Mesas", () => {
+  const pdvCode = fs.readFileSync(new URL("../web/src/pages/PDV.jsx", import.meta.url), "utf8");
+  assert.ok(pdvCode.includes("ehConcreto"), "Deve calcular se a empresa ativa é do segmento de concreto/mineração");
+  assert.ok(pdvCode.includes("tabsExibidas"), "Deve conter tabsExibidas adaptadas para o segmento");
+  assert.ok(pdvCode.includes("concreto-vendas"), "Deve incluir a aba Balcão Concreto para a concreteira");
+  assert.ok(pdvCode.includes("activeTab === \"mesas\" && ehConcreto"), "Mesas deve ter fallback para Balança 80t quando for concreteira");
+});

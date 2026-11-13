@@ -361,8 +361,36 @@ function MesaCard({ m, onClick }) {
 export default function PDV() {
   const { toast } = useToast()
   const { user, lojaAtiva } = useAuth()
+  const [empresaAtiva, setEmpresaAtiva] = useState(() => {
+    try {
+      const empRaw = localStorage.getItem("empresa_ativa") || localStorage.getItem("sp_empresa_ativa");
+      if (empRaw) return JSON.parse(empRaw);
+    } catch {}
+    return null;
+  });
+
+  useEffect(() => {
+    const handler = () => {
+      try {
+        const empRaw = localStorage.getItem("empresa_ativa") || localStorage.getItem("sp_empresa_ativa");
+        if (empRaw) setEmpresaAtiva(JSON.parse(empRaw));
+      } catch {}
+    };
+    window.addEventListener("storage", handler);
+    window.addEventListener("empresa_alterada", handler);
+    return () => {
+      window.removeEventListener("storage", handler);
+      window.removeEventListener("empresa_alterada", handler);
+    };
+  }, []);
+
   const ehConcreto = (() => {
-    const s = `${lojaAtiva?.segmento || ""} ${lojaAtiva?.tipo || ""} ${lojaAtiva?.nome || ""} ${user?.empresaAtivaNome || ""} ${user?.empresaNome || ""} ${user?.empresa || ""}`.toLowerCase();
+    const p = new URLSearchParams(window.location.search);
+    if (p.get("segmento") === "concreto" || p.get("tipo") === "concreto" || p.get("tab") === "balanca") return true;
+    const nomeEmpresa = `${empresaAtiva?.nome || ""} ${empresaAtiva?.nomeFantasia || ""} ${empresaAtiva?.razaoSocial || ""} ${empresaAtiva?.segmento || ""}`.toLowerCase();
+    const nomeLoja = `${lojaAtiva?.segmento || ""} ${lojaAtiva?.tipo || ""} ${lojaAtiva?.nome || ""}`.toLowerCase();
+    const nomeUser = `${user?.empresaAtivaNome || ""} ${user?.empresaNome || ""} ${user?.empresa || ""}`.toLowerCase();
+    const s = `${nomeEmpresa} ${nomeLoja} ${nomeUser}`;
     return s.includes("concreto") || s.includes("serrano") || s.includes("usina") || s.includes("mineracao") || s.includes("mineração");
   })();
 
@@ -1095,7 +1123,7 @@ export default function PDV() {
       </div>
 
       {/* Conteúdo por aba */}
-      {activeTab === 'mesas' && (
+      {activeTab === 'mesas' && !ehConcreto && (
         <>
           {/* Mesas Físicas — MELHORADO F3 */}
           <div style={S.section}>
@@ -1303,6 +1331,12 @@ export default function PDV() {
         </div>
       )}
 
+      {/* Fallback ativo: se for concreteira e a aba for mesas, exibe Balança 80t */}
+      {activeTab === "mesas" && ehConcreto && (
+        <div style={{ paddingBottom: 70 }}>
+          <BalancaRodoviariaCockpit onVoltar={() => setActiveTab("balanca")} />
+        </div>
+      )}
       {/* Aba Balança Rodoviária 80t Toledo & Automação Remota */}
       {activeTab === 'balanca' && (
         <div style={{ paddingBottom: 70 }}>
