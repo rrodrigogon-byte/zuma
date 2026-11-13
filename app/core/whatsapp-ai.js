@@ -315,6 +315,8 @@ export const BARBERSHOP_SYSTEM_GUIDANCE = `
 - MODO RV (RÉGUA VELOZ - AGENDAMENTO ÁGIL COM 2 OPÇÕES + LINK DE APOIO + FINALIZAÇÃO COMPLETA NO CHAT):
   * REGRA DAS DUAS OPÇÕES REAIS: Ao apresentar horários livres, ofereça de forma rápida e direta exatamente DUAS opções reais de horários (as 2 melhores vagas mais convenientes), sem listas longas de 5 ou 6 opções.
   * LINK DA AGENDA + CONDUÇÃO ATIVA: Envie o link da agenda (https://kytto.com.br/agendar/dino) para consulta, mas nunca abandone o cliente no link: continue o atendimento no WhatsApp para fechar na hora ("Qual horário fica melhor pra você? Me avisa por aqui que já deixo marcado agora mesmo!").
+  * ANTI-FLOOD DE LINK DA AGENDA: No máximo 1 vez por conversa. NUNCA envie o link repetidas vezes ou em mensagens sucessivas!
+  * ESCOPO ESTRITO DA BARBEARIA: Atendemos corte masculino, barba, sobrancelha, selagem e prótese capilar. NÃO oferecemos serviços de podologia, manicure, unhas, nem procedimentos estéticos invasivos ou limpeza de pele profunda (extração de cravos). Se o cliente perguntar, informe com simpatia o foco em cabelo e barba ou chame a equipe.
   * FIDELIDADE TOTAL À AGENDA (PROIBIDO INVENTAR HORÁRIOS): NUNCA sugira, suponha ou confirme horários que não estejam na lista de horários livres retornada pela ferramenta consultar_disponibilidade. Respeite o encerramento da barbearia às 19:00 e o expediente dos barbeiros (Nati até 18:00 com último corte às 17:30; Bruno até 19:00 com último corte às 18:30).
   * NATURALIDADE ACOLHEDORA (SEM GÍRIAS E SEM FORMALISMO FORÇADO): NUNCA use gírias ("bora", "show", "tá na régua", "tamo junto", "meu irmão", "de boa", "foi mal"), mas NUNCA seja robótico ou engessado (PROIBIDO usar "Peço sinceras desculpas pelo ocorrido" ou "Lamento pelo mal-entendido"). Fale com a simpatia e naturalidade espontânea de uma recepção atenciosa ("Desculpa a confusão!", "Desculpa qualquer transtorno, viu?", "Pode deixar que eu já ajeito tudo aqui pra você!").
   1. AGENDAMENTO EXPRESSO EM 2 TURNOS: Se o cliente disser dia, hora e serviço, consulte e chame preparar_agendamento IMEDIATAMENTE no mesmo turno! Responda em no máximo 2 linhas com o resumo e peça a confirmação para fechar.
@@ -3208,6 +3210,17 @@ export async function claimWhatsappAiHandoff(context = {}, sessionId) {
             AND id::text = (SELECT acao_pendente->>'actionId' FROM whatsapp_ai_sessions WHERE id = $1 AND empresa_id = $2)`,
         [normalizedSessionId, empresaId],
       );
+      // Cancela tarefas pendentes do worker de IA para este contato, evitando que o T-Rex responda atrasado.
+      await trx.query(
+        `UPDATE tarefas_integracao_canais
+            SET status = 'cancelada', erro = 'ATENDIMENTO_ASSUMIDO_EQUIPE', erro_codigo = 'CANCELADA_CLAIM',
+                resposta = jsonb_build_object('canceladoPor', $2::text), concluido_em = CURRENT_TIMESTAMP, data_atualizacao = CURRENT_TIMESTAMP
+          WHERE empresa_id = $1 AND status IN ('pendente', 'processando') AND tipo = 'processar_conversa'
+            AND (referencia_externa LIKE '%' || (SELECT COALESCE(telefone, '') FROM whatsapp_ai_sessions WHERE id = $3) || '%'
+                 OR payload->>'sessionId' = $3::text
+                 OR payload->>'phone' = (SELECT COALESCE(telefone, '') FROM whatsapp_ai_sessions WHERE id = $3))`,
+        [empresaId, context.usuarioId, normalizedSessionId],
+      ).catch(() => null);
       const taken = await trx.query(
         `UPDATE whatsapp_ai_sessions
             SET status = 'humano', handoff_requested_at = CURRENT_TIMESTAMP, handoff_reason = $5::text,
@@ -3420,7 +3433,7 @@ export async function getWhatsappAiConversation(context = {}, sessionId, { limit
  * O atendente responde pelo painel: a mensagem sai pelo WhatsApp da loja (mesma trava de saída)
  * e fica no histórico marcada como da equipe. Só com a conversa na equipe; assume se estiver livre.
  */
-export async function sendWhatsappAiStaffMessage(context = {}, sessionId, input = {}) {
+export async function sendWhatsappAiStaffMessage(context = {}, sessionId, input = {}, { sendProviderMessage = enviarMensagem } = {}) {
   const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
   const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
   const tipoCanal = whatsappChannelType(context.tipoCanal || 'cliente');
@@ -3443,10 +3456,14 @@ export async function sendWhatsappAiStaffMessage(context = {}, sessionId, input 
     error.code = 'WHATSAPP_AI_SESSION_NOT_FOUND';
     throw error;
   }
+  let autoClaimed = false;
   if (row.status !== 'humano') {
-    const error = new Error('assuma a conversa antes de responder (o T-Rex está atendendo)');
-    error.code = 'WHATSAPP_AI_SESSION_NOT_WITH_STAFF';
-    throw error;
+    // Se a conversa ainda está com o T-Rex (ativo), ao enviar pelo painel a equipe assume
+    // automaticamente, cancelando qualquer tarefa pendente da IA para evitar concorrência.
+    await claimWhatsappAiHandoff(context, sessionId);
+    row.status = 'humano';
+    row.assigned_to = context.usuarioId;
+    autoClaimed = true;
   }
   if (row.assigned_to && context.usuarioId && String(row.assigned_to) !== String(context.usuarioId)) {
     const error = new Error('conversa assumida por outro atendente');
@@ -3478,7 +3495,7 @@ export async function sendWhatsappAiStaffMessage(context = {}, sessionId, input 
      RETURNING id, criado_em`,
     [empresaId, lojaId, row.canal_id, row.id, externalId, texto, JSON.stringify({ autor: 'equipe', autorNome, usuarioId: context.usuarioId || null, interactionType: 'staff_panel' })],
   );
-  const resultado = await enviarMensagem(tenant, row.telefone, texto).catch((error) => ({ ok: false, error: safeErrorCode(error) }));
+  const resultado = await sendProviderMessage(tenant, row.telefone, texto).catch((error) => ({ ok: false, error: safeErrorCode(error) }));
   const status = resultado?.ok ? 'sent' : resultado?.uncertain ? 'unknown' : 'failed';
   await db.query(
     `UPDATE whatsapp_ai_messages SET delivery_status = $5::text, delivered_at = CASE WHEN $5::text = 'sent' THEN CURRENT_TIMESTAMP ELSE delivered_at END
@@ -3494,7 +3511,7 @@ export async function sendWhatsappAiStaffMessage(context = {}, sessionId, input 
     error.code = resultado?.uncertain ? 'WHATSAPP_DELIVERY_UNKNOWN' : 'WHATSAPP_PROVIDER_REJECTED';
     throw error;
   }
-  return { ok: true, id: salvo.rows[0].id, em: salvo.rows[0].criado_em };
+  return { ok: true, id: salvo.rows[0].id, em: salvo.rows[0].criado_em, autoClaimed, session: { id: row.id, status: 'humano', claimed: autoClaimed } };
 }
 
 export async function closeWhatsappAiHandoff(context = {}, sessionId) {

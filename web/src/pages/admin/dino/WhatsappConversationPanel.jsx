@@ -114,7 +114,7 @@ export default function WhatsappConversationPanel({
   const comEquipe = sessao?.status === 'humano'
   const encerrada = sessao?.status === 'encerrado'
   const outroAtendente = Boolean(sessao?.assumida && !sessao?.minha)
-  const podeResponder = canAct && comEquipe && !outroAtendente
+  const podeResponder = canAct && !outroAtendente && !encerrada
 
   async function acao(nome, executar, sucesso) {
     if (ocupado) return
@@ -140,7 +140,10 @@ export default function WhatsappConversationPanel({
     event?.preventDefault()
     const mensagem = texto.trim()
     if (!mensagem || !podeResponder) return
-    const ok = await acao('enviar', () => api.post(`${HUMAN_QUEUE_PATH}/${encodeURIComponent(sessionId)}/messages${canalQuery}`, { texto: mensagem }, { headers }), 'Mensagem enviada ao cliente pelo WhatsApp.')
+    const msgSucesso = !comEquipe
+      ? 'Conversa assumida com sucesso e mensagem enviada pelo WhatsApp.'
+      : 'Mensagem enviada ao cliente pelo WhatsApp.'
+    const ok = await acao('enviar', () => api.post(`${HUMAN_QUEUE_PATH}/${encodeURIComponent(sessionId)}/messages${canalQuery}`, { texto: mensagem }, { headers }), msgSucesso)
     if (ok) setTexto('')
   }
 
@@ -213,7 +216,22 @@ export default function WhatsappConversationPanel({
     <aside className="wa-conv" role="dialog" aria-modal="true" aria-labelledby="wa-conv-titulo">
       <header className="wa-conv__head">
         <div>
-          <h2 id="wa-conv-titulo">{sessao?.nome || sessao?.telefone || 'Conversa'}</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <h2 id="wa-conv-titulo">{sessao?.nome || sessao?.telefone || 'Conversa'}</h2>
+            {sessao && (
+              <span style={{
+                fontSize: 11,
+                fontWeight: 700,
+                padding: '2px 8px',
+                borderRadius: 999,
+                background: comEquipe ? (sessao.minha ? 'rgba(34, 197, 94, 0.15)' : 'rgba(234, 179, 8, 0.15)') : 'rgba(59, 130, 246, 0.15)',
+                color: comEquipe ? (sessao.minha ? '#16a34a' : '#ca8a04') : '#2563eb',
+                border: `1px solid ${comEquipe ? (sessao.minha ? '#86efac' : '#fde047') : '#93c5fd'}`
+              }}>
+                {comEquipe ? (sessao.minha ? '👤 Com você' : sessao.assumida ? `👥 Com ${sessao.atendenteNome || 'outro atendente'}` : '⏳ Aguardando equipe') : '🤖 T-Rex atendendo'}
+              </span>
+            )}
+          </div>
           <p className="wa-conv__sub">{sessao?.nome ? `${sessao.telefone} · ` : ''}{situacao}</p>
           <div className="wa-conv__atalhos">
             <a href="/admin/barbearia?tab=agenda" target="_blank" rel="noreferrer" className="wa-conv__atalho-link">📅 Ver Agenda</a>
@@ -223,7 +241,20 @@ export default function WhatsappConversationPanel({
             )}
           </div>
         </div>
-        <button type="button" className="c360-btn ghost" onClick={() => onClose?.()} disabled={Boolean(ocupado)} aria-label="Fechar conversa">Fechar</button>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {canAct && !encerrada && !outroAtendente && (
+            !comEquipe ? (
+              <button type="button" className="c360-btn primary" onClick={assumir} disabled={Boolean(ocupado)} title="Pausa o T-Rex e coloca o atendimento sob seu controle">
+                {ocupado === 'assumir' ? 'Assumindo…' : '✋ Assumir'}
+              </button>
+            ) : (
+              <button type="button" className="c360-btn ghost" onClick={() => setConfirmar('devolver')} disabled={Boolean(ocupado)} title="Devolve o atendimento para o robô T-Rex continuar">
+                🤖 Devolver ao T-Rex
+              </button>
+            )
+          )}
+          <button type="button" className="c360-btn ghost" onClick={() => onClose?.()} disabled={Boolean(ocupado)} aria-label="Fechar conversa">Fechar</button>
+        </div>
       </header>
 
       {erro && <p className="dadm-note danger" role="alert">{erro}</p>}
@@ -262,6 +293,14 @@ export default function WhatsappConversationPanel({
 
       {encerrada ? <p className="wa-conv__rodape">Conversa no histórico. Se o cliente escrever de novo, o T-Rex volta a atender.</p> : <>
         {podeResponder ? <>
+          {!comEquipe && (
+            <div style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.35)', borderRadius: 8, padding: '6px 10px', fontSize: 12, color: '#1d4ed8', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <span>💡 <b>T-Rex ativo:</b> Digite sua resposta abaixo. Ao enviar, você assume a conversa e pausa o T-Rex automaticamente.</span>
+              <button type="button" className="c360-btn primary" style={{ padding: '3px 8px', fontSize: 11 }} onClick={assumir} disabled={Boolean(ocupado)}>
+                {ocupado === 'assumir' ? 'Assumindo…' : '✋ Assumir agora'}
+              </button>
+            </div>
+          )}
           <div className="wa-conv__macros" aria-label="Respostas Rápidas">
             <button type="button" className="wa-conv__macro-btn" style={{ background: 'rgba(20, 184, 122, 0.18)', borderColor: '#14b87a', fontWeight: 700 }} onClick={inserirHorariosLivresHoje} disabled={Boolean(ocupado)} title="Consulta a agenda real dos profissionais ativos no banco e escreve os próximos horários livres">
               {ocupado === 'horarios' ? '⏳ Consultando agenda…' : `⚡ Inserir Horários Livres${nomesProfissionaisBanco.length ? ` (${nomesProfissionaisBanco.join('/')})` : ''}`}
@@ -274,11 +313,13 @@ export default function WhatsappConversationPanel({
           </div>
           <form className="wa-conv__composer" onSubmit={enviar}>
           <textarea value={texto} onChange={(event) => setTexto(event.target.value)} rows={3} maxLength={4000}
-            placeholder="Responder ao cliente pelo WhatsApp da loja…" disabled={Boolean(ocupado)}
+            placeholder={!comEquipe ? "Responder ao cliente (ao enviar, você assume e pausa o T-Rex)..." : "Responder ao cliente pelo WhatsApp da loja…"} disabled={Boolean(ocupado)}
             onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); enviar() } }} />
-          <button type="submit" className="c360-btn primary" disabled={!texto.trim() || Boolean(ocupado)}>{ocupado === 'enviar' ? 'Enviando…' : 'Enviar'}</button>
+          <button type="submit" className="c360-btn primary" disabled={!texto.trim() || Boolean(ocupado)}>
+            {ocupado === 'enviar' ? 'Enviando…' : !comEquipe ? 'Enviar (Assumir)' : 'Enviar'}
+          </button>
         </form></> : <p className="wa-conv__rodape">
-          {!canAct ? 'Seu acesso permite só ver a conversa.' : outroAtendente ? 'Outro atendente está com esta conversa.' : 'O T-Rex está atendendo. Assuma para responder por aqui.'}
+          {!canAct ? 'Seu acesso permite só ver a conversa.' : outroAtendente ? 'Outro atendente está com esta conversa.' : 'Esta conversa está finalizada.'}
         </p>}
         {canAct && <div className="wa-conv__acoes">
           {!comEquipe && <button type="button" className="c360-btn primary" onClick={assumir} disabled={Boolean(ocupado)}>{ocupado === 'assumir' ? 'Assumindo…' : 'Assumir conversa'}</button>}

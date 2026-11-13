@@ -84,6 +84,7 @@ const NAV_ADMIN_GROUPS = [
       { to: '/admin/relatorios-operacionais',icon: '📄', label: 'Relatórios Operacionais' },
       { to: '/admin/financeiro',icon: '💰', label: 'Financeiro' },
       { to: '/admin/dre', icon: '📈', label: 'DRE Contábil & Gerencial' },
+      { to: '/admin/whatsapp-fila', icon: '💬', label: 'Atendimento WhatsApp' },
       { to: '/admin/whatsapp', icon: '💬', label: 'WhatsApp da empresa' },
       { to: '/admin/whatsapp-gestao', icon: '▣', label: 'WhatsApp Gestão' },
       { to: '/admin/whatsapp-lancamentos', icon: '🧾', label: 'WhatsApp Lançamentos' },
@@ -199,6 +200,7 @@ const NAV_DINO_GROUPS = [
     items: [
       { to: '/admin', icon: '◔', label: 'Painel do negócio', end: true },
       { to: '/admin/inteligencia-vendas', icon: '🚀', label: 'Como Vender Mais com IA' },
+      { to: '/admin/whatsapp-fila', icon: '💬', label: 'Atendimento WhatsApp (T-Rex)' },
       { to: '/admin/barbearia-erp?area=operacao&tab=Vis%C3%A3o+geral', icon: '⌂', label: 'Operação do dia' },
       // A agenda abre numa guia própria, em tela cheia, para ficar aberta ao lado do painel.
       { to: '/admin/barbearia-erp?area=operacao&tab=Agenda', icon: '▣', label: 'Agenda', novaGuia: true },
@@ -209,6 +211,7 @@ const NAV_DINO_GROUPS = [
   {
     label: 'Clientes & WhatsApp',
     items: [
+      { to: '/admin/whatsapp-fila', icon: '💬', label: 'Atendimento WhatsApp (T-Rex)' },
       { to: '/admin/clientes-360', icon: '◉', label: 'Clientes 360' },
       { to: '/admin/barbearia-erp?area=relacionamento&tab=Carteira+por+barbeiro', icon: '✂', label: 'Carteira de Clientes' },
       { to: '/admin/barbearia-erp?area=relacionamento&tab=Clientes', icon: '↻', label: 'CRM e campanhas' },

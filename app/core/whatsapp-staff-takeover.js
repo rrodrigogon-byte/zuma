@@ -39,6 +39,7 @@ export function staffPauseMinutes() {
 
 /** Mensagem de saída digitada por uma pessoa (não pela API)? */
 export function isStaffTyped(item = {}) {
+  if (!item || typeof item !== 'object') return false;
   if (String(item.role || '').toLowerCase() !== 'assistant') return false;
   return String(item.interactionType || '').trim().toLowerCase() === 'organic';
 }
@@ -99,6 +100,15 @@ export async function pauseForStaff(canal, { phone, at }, { pauseMin = staffPaus
         WHERE empresa_id = $2 AND status = 'preparada'
           AND id::text = (SELECT acao_pendente->>'actionId' FROM whatsapp_ai_sessions WHERE id = $1)`,
       [s.id, canal.empresa_id],
+    ).catch(() => null);
+    // Tarefas pendentes da IA para este contato são canceladas imediatamente para evitar invasão do T-Rex.
+    await trx.query(
+      `UPDATE tarefas_integracao_canais
+          SET status = 'cancelada', erro = 'EQUIPE_ASSUMIU_NO_APARELHO', erro_codigo = 'CANCELADA_STAFF',
+              resposta = '{"canceladoPor":"staff"}'::jsonb, concluido_em = CURRENT_TIMESTAMP, data_atualizacao = CURRENT_TIMESTAMP
+        WHERE empresa_id = $1 AND canal_id = $2 AND status = 'pendente' AND tipo = 'processar_conversa'
+          AND (referencia_externa LIKE '%' || $3 || '%' OR payload->>'phone' = $3)`,
+      [canal.empresa_id, canal.id, phone],
     ).catch(() => null);
     await trx.query(
       `UPDATE whatsapp_ai_sessions

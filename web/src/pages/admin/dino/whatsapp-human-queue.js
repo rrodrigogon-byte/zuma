@@ -104,6 +104,7 @@ export function validateHumanQueueResponse(payload, context = {}) {
   if (lojaId && typeof selection.requestedLojaId === 'string' && selection.requestedLojaId.toLowerCase() !== lojaId.toLowerCase() && String(selection.canonicalLojaId || '').toLowerCase() !== lojaId.toLowerCase()) {
     throw new Error('unidade da fila não corresponde ao contexto')
   }
+  if (selection.inferred === true) throw new Error('seleção inferida da fila inválida')
   if (!isUuid(selection.canonicalLojaId)) throw new Error('seleção canônica da fila inválida')
   const ids = new Set()
   const items = payload.items.map((item, index) => validItem(item, index, ids))

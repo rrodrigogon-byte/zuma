@@ -610,7 +610,7 @@ export default function WhatsappHumanQueue({
                   </div>
                   <span className="wa-trex-card__selo">{situacao}</span>
                 </header>
-                {precisaColetaUrgente && <p className="wa-trex-card__aviso" role="alert">🚨 Coleta urgente: o atendente deve assumir esta conversa.</p>}
+                {precisaColetaUrgente && <p className="wa-trex-card__aviso" role="alert">🚨 Coleta urgente: O atendente deve assumir esta conversa.</p>}
                 {!encerrada && item.hasPendingAction && (
                   <div className="wa-trex-card__msg" style={{ background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.45)', borderRadius: 8, padding: '8px 10px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 12, color: '#fbbf24' }}>
