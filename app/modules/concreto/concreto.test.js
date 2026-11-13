@@ -5,8 +5,8 @@ import {
   criarCargaConcreto,
   obterCargaPorId,
   atualizarCargaConcreto,
-  excluirCargaConcreto,
   duplicarCargaConcreto,
+  excluirCargaConcreto,
   atualizarStatusCarga,
   registrarEventoViagem,
   registrarRupturaCorpoProva,
@@ -535,7 +535,6 @@ test('20. Telemetria das 8 Células de Carga Toledo Digital DLC-10t', async () =
   assert.ok(telemetria.celulas[0].mVPorV > 0);
   assert.equal(telemetria.celulas[0].status, 'conforme');
 });
-
 test('21. Edição e Detalhamento Completo de Concretagem Agendada (Alterar e Salvar)', async () => {
   // 1. Criar carga de teste para agendamento
   const resCriar = await criarCargaConcreto({
