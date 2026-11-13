@@ -757,6 +757,10 @@ export default function WhatsappHumanQueue({
       tipoCanal={tipoCanal}
       canAct={canClaim}
       onClose={() => { setConversaId(''); loadQueue({ silencioso: true }) }}
+      onNovaConversa={() => {
+        setNovaConversaOpen(true)
+        setNovaConversaErro('')
+      }}
       onChanged={async () => { await loadQueue({ silencioso: true }); if (typeof onChanged === 'function') await onChanged() }}
     />}
 

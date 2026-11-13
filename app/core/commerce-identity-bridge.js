@@ -45,7 +45,21 @@ export async function resolveCommerceIdentity(req) {
     let lojaId = commerceLojaIdFromLegacy(requested.lojaId, empresaId) || commerceLojaIdFromLegacy(clean(user?.lojaId), empresaId) || null;
     if (!isUuid(empresaId)) empresaId = DINO_COMMERCE_EMPRESA_ID;
     if (lojaId && !isUuid(lojaId)) lojaId = DINO_COMMERCE_LOJA_ID;
-    const usuarioId = (user?.id && isUuid(user.id)) ? user.id : (isUuid(user?.usuarioId) ? user.usuarioId : null);
+    let usuarioId = (user?.id && isUuid(user.id)) ? user.id : (isUuid(user?.usuarioId) ? user.usuarioId : null);
+    if (!usuarioId && user?.email) {
+      const uRes = await db.queryRead(
+        `SELECT id FROM usuarios WHERE (empresa_id = $1 OR empresa_id IS NULL) AND lower(btrim(email)) = $2 AND ativo = true ORDER BY empresa_id NULLS LAST LIMIT 1`,
+        [empresaId, String(user.email).trim().toLowerCase()],
+      ).catch(() => ({ rows: [] }));
+      if (uRes.rows?.[0]?.id) usuarioId = uRes.rows[0].id;
+    }
+    if (!usuarioId) {
+      const uRes = await db.queryRead(
+        `SELECT id FROM usuarios WHERE empresa_id = $1 AND ativo = true ORDER BY (role IN ('admin','organizador','gerente','operador')) DESC, criado_em ASC LIMIT 1`,
+        [empresaId],
+      ).catch(() => ({ rows: [] }));
+      if (uRes.rows?.[0]?.id) usuarioId = uRes.rows[0].id;
+    }
     return tenantContext({ empresaId, lojaId, usuarioId });
   }
   if (user?.pgOperational === true) {

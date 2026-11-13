@@ -2464,7 +2464,9 @@ export function createCommerceAdminRouter() {
       const context = await withWhatsappLoja(await requirePermission(req, isOp ? 'customers.write' : 'settings.write'));
       const tipoCanal = whatsappTipoCanal(req);
       const reatribuir = req.body?.reatribuir === true || req.body?.forcar === true || req.query?.reatribuir === 'true';
-      res.json(await claimWhatsappAiHandoff({ ...context, tipoCanal }, req.params.id, { reatribuir }));
+      const usuarioEmail = req.user?.email || '';
+      const usuarioNome = req.user?.nome || req.user?.username || '';
+      res.json(await claimWhatsappAiHandoff({ ...context, tipoCanal, usuarioEmail, usuarioNome }, req.params.id, { reatribuir }));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/whatsapp-ai/sessions/start', async (req, res) => {
@@ -2472,7 +2474,9 @@ export function createCommerceAdminRouter() {
       const isOp = req.user?.role === 'operador' || req.user?.perfil === 'operador';
       const context = await withWhatsappLoja(await requirePermission(req, isOp ? 'customers.write' : 'settings.write'));
       const tipoCanal = whatsappTipoCanal(req);
-      res.json(await startWhatsappAiSession({ ...context, tipoCanal, usuarioNome: req.user?.nome || '' }, req.body || {}));
+      const usuarioEmail = req.user?.email || '';
+      const usuarioNome = req.user?.nome || req.user?.username || '';
+      res.json(await startWhatsappAiSession({ ...context, tipoCanal, usuarioEmail, usuarioNome }, req.body || {}));
     } catch (error) { jsonError(res, error); }
   });
   router.get('/whatsapp-ai/contacts', async (req, res) => {

@@ -286,3 +286,52 @@ test('startWhatsappAiSession: cria nova sessão já assumida para o atendente', 
     db.queryRead = originalQueryRead;
   }
 });
+
+test('startWhatsappAiSession: resolve atendente resiliente por email ou fallback quando usuarioId não é UUID', async () => {
+  const originalQuery = db.query;
+  const originalQueryRead = db.queryRead;
+
+  db.queryRead = async (sql) => {
+    if (sql.includes('FROM canais_integracao')) {
+      return { rows: [{ id: CANAL, api_base_url: 'http://waha.test', configuracao: {}, nome: 'Canal Teste', status: 'conectado' }] };
+    }
+    if (sql.includes('FROM usuarios WHERE')) {
+      return { rows: [{ id: USUARIO }] };
+    }
+    return { rows: [] };
+  };
+
+  db.query = async (sql, params) => {
+    if (sql.includes('INSERT INTO whatsapp_ai_sessions')) {
+      return {
+        rows: [{
+          id: '88888888-8888-4888-8888-888888888888',
+          remote_jid: '5565999223344@s.whatsapp.net',
+          telefone: '5565999223344',
+          nome: 'Cliente Resiliente',
+          status: 'humano',
+          assigned_to: USUARIO,
+          canal_id: CANAL,
+        }],
+      };
+    }
+    return { rows: [] };
+  };
+
+  try {
+    const res = await startWhatsappAiSession(
+      { empresaId: EMPRESA, lojaId: LOJA, usuarioEmail: 'ster@barbeariadino.com.br' },
+      {
+        telefone: '65999223344',
+        nome: 'Cliente Resiliente',
+        assumir: true,
+      }
+    );
+    assert.equal(res.ok, true);
+    assert.equal(res.session.status, 'humano');
+    assert.equal(res.session.assigned_to, USUARIO);
+  } finally {
+    db.query = originalQuery;
+    db.queryRead = originalQueryRead;
+  }
+});

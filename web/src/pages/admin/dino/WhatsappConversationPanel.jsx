@@ -36,6 +36,7 @@ export default function WhatsappConversationPanel({
   tipoCanal = 'cliente',
   canAct = false,
   onClose,
+  onNovaConversa,
   onChanged,
 }) {
   const [dados, setDados] = useState(null)
@@ -242,6 +243,16 @@ export default function WhatsappConversationPanel({
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {typeof onNovaConversa === 'function' && (
+            <button
+              type="button"
+              className="c360-btn ghost wa-btn-nova-panel"
+              onClick={() => onNovaConversa()}
+              title="Iniciar nova conversa no WhatsApp"
+            >
+              ➕ Nova Conversa
+            </button>
+          )}
           {canAct && !encerrada && !outroAtendente && (
             !comEquipe ? (
               <button type="button" className="c360-btn primary" onClick={assumir} disabled={Boolean(ocupado)} title="Pausa o T-Rex e coloca o atendimento sob seu controle">

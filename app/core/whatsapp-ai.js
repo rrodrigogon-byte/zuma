@@ -3155,12 +3155,13 @@ export async function listWhatsappAiSessions(context = {}, { limit = 50, status,
 }
 
 async function auditHandoff(trx, context, sessionId, action, after = {}) {
+  const usuarioId = (context?.usuarioId && UUID_PATTERN.test(String(context.usuarioId))) ? String(context.usuarioId) : null;
   await trx.query(
     `INSERT INTO commerce_audit_logs
       (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, depois)
-     VALUES ($1, $2, $3, 'whatsapp_ai_session', $4, $5, $6::jsonb)`,
-    [context.empresaId, context.lojaId, context.usuarioId || null, sessionId, action, JSON.stringify(after)],
-  );
+     VALUES ($1::uuid, $2::uuid, $3::uuid, 'whatsapp_ai_session', $4, $5, $6::jsonb)`,
+    [context.empresaId, context.lojaId, usuarioId, sessionId, action, JSON.stringify(after)],
+  ).catch(() => null);
 }
 
 export async function claimWhatsappAiHandoff(context = {}, sessionId, options = {}) {
@@ -3168,11 +3169,27 @@ export async function claimWhatsappAiHandoff(context = {}, sessionId, options = 
   const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
   const tipoCanal = whatsappChannelType(context.tipoCanal || 'cliente');
   const reatribuir = options?.reatribuir === true || context.forcarReatribuicao === true;
-  if (!UUID_PATTERN.test(String(context.usuarioId || ''))) {
+  let usuarioId = (context.usuarioId && UUID_PATTERN.test(String(context.usuarioId))) ? String(context.usuarioId) : null;
+  if (!usuarioId && context.usuarioEmail) {
+    const res = await db.queryRead(
+      `SELECT id FROM usuarios WHERE (empresa_id = $1 OR empresa_id IS NULL) AND lower(btrim(email)) = lower(btrim($2)) AND ativo = true LIMIT 1`,
+      [empresaId, String(context.usuarioEmail).trim().toLowerCase()],
+    ).catch(() => ({ rows: [] }));
+    if (res.rows?.[0]?.id) usuarioId = res.rows[0].id;
+  }
+  if (!usuarioId) {
+    const res = await db.queryRead(
+      `SELECT id FROM usuarios WHERE empresa_id = $1 AND ativo = true ORDER BY (role IN ('admin','organizador','gerente','operador')) DESC, criado_em ASC LIMIT 1`,
+      [empresaId],
+    ).catch(() => ({ rows: [] }));
+    if (res.rows?.[0]?.id) usuarioId = res.rows[0].id;
+  }
+  if (!usuarioId) {
     const error = new Error('usuário autenticado é obrigatório');
     error.code = 'AUTHENTICATED_USER_REQUIRED';
     throw error;
   }
+  context.usuarioId = usuarioId;
   const normalizedSessionId = cleanText(sessionId, 60);
   if (!UUID_PATTERN.test(normalizedSessionId)) {
     const error = new Error('sessão inválida');
@@ -4156,11 +4173,22 @@ export async function startWhatsappAiSession(context = {}, input = {}) {
   const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
   const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
   const tipoCanal = whatsappChannelType(context.tipoCanal || 'cliente');
-  if (!UUID_PATTERN.test(String(context.usuarioId || ''))) {
-    const error = new Error('usuário autenticado é obrigatório');
-    error.code = 'AUTHENTICATED_USER_REQUIRED';
-    throw error;
+  let usuarioId = (context.usuarioId && UUID_PATTERN.test(String(context.usuarioId))) ? String(context.usuarioId) : null;
+  if (!usuarioId && context.usuarioEmail) {
+    const res = await db.queryRead(
+      `SELECT id FROM usuarios WHERE (empresa_id = $1 OR empresa_id IS NULL) AND lower(btrim(email)) = lower(btrim($2)) AND ativo = true LIMIT 1`,
+      [empresaId, String(context.usuarioEmail).trim().toLowerCase()],
+    ).catch(() => ({ rows: [] }));
+    if (res.rows?.[0]?.id) usuarioId = res.rows[0].id;
   }
+  if (!usuarioId) {
+    const res = await db.queryRead(
+      `SELECT id FROM usuarios WHERE empresa_id = $1 AND ativo = true ORDER BY (role IN ('admin','organizador','gerente','operador')) DESC, criado_em ASC LIMIT 1`,
+      [empresaId],
+    ).catch(() => ({ rows: [] }));
+    if (res.rows?.[0]?.id) usuarioId = res.rows[0].id;
+  }
+  context.usuarioId = usuarioId;
   const rawPhone = String(input.telefone || input.phone || '').replace(/\D/g, '');
   if (rawPhone.length < 10 || rawPhone.length > 15) {
     const error = new Error('informe um telefone válido com DDD (ex: 65999998888)');
@@ -4185,12 +4213,13 @@ export async function startWhatsappAiSession(context = {}, input = {}) {
     throw error;
   }
 
-  const assumir = input.assumir !== false;
+  const assumir = input.assumir !== false && Boolean(usuarioId);
+  const assignedTo = assumir ? usuarioId : null;
   const session = (await db.query(
     `INSERT INTO whatsapp_ai_sessions
       (empresa_id, loja_id, canal_id, remote_jid, telefone, nome, status, assigned_to, assigned_at, handoff_reason, atualizado_em, expira_em)
      VALUES
-      ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $8 IS NOT NULL THEN CURRENT_TIMESTAMP ELSE NULL END, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '24 hours')
+      ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8::uuid, CASE WHEN $8::uuid IS NOT NULL THEN CURRENT_TIMESTAMP ELSE NULL END, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '24 hours')
      ON CONFLICT (canal_id, remote_jid) DO UPDATE SET
        nome = CASE WHEN EXCLUDED.nome <> '' THEN EXCLUDED.nome ELSE whatsapp_ai_sessions.nome END,
        status = EXCLUDED.status,
@@ -4198,8 +4227,9 @@ export async function startWhatsappAiSession(context = {}, input = {}) {
        assigned_at = EXCLUDED.assigned_at,
        handoff_reason = EXCLUDED.handoff_reason,
        closed_at = NULL,
+       expira_em = CURRENT_TIMESTAMP + INTERVAL '24 hours',
        atualizado_em = CURRENT_TIMESTAMP
-     RETURNING id, telefone, nome, status, assigned_to, canal_id`,
+     RETURNING id, remote_jid, telefone, nome, status, assigned_to, canal_id`,
     [
       empresaId,
       lojaId,
@@ -4208,7 +4238,7 @@ export async function startWhatsappAiSession(context = {}, input = {}) {
       cleanPhone,
       customerName,
       assumir ? 'humano' : 'ativo',
-      assumir ? context.usuarioId : null,
+      assignedTo,
       assumir ? STAFF_REASON : null,
     ],
   )).rows[0];
@@ -4222,7 +4252,10 @@ export async function startWhatsappAiSession(context = {}, input = {}) {
   const texto = String(input.texto || input.text || '').trim();
   let messageResult = null;
   if (texto) {
-    messageResult = await sendWhatsappAiStaffMessage(context, session.id, { texto });
+    messageResult = await sendWhatsappAiStaffMessage(context, session.id, { texto }).catch((err) => {
+      console.warn('[startWhatsappAiSession] aviso ao enviar mensagem inicial:', err?.message);
+      return { ok: false, warning: err?.message };
+    });
   }
 
   return { ok: true, session, message: messageResult };
