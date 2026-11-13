@@ -11,14 +11,14 @@ test('sem período pedido, o horário comercial vem antes da noite e da madrugad
   assert.deepEqual(ordem, ['09:00', '14:30', '19:00', '00:00', '00:15', '05:45']);
 });
 
-test('earliestSlots não oferece meia-noite para quem só pediu o dia (30/10)', async () => {
+test('earliestSlots não oferece meia-noite nem madrugada (< 07h30) para quem só pediu o dia (ajuste 13/11)', async () => {
   const result = await earliestSlots({ fetchDay: async () => ({ slots: AGENDA_24H }), fromDate: '2026-11-03', days: 1, limit: 3 });
-  assert.deepEqual(result.slots.map((s) => s.time), ['06:00', '06:15', '06:30']);
+  assert.deepEqual(result.slots.map((s) => s.time), ['08:00', '08:15', '08:30']);
 });
 
-test('"de manhã" é 6h às 12h e "madrugada" é 0h às 6h', async () => {
+test('"de manhã" prioriza expediente padrão (>= 08h) e "madrugada" pega 0h em diante', async () => {
   const manha = await earliestSlots({ fetchDay: async () => ({ slots: AGENDA_24H }), fromDate: '2026-11-03', days: 1, limit: 2, period: 'manha' });
-  assert.deepEqual(manha.slots.map((s) => s.time), ['06:00', '06:15']);
+  assert.deepEqual(manha.slots.map((s) => s.time), ['08:00', '08:15']);
   const madrugada = await earliestSlots({ fetchDay: async () => ({ slots: AGENDA_24H }), fromDate: '2026-11-03', days: 1, limit: 2, period: 'madrugada' });
   assert.deepEqual(madrugada.slots.map((s) => s.time), ['00:00', '00:15']);
 });
