@@ -89,6 +89,12 @@
   box-sizing: border-box;
 }
 
+.serrano-main-torre-full {
+  max-width: 100% !important;
+  padding: 4px 10px 12px !important;
+  gap: 8px !important;
+}
+
 /* ─── Abas Rápidas do Fluxo da Usina (Pílulas Industriais) ─── */
 .serrano-nav-tabs {
   display: flex;

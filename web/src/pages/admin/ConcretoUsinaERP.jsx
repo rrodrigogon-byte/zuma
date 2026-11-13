@@ -612,7 +612,8 @@ export default function ConcretoUsinaERP() {
       
 
       {/* ─── ÁREA PRINCIPAL ─── */}
-      <main className="serrano-main">
+      <main className={`serrano-main ${secaoAtiva === "torre-pesagem" ? "serrano-main-torre-full" : ""}`}>
+
         
         {/* Topbar Limpa */}
         <header className="serrano-topbar">

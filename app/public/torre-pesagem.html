@@ -48,27 +48,31 @@ p{margin:0}
 svg.i{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 :focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 
-/* ===== Shell ===== */
-.shell{display:grid;grid-template-columns:76px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);height:100%}
-.rail{grid-row:1/3;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 6px;overflow-y:auto}
-.mark{width:40px;height:40px;border-radius:50%;background:#FF7000;display:grid;place-items:center;font:800 18px/1 var(--display);color:#16181B;flex:none;margin-bottom:10px}
-.rail button{width:64px;border:0;background:none;border-radius:8px;padding:8px 2px;display:grid;justify-items:center;gap:4px;cursor:pointer;color:var(--fg-3);font:600 10.5px/1.15 var(--body);text-align:center;position:relative}
-.rail button svg.i{width:20px;height:20px}
-.rail button:hover{background:var(--panel-2);color:var(--fg)}
-.rail button[aria-current="page"]{background:var(--brand-soft);color:var(--brand-ink)}
-.rail button[aria-current="page"]::before{content:"";position:absolute;left:-6px;top:10px;bottom:10px;width:3px;border-radius:2px;background:var(--brand)}
-.rail .badge{position:absolute;top:3px;right:8px;min-width:16px;height:16px;border-radius:8px;background:var(--crit);color:#fff;font:700 10px/16px var(--mono);padding:0 4px}
-.rail .sp{flex:1}
-
-.topbar{display:flex;align-items:center;gap:14px;padding:8px 20px;border-bottom:1px solid var(--line);background:var(--panel);min-width:0;flex-wrap:wrap}
-.tb-title{display:grid;line-height:1.15}
-.tb-title b{font:700 18px var(--display);text-transform:uppercase;letter-spacing:.02em}
-.tb-title small{font:500 11px var(--mono);color:var(--fg-3)}
+/* ===== Shell Unificado e Otimizado CCO (Elimina menu duplo e tela dentro de tela) ===== */
+.shell{display:flex;flex-direction:column;height:100vh;width:100%;overflow:hidden;background:var(--bg)}
+.topbar{display:flex;align-items:center;gap:12px;padding:8px 16px;border-bottom:1px solid var(--line);background:var(--panel);min-width:0;flex-wrap:wrap;flex-shrink:0;z-index:10}
+.torre-brand{display:flex;align-items:center;gap:10px}
+.torre-logo-icon{width:38px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:linear-gradient(135deg,#FF7000 0%,#D95300 100%);box-shadow:0 2px 6px rgba(255,112,0,0.28)}
+.torre-brand-title{display:flex;align-items:center;gap:8px;line-height:1.1}
+.torre-brand-title b{font-family:var(--display);font-size:17px;font-weight:800;letter-spacing:0.03em;color:var(--fg);text-transform:uppercase}
+.torre-brand-title .live-pill{font:700 9.5px var(--mono);background:rgba(61,190,116,0.15);color:#3DBE74;border:1px solid rgba(61,190,116,0.3);padding:2px 7px;border-radius:999px;display:inline-flex;align-items:center;gap:4px}
+.torre-brand-sub{font:500 10.5px var(--mono);color:var(--fg-3);margin-top:2px}
+/* Menu Unificado da Torre: Barra Horizontal de Abas */
+.rail{display:flex;align-items:center;gap:6px;overflow-x:auto;padding:6px 14px;background:var(--panel-2);border-bottom:1px solid var(--line);scrollbar-width:thin;flex-shrink:0}
+.rail .mark, .rail .sp{display:none!important}
+.rail button{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--fg-2);font:600 11.5px var(--body);cursor:pointer;white-space:nowrap;position:relative;transition:all .15s ease;width:auto;min-width:0}
+.rail button svg.i{width:14px;height:14px}
+.rail button:hover{background:var(--panel-3);color:var(--fg);border-color:var(--fg-3)}
+.rail button[aria-current="page"]{background:var(--brand-soft);color:var(--brand-ink);border-color:var(--brand);font-weight:700;box-shadow:0 1px 4px rgba(255,112,0,0.18)}
+.rail button[aria-current="page"]::before{display:none!important}
+.rail .badge{position:static;margin-left:4px;min-width:16px;height:16px;border-radius:8px;background:var(--crit);color:#fff;font:700 10px/16px var(--mono);padding:0 5px;display:inline-block}
 .live-strip{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
-.ls{display:flex;align-items:center;gap:10px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:5px 10px;cursor:pointer;text-align:left}
+/* Áreas de Ações CCO */
+.torre-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.ls{display:flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:4px 8px;cursor:pointer;text-align:left}
 .ls b{font:600 11.5px var(--body);display:block;line-height:1.2}
-.ls small{font:500 10.5px var(--mono);color:var(--fg-3);display:block;line-height:1.2;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ls .w{font:700 19px/1 var(--display);font-variant-numeric:tabular-nums;min-width:78px;text-align:right}
+.ls small{font:500 10px var(--mono);color:var(--fg-3);display:block;line-height:1.2;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ls .w{font:700 18px/1 var(--display);font-variant-numeric:tabular-nums;min-width:72px;text-align:right}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--ok);flex:none}
 .dot.warn{background:var(--warn)} .dot.crit{background:var(--crit)} .dot.off{background:var(--fg-3)} .dot.brand{background:var(--brand)}
 .dot.pulse{box-shadow:0 0 0 0 currentColor;animation:pulse 1.6s infinite}
@@ -78,11 +82,10 @@ svg.i{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-widt
 .speed{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .speed button{border:0;background:none;padding:3px 7px;font:600 11px var(--mono);cursor:pointer;color:var(--fg-3)}
 .speed button[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
-.ai-btn{display:flex;align-items:center;gap:8px;border:1px solid var(--brand);background:var(--brand-soft);color:var(--brand-ink);border-radius:8px;padding:7px 12px;font-weight:600;cursor:pointer}
-.ai-btn kbd{font:500 10.5px var(--mono);border:1px solid currentColor;border-radius:4px;padding:0 4px;opacity:.7}
-
-.work{min-width:0;min-height:0;overflow-y:auto;position:relative}
-.view{padding:18px 20px 40px;display:grid;gap:14px;align-content:start;max-width:1680px}
+.ai-btn{display:flex;align-items:center;gap:8px;border:1px solid var(--brand);background:var(--brand-soft);color:var(--brand-ink);border-radius:8px;padding:6px 11px;font-weight:600;font-size:12px;cursor:pointer}
+.ai-btn kbd{font:500 10px var(--mono);border:1px solid currentColor;border-radius:4px;padding:0 3px;opacity:.7}
+.work{flex:1;min-width:0;min-height:0;overflow-y:auto;position:relative;background:var(--bg)}
+.view{padding:12px 14px 28px;display:grid;gap:12px;align-content:start;max-width:100%}
 .vh{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
 .vh h1{font-size:28px;text-transform:uppercase;letter-spacing:.01em}
 .vh p{color:var(--fg-2);font-size:13px;margin-top:2px;max-width:80ch}
@@ -305,14 +308,52 @@ textarea{resize:vertical;min-height:56px}
 </style>
 
 <div class="shell">
-  <nav class="rail" id="rail" aria-label="Módulos"></nav>
   <header class="topbar">
-    <div class="tb-title"><b>Torre de Pesagem</b><small>Serrano Concreto &amp; Mineração · Tangará da Serra</small></div>
+    <!-- LOGO OFICIAL DA TORRE PADRONIZADO -->
+    <div class="torre-brand">
+      <div class="torre-logo-icon" title="Serrano CCO - Torre de Controle &amp; Balanças 80t">
+        <svg viewBox="0 0 38 38" width="34" height="34" fill="none">
+          <defs>
+            <linearGradient id="gTorre" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#FF7000" />
+              <stop offset="100%" stop-color="#D95300" />
+            </linearGradient>
+          </defs>
+          <rect width="38" height="38" rx="8" fill="url(#gTorre)" />
+          <path d="M19 6v22M13 28h12M14 18h10M15 12h8" stroke="#16181B" stroke-width="2.2" stroke-linecap="round" />
+          <circle cx="19" cy="6" r="2.5" fill="#FFF" />
+          <path d="M9 31h20" stroke="#16181B" stroke-width="2.6" stroke-linecap="round" />
+          <path d="M11 9a11 11 0 0 0 0 8M27 9a11 11 0 0 1 0 8" stroke="#FFF" stroke-width="1.6" stroke-linecap="round" opacity="0.85" />
+        </svg>
+      </div>
+      <div class="torre-brand-text">
+        <div class="torre-brand-title">
+          <b>Torre Serrano CCO</b>
+          <span class="live-pill"><span class="dot pulse"></span>GÊMEO DIGITAL AO VIVO</span>
+        </div>
+        <div class="torre-brand-sub">Torre de Pesagem &amp; Controle Operacional · Balanças 80t BAL-01 / BAL-02</div>
+      </div>
+    </div>
+
+    <!-- STATUS DAS BALANÇAS -->
     <div class="live-strip" id="strip"></div>
-    <div class="clock" title="Relógio da simulação"><span class="dot pulse" id="clock-dot"></span><span class="t num" id="clock-t">--:--</span>
+
+    <!-- RELÓGIO OPERACIONAL -->
+    <div class="clock" title="Relógio operacional CCO"><span class="dot pulse" id="clock-dot"></span><span class="t num" id="clock-t">--:--</span>
       <span class="speed" role="group" aria-label="Velocidade da simulação" id="speed"></span></div>
-    <button class="ai-btn" type="button" data-act="copilot" id="ai-open"><svg class="i" viewBox="0 0 24 24"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/></svg>Copiloto<kbd>Ctrl K</kbd></button>
+
+    <!-- AÇÕES E COMANDOS CCO -->
+    <div class="torre-actions">
+      <button class="ai-btn" type="button" data-act="copilot" id="ai-open" title="Abrir Copiloto KyttoIA"><svg class="i" viewBox="0 0 24 24"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/></svg>Copiloto<kbd>Ctrl K</kbd></button>
+      <button class="btn sm" type="button" id="btn-cams" title="Câmeras Industriais IP &amp; Vision AI"><svg class="i" viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>Câmeras AI</button>
+      <a class="btn sm" href="/torre-pesagem.html" target="_blank" rel="noopener noreferrer" title="Abrir Torre em Monitor CCO Externo"><svg class="i" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Monitor CCO</a>
+      <button class="btn sm" type="button" id="btn-fullscreen" style="background:#FF7000;color:#16181B;border-color:#FF7000;font-weight:700;" title="Modo Sala de Controle (Tela Cheia)"><svg class="i" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>Sala de Controle</button>
+    </div>
   </header>
+
+  <!-- NAVEGAÇÃO UNIFICADA HORIZONTAL DOS 8 MÓDULOS -->
+  <nav class="rail" id="rail" aria-label="Módulos da Torre"></nav>
+
   <div class="work" id="work"><main class="view" id="view"></main></div>
 </div>
 <aside class="copilot" id="copilot" hidden aria-label="Copiloto de IA"></aside>
@@ -648,10 +689,19 @@ function openExceptions(T){return TRIPS.filter(t=>needsDecision(t)&&anomAt(t)<=T
 /* =====================================================================
    Shell
    ===================================================================== */
-const VIEWS=[['torre','Torre','tower'],['pesagem','Pesagem','scale'],['fila','Fila & agenda','queue'],['antifraude','Antifraude','shield'],['clientes','Clientes','hand'],['fiscal','Fiscal & integrações','plug'],['relatorios','Relatórios','chart'],['cadastros','Cadastros & regras','db']];
+const VIEWS=[
+  ['torre','Torre (Gêmeo Digital)','tower'],
+  ['pesagem','Cockpit Pesagem 80t','scale'],
+  ['fila','Fila & Pátio','queue'],
+  ['antifraude','Antifraude & Auditoria','shield'],
+  ['clientes','Clientes & Contratos','hand'],
+  ['fiscal','Fiscal & SEFAZ','plug'],
+  ['relatorios','Relatórios & KPIs','chart'],
+  ['cadastros','Cadastros & Regras','db']
+];
 function renderRail(){
   const exc=openExceptions(VT()).length;
-  $('#rail').innerHTML=`<div class="mark" aria-hidden="true">SC</div>`+VIEWS.map(([id,n,i])=>`<button type="button" data-view="${id}" ${S.view===id?'aria-current="page"':''}>${ic(i)}<span>${n}</span>${id==='pesagem'&&exc?`<span class="badge">${exc}</span>`:''}</button>`).join('')+`<div class="sp"></div>`;
+  $('#rail').innerHTML=VIEWS.map(([id,n,i])=>`<button type="button" data-view="${id}" ${S.view===id?'aria-current="page"':''}>${ic(i)}<span>${n}</span>${id==='pesagem'&&exc?`<span class="badge">${exc}</span>`:''}</button>`).join('');
 }
 function stageLabel(t,T){const s=stateAt(t,T);if(!s)return '';return {chegando:'chegando',fila:'na fila',balanca:(s.fase===1?'1ª':'2ª')+' pesagem',patio:'no pátio',excecao:'baia de exceção',saindo:'saindo'}[s.k];}
 function renderStrip(){
@@ -1385,6 +1435,28 @@ function updateStrip(){
     const exc=openExceptions(T).filter(x=>x.bal===sc.id).length;btn.querySelector('.dot').className='dot '+(exc?'crit':sc.ipem.dias<=30?'warn':'');});
 }
 document.addEventListener('click',e=>{
+  const btnCams = e.target.closest('#btn-cams');
+  if (btnCams) {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: 'NAVIGATE_SECTION', secao: 'cameras-cftv' }, '*');
+    } else {
+      window.location.href = '/admin/concreto?secao=cameras-cftv';
+    }
+    return;
+  }
+  const btnFull = e.target.closest('#btn-fullscreen');
+  if (btnFull) {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: 'TOGGLE_FULLSCREEN' }, '*');
+    } else {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(()=>{});
+      } else {
+        document.exitFullscreen().catch(()=>{});
+      }
+    }
+    return;
+  }
   const tk=e.target.closest('#trucks [data-trip]'); if(tk){S.sel=S.sel===tk.dataset.trip?null:tk.dataset.trip;updateMap();return;}
   const b=e.target.closest('button,[data-tk],[data-locate],[data-act="scrim"],label.btn'); if(!b) return;
   const d=b.dataset;
