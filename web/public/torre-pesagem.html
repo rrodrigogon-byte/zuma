@@ -752,7 +752,7 @@ TRIPS.forEach(t=>{const d=DEC[t.id];if(d&&t.anom)FEED.push({t:d.at+0.2,tipo:'pes
 /* =====================================================================
    Estado da interface
    ===================================================================== */
-const S={view:'torre',site:'usina',bal:'BAL-01',T:T0,speed:10,playing:true,replay:null,sel:null,feedF:'tudo',
+const S={view:'pesagem',site:'usina',bal:'BAL-01',T:T0,speed:10,playing:true,replay:null,sel:null,feedF:'tudo',
   fraudVeh:'NJK-3307',tkF:{q:'',bal:'todas',st:'todos'},cadTab:'veiculos',log:[],applied:{},
   models:{tara:true,placa:true,pessoa:true,posicao:true,nf:true,dupla:true,manual:true}};
 const VT=()=>S.replay??S.T;
@@ -2109,7 +2109,7 @@ document.addEventListener('click',e=>{
     }
     return;
   }
-  const btnFull = e.target.closest("#btn-fullscreen, [data-act="fullscreen"]");
+  const btnFull = e.target.closest('#btn-fullscreen, [data-act="fullscreen"]');
   if (btnFull) {
     toggleFullscreen();
     return;
@@ -2243,6 +2243,13 @@ document.addEventListener('keydown',e=>{
   if((e.key==='Enter')&&e.target.dataset&&(e.target.dataset.tk||e.target.dataset.locate)){e.target.click();}
 });
 window.addEventListener('resize',()=>updatePop());
+
+try {
+  const p = new URLSearchParams(window.location.search);
+  if (p.get('view') && V[p.get('view')]) S.view = p.get('view');
+  if (p.get('bal') && SCALES[p.get('bal')]) S.bal = p.get('bal');
+  if (p.get('site')) S.site = p.get('site');
+} catch(e) {}
 
 render();
 setInterval(tick,250);
