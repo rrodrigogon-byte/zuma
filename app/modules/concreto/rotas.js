@@ -8,7 +8,6 @@ import {
   calcularDosagemAvancada,
   criarPropostaComercial,
   atualizarStatusProposta,
-  converterPropostaEmOp,
   atualizarStatusVeiculoFrota,
   registrarMovimentacaoInsumoSilo,
   gerarListaTecnicaBOM,
@@ -18,11 +17,6 @@ import {
   calcularCustoConcretoAvancado,
   listarOrdensProducao,
   criarOrdemProducao,
-  obterOrdemProducao,
-  atualizarOrdemProducao,
-  excluirOrdemProducao,
-  apontarPesagemOrdemProducao,
-  gerarHtmlOrdemProducaoOficial,
   concluirOrdemProducao,
   listarMineracao,
   registrarExtracaoDraga,
@@ -44,11 +38,6 @@ import {
   listarMedicoesObras,
   criarMedicaoObra,
   atualizarStatusMedicao,
-  criarLoteEnsaio,
-  atualizarLoteEnsaio,
-  excluirLoteEnsaio,
-  atualizarCorpoProva,
-  gerarLaudoTecnicoImpressaoHtml,
   ajustarUmidadeBaia,
   reabastecerSiloOuTanque,
   dosarBateladaProcesso,
@@ -64,7 +53,11 @@ import {
   registrarConcretoResidual,
   obterAuditoriaMetrologicaBalancas,
   obterRotasGpsFrota,
-  obterTelemetriaCelulasToledo
+  obterTelemetriaCelulasToledo,
+  calcularCartasControleEstatisticoNbr12655,
+  gerarHtmlLaudoAceitacaoEstatistica,
+  otimizarTracoSustentavel,
+  calcularCurvaMaturidadeAstmC1074
 } from './servico.js';
 import { CONCRETO_EMPRESA_ID } from '../../concreto-usina-seed.js';
 
@@ -166,58 +159,6 @@ export function criarRotasConcreto() {
     }
   });
 
-  router.get('/ordens-producao/:id', async (req, res) => {
-    try {
-      const empresaId = resolverEmpresa(req);
-      const resultado = await obterOrdemProducao(req.params.id, empresaId);
-      return res.json(resultado);
-    } catch (e) {
-      return res.status(404).json({ ok: false, error: e.message });
-    }
-  });
-
-  router.put('/ordens-producao/:id', async (req, res) => {
-    try {
-      const empresaId = resolverEmpresa(req);
-      const resultado = await atualizarOrdemProducao(req.params.id, req.body, empresaId);
-      return res.json(resultado);
-    } catch (e) {
-      return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
-  router.delete('/ordens-producao/:id', async (req, res) => {
-    try {
-      const empresaId = resolverEmpresa(req);
-      const resultado = await excluirOrdemProducao(req.params.id, empresaId);
-      return res.json(resultado);
-    } catch (e) {
-      return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
-  router.post('/ordens-producao/:id/apontamento', async (req, res) => {
-    try {
-      const empresaId = resolverEmpresa(req);
-      const resultado = await apontarPesagemOrdemProducao(req.params.id, req.body, empresaId);
-      return res.json(resultado);
-    } catch (e) {
-      return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
-  router.get('/ordens-producao/:id/impressao', async (req, res) => {
-    try {
-      const empresaId = resolverEmpresa(req);
-      const { ordemProducao } = await obterOrdemProducao(req.params.id, empresaId);
-      const html = gerarHtmlOrdemProducaoOficial(ordemProducao);
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      return res.send(html);
-    } catch (e) {
-      return res.status(404).send(`<h1>Erro ao gerar ordem de produção: ${e.message}</h1>`);
-    }
-  });
-
   // 6. Criar nova carga
   router.post('/cargas', async (req, res) => {
     try {
@@ -296,17 +237,6 @@ router.post('/dosagem/calcular', (req, res) => {
   });
 
   // 12. Atualizar status de proposta comercial
-  
-  // 12b. Converter proposta comercial aprovada em Ordem de Produção (OP)
-  router.post("/propostas/:id/converter-op", async (req, res) => {
-    try {
-      const resultado = await converterPropostaEmOp(req.params.id, req.body || {});
-      return res.json(resultado);
-    } catch (e) {
-      return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
   router.put('/propostas/:id/status', async (req, res) => {
     try {
       const { status } = req.body;
@@ -739,55 +669,57 @@ router.post('/dosagem/calcular', (req, res) => {
   });
 
 
-  // ─── ROTAS COMPLETAS DE LABORATÓRIO & CONTROLE TECNOLÓGICO NBR 5738/5739 ───
-  router.post('/ensaios', async (req, res) => {
+  // 46. Controle Estatístico NBR 12655 com Cartas de Shewhart e CUSUM
+  router.get('/laboratorio/estatistica-nbr12655', (req, res) => {
     try {
-      const empresaId = resolverEmpresa(req);
-      const resultado = await criarLoteEnsaio(req.body, empresaId);
-      return res.status(201).json(resultado);
-    } catch (e) {
-      return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
-  router.put('/ensaios/:id', async (req, res) => {
-    try {
-      const empresaId = resolverEmpresa(req);
-      const resultado = await atualizarLoteEnsaio(req.params.id, req.body, empresaId);
+      const resultado = calcularCartasControleEstatisticoNbr12655(resolverEmpresa(req));
       return res.json(resultado);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
     }
   });
 
-  router.delete('/ensaios/:id', async (req, res) => {
+  // 47. Laudo Oficial de Aceitação Estatística ABNT NBR 12655 em HTML Timbrado
+  router.get('/laboratorio/laudos/:id/aceitacao-html', async (req, res) => {
     try {
-      const empresaId = resolverEmpresa(req);
-      const resultado = await excluirLoteEnsaio(req.params.id, empresaId);
-      return res.json(resultado);
-    } catch (e) {
-      return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
-  router.put('/ensaios/:loteId/corpos-prova/:cpId', async (req, res) => {
-    try {
-      const empresaId = resolverEmpresa(req);
-      const resultado = await atualizarCorpoProva(req.params.loteId, req.params.cpId, req.body, empresaId);
-      return res.json(resultado);
-    } catch (e) {
-      return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
-  router.get('/ensaios/:loteId/laudo-imprimir', (req, res) => {
-    try {
-      const empresaId = resolverEmpresa(req);
-      const html = gerarLaudoTecnicoImpressaoHtml(req.params.loteId, empresaId);
+      const html = await gerarHtmlLaudoAceitacaoEstatistica(req.params.id, resolverEmpresa(req));
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.send(html);
     } catch (e) {
-      return res.status(404).send('<h1>Erro 404</h1><p>' + e.message + '</p>');
+      return res.status(400).send(`<h3>Erro ao gerar Laudo NBR 12655: ${e.message}</h3>`);
+    }
+  });
+
+  // 48. Otimizador de Traços Sustentáveis & Pegada de Carbono (Meta BOxCrete)
+  router.post('/tracos/otimizar-sustentavel', (req, res) => {
+    try {
+      const resultado = otimizarTracoSustentavel(req.body, resolverEmpresa(req));
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 49. Simulador de Maturidade In-Situ ASTM C1074 (Nurse-Saul & Arrhenius)
+  router.get('/laboratorio/maturidade-curva', (req, res) => {
+    try {
+      const dados = {
+        fckProjetoMpa: req.query.fck ? Number(req.query.fck) : 30,
+        temperaturaAmbienteC: req.query.temp ? Number(req.query.temp) : 31
+      };
+      const resultado = calcularCurvaMaturidadeAstmC1074(dados, resolverEmpresa(req));
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post('/laboratorio/maturidade-curva', (req, res) => {
+    try {
+      const resultado = calcularCurvaMaturidadeAstmC1074(req.body, resolverEmpresa(req));
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
     }
   });
 

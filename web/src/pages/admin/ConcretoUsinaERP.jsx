@@ -11,7 +11,7 @@ import ConcretoMapaGpsFrota from './concreto/ConcretoMapaGpsFrota';
 import ConcretoChecklistFrota from './concreto/ConcretoChecklistFrota';
 import ConcretoRecicladorSustentabilidade from './concreto/ConcretoRecicladorSustentabilidade';
 import ConcretoAuditoriaMetrologica from './concreto/ConcretoAuditoriaMetrologica';
-import HoldingGrupoPalatare from './concreto/HoldingGrupoPalatare';
+import ConcretoLaboratorioTecnologico from './concreto/ConcretoLaboratorioTecnologico';
 
 
 const CARGAS_PADRAO = [
@@ -88,45 +88,7 @@ export default function ConcretoUsinaERP() {
   const [modalAssinaturaAberto, setModalAssinaturaAberto] = useState(null);
   const [modalRupturaAberto, setModalRupturaAberto] = useState(null);
   const [modalNovaPropostaAberto, setModalNovaPropostaAberto] = useState(false);
-  const [modalVisualizarProposta, setModalVisualizarProposta] = useState(null);
   const [modalLaudoAberto, setModalLaudoAberto] = useState(null);
-  
-  // Modais de Ordens de Produção (OP)
-  const [modalOpFormAberto, setModalOpFormAberto] = useState(null); // null | { modo: 'criar' | 'editar', op?: object }
-  const [modalOpVisualizarAberto, setModalOpVisualizarAberto] = useState(null); // null | op
-  const [modalOpApontamentoAberto, setModalOpApontamentoAberto] = useState(null); // null | op
-  const [filtroOpStatus, setFiltroOpStatus] = useState('todos');
-  const [buscaOpTermo, setBuscaOpTermo] = useState('');
-  const [salvandoOp, setSalvandoOp] = useState(false);
-  const [salvandoApontamento, setSalvandoApontamento] = useState(false);
-
-  // Formulários de OP
-  const [formOp, setFormOp] = useState({
-    numero: '',
-    cliente: '',
-    obra: '',
-    endereco: '',
-    fck: 25,
-    volumeM3: 8,
-    slumpPrevistoCm: '12 ± 2 cm',
-    betoneirasEscaladas: ['BT-01'],
-    operador: 'Carlos Eduardo',
-    motorista: '',
-    dataHora: '',
-    status: 'programada',
-    observacoes: ''
-  });
-
-  const [formApontamentoOp, setFormApontamentoOp] = useState({
-    cimentoKg: '',
-    areiaKg: '',
-    britaKg: '',
-    aguaL: '',
-    aditivoL: '',
-    slumpMedidoCm: '12.0',
-    lacreCarga: '',
-    status: 'concluida'
-  });
 
   // Estados de Assinatura Digital do Cliente e Romaneio
   const [abaRomaneio, setAbaRomaneio] = useState('romaneio'); // 'romaneio' | 'balanca'
@@ -437,179 +399,6 @@ export default function ConcretoUsinaERP() {
     observacoes: ''
   });
 
-  // Cálculo dinâmico estequiométrico em tempo real no formulário de OP (NBR 7212)
-  const calculoTeoricoFormOp = useMemo(() => {
-    const f = Number(formOp.fck) || 25;
-    const v = Number(formOp.volumeM3) || 8;
-    const tracosBase = {
-      20: { cimentoKg: 300, areiaKg: 975, britaKg: 1230, aguaL: 180, aditivoL: 2.4 },
-      25: { cimentoKg: 340, areiaKg: 930, britaKg: 1190, aguaL: 175, aditivoL: 2.7 },
-      30: { cimentoKg: 380, areiaKg: 870, britaKg: 1160, aguaL: 170, aditivoL: 3.0 },
-      35: { cimentoKg: 420, areiaKg: 825, britaKg: 1130, aguaL: 165, aditivoL: 3.4 },
-      40: { cimentoKg: 460, areiaKg: 780, britaKg: 1090, aguaL: 160, aditivoL: 3.8 }
-    };
-    const b = tracosBase[f] || tracosBase[25];
-    return {
-      totalBateladas: Math.ceil(v / 8),
-      cimentoKg: Math.round(b.cimentoKg * v),
-      areiaKg: Math.round(b.areiaKg * v),
-      britaKg: Math.round(b.britaKg * v),
-      aguaL: Math.round(b.aguaL * v),
-      aditivoL: +(b.aditivoL * v).toFixed(1),
-      pesoTotalKg: Math.round((b.cimentoKg + b.areiaKg + b.britaKg + b.aguaL) * v)
-    };
-  }, [formOp.fck, formOp.volumeM3]);
-
-  // Handlers para Operações de Ordens de Produção (OP)
-  const abrirCriarOp = () => {
-    const proximoNum = (ordensProducao || []).reduce((max, op) => {
-      const num = parseInt(String(op.numero || '').replace(/\D/g, ''), 10);
-      return isNaN(num) ? max : Math.max(max, num);
-    }, 93) + 1;
-    const numOp = `OP-2026-${String(proximoNum).padStart(3, '0')}`;
-    setFormOp({
-      numero: numOp,
-      cliente: '',
-      obra: '',
-      endereco: 'Tangará da Serra - MT',
-      fck: 25,
-      volumeM3: 8,
-      slumpPrevistoCm: '12 ± 2 cm',
-      betoneirasEscaladas: ['BT-01'],
-      operador: 'Carlos Eduardo',
-      motorista: '',
-      dataHora: new Date().toISOString().slice(0, 16).replace('T', ' '),
-      status: 'programada',
-      observacoes: 'Dosagem padrão NBR 7212. Ensaios de slump na obra e moldagem de CPs.'
-    });
-    setModalOpFormAberto({ modo: 'criar' });
-  };
-
-  const abrirEditarOp = (op) => {
-    setFormOp({
-      id: op.id,
-      numero: op.numero,
-      cliente: op.cliente || '',
-      obra: op.obra || '',
-      endereco: op.endereco || 'Tangará da Serra - MT',
-      fck: op.fck || 25,
-      volumeM3: op.volumeM3 || 8,
-      slumpPrevistoCm: op.slumpPrevistoCm || '12 ± 2 cm',
-      betoneirasEscaladas: op.betoneirasEscaladas && op.betoneirasEscaladas.length > 0 ? op.betoneirasEscaladas : ['BT-01'],
-      operador: op.operador || 'Carlos Eduardo',
-      motorista: op.motorista || '',
-      dataHora: op.dataHora || '',
-      status: op.status || 'programada',
-      observacoes: op.observacoes || ''
-    });
-    setModalOpFormAberto({ modo: 'editar', op });
-  };
-
-  const abrirVisualizarOp = (op) => {
-    setModalOpVisualizarAberto(op);
-  };
-
-  const abrirApontamentoOp = (op) => {
-    const teo = op.consumoTeorico || {};
-    const real = op.consumoRealBalança || {};
-    setFormApontamentoOp({
-      id: op.id,
-      numero: op.numero,
-      cimentoKg: real.cimentoKg || teo.cimentoKg || '',
-      areiaKg: real.areiaKg || teo.areiaKg || '',
-      britaKg: real.britaKg || teo.britaKg || '',
-      aguaL: real.aguaL || teo.aguaL || '',
-      aditivoL: real.aditivoL || teo.aditivoL || '',
-      slumpMedidoCm: real.slumpMedidoCm || op.slumpMedidoCm || '12.0',
-      lacreCarga: real.lacreCarga || 'LAC-2026-098',
-      status: 'concluida'
-    });
-    setModalOpApontamentoAberto(op);
-  };
-
-  const handleSalvarOp = async (e) => {
-    e.preventDefault();
-    if (!formOp.cliente || !formOp.obra) {
-      toast ? toast.warning('Informe o cliente e a obra!') : alert('Informe o cliente e a obra!');
-      return;
-    }
-    setSalvandoOp(true);
-    try {
-      if (modalOpFormAberto?.modo === 'editar') {
-        const res = await api.put(`/api/admin/concreto/ordens-producao/${formOp.id || formOp.numero}`, formOp);
-        if (res?.ok) {
-          setOrdensProducao(prev => prev.map(o => (o.id === res.ordemProducao.id || o.numero === res.ordemProducao.numero) ? res.ordemProducao : o));
-          toast ? toast.success(`Ordem de Produção ${res.ordemProducao.numero} atualizada com sucesso!`) : alert('OP atualizada com sucesso!');
-          setModalOpFormAberto(null);
-        }
-      } else {
-        const res = await api.post('/api/admin/concreto/ordens-producao', formOp);
-        if (res?.ok) {
-          setOrdensProducao(prev => [res.ordemProducao, ...prev]);
-          toast ? toast.success(`Ordem de Produção ${res.ordemProducao.numero} criada e programada!`) : alert('OP criada com sucesso!');
-          setModalOpFormAberto(null);
-        }
-      }
-    } catch (err) {
-      console.error('Erro ao salvar OP:', err);
-      toast ? toast.error('Erro ao salvar OP: ' + (err.message || 'Falha de conexão')) : alert('Erro ao salvar OP');
-    } finally {
-      setSalvandoOp(false);
-    }
-  };
-
-  const handleSalvarApontamento = async (e) => {
-    e.preventDefault();
-    setSalvandoApontamento(true);
-    try {
-      const opId = modalOpApontamentoAberto.id || modalOpApontamentoAberto.numero;
-      const res = await api.post(`/api/admin/concreto/ordens-producao/${opId}/apontamento`, formApontamentoOp);
-      if (res?.ok) {
-        setOrdensProducao(prev => prev.map(o => (o.id === res.ordemProducao.id || o.numero === res.ordemProducao.numero) ? res.ordemProducao : o));
-        toast ? toast.success(`Pesagem real da balança para ${res.ordemProducao.numero} registrada com sucesso!`) : alert('Pesagem registrada!');
-        setModalOpApontamentoAberto(null);
-        carregarDados();
-      }
-    } catch (err) {
-      console.error('Erro ao registrar pesagem:', err);
-      toast ? toast.error('Erro ao registrar pesagem: ' + err.message) : alert('Erro: ' + err.message);
-    } finally {
-      setSalvandoApontamento(false);
-    }
-  };
-
-  const handleMudarStatusOp = async (op, novoStatus) => {
-    try {
-      const res = await api.put(`/api/admin/concreto/ordens-producao/${op.id || op.numero}`, { status: novoStatus });
-      if (res?.ok) {
-        setOrdensProducao(prev => prev.map(o => (o.id === res.ordemProducao.id || o.numero === res.ordemProducao.numero) ? res.ordemProducao : o));
-        toast ? toast.success(`Status da ${op.numero} alterado para ${novoStatus.toUpperCase()}!`) : alert('Status alterado!');
-      }
-    } catch (err) {
-      toast ? toast.error('Erro ao alterar status: ' + err.message) : alert('Erro: ' + err.message);
-    }
-  };
-
-  const handleExcluirOp = async (op) => {
-    if (!window.confirm(`Tem certeza que deseja cancelar e excluir a Ordem de Produção ${op.numero}?`)) {
-      return;
-    }
-    try {
-      const res = await api.delete(`/api/admin/concreto/ordens-producao/${op.id || op.numero}`);
-      if (res?.ok) {
-        setOrdensProducao(prev => prev.filter(o => o.id !== op.id && o.numero !== op.numero));
-        toast ? toast.success(`Ordem de Produção ${op.numero} excluída com sucesso!`) : alert('OP excluída com sucesso!');
-      }
-    } catch (err) {
-      toast ? toast.error('Erro ao excluir OP: ' + err.message) : alert('Erro: ' + err.message);
-    }
-  };
-
-  const handleImprimirOp = (op) => {
-    const token = localStorage.getItem('sp_token') || '';
-    window.open(`/api/admin/concreto/ordens-producao/${op.id || op.numero}/impressao?token=${encodeURIComponent(token)}`, '_blank');
-  };
-
   useEffect(() => {
     carregarDados();
   }, [empresaAtiva]);
@@ -776,39 +565,6 @@ export default function ConcretoUsinaERP() {
     }
   };
 
-  
-  const handleConverterPropostaEmOp = async (proposta) => {
-    try {
-      const res = await api.post(`/api/admin/concreto/propostas/${proposta.id}/converter-op`, {
-        slumpPrevisto: "12 ± 2 cm",
-        operador: "Carlos Eduardo"
-      });
-      if (res?.ok) {
-        toast(`Proposta #${proposta.numero} convertida na OP #${res.op?.numero || ""} com sucesso!`, "success");
-        setModalVisualizarProposta(null);
-        await carregarDados();
-        setSecaoAtiva("producao-op");
-      }
-    } catch (err) {
-      toast("Erro ao converter proposta em OP: " + err.message, "error");
-    }
-  };
-
-  const handleAtualizarStatusProposta = async (propostaId, novoStatus) => {
-    try {
-      const res = await api.put(`/api/admin/concreto/propostas/${propostaId}/status`, { status: novoStatus });
-      if (res?.ok) {
-        toast("Status da proposta atualizado para " + novoStatus, "success");
-        carregarDados();
-        if (modalVisualizarProposta && modalVisualizarProposta.id === propostaId) {
-          setModalVisualizarProposta(prev => ({ ...prev, status: novoStatus }));
-        }
-      }
-    } catch (err) {
-      toast("Erro ao atualizar status: " + err.message, "error");
-    }
-  };
-
   const enviarPropostaWhatsApp = (prop) => {
     const tel = String(prop.telefone || '').replace(/\D/g, '');
     const msg = `*SERRANO CONCRETO USINADO & MINERAÇÃO* 🚚\nTangará da Serra - MT\n\nOlá ${prop.contato || prop.cliente}! Segue a proposta oficial de concretagem:\n\n📋 *Proposta Comercial Nº ${prop.numero}*\n🏗️ *Obra:* ${prop.obra}\n📍 *Local:* ${prop.endereco}\n🧪 *Traço:* FCK ${prop.fck} MPa\n📊 *Volume:* ${prop.volumeM3} m³\n🚀 *Bombeamento:* ${prop.tipoBomba}\n💰 *Valor Total:* R$ ${Number(prop.totalProposta).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n💳 *Condição:* ${prop.condicaoPagamento}\n\nIncluso ensaio de slump test na obra e moldagem de 4 corpos de prova com laudo assinado por nossa RT Engª Karin Prestes (CREA-MT 027300).\n\nPodemos confirmar a programação da sua concretagem?`;
@@ -880,7 +636,7 @@ export default function ConcretoUsinaERP() {
             { id: "suprimentos-silos", label: "Mineração & Silos 96t", icon: "⛏️", count: silos.length },
             { id: "vendas-faturamento", label: "Vendas & Notas Fiscais", icon: "📑" },
             { id: "comercial-propostas", label: "Orçamentos & Propostas", icon: "💼", count: propostas.length },
-            { id: "empresa-holding", label: "Grupo Palatare · Holding", icon: "🏢" },
+            { id: "empresa-holding", label: "Holding & Dados Fiscais", icon: "🏢" },
           ].map(tab => (
             <button
               key={tab.id}
@@ -897,9 +653,6 @@ export default function ConcretoUsinaERP() {
           ))}
         </nav>
 
-        {/* Cabeçalho e KPIs de Despacho ao Vivo - Exibidos somente na aba de despacho */}
-        {secaoAtiva === 'operacao-despacho' && (
-          <>
         <div className="serrano-ph">
           <div>
             <h1>Despacho ao vivo</h1>
@@ -958,8 +711,6 @@ export default function ConcretoUsinaERP() {
             <span>Usinado + bombeamento</span>
           </div>
         </div>
-          </>
-        )}
 
         {/* ─── ESCALA DA FROTA / GANTT INDUSTRIAL (07h às 17h) ─── */}
         {secaoAtiva === 'operacao-despacho' && (
@@ -1224,26 +975,10 @@ export default function ConcretoUsinaERP() {
               >
                 📊 Auditoria Metrológica das 4 Balanças (NBR 7212)
               </button>
-              <button
-                type="button"
-                className="btn-serrano"
-                style={{
-                  background: subAbaCentral === "reciclador" ? "var(--serrano-orange)" : "transparent",
-                  color: subAbaCentral === "reciclador" ? "#fff" : "var(--text)",
-                  borderColor: subAbaCentral === "reciclador" ? "var(--serrano-orange)" : "var(--joint)",
-                  fontWeight: 600,
-                  fontSize: 12
-                }}
-                onClick={() => setSubAbaCentral("reciclador")}
-              >
-                ♻️ Reciclador Ecológico (Zero Descarte)
-              </button>
             </div>
 
             {subAbaCentral === 'auditoria' ? (
               <ConcretoAuditoriaMetrologica />
-            ) : subAbaCentral === 'reciclador' ? (
-              <ConcretoRecicladorSustentabilidade />
             ) : (
           <div className="serrano-grid-2col">
             <div className="serrano-card">
@@ -1357,411 +1092,16 @@ export default function ConcretoUsinaERP() {
           </div>
         )}
 
-        {/* ─── ABA 3: LABORATÓRIO & CPS NBR 5738/5739 ─── */}
+        {/* ─── ABA 3: LABORATÓRIO TECNOLÓGICO NBR 12655 / SHEWHART / CUSUM / BOxCrete / ASTM C1074 ─── */}
         {secaoAtiva === 'producao-laboratorio' && (
-          <div style={{ display: 'grid', gap: 20 }}>
-            {/* Header com KPIs do Laboratório Tecnológico */}
-            <div className="serrano-card" style={{ padding: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, fontFamily: 'var(--font-display)', letterSpacing: 0.5 }}>
-                      Laboratório de Controle Tecnológico &amp; Ruptura de CPs
-                    </h2>
-                    <span className="serrano-pill serrano-p-ok" style={{ fontWeight: 700 }}>
-                      ABNT NBR 5738 / 5739 / 12655
-                    </span>
-                  </div>
-                  <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: 13 }}>
-                    Prensa eletro-hidráulica microprocessada (0,45 ± 0,15 MPa/s), câmara úmida NBR 9479 e emissão de laudos oficiais com ART/CREA.
-                  </p>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <button 
-                    type="button" 
-                    className="btn-serrano pri"
-                    onClick={() => ensaios.length > 0 && abrirModalRuptura(ensaios[0])}
-                  >
-                    + Romper CP na Prensa Digital
-                  </button>
-                </div>
-              </div>
-
-              {/* Grid de KPIs do Laboratório */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14, marginTop: 18 }}>
-                <div style={{ background: 'var(--surface-2)', padding: 14, borderRadius: 8, borderLeft: '4px solid var(--serrano-orange)' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Lotes Rasteados</div>
-                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, marginTop: 4 }}>
-                    {ensaios.length} lotes oficiais
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Controle rigoroso NBR 12655</div>
-                </div>
-
-                <div style={{ background: 'var(--surface-2)', padding: 14, borderRadius: 8, borderLeft: '4px solid var(--status-ok)' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>CPs em Cura (NBR 9479)</div>
-                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, marginTop: 4, color: 'var(--status-ok)' }}>
-                    {ensaios.reduce((acc, e) => acc + (e.corposProva?.filter(c => c.tensaoMpa == null).length || 0), 0)} CPs no tanque
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>23,0°C ± 1°C · Saturação Cal</div>
-                </div>
-
-                <div style={{ background: 'var(--surface-2)', padding: 14, borderRadius: 8, borderLeft: '4px solid var(--status-info)' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>CPs Rompidos</div>
-                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, marginTop: 4, color: 'var(--status-info)' }}>
-                    {ensaios.reduce((acc, e) => acc + (e.corposProva?.filter(c => c.tensaoMpa != null).length || 0), 0)} CPs ensaiados
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Taxa 0,45 MPa/s RBC</div>
-                </div>
-
-                <div style={{ background: 'var(--surface-2)', padding: 14, borderRadius: 8, borderLeft: '4px solid #8b5cf6' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Conformidade do Lote</div>
-                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, marginTop: 4, color: '#8b5cf6' }}>
-                    100% Conforme
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>fck,est ≥ fck projeto</div>
-                </div>
-              </div>
-
-              {/* Sub-abas do Laboratório */}
-              <div style={{ display: 'flex', gap: 8, marginTop: 20, borderBottom: '1px solid var(--joint)', paddingBottom: 10 }}>
-                {[
-                  { id: 'lotes', label: '📋 Lotes & Rupturas NBR 5739' },
-                  { id: 'curva', label: '📈 Curva de Maturação & Abrams' },
-                  { id: 'camara', label: '💧 Tanque de Cura NBR 9479' },
-                  { id: 'estatistica', label: '📊 Avaliação Estatística NBR 12655' }
-                ].map(t => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    style={{
-                      padding: '8px 16px',
-                      borderRadius: 6,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      border: 'none',
-                      background: abaLaboratorio === t.id ? 'var(--serrano-orange)' : 'var(--surface-2)',
-                      color: abaLaboratorio === t.id ? '#fff' : 'var(--text)'
-                    }}
-                    onClick={() => setAbaLaboratorio(t.id)}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* SUB-ABA 1: LOTES E RUPTURAS */}
-            {abaLaboratorio === 'lotes' && (
-              <div className="serrano-card">
-                <div className="serrano-card-h">
-                  <h3>Lotes de Amostragem &amp; Corpos de Prova Cilindricos (10x20 cm)</h3>
-                  <span className="serrano-legend">
-                    Responsável Técnica: <b>Engª Karin Prestes (CREA-MT 027300)</b>
-                  </span>
-                </div>
-                <div style={{ padding: 20 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 16 }}>
-                    {ensaios.map(ens => (
-                      <div key={ens.id} style={{ background: 'var(--surface-2)', border: '1px solid var(--joint)', borderRadius: 8, padding: 16 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-                          <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <b style={{ fontFamily: 'var(--font-data)', fontSize: 15, color: 'var(--serrano-orange-text)' }}>{ens.lote}</b>
-                              <span className={`serrano-pill ${ens.status === 'aprovado' ? 'serrano-p-ok' : 'serrano-p-warn'}`}>
-                                {ens.status === 'aprovado' ? '✓ Aprovado 28d' : ens.status === 'moldado' ? 'Moldado Hoje' : 'Em Cura no Tanque'}
-                              </span>
-                            </div>
-                            <div style={{ fontSize: 13, fontWeight: 700, marginTop: 4 }}>{ens.obra}</div>
-                            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Cliente: {ens.cliente}</div>
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                              Data Moldagem: <b>{ens.dataMoldagem}</b> · Slump: <b>{ens.slumpMedidoCm} cm</b>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Corpos de Prova do Lote */}
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, margin: '14px 0' }}>
-                          {(ens.corposProva || []).map(cp => {
-                            const rompido = cp.tensaoMpa != null;
-                            const perc = cp.percentualFck || (rompido ? +((cp.tensaoMpa / ens.fckProjeto) * 100).toFixed(0) : 0);
-                            return (
-                              <div 
-                                key={cp.id} 
-                                style={{ 
-                                  background: 'var(--surface)', 
-                                  border: rompido ? '1px solid var(--status-ok)' : '1px dashed var(--joint)', 
-                                  borderRadius: 6, 
-                                  padding: '10px 6px', 
-                                  textAlign: 'center',
-                                  cursor: rompido ? 'default' : 'pointer'
-                                }}
-                                title={rompido ? `Rompido: ${cp.forcaKn} kN · Ruptura Tipo ${cp.tipoRuptura || 'A'}` : 'Clique para romper este CP na prensa'}
-                                onClick={() => !rompido && abrirModalRuptura(ens, cp)}
-                              >
-                                <div style={{ fontFamily: 'var(--font-data)', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>
-                                  {cp.id} ({cp.idadeDias}d)
-                                </div>
-                                <div style={{ fontFamily: 'var(--font-data)', fontWeight: 800, fontSize: 13, marginTop: 4, color: rompido ? (cp.tensaoMpa >= ens.fckProjeto ? 'var(--status-ok)' : 'var(--status-info)') : 'var(--text-muted)' }}>
-                                  {rompido ? `${cp.tensaoMpa} MPa` : 'Em cura'}
-                                </div>
-                                {rompido ? (
-                                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
-                                    {perc}% FCK · Tipo {cp.tipoRuptura || 'A'}
-                                  </div>
-                                ) : (
-                                  <div style={{ fontSize: 10, color: 'var(--serrano-orange-text)', marginTop: 2, fontWeight: 700 }}>
-                                    ⚡ Romper
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--joint)', paddingTop: 12, marginTop: 10, flexWrap: 'wrap', gap: 8 }}>
-                          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                            FCK Projeto: <b style={{ color: 'var(--text)' }}>{ens.fckProjeto} MPa</b>
-                            {ens.fckEstimado28d && (
-                              <span style={{ marginLeft: 6, color: 'var(--status-ok)', fontWeight: 700 }}>
-                                (Aferido: {ens.fckEstimado28d} MPa)
-                              </span>
-                            )}
-                          </span>
-                          <div style={{ display: 'flex', gap: 8 }}>
-                            <button 
-                              type="button" 
-                              className="btn-serrano"
-                              style={{ padding: '5px 10px', fontSize: 11 }}
-                              onClick={() => abrirModalRuptura(ens)}
-                            >
-                              + Romper CP
-                            </button>
-                            <button 
-                              type="button" 
-                              className="btn-serrano"
-                              style={{ padding: '5px 12px', fontSize: 11, borderColor: 'var(--serrano-orange)', color: 'var(--serrano-orange-text)' }}
-                              onClick={() => setModalLaudoAberto(ens)}
-                            >
-                              Ver Laudo NBR 5739
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* SUB-ABA 2: CURVA DE MATURAÇÃO & ABRAMS */}
-            {abaLaboratorio === 'curva' && (
-              <div className="serrano-card" style={{ padding: 20 }}>
-                <div className="serrano-card-h" style={{ padding: '0 0 16px', borderBottom: '1px solid var(--joint)', marginBottom: 16 }}>
-                  <div>
-                    <h3 style={{ margin: 0 }}>Curva de Maturação do Concreto &amp; Modelo de Abrams (NBR 6118)</h3>
-                    <small style={{ color: 'var(--text-muted)' }}>Evolução da resistência à compressão axial dos 3 aos 28 dias para cimento CP II-F-32</small>
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20, alignItems: 'center' }}>
-                  {/* Gráfico SVG da Curva de Resistência */}
-                  <div style={{ background: 'var(--surface-2)', padding: 16, borderRadius: 8, border: '1px solid var(--joint)' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, color: 'var(--text-muted)' }}>
-                      Gráfico Resistência (MPa) x Idade de Cura (Dias)
-                    </div>
-                    <svg viewBox="0 0 540 220" style={{ width: '100%', height: 'auto', overflow: 'visible' }}>
-                      {/* Grid Horizontal */}
-                      <line x1="40" y1="180" x2="520" y2="180" stroke="var(--joint)" strokeWidth="1" />
-                      <line x1="40" y1="140" x2="520" y2="140" stroke="var(--joint)" strokeWidth="1" strokeDasharray="3 3" />
-                      <line x1="40" y1="100" x2="520" y2="100" stroke="var(--joint)" strokeWidth="1" strokeDasharray="3 3" />
-                      <line x1="40" y1="60" x2="520" y2="60" stroke="var(--joint)" strokeWidth="1" strokeDasharray="3 3" />
-                      <line x1="40" y1="20" x2="520" y2="20" stroke="var(--joint)" strokeWidth="1" strokeDasharray="3 3" />
-
-                      {/* Eixos */}
-                      <line x1="40" y1="20" x2="40" y2="180" stroke="var(--text-muted)" strokeWidth="1.5" />
-                      <line x1="40" y1="180" x2="520" y2="180" stroke="var(--text-muted)" strokeWidth="1.5" />
-
-                      {/* Labels Y */}
-                      <text x="32" y="184" fontSize="10" textAnchor="end" fill="var(--text-muted)">0</text>
-                      <text x="32" y="144" fontSize="10" textAnchor="end" fill="var(--text-muted)">10</text>
-                      <text x="32" y="104" fontSize="10" textAnchor="end" fill="var(--text-muted)">20</text>
-                      <text x="32" y="64" fontSize="10" textAnchor="end" fill="var(--text-muted)">30</text>
-                      <text x="32" y="24" fontSize="10" textAnchor="end" fill="var(--text-muted)">40</text>
-
-                      {/* Labels X */}
-                      <text x="40" y="196" fontSize="10" textAnchor="middle" fill="var(--text-muted)">0d</text>
-                      <text x="91" y="196" fontSize="10" textAnchor="middle" fill="var(--text-muted)">3d</text>
-                      <text x="160" y="196" fontSize="10" textAnchor="middle" fill="var(--text-muted)">7d</text>
-                      <text x="280" y="196" fontSize="10" textAnchor="middle" fill="var(--text-muted)">14d</text>
-                      <text x="520" y="196" fontSize="10" textAnchor="middle" fill="var(--text-muted)">28d</text>
-
-                      {/* Linha Meta FCK 30 MPa Projeto */}
-                      <line x1="40" y1="60" x2="520" y2="60" stroke="#10b981" strokeWidth="2" strokeDasharray="5 5" />
-                      <text x="470" y="54" fontSize="10" fill="#10b981" fontWeight="bold">FCK = 30 MPa</text>
-
-                      {/* Curva Teórica Abrams (s=0.25 CP II) */}
-                      <path 
-                        d="M 40,180 Q 91,105 160,82 T 280,62 T 520,44" 
-                        fill="none" 
-                        stroke="var(--serrano-orange)" 
-                        strokeWidth="3" 
-                      />
-
-                      {/* Pontos Reais de Ensaio dos Lotes */}
-                      {/* Ponto 3d (19.8 MPa) */}
-                      <circle cx="91" cy="101" r="5" fill="#0284c7" stroke="#fff" strokeWidth="1.5" />
-                      <text x="91" y="93" fontSize="10" textAnchor="middle" fill="#0284c7" fontWeight="bold">19.8</text>
-
-                      {/* Ponto 7d (25.1 MPa) */}
-                      <circle cx="160" cy="80" r="5" fill="#0284c7" stroke="#fff" strokeWidth="1.5" />
-                      <text x="160" y="72" fontSize="10" textAnchor="middle" fill="#0284c7" fontWeight="bold">25.1</text>
-
-                      {/* Ponto 28d (34.2 MPa - Superou o FCK) */}
-                      <circle cx="520" cy="43" r="6" fill="#10b981" stroke="#fff" strokeWidth="2" />
-                      <text x="500" y="36" fontSize="11" textAnchor="end" fill="#10b981" fontWeight="bold">34.2 MPa (114%)</text>
-                    </svg>
-
-                    <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 11, color: 'var(--text-muted)', justifyContent: 'center' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ width: 12, height: 3, background: 'var(--serrano-orange)', display: 'inline-block' }}></span>
-                        Curva Teórica Abrams / NBR 6118
-                      </span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#0284c7', display: 'inline-block' }}></span>
-                        Resistências Reais Aferidas
-                      </span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ width: 12, height: 2, background: '#10b981', borderTop: '2px dashed #10b981', display: 'inline-block' }}></span>
-                        Meta de Projeto (FCK 30 MPa)
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Tabela de Referência Normativa */}
-                  <div style={{ display: 'grid', gap: 10 }}>
-                    <div style={{ background: 'var(--surface-2)', padding: 12, borderRadius: 6 }}>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Idade 3 Dias (Desforma Rápida)</div>
-                      <div style={{ fontSize: 16, fontWeight: 700, marginTop: 2 }}>~ 55% a 65% do FCK</div>
-                      <small style={{ color: 'var(--text-muted)' }}>Liberação de escoramento primário de lajes e vigas</small>
-                    </div>
-
-                    <div style={{ background: 'var(--surface-2)', padding: 12, borderRadius: 6 }}>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Idade 7 Dias (Controle Prévio)</div>
-                      <div style={{ fontSize: 16, fontWeight: 700, marginTop: 2, color: 'var(--status-info)' }}>~ 80% a 88% do FCK</div>
-                      <small style={{ color: 'var(--text-muted)' }}>Índice de segurança para avanço da estrutura em altura</small>
-                    </div>
-
-                    <div style={{ background: 'var(--surface-2)', padding: 12, borderRadius: 6 }}>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Idade 28 Dias (Aceitação NBR 12655)</div>
-                      <div style={{ fontSize: 16, fontWeight: 700, marginTop: 2, color: 'var(--status-ok)' }}>≥ 100% do FCK</div>
-                      <small style={{ color: 'var(--text-muted)' }}>Condição contratual de aprovação e emissão do Laudo com ART</small>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* SUB-ABA 3: CÂMARA ÚMIDA E TANQUE DE CURA */}
-            {abaLaboratorio === 'camara' && (
-              <div className="serrano-card" style={{ padding: 20 }}>
-                <div className="serrano-card-h" style={{ padding: '0 0 16px', borderBottom: '1px solid var(--joint)', marginBottom: 16 }}>
-                  <div>
-                    <h3 style={{ margin: 0 }}>Tanque de Cura Submerso &amp; Câmara Úmida (ABNT NBR 9479)</h3>
-                    <small style={{ color: 'var(--text-muted)' }}>Ambiente controlado com recirculação contínua e saturação com hidróxido de cálcio Ca(OH)₂</small>
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
-                  <div style={{ background: 'var(--surface-2)', padding: 16, borderRadius: 8, textAlign: 'center' }}>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Temperatura da Água</div>
-                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 800, color: 'var(--status-ok)', marginTop: 4 }}>
-                      23.1 °C
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Faixa Normativa: 21,0°C a 25,0°C (Conforme)</div>
-                  </div>
-
-                  <div style={{ background: 'var(--surface-2)', padding: 16, borderRadius: 8, textAlign: 'center' }}>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Saturação de Cal Ca(OH)₂</div>
-                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 800, color: 'var(--status-ok)', marginTop: 4 }}>
-                      3.2 g/L
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Evita a lixiviação do cimento nos CPs</div>
-                  </div>
-
-                  <div style={{ background: 'var(--surface-2)', padding: 16, borderRadius: 8, textAlign: 'center' }}>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Umidade Relativa Câmara</div>
-                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 800, color: 'var(--status-info)', marginTop: 4 }}>
-                      98.4 %
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Mínimo Normativo: 95,0% (Conforme)</div>
-                  </div>
-
-                  <div style={{ background: 'var(--surface-2)', padding: 16, borderRadius: 8, textAlign: 'center' }}>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Bomba de Recirculação</div>
-                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 800, color: 'var(--status-ok)', marginTop: 4 }}>
-                      100%
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Fluxo uniforme e constante 24/7</div>
-                  </div>
-                </div>
-
-                <div style={{ marginTop: 20, background: 'var(--surface-2)', padding: 16, borderRadius: 8 }}>
-                  <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Mapa de Prateleiras do Tanque de Cura:</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, fontSize: 12 }}>
-                    <div style={{ background: 'var(--surface)', padding: 10, borderRadius: 6, border: '1px solid var(--joint)' }}>
-                      <b>Prateleira A (Lote 088):</b> Liberado aos 28d
-                    </div>
-                    <div style={{ background: 'var(--surface)', padding: 10, borderRadius: 6, border: '1px solid var(--joint)' }}>
-                      <b>Prateleira B (Lote 089):</b> Ruptura 28d em 02/12
-                    </div>
-                    <div style={{ background: 'var(--surface)', padding: 10, borderRadius: 6, border: '1px solid var(--joint)' }}>
-                      <b>Prateleira C (Lote 090):</b> Ruptura 28d em 04/12
-                    </div>
-                    <div style={{ background: 'var(--surface)', padding: 10, borderRadius: 6, border: '1px solid var(--joint)' }}>
-                      <b>Prateleira D (Lote 091):</b> Ruptura 7d em 16/11
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* SUB-ABA 4: CONTROLE ESTATÍSTICO NBR 12655 */}
-            {abaLaboratorio === 'estatistica' && (
-              <div className="serrano-card" style={{ padding: 20 }}>
-                <div className="serrano-card-h" style={{ padding: '0 0 16px', borderBottom: '1px solid var(--joint)', marginBottom: 16 }}>
-                  <div>
-                    <h3 style={{ margin: 0 }}>Critérios de Aceitação e Controle Estatístico (ABNT NBR 12655:2022)</h3>
-                    <small style={{ color: 'var(--text-muted)' }}>Cálculo do fck estimado (fck,est) por amostragem total ou parcial com desvio padrão rigoroso</small>
-                  </div>
-                </div>
-
-                <div style={{ background: 'var(--surface-2)', padding: 16, borderRadius: 8, fontSize: 13, lineHeight: 1.6 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
-                    <div>
-                      <small style={{ color: 'var(--text-muted)' }}>Condição de Preparo da Usina</small>
-                      <div style={{ fontWeight: 800, fontSize: 16 }}>Condição A (Usina Dosadora)</div>
-                      <small style={{ color: 'var(--text-muted)' }}>Desvio padrão da dosagem: sd = 4,0 MPa (Serrano opera a sd = 2,4 MPa)</small>
-                    </div>
-
-                    <div>
-                      <small style={{ color: 'var(--text-muted)' }}>Critério de Amostragem Total (100%)</small>
-                      <div style={{ fontWeight: 800, fontSize: 16 }}>fck,est = fc,médio</div>
-                      <small style={{ color: 'var(--text-muted)' }}>Cada betoneira possui seus corpos de prova rastreados</small>
-                    </div>
-
-                    <div>
-                      <small style={{ color: 'var(--text-muted)' }}>Taxa de Aplicação de Carga</small>
-                      <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--status-ok)' }}>0,45 ± 0,15 MPa/s</div>
-                      <small style={{ color: 'var(--text-muted)' }}>Conforme ABNT NBR 5739:2018 item 6.3</small>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          <ConcretoLaboratorioTecnologico
+            ensaios={ensaios}
+            onAtualizarDados={carregarDados}
+            onAbrirRomaneio={(c) => { setModalRomaneioAberto(c); setAbaRomaneio('romaneio'); }}
+          />
         )}
-{/* ─── ABA 4: SUPRIMENTOS, SILOS & CONTROLE DE PROCESSO NBR 7212 ─── */}
+
+        {/* ─── ABA 4: SUPRIMENTOS, SILOS & CONTROLE DE PROCESSO NBR 7212 ─── */}
         {secaoAtiva === 'suprimentos-silos' && (
           <div style={{ display: 'grid', gap: 20 }}>
             {/* Header com KPIs e Ações Rápida */}
@@ -2223,11 +1563,6 @@ export default function ConcretoUsinaERP() {
               </div>
             )}
 
-            {/* SUB-ABA 5: RECICLADOR ECOLÓGICO & SOBRAS (CONAMA) */}
-            {subAbaSuprimentos === 'reciclador-ecologico' && (
-              <ConcretoRecicladorSustentabilidade />
-            )}
-
             {/* SUB-ABA 4: ADITIVOS QUÍMICOS & ÁGUA CHILLER */}
             {subAbaSuprimentos === 'tanques-aditivos' && (
               <div className="serrano-card">
@@ -2323,9 +1658,38 @@ export default function ConcretoUsinaERP() {
           </div>
         )}
 
-        {/* ─── ABA: GRUPO PALATARE · HOLDING & GOVERNANÇA CORPORATIVA ─── */}
+        {/* ─── ABA 6: HOLDING & DADOS FISCAIS SEFAZ ─── */}
         {secaoAtiva === 'empresa-holding' && (
-          <HoldingGrupoPalatare setSecaoAtiva={setSecaoAtiva} />
+          <div className="serrano-grid-2col">
+            <div className="serrano-card">
+              <div className="serrano-card-h">
+                <h3>Serrano Concreto &amp; Mineração · Dados Oficiais</h3>
+              </div>
+              <div style={{ padding: 20, display: 'grid', gap: 12 }}>
+                <div><small style={{ color: 'var(--text-muted)' }}>Razão Social:</small> <b style={{ display: 'block' }}>SERRANO CONCRETO USINADO &amp; MINERAÇÃO LTDA</b></div>
+                <div><small style={{ color: 'var(--text-muted)' }}>CNPJ Matriz:</small> <b style={{ display: 'block', fontFamily: 'var(--font-data)' }}>51.499.928/0001-01</b></div>
+                <div><small style={{ color: 'var(--text-muted)' }}>CNPJ Usinado:</small> <b style={{ display: 'block', fontFamily: 'var(--font-data)' }}>53.798.485/0001-77</b></div>
+                <div><small style={{ color: 'var(--text-muted)' }}>Inscrição Estadual (SEFAZ-MT):</small> <b style={{ display: 'block', fontFamily: 'var(--font-data)' }}>14.229.191-9</b></div>
+                <div><small style={{ color: 'var(--text-muted)' }}>Registro ANTT (RNTRC):</small> <b style={{ display: 'block', fontFamily: 'var(--font-data)' }}>056256077</b></div>
+                <div><small style={{ color: 'var(--text-muted)' }}>Responsável Técnica (RT):</small> <b style={{ display: 'block', color: 'var(--status-ok)' }}>Engª Karin Prestes (CREA-MT 027300)</b></div>
+              </div>
+            </div>
+
+            <div className="serrano-card">
+              <div className="serrano-card-h">
+                <h3>Holding Serrano &amp; Palatare Participações S/A</h3>
+              </div>
+              <div style={{ padding: 20, display: 'grid', gap: 12 }}>
+                <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+                  Consolidação corporativa do Grupo Serrano &amp; Palatare, unificando a usina dosadora de concreto, mineração de agregados do Rio Sepotuba e a rede de restaurantes e food service em Tangará da Serra/MT.
+                </p>
+                <div style={{ background: 'var(--surface-2)', padding: 14, borderRadius: 8 }}>
+                  <b style={{ display: 'block', fontSize: 14 }}>Barramento SEFAZ-MT: Ativo e Sincronizado</b>
+                  <small style={{ color: 'var(--status-ok)' }}>● Emissão autorizada de CT-e, Romaneios NBR 7212 e MDF-e de frota própria</small>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
 
 
@@ -2500,284 +1864,45 @@ export default function ConcretoUsinaERP() {
 {/* ─── ABA 2B: ORDENS DE PRODUÇÃO (OPS) ─── */}
         {secaoAtiva === 'producao-op' && (
           <div className="serrano-card">
-            <div className="serrano-card-h" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+            <div className="serrano-card-h">
               <div>
-                <h3>📋 Central de Ordens de Produção (OP) · Dosagem NBR 7212</h3>
-                <small style={{ color: 'var(--text-muted)' }}>Planejamento, edição, pesagem estequiométrica dos silos e rastreabilidade total de concreto</small>
-              </div>
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  className="btn-serrano pri"
-                  onClick={abrirCriarOp}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800 }}
-                >
-                  <span>+</span> Nova Ordem de Produção (OP)
-                </button>
+                <h3>Ordens de Produção (Bateladas Industriais &amp; Pesagem dos Silos)</h3>
+                <small style={{ color: 'var(--text-muted)' }}>Rastreabilidade de bateladas NBR 7212 com consumo real de cimento e agregados</small>
               </div>
             </div>
-
-            {/* KPIs de Produção */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, padding: '16px 20px', borderBottom: '1px solid var(--joint)', background: 'var(--surface-2)' }}>
-              <div style={{ background: 'var(--card-bg, #fff)', padding: '12px 16px', borderRadius: 8, border: '1px solid var(--joint)' }}>
-                <small style={{ color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', fontWeight: 700 }}>Total de OPs Hoje</small>
-                <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--serrano-orange-text)' }}>
-                  {(ordensProducao && ordensProducao.length > 0 ? ordensProducao : [1,2,3]).length} OPs
-                </div>
-              </div>
-              <div style={{ background: 'var(--card-bg, #fff)', padding: '12px 16px', borderRadius: 8, border: '1px solid var(--joint)' }}>
-                <small style={{ color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', fontWeight: 700 }}>Volume Programado</small>
-                <div style={{ fontSize: 22, fontWeight: 900, color: '#0F172A' }}>
-                  {(ordensProducao && ordensProducao.length > 0 ? ordensProducao : [
-                    { volumeM3: 24 }, { volumeM3: 32 }, { volumeM3: 16 }
-                  ]).reduce((acc, o) => acc + (Number(o.volumeM3) || 0), 0)} m³
-                </div>
-              </div>
-              <div style={{ background: 'var(--card-bg, #fff)', padding: '12px 16px', borderRadius: 8, border: '1px solid var(--joint)' }}>
-                <small style={{ color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', fontWeight: 700 }}>Bateladas em Usina</small>
-                <div style={{ fontSize: 22, fontWeight: 900, color: '#2563EB' }}>
-                  {(ordensProducao && ordensProducao.length > 0 ? ordensProducao : [
-                    { totalBateladas: 3 }, { totalBateladas: 4 }, { totalBateladas: 2 }
-                  ]).reduce((acc, o) => acc + (Number(o.totalBateladas) || Math.ceil((Number(o.volumeM3) || 8) / 8)), 0)} Bateladas
-                </div>
-              </div>
-              <div style={{ background: 'var(--card-bg, #fff)', padding: '12px 16px', borderRadius: 8, border: '1px solid var(--joint)' }}>
-                <small style={{ color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', fontWeight: 700 }}>Concluídas</small>
-                <div style={{ fontSize: 22, fontWeight: 900, color: '#16A34A' }}>
-                  {(ordensProducao || []).filter(o => o.status === 'concluida').length} OPs
-                </div>
-              </div>
-            </div>
-
-            {/* Filtros e Busca Rápida */}
-            <div style={{ padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, borderBottom: '1px solid var(--joint)' }}>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {[
-                  { id: 'todos', label: 'Todas as OPs' },
-                  { id: 'programada', label: 'Programadas' },
-                  { id: 'em_pesagem', label: 'Pesagem Silos' },
-                  { id: 'concluida', label: 'Concluídas' }
-                ].map(f => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    className={`btn-serrano ${filtroOpStatus === f.id ? 'pri' : ''}`}
-                    style={{ padding: '6px 12px', fontSize: 12 }}
-                    onClick={() => setFiltroOpStatus(f.id)}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-
-              <div style={{ minWidth: 260, flex: '1 1 auto', maxWidth: 400 }}>
-                <input
-                  type="text"
-                  className="serrano-input"
-                  placeholder="🔍 Buscar por OP, obra, cliente ou betoneira..."
-                  value={buscaOpTermo}
-                  onChange={e => setBuscaOpTermo(e.target.value)}
-                  style={{ width: '100%', fontSize: 13 }}
-                />
-              </div>
-            </div>
-
             <div style={{ padding: 20 }}>
               <div style={{ display: 'grid', gap: 12 }}>
-                {((ordensProducao.length > 0 ? ordensProducao : [
-                  { id: 'op-091', numero: 'OP-2026-091', dataHora: '2026-11-12 08:30:00', obra: 'Edifício Residencial Serra Dourada · Lajes 4º Pav.', cliente: 'Construtora MT Horizon', endereco: 'Rua das Flores, 1400 · Tangará da Serra/MT', fck: 30, volumeM3: 24, totalBateladas: 3, betoneirasEscaladas: ['BT-01', 'BT-02', 'BT-03'], status: 'concluida', operador: 'Carlos Eduardo', motorista: 'Marcos Silveira', consumoTeorico: { cimentoKg: 9120, areiaKg: 20880, britaKg: 27840, aguaL: 4080, aditivoL: 72 }, consumoRealBalança: { cimentoKg: 9150, areiaKg: 20900, britaKg: 27800, aguaL: 4080, aditivoL: 72, slumpMedidoCm: 14.0 } },
-                  { id: 'op-092', numero: 'OP-2026-092', dataHora: '2026-11-12 13:45:00', obra: 'Piso Industrial Galpão de Cargas · Etapa 2', cliente: 'AgroLog Transportes & Logística', endereco: 'Distrito Industrial · Tangará da Serra/MT', fck: 35, volumeM3: 32, totalBateladas: 4, betoneirasEscaladas: ['BT-04', 'BT-05'], status: 'em_pesagem', operador: 'Carlos Eduardo', motorista: 'Roberto Lima', consumoTeorico: { cimentoKg: 13440, areiaKg: 26400, britaKg: 36160, aguaL: 5280, aditivoL: 108.8 } },
-                  { id: 'op-093', numero: 'OP-2026-093', dataHora: '2026-11-12 16:15:00', obra: 'Casa Térrea Lote 12 Qd. 08 · Vigas e Baldrames', cliente: 'Eng. Marcelo Dantas', endereco: 'Jardim dos Ipês · Tangará da Serra/MT', fck: 25, volumeM3: 16, totalBateladas: 2, betoneirasEscaladas: ['BT-03'], status: 'programada', operador: 'Marcos Vinicius', motorista: 'Valdemir Oliveira', consumoTeorico: { cimentoKg: 5440, areiaKg: 14880, britaKg: 19040, aguaL: 2800, aditivoL: 43.2 } }
-                ])).filter(op => {
-                  if (filtroOpStatus !== 'todos') {
-                    if (filtroOpStatus === 'em_pesagem' && op.status !== 'em_pesagem') return false;
-                    if (filtroOpStatus === 'concluida' && op.status !== 'concluida') return false;
-                    if (filtroOpStatus === 'programada' && (op.status !== 'programada' && op.status !== 'planejada')) return false;
-                  }
-                  if (buscaOpTermo.trim()) {
-                    const t = buscaOpTermo.toLowerCase();
-                    const n = String(op.numero || '').toLowerCase();
-                    const c = String(op.cliente || '').toLowerCase();
-                    const o = String(op.obra || '').toLowerCase();
-                    const v = (op.betoneirasEscaladas || []).join(' ').toLowerCase();
-                    return n.includes(t) || c.includes(t) || o.includes(t) || v.includes(t);
-                  }
-                  return true;
-                }).map((op, idx) => {
-                  const teo = op.consumoTeorico || {};
-                  const real = op.consumoRealBalança || null;
-                  return (
-                    <div key={op.id || op.numero || idx} style={{ background: 'var(--surface-2)', border: '1px solid var(--joint)', borderRadius: 10, padding: 18, display: 'flex', flexDirection: 'column', gap: 14, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-                      {/* Cabeçalho da Linha */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                          <span style={{ fontFamily: 'var(--font-data)', fontSize: 16, fontWeight: 900, color: 'var(--serrano-orange-text)', background: 'rgba(234, 88, 12, 0.08)', padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(234, 88, 12, 0.2)' }}>
-                            {op.numero}
-                          </span>
-                          <span className={`serrano-pill ${op.status === 'concluida' ? 'serrano-p-ok' : op.status === 'em_pesagem' ? 'serrano-p-live' : 'serrano-p-load'}`}>
-                            {op.status === 'concluida' ? 'Concluída' : op.status === 'em_pesagem' ? 'Pesagem dos Silos' : op.status === 'cancelada' ? 'Cancelada' : 'Programada'}
-                          </span>
-                          <small style={{ color: 'var(--text-muted)' }}>🕒 {op.dataHora}</small>
-                          <small style={{ color: 'var(--text-muted)', background: 'var(--card-bg, #fff)', padding: '2px 8px', borderRadius: 4, border: '1px solid var(--joint)' }}>
-                            👤 Operador: <b>{op.operador || 'Carlos Eduardo'}</b>
-                          </small>
-                        </div>
-
-                        {/* Ações da OP */}
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          <button
-                            type="button"
-                            className="btn-serrano"
-                            style={{ padding: '6px 10px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
-                            onClick={() => abrirVisualizarOp(op)}
-                            title="Visualizar ficha técnica e dosagem estequiométrica"
-                          >
-                            👁️ Detalhes
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-serrano"
-                            style={{ padding: '6px 10px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
-                            onClick={() => abrirEditarOp(op)}
-                            title="Editar / Modificar dados da Ordem de Produção"
-                          >
-                            ✏️ Editar
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-serrano"
-                            style={{ padding: '6px 10px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, background: '#FEF3C7', color: '#92400E', borderColor: '#F59E0B' }}
-                            onClick={() => abrirApontamentoOp(op)}
-                            title="Registrar pesagem real dos silos na balança e slump medido"
-                          >
-                            ⚖️ Apontar Silos
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-serrano"
-                            style={{ padding: '6px 10px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
-                            onClick={() => handleImprimirOp(op)}
-                            title="Imprimir Ficha Técnica Oficial NBR 7212 (A4)"
-                          >
-                            🖨️ Ficha A4
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-serrano"
-                            style={{ padding: '6px 8px', fontSize: 12, color: '#DC2626' }}
-                            onClick={() => handleExcluirOp(op)}
-                            title="Cancelar / Excluir OP"
-                          >
-                            🗑️
-                          </button>
-                        </div>
+                {(ordensProducao.length > 0 ? ordensProducao : [
+                  { numero: 'OP-2026-091', dataHora: '2026-11-12 08:30:00', obra: 'Edifício Residencial Serra Dourada · Lajes 4º Pav.', cliente: 'Construtora MT Horizon', fck: 30, volumeM3: 24, totalBateladas: 3, betoneirasEscaladas: ['BT-01', 'BT-02', 'BT-03'], status: 'concluida' },
+                  { numero: 'OP-2026-092', dataHora: '2026-11-12 13:45:00', obra: 'Piso Industrial Galpão de Cargas · Etapa 2', cliente: 'AgroLog Transportes & Logística', fck: 35, volumeM3: 32, totalBateladas: 4, betoneirasEscaladas: ['BT-04', 'BT-05'], status: 'em_pesagem' },
+                  { numero: 'OP-2026-093', dataHora: '2026-11-12 16:15:00', obra: 'Casa Térrea Lote 12 Qd. 08 · Vigas e Baldrames', cliente: 'Eng. Marcelo Dantas', fck: 25, volumeM3: 16, totalBateladas: 2, betoneirasEscaladas: ['BT-03'], status: 'programada' }
+                ]).map((op, idx) => (
+                  <div key={op.numero || idx} style={{ background: 'var(--surface-2)', border: '1px solid var(--joint)', borderRadius: 8, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <b style={{ fontFamily: 'var(--font-data)', fontSize: 15, color: 'var(--serrano-orange-text)' }}>{op.numero}</b>
+                        <span className={`serrano-pill ${op.status === 'concluida' ? 'serrano-p-ok' : op.status === 'em_pesagem' ? 'serrano-p-live' : 'serrano-p-load'}`}>
+                          {op.status === 'concluida' ? 'Concluída' : op.status === 'em_pesagem' ? 'Pesagem dos Silos' : 'Programada'}
+                        </span>
+                        <small style={{ color: 'var(--text-muted)' }}>{op.dataHora}</small>
                       </div>
-
-                      {/* Dados da Obra & Cliente */}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
-                        <div>
-                          <div style={{ fontWeight: 800, fontSize: 15, color: '#0F172A' }}>{op.obra}</div>
-                          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
-                            Cliente: <b>{op.cliente}</b> {op.endereco ? `· ${op.endereco}` : ''}
-                          </div>
-                        </div>
-
-                        <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          <div>
-                            Traço: <b style={{ color: 'var(--serrano-orange-text)' }}>FCK {op.fck} MPa</b> · Volume: <b>{op.volumeM3} m³</b> ({op.totalBateladas || Math.ceil(op.volumeM3 / 8)} batelada(s) de 8m³)
-                          </div>
-                          <div>
-                            🚚 Betoneiras: <b>{(op.betoneirasEscaladas || []).join(', ') || 'BT-01'}</b> {op.motorista ? `(Motorista: ${op.motorista})` : ''}
-                          </div>
-                          <div>
-                            📐 Slump Test: Previsto: <b>{op.slumpPrevistoCm || '12 ± 2 cm'}</b>
-                            {real?.slumpMedidoCm && (
-                              <span style={{ marginLeft: 8, color: '#16A34A', fontWeight: 700 }}>
-                                · Medido na Carga: {real.slumpMedidoCm} cm ✓
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Quadro Rápido de Pesagem Teórica vs Real */}
-                      <div style={{ background: 'var(--card-bg, #fff)', border: '1px solid var(--joint)', borderRadius: 8, padding: '10px 14px', fontSize: 12 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                          <b style={{ textTransform: 'uppercase', fontSize: 11, color: 'var(--text-muted)' }}>
-                            Balança dos Silos &amp; Insumos Estequiométricos (NBR 7212):
-                          </b>
-                          {real ? (
-                            <span style={{ color: '#16A34A', fontWeight: 800, fontSize: 11 }}>✓ Pesagem Real Apontada</span>
-                          ) : (
-                            <span style={{ color: '#92400E', fontWeight: 700, fontSize: 11 }}>⏳ Aguardando Pesagem na Balança</span>
-                          )}
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
-                          <div>
-                            <span style={{ color: 'var(--text-muted)' }}>Cimento CP II:</span><br />
-                            <b>{Number(teo.cimentoKg || 0).toLocaleString('pt-BR')} kg</b>
-                            {real?.cimentoKg && <span style={{ color: '#16A34A', fontSize: 11 }}> → {Number(real.cimentoKg).toLocaleString('pt-BR')} kg</span>}
-                          </div>
-                          <div>
-                            <span style={{ color: 'var(--text-muted)' }}>Areia Média:</span><br />
-                            <b>{Number(teo.areiaKg || 0).toLocaleString('pt-BR')} kg</b>
-                            {real?.areiaKg && <span style={{ color: '#16A34A', fontSize: 11 }}> → {Number(real.areiaKg).toLocaleString('pt-BR')} kg</span>}
-                          </div>
-                          <div>
-                            <span style={{ color: 'var(--text-muted)' }}>Brita 1:</span><br />
-                            <b>{Number(teo.britaKg || 0).toLocaleString('pt-BR')} kg</b>
-                            {real?.britaKg && <span style={{ color: '#16A34A', fontSize: 11 }}> → {Number(real.britaKg).toLocaleString('pt-BR')} kg</span>}
-                          </div>
-                          <div>
-                            <span style={{ color: 'var(--text-muted)' }}>Água Potável:</span><br />
-                            <b>{Number(teo.aguaL || 0).toLocaleString('pt-BR')} L</b>
-                            {real?.aguaL && <span style={{ color: '#16A34A', fontSize: 11 }}> → {Number(real.aguaL).toLocaleString('pt-BR')} L</span>}
-                          </div>
-                          <div>
-                            <span style={{ color: 'var(--text-muted)' }}>Aditivo Plastificante:</span><br />
-                            <b>{Number(teo.aditivoL || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1 })} L</b>
-                            {real?.aditivoL && <span style={{ color: '#16A34A', fontSize: 11 }}> → {Number(real.aditivoL).toLocaleString('pt-BR', { minimumFractionDigits: 1 })} L</span>}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Avanço Rápido de Status */}
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, borderTop: '1px solid var(--joint)', paddingTop: 10 }}>
-                        <small style={{ color: 'var(--text-muted)' }}>Mudar Status:</small>
-                        {op.status !== 'programada' && (
-                          <button
-                            type="button"
-                            className="btn-serrano"
-                            style={{ padding: '4px 8px', fontSize: 11 }}
-                            onClick={() => handleMudarStatusOp(op, 'programada')}
-                          >
-                            Programada
-                          </button>
-                        )}
-                        {op.status !== 'em_pesagem' && (
-                          <button
-                            type="button"
-                            className="btn-serrano"
-                            style={{ padding: '4px 8px', fontSize: 11, background: '#EFF6FF', color: '#1E40AF', borderColor: '#3B82F6' }}
-                            onClick={() => handleMudarStatusOp(op, 'em_pesagem')}
-                          >
-                            Em Pesagem Silos
-                          </button>
-                        )}
-                        {op.status !== 'concluida' && (
-                          <button
-                            type="button"
-                            className="btn-serrano"
-                            style={{ padding: '4px 8px', fontSize: 11, background: '#DCFCE7', color: '#166534', borderColor: '#22C55E' }}
-                            onClick={() => handleMudarStatusOp(op, 'concluida')}
-                          >
-                            ✓ Concluir OP
-                          </button>
-                        )}
+                      <div style={{ fontWeight: 700, fontSize: 14, marginTop: 4 }}>{op.obra}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Cliente: {op.cliente}</div>
+                      <div style={{ fontSize: 13, marginTop: 4 }}>
+                        Traço: <b>FCK {op.fck} MPa</b> · Volume: <b>{op.volumeM3} m³</b> ({op.totalBateladas} bateladas de usina) · Veículos: <b>{(op.betoneirasEscaladas || []).join(', ')}</b>
                       </div>
                     </div>
-                  );
-                })}
+                    <div>
+                      <button 
+                        type="button" 
+                        className="btn-serrano"
+                        onClick={() => alert(`Ordem de Produção ${op.numero} impressa com sucesso!`)}
+                      >
+                        Imprimir Ordem
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -3580,512 +2705,6 @@ export default function ConcretoUsinaERP() {
         </div>
       )}
 
-{/* ─── MODAL: CRIAR OU EDITAR ORDEM DE PRODUÇÃO (OP) ─── */}
-      {modalOpFormAberto && (
-        <div className="serrano-modal-overlay">
-          <div className="serrano-modal-card" style={{ maxWidth: 760, width: '100%' }}>
-            <h2>
-              {modalOpFormAberto.modo === 'editar' ? `✏️ Editar Ordem de Produção ${formOp.numero}` : '📋 Nova Ordem de Produção (OP) · Dosagem NBR 7212'}
-            </h2>
-            <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '0 0 16px' }}>
-              Planejamento de bateladas industriais, especificação de FCK, alocação de betoneiras e cálculo estequiométrico dos silos.
-            </p>
-
-            <form onSubmit={handleSalvarOp}>
-              <div className="serrano-grid-3col" style={{ gap: 12, marginBottom: 12 }}>
-                <div className="serrano-form-row">
-                  <label>Número da OP</label>
-                  <input
-                    type="text"
-                    required
-                    className="serrano-input"
-                    value={formOp.numero}
-                    onChange={e => setFormOp({ ...formOp, numero: e.target.value })}
-                  />
-                </div>
-
-                <div className="serrano-form-row">
-                  <label>Status da Produção</label>
-                  <select
-                    className="serrano-input"
-                    value={formOp.status}
-                    onChange={e => setFormOp({ ...formOp, status: e.target.value })}
-                  >
-                    <option value="programada">Programada</option>
-                    <option value="em_pesagem">Em Pesagem Silos</option>
-                    <option value="concluida">Concluída / Dosada</option>
-                    <option value="cancelada">Cancelada</option>
-                  </select>
-                </div>
-
-                <div className="serrano-form-row">
-                  <label>Data &amp; Hora Programada</label>
-                  <input
-                    type="text"
-                    className="serrano-input"
-                    value={formOp.dataHora}
-                    onChange={e => setFormOp({ ...formOp, dataHora: e.target.value })}
-                    placeholder="2026-11-12 14:00"
-                  />
-                </div>
-              </div>
-
-              <div className="serrano-grid-2col" style={{ gap: 12, marginBottom: 12 }}>
-                <div className="serrano-form-row">
-                  <label>Cliente / Construtora *</label>
-                  <input
-                    type="text"
-                    required
-                    className="serrano-input"
-                    value={formOp.cliente}
-                    onChange={e => setFormOp({ ...formOp, cliente: e.target.value })}
-                    placeholder="Ex: Construtora MT Horizon"
-                  />
-                </div>
-
-                <div className="serrano-form-row">
-                  <label>Obra &amp; Etapa Concretagem *</label>
-                  <input
-                    type="text"
-                    required
-                    className="serrano-input"
-                    value={formOp.obra}
-                    onChange={e => setFormOp({ ...formOp, obra: e.target.value })}
-                    placeholder="Ex: Edifício Belvedere · Lajes 3º Pav."
-                  />
-                </div>
-              </div>
-
-              <div className="serrano-form-row" style={{ marginBottom: 12 }}>
-                <label>Endereço / Local de Descarga</label>
-                <input
-                  type="text"
-                  className="serrano-input"
-                  value={formOp.endereco}
-                  onChange={e => setFormOp({ ...formOp, endereco: e.target.value })}
-                  placeholder="Rua, Bairro e Município (Ex: Av. Brasil, 1500 · Tangará da Serra/MT)"
-                />
-              </div>
-
-              <div className="serrano-grid-3col" style={{ gap: 12, marginBottom: 14 }}>
-                <div className="serrano-form-row">
-                  <label>Resistência (FCK MPa) *</label>
-                  <select
-                    className="serrano-input"
-                    value={formOp.fck}
-                    onChange={e => setFormOp({ ...formOp, fck: Number(e.target.value) })}
-                  >
-                    <option value={20}>FCK 20 MPa (Piso / Magro)</option>
-                    <option value={25}>FCK 25 MPa (Estrutural Padrão)</option>
-                    <option value={30}>FCK 30 MPa (Lajes / Pilares)</option>
-                    <option value={35}>FCK 35 MPa (Piso Industrial)</option>
-                    <option value={40}>FCK 40 MPa (Alta Resistência)</option>
-                  </select>
-                </div>
-
-                <div className="serrano-form-row">
-                  <label>Volume Total (m³) *</label>
-                  <input
-                    type="number"
-                    step="1"
-                    min="1"
-                    required
-                    className="serrano-input"
-                    value={formOp.volumeM3}
-                    onChange={e => setFormOp({ ...formOp, volumeM3: Number(e.target.value) })}
-                  />
-                </div>
-
-                <div className="serrano-form-row">
-                  <label>Slump Test Previsto (Abatimento)</label>
-                  <input
-                    type="text"
-                    className="serrano-input"
-                    value={formOp.slumpPrevistoCm}
-                    onChange={e => setFormOp({ ...formOp, slumpPrevistoCm: e.target.value })}
-                    placeholder="12 ± 2 cm"
-                  />
-                </div>
-              </div>
-
-              {/* Quadro Estequiométrico Teórico Calculado em Tempo Real */}
-              <div style={{ background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 8, padding: '12px 16px', marginBottom: 14 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <b style={{ fontSize: 11, textTransform: 'uppercase', color: '#475569' }}>
-                    🧪 Previsão Estequiométrica de Insumos NBR 7212 ({formOp.volumeM3 || 0} m³ · FCK {formOp.fck} MPa):
-                  </b>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#2563EB' }}>
-                    {calculoTeoricoFormOp.totalBateladas} batelada(s) de usina
-                  </span>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 8, fontSize: 11 }}>
-                  <div>Cimento CP II:<br /><b style={{ fontSize: 13, color: '#0F172A' }}>{Number(calculoTeoricoFormOp.cimentoKg).toLocaleString('pt-BR')} kg</b></div>
-                  <div>Areia Média:<br /><b style={{ fontSize: 13, color: '#0F172A' }}>{Number(calculoTeoricoFormOp.areiaKg).toLocaleString('pt-BR')} kg</b></div>
-                  <div>Brita 1:<br /><b style={{ fontSize: 13, color: '#0F172A' }}>{Number(calculoTeoricoFormOp.britaKg).toLocaleString('pt-BR')} kg</b></div>
-                  <div>Água Dosagem:<br /><b style={{ fontSize: 13, color: '#0F172A' }}>{Number(calculoTeoricoFormOp.aguaL).toLocaleString('pt-BR')} L</b></div>
-                  <div>Aditivo Plast.:<br /><b style={{ fontSize: 13, color: '#0F172A' }}>{calculoTeoricoFormOp.aditivoL} L</b></div>
-                  <div>Peso Total:<br /><b style={{ fontSize: 13, color: 'var(--serrano-orange-text)' }}>{Number(calculoTeoricoFormOp.pesoTotalKg).toLocaleString('pt-BR')} kg</b></div>
-                </div>
-              </div>
-
-              <div className="serrano-grid-3col" style={{ gap: 12, marginBottom: 14 }}>
-                <div className="serrano-form-row">
-                  <label>Betoneiras Escaladas</label>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                    {['BT-01', 'BT-02', 'BT-03', 'BT-04', 'BT-05', 'BT-06'].map(v => {
-                      const sel = (formOp.betoneirasEscaladas || []).includes(v);
-                      return (
-                        <button
-                          key={v}
-                          type="button"
-                          className={`btn-serrano ${sel ? 'pri' : ''}`}
-                          style={{ padding: '4px 8px', fontSize: 11 }}
-                          onClick={() => {
-                            const atual = formOp.betoneirasEscaladas || [];
-                            const novo = sel ? atual.filter(x => x !== v) : [...atual, v];
-                            setFormOp({ ...formOp, betoneirasEscaladas: novo.length > 0 ? novo : [v] });
-                          }}
-                        >
-                          {v}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="serrano-form-row">
-                  <label>Operador da Central de Dosagem</label>
-                  <input
-                    type="text"
-                    className="serrano-input"
-                    value={formOp.operador}
-                    onChange={e => setFormOp({ ...formOp, operador: e.target.value })}
-                    placeholder="Carlos Eduardo"
-                  />
-                </div>
-
-                <div className="serrano-form-row">
-                  <label>Motorista / Condutor</label>
-                  <input
-                    type="text"
-                    className="serrano-input"
-                    value={formOp.motorista}
-                    onChange={e => setFormOp({ ...formOp, motorista: e.target.value })}
-                    placeholder="Ex: Marcos Silveira"
-                  />
-                </div>
-              </div>
-
-              <div className="serrano-form-row" style={{ marginBottom: 16 }}>
-                <label>Observações Técnicas &amp; Rastreabilidade</label>
-                <textarea
-                  className="serrano-input"
-                  rows={2}
-                  value={formOp.observacoes}
-                  onChange={e => setFormOp({ ...formOp, observacoes: e.target.value })}
-                  placeholder="Instruções de mistura, tipo de brita, cuidados na descarga..."
-                />
-              </div>
-
-              <div className="serrano-modal-footer">
-                <button
-                  type="button"
-                  className="btn-serrano"
-                  onClick={() => setModalOpFormAberto(null)}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={salvandoOp}
-                  className="btn-serrano pri"
-                >
-                  {salvandoOp ? 'Salvando OP no Datastore...' : '✓ Salvar Ordem de Produção'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ─── MODAL: VISUALIZAR DETALHES COMPLETOS DA OP ─── */}
-      {modalOpVisualizarAberto && (
-        <div className="serrano-modal-overlay">
-          <div className="serrano-modal-card" style={{ maxWidth: 740, width: '100%' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid var(--serrano-orange)', paddingBottom: 12, marginBottom: 16 }}>
-              <div>
-                <h2 style={{ margin: 0, fontSize: 20 }}>Ficha Técnica · {modalOpVisualizarAberto.numero}</h2>
-                <small style={{ color: 'var(--text-muted)' }}>Rastreabilidade de Usina e Controle Tecnológico NBR 7212:2021</small>
-              </div>
-              <span className={`serrano-pill ${modalOpVisualizarAberto.status === 'concluida' ? 'serrano-p-ok' : modalOpVisualizarAberto.status === 'em_pesagem' ? 'serrano-p-live' : 'serrano-p-load'}`}>
-                {modalOpVisualizarAberto.status === 'concluida' ? 'Concluída' : modalOpVisualizarAberto.status === 'em_pesagem' ? 'Pesagem Silos' : 'Programada'}
-              </span>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 16 }}>
-              <div style={{ background: 'var(--surface-2)', padding: 14, borderRadius: 8 }}>
-                <b style={{ fontSize: 11, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Destino &amp; Obra</b>
-                <div style={{ fontWeight: 800, fontSize: 14, marginTop: 4 }}>{modalOpVisualizarAberto.obra}</div>
-                <div style={{ fontSize: 13, marginTop: 2 }}>Cliente: <b>{modalOpVisualizarAberto.cliente}</b></div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{modalOpVisualizarAberto.endereco || 'Tangará da Serra - MT'}</div>
-                <div style={{ fontSize: 12, marginTop: 6 }}>Data/Hora: <b>{modalOpVisualizarAberto.dataHora}</b></div>
-              </div>
-
-              <div style={{ background: 'var(--surface-2)', padding: 14, borderRadius: 8 }}>
-                <b style={{ fontSize: 11, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Especificação do Traço</b>
-                <div style={{ fontWeight: 800, fontSize: 14, color: 'var(--serrano-orange-text)', marginTop: 4 }}>
-                  FCK {modalOpVisualizarAberto.fck} MPa · {modalOpVisualizarAberto.volumeM3} m³
-                </div>
-                <div style={{ fontSize: 13, marginTop: 2 }}>Bateladas Usina: <b>{modalOpVisualizarAberto.totalBateladas || Math.ceil(modalOpVisualizarAberto.volumeM3 / 8)} de 8m³</b></div>
-                <div style={{ fontSize: 12, marginTop: 2 }}>Betoneiras: <b>{(modalOpVisualizarAberto.betoneirasEscaladas || []).join(', ')}</b></div>
-                <div style={{ fontSize: 12, marginTop: 2 }}>Operador Central: <b>{modalOpVisualizarAberto.operador || 'Carlos Eduardo'}</b></div>
-                <div style={{ fontSize: 12, marginTop: 2 }}>Slump Previsto: <b>{modalOpVisualizarAberto.slumpPrevistoCm || '12 ± 2 cm'}</b></div>
-              </div>
-            </div>
-
-            {/* Tabela de Insumos da Balança dos Silos */}
-            <div style={{ background: 'var(--surface-2)', borderRadius: 8, padding: 14, marginBottom: 16 }}>
-              <b style={{ fontSize: 11, textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>
-                Dosagem Estequiométrica &amp; Pesagem Balança dos Silos (NBR 7212)
-              </b>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                <thead>
-                  <tr style={{ background: 'var(--joint)', textAlign: 'left' }}>
-                    <th style={{ padding: '6px 8px' }}>Insumo</th>
-                    <th style={{ padding: '6px 8px', textAlign: 'right' }}>Teórico (kg/L)</th>
-                    <th style={{ padding: '6px 8px', textAlign: 'right' }}>Real Balança</th>
-                    <th style={{ padding: '6px 8px', textAlign: 'right' }}>Status NBR</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td style={{ padding: '6px 8px' }}>Cimento CP II-F-32</td>
-                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>{Number(modalOpVisualizarAberto.consumoTeorico?.cimentoKg || 0).toLocaleString('pt-BR')} kg</td>
-                    <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700 }}>
-                      {modalOpVisualizarAberto.consumoRealBalança?.cimentoKg ? `${Number(modalOpVisualizarAberto.consumoRealBalança.cimentoKg).toLocaleString('pt-BR')} kg` : '—'}
-                    </td>
-                    <td style={{ padding: '6px 8px', textAlign: 'right', color: '#16A34A' }}>±2.0% Tolerância</td>
-                  </tr>
-                  <tr>
-                    <td style={{ padding: '6px 8px' }}>Areia Média Lavada</td>
-                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>{Number(modalOpVisualizarAberto.consumoTeorico?.areiaKg || 0).toLocaleString('pt-BR')} kg</td>
-                    <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700 }}>
-                      {modalOpVisualizarAberto.consumoRealBalança?.areiaKg ? `${Number(modalOpVisualizarAberto.consumoRealBalança.areiaKg).toLocaleString('pt-BR')} kg` : '—'}
-                    </td>
-                    <td style={{ padding: '6px 8px', textAlign: 'right', color: '#16A34A' }}>±3.0% Tolerância</td>
-                  </tr>
-                  <tr>
-                    <td style={{ padding: '6px 8px' }}>Brita 1 Granítica</td>
-                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>{Number(modalOpVisualizarAberto.consumoTeorico?.britaKg || 0).toLocaleString('pt-BR')} kg</td>
-                    <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700 }}>
-                      {modalOpVisualizarAberto.consumoRealBalança?.britaKg ? `${Number(modalOpVisualizarAberto.consumoRealBalança.britaKg).toLocaleString('pt-BR')} kg` : '—'}
-                    </td>
-                    <td style={{ padding: '6px 8px', textAlign: 'right', color: '#16A34A' }}>±3.0% Tolerância</td>
-                  </tr>
-                  <tr>
-                    <td style={{ padding: '6px 8px' }}>Água Potável de Dosagem</td>
-                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>{Number(modalOpVisualizarAberto.consumoTeorico?.aguaL || 0).toLocaleString('pt-BR')} L</td>
-                    <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700 }}>
-                      {modalOpVisualizarAberto.consumoRealBalança?.aguaL ? `${Number(modalOpVisualizarAberto.consumoRealBalança.aguaL).toLocaleString('pt-BR')} L` : '—'}
-                    </td>
-                    <td style={{ padding: '6px 8px', textAlign: 'right', color: '#16A34A' }}>±1.0% Tolerância</td>
-                  </tr>
-                  <tr>
-                    <td style={{ padding: '6px 8px' }}>Aditivo Plastificante</td>
-                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>{Number(modalOpVisualizarAberto.consumoTeorico?.aditivoL || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1 })} L</td>
-                    <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700 }}>
-                      {modalOpVisualizarAberto.consumoRealBalança?.aditivoL ? `${Number(modalOpVisualizarAberto.consumoRealBalança.aditivoL).toLocaleString('pt-BR', { minimumFractionDigits: 1 })} L` : '—'}
-                    </td>
-                    <td style={{ padding: '6px 8px', textAlign: 'right', color: '#16A34A' }}>±3.0% Tolerância</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
-              <b>Observações:</b> {modalOpVisualizarAberto.observacoes || 'Sem observações adicionais para esta OP.'}
-            </div>
-
-            <div className="serrano-modal-footer">
-              <button
-                type="button"
-                className="btn-serrano"
-                onClick={() => {
-                  const op = modalOpVisualizarAberto;
-                  setModalOpVisualizarAberto(null);
-                  abrirEditarOp(op);
-                }}
-              >
-                ✏️ Editar Dados
-              </button>
-              <button
-                type="button"
-                className="btn-serrano"
-                onClick={() => {
-                  const op = modalOpVisualizarAberto;
-                  setModalOpVisualizarAberto(null);
-                  abrirApontamentoOp(op);
-                }}
-              >
-                ⚖️ Apontar Pesagem Silos
-              </button>
-              <button
-                type="button"
-                className="btn-serrano"
-                onClick={() => handleImprimirOp(modalOpVisualizarAberto)}
-              >
-                🖨️ Imprimir Ficha A4
-              </button>
-              <button
-                type="button"
-                className="btn-serrano pri"
-                onClick={() => setModalOpVisualizarAberto(null)}
-              >
-                Fechar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ─── MODAL: APONTAMENTO DE PESAGEM REAL DA BALANÇA DOS SILOS ─── */}
-      {modalOpApontamentoAberto && (
-        <div className="serrano-modal-overlay">
-          <div className="serrano-modal-card" style={{ maxWidth: 620, width: '100%' }}>
-            <h2>⚖️ Apontar Pesagem da Balança dos Silos · {modalOpApontamentoAberto.numero}</h2>
-            <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '0 0 16px' }}>
-              Lançamento dos quilos e litros efetivamente medidos na balança automática da central de dosagem (NBR 7212).
-            </p>
-
-            <form onSubmit={handleSalvarApontamento}>
-              <div style={{ background: 'var(--surface-2)', padding: 12, borderRadius: 8, marginBottom: 14 }}>
-                <div style={{ fontSize: 13, fontWeight: 700 }}>{modalOpApontamentoAberto.obra}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  Cliente: <b>{modalOpApontamentoAberto.cliente}</b> · Volume: <b>{modalOpApontamentoAberto.volumeM3} m³</b> · Traço: <b>FCK {modalOpApontamentoAberto.fck} MPa</b>
-                </div>
-              </div>
-
-              <div className="serrano-grid-2col" style={{ gap: 12, marginBottom: 12 }}>
-                <div className="serrano-form-row">
-                  <label>Cimento CP II Balança (kg) *</label>
-                  <input
-                    type="number"
-                    required
-                    className="serrano-input"
-                    value={formApontamentoOp.cimentoKg}
-                    onChange={e => setFormApontamentoOp({ ...formApontamentoOp, cimentoKg: e.target.value })}
-                    placeholder="Ex: 9150"
-                  />
-                </div>
-
-                <div className="serrano-form-row">
-                  <label>Areia Média Silo (kg) *</label>
-                  <input
-                    type="number"
-                    required
-                    className="serrano-input"
-                    value={formApontamentoOp.areiaKg}
-                    onChange={e => setFormApontamentoOp({ ...formApontamentoOp, areiaKg: e.target.value })}
-                    placeholder="Ex: 20900"
-                  />
-                </div>
-              </div>
-
-              <div className="serrano-grid-2col" style={{ gap: 12, marginBottom: 12 }}>
-                <div className="serrano-form-row">
-                  <label>Brita 1 Granítica Balança (kg) *</label>
-                  <input
-                    type="number"
-                    required
-                    className="serrano-input"
-                    value={formApontamentoOp.britaKg}
-                    onChange={e => setFormApontamentoOp({ ...formApontamentoOp, britaKg: e.target.value })}
-                    placeholder="Ex: 27800"
-                  />
-                </div>
-
-                <div className="serrano-form-row">
-                  <label>Água de Dosagem (Litros) *</label>
-                  <input
-                    type="number"
-                    required
-                    className="serrano-input"
-                    value={formApontamentoOp.aguaL}
-                    onChange={e => setFormApontamentoOp({ ...formApontamentoOp, aguaL: e.target.value })}
-                    placeholder="Ex: 4080"
-                  />
-                </div>
-              </div>
-
-              <div className="serrano-grid-3col" style={{ gap: 12, marginBottom: 14 }}>
-                <div className="serrano-form-row">
-                  <label>Aditivo Plastificante (L)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    className="serrano-input"
-                    value={formApontamentoOp.aditivoL}
-                    onChange={e => setFormApontamentoOp({ ...formApontamentoOp, aditivoL: e.target.value })}
-                    placeholder="Ex: 72.0"
-                  />
-                </div>
-
-                <div className="serrano-form-row">
-                  <label>Slump Medido na Carga (cm)</label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    className="serrano-input"
-                    value={formApontamentoOp.slumpMedidoCm}
-                    onChange={e => setFormApontamentoOp({ ...formApontamentoOp, slumpMedidoCm: e.target.value })}
-                    placeholder="12.0"
-                  />
-                </div>
-
-                <div className="serrano-form-row">
-                  <label>Lacre do Caminhão</label>
-                  <input
-                    type="text"
-                    className="serrano-input"
-                    value={formApontamentoOp.lacreCarga}
-                    onChange={e => setFormApontamentoOp({ ...formApontamentoOp, lacreCarga: e.target.value })}
-                    placeholder="LAC-2026-098"
-                  />
-                </div>
-              </div>
-
-              <div className="serrano-form-row" style={{ marginBottom: 16 }}>
-                <label>Status da OP após apontamento</label>
-                <select
-                  className="serrano-input"
-                  value={formApontamentoOp.status}
-                  onChange={e => setFormApontamentoOp({ ...formApontamentoOp, status: e.target.value })}
-                >
-                  <option value="concluida">✓ Concluir OP &amp; Dar Baixa nos Silos</option>
-                  <option value="em_pesagem">Manter em Pesagem</option>
-                </select>
-              </div>
-
-              <div className="serrano-modal-footer">
-                <button
-                  type="button"
-                  className="btn-serrano"
-                  onClick={() => setModalOpApontamentoAberto(null)}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={salvandoApontamento}
-                  className="btn-serrano pri"
-                >
-                  {salvandoApontamento ? "Gravando Pesagem..." : "✓ Confirmar Pesagem & Atualizar Silos"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
       {/* ─── MODAL: ROMPIMENTO DE CP NA PRENSA DIGITAL NBR 5739 ─── */}
       {modalRupturaAberto && (
         <div className="serrano-modal-overlay">
@@ -4276,7 +2895,7 @@ export default function ConcretoUsinaERP() {
                   className="btn-serrano pri"
                   disabled={salvandoRuptura}
                 >
-                  {salvandoRuptura ? "Gravando Ensaio..." : "Confirmar Ruptura na Prensa"}
+                  {salvandoRuptura ? 'Gravando Ensaio...' : 'Confirmar Ruptura na Prensa'}
                 </button>
               </div>
             </form>
@@ -4284,7 +2903,7 @@ export default function ConcretoUsinaERP() {
         </div>
       )}
 
-{/* ─── MODAL: LAUDO NBR 5739 COMPLETO ─── */}
+      {/* ─── MODAL: LAUDO NBR 5739 COMPLETO ─── */}
       {modalLaudoAberto && (
         <div className="serrano-modal-overlay">
           <div className="serrano-modal-card" style={{ maxWidth: 720 }}>
@@ -4374,304 +2993,6 @@ export default function ConcretoUsinaERP() {
           </div>
         </div>
       )}
-      
-      {/* ─── MODAL: NOVA PROPOSTA COMERCIAL DE CONCRETO ─── */}
-      {modalNovaPropostaAberto && (
-        <div className="serrano-modal-overlay">
-          <div className="serrano-modal-card" style={{ maxWidth: 640, maxHeight: "90vh", overflowY: "auto" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--joint)", paddingBottom: 12, marginBottom: 16 }}>
-              <div>
-                <h3 style={{ margin: 0, fontFamily: "var(--font-display)", fontSize: 18 }}>Nova Proposta Comercial de Concretagem</h3>
-                <small style={{ color: "var(--text-muted)" }}>Tangará da Serra · Usina Convicta & Mineração</small>
-              </div>
-              <button
-                type="button"
-                className="btn-serrano"
-                style={{ padding: "4px 8px" }}
-                onClick={() => setModalNovaPropostaAberto(false)}
-              >
-                ✕
-              </button>
-            </div>
-            <form onSubmit={handleCriarProposta}>
-              <div className="serrano-form-row">
-                <label>Cliente / Construtora *</label>
-                <input
-                  type="text"
-                  className="serrano-input"
-                  required
-                  placeholder="Ex: Construtora MT Horizon Ltda"
-                  value={formProposta.cliente}
-                  onChange={e => setFormProposta({ ...formProposta, cliente: e.target.value })}
-                />
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div className="serrano-form-row">
-                  <label>Contato / Engenheiro(a)</label>
-                  <input
-                    type="text"
-                    className="serrano-input"
-                    placeholder="Ex: Eng. Lucas Silveira"
-                    value={formProposta.contato}
-                    onChange={e => setFormProposta({ ...formProposta, contato: e.target.value })}
-                  />
-                </div>
-                <div className="serrano-form-row">
-                  <label>Telefone / WhatsApp</label>
-                  <input
-                    type="text"
-                    className="serrano-input"
-                    placeholder="(65) 99999-0000"
-                    value={formProposta.telefone}
-                    onChange={e => setFormProposta({ ...formProposta, telefone: e.target.value })}
-                  />
-                </div>
-              </div>
-              <div className="serrano-form-row">
-                <label>Nome da Obra *</label>
-                <input
-                  type="text"
-                  className="serrano-input"
-                  required
-                  placeholder="Ex: Edifício Residencial Jardins · Laje 3º Pav."
-                  value={formProposta.obra}
-                  onChange={e => setFormProposta({ ...formProposta, obra: e.target.value })}
-                />
-              </div>
-              <div className="serrano-form-row">
-                <label>Endereço de Descarga</label>
-                <input
-                  type="text"
-                  className="serrano-input"
-                  placeholder="Av. Brasil, 2400 · Centro · Tangará da Serra/MT"
-                  value={formProposta.endereco}
-                  onChange={e => setFormProposta({ ...formProposta, endereco: e.target.value })}
-                />
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div className="serrano-form-row">
-                  <label>Classe FCK (Resistência)</label>
-                  <select
-                    className="serrano-input"
-                    value={formProposta.fck}
-                    onChange={e => setFormProposta({ ...formProposta, fck: Number(e.target.value) })}
-                  >
-                    <option value={20}>FCK 20 MPa (R$ 380/m³)</option>
-                    <option value={25}>FCK 25 MPa (R$ 410/m³ · Padrão)</option>
-                    <option value={30}>FCK 30 MPa (R$ 440/m³ · Estrutural)</option>
-                    <option value={35}>FCK 35 MPa (R$ 480/m³ · Piso Industrial)</option>
-                    <option value={40}>FCK 40 MPa (R$ 520/m³ · Alta Resistência)</option>
-                  </select>
-                </div>
-                <div className="serrano-form-row">
-                  <label>Volume Total (m³)</label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="1"
-                    className="serrano-input"
-                    value={formProposta.volumeM3}
-                    onChange={e => setFormProposta({ ...formProposta, volumeM3: Number(e.target.value) })}
-                  />
-                </div>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div className="serrano-form-row">
-                  <label>Serviço de Bombeamento</label>
-                  <select
-                    className="serrano-input"
-                    value={formProposta.tipoBomba}
-                    onChange={e => setFormProposta({ ...formProposta, tipoBomba: e.target.value })}
-                  >
-                    <option value="Bomba Lança 32m">Bomba Lança 32m (R$ 750 fixo)</option>
-                    <option value="Bomba Lança 38m">Bomba Lança 38m (R$ 850 fixo)</option>
-                    <option value="Bomba Estática">Bomba Estática de Solo (R$ 700)</option>
-                    <option value="Descarga Direta (Sem Bomba)">Descarga Direta em Calha (R$ 0)</option>
-                  </select>
-                </div>
-                <div className="serrano-form-row">
-                  <label>Distância / Frete (km fora de Tangará)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    className="serrano-input"
-                    placeholder="0 km = Perímetro urbano"
-                    value={formProposta.freteKm || 0}
-                    onChange={e => setFormProposta({ ...formProposta, freteKm: Number(e.target.value) })}
-                  />
-                </div>
-              </div>
-              <div className="serrano-form-row">
-                <label>Condição de Pagamento</label>
-                <input
-                  type="text"
-                  className="serrano-input"
-                  placeholder="Ex: Boleto Faturado 14/28 DDL ou PIX à Vista"
-                  value={formProposta.condicaoPagamento}
-                  onChange={e => setFormProposta({ ...formProposta, condicaoPagamento: e.target.value })}
-                />
-              </div>
-
-              {/* Box de Estimativa em Tempo Real */}
-              {(() => {
-                const fck = Number(formProposta.fck) || 25;
-                const m3 = Number(formProposta.volumeM3) || 8;
-                const pM3 = fck === 20 ? 380 : fck === 25 ? 410 : fck === 30 ? 440 : fck === 35 ? 480 : fck === 40 ? 520 : 340;
-                const subConcreto = m3 * pM3;
-                let taxaB = 0;
-                if (formProposta.tipoBomba && formProposta.tipoBomba.toLowerCase().includes("bomba")) {
-                  taxaB = 750 + (m3 > 25 ? (m3 - 25) * 25 : 0);
-                }
-                const frete = (Number(formProposta.freteKm) || 0) * 12;
-                const total = subConcreto + taxaB + frete;
-                return (
-                  <div style={{ background: "var(--surface-2)", padding: 14, borderRadius: 8, border: "1px solid var(--joint)", marginTop: 12 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
-                      <span>Concreto FCK {fck} MPa ({m3} m³ x R$ {pM3}):</span>
-                      <b>R$ {subConcreto.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</b>
-                    </div>
-                    {taxaB > 0 && (
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
-                        <span>Taxa de Bombeamento ({formProposta.tipoBomba}):</span>
-                        <b>R$ {taxaB.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</b>
-                      </div>
-                    )}
-                    {frete > 0 && (
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
-                        <span>Frete Regional ({formProposta.freteKm} km):</span>
-                        <b>R$ {frete.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</b>
-                      </div>
-                    )}
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, fontWeight: 800, marginTop: 8, borderTop: "1px solid var(--joint)", paddingTop: 8, color: "var(--serrano-orange-text)" }}>
-                      <span>Total Estimado da Proposta:</span>
-                      <span>R$ {total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <div className="serrano-modal-footer" style={{ marginTop: 16 }}>
-                <button
-                  type="button"
-                  className="btn-serrano"
-                  onClick={() => setModalNovaPropostaAberto(false)}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="btn-serrano pri"
-                >
-                  ✓ Gerar Proposta Comercial
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ─── MODAL: DETALHES DA PROPOSTA COMERCIAL & CONVERSÃO EM OP ─── */}
-      {modalVisualizarProposta && (
-        <div className="serrano-modal-overlay">
-          <div className="serrano-modal-card" style={{ maxWidth: 660, maxHeight: "90vh", overflowY: "auto" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid var(--joint)", paddingBottom: 12 }}>
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <h3 style={{ margin: 0, fontFamily: "var(--font-display)", fontSize: 18 }}>
-                    Proposta Comercial Nº {modalVisualizarProposta.numero}
-                  </h3>
-                  <span className={`serrano-pill ${modalVisualizarProposta.status === "aprovada" || modalVisualizarProposta.status === "aprovada_op" ? "serrano-p-ok" : "serrano-p-warn"}`}>
-                    {modalVisualizarProposta.status === "aprovada_op" ? "✓ Convertida em OP" : modalVisualizarProposta.status === "aprovada" ? "✓ Aprovada" : modalVisualizarProposta.status}
-                  </span>
-                </div>
-                <small style={{ color: "var(--text-muted)" }}>Serrano Concreto Usinado & Mineração · Tangará da Serra - MT</small>
-              </div>
-              <button
-                type="button"
-                className="btn-serrano"
-                style={{ padding: "4px 8px" }}
-                onClick={() => setModalVisualizarProposta(null)}
-              >
-                ✕
-              </button>
-            </div>
-            <div style={{ padding: "16px 0", display: "grid", gap: 12 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <div><small style={{ color: "var(--text-muted)" }}>Cliente:</small> <b style={{ display: "block" }}>{modalVisualizarProposta.cliente}</b></div>
-                <div><small style={{ color: "var(--text-muted)" }}>Contato:</small> <b style={{ display: "block" }}>{modalVisualizarProposta.contato} ({modalVisualizarProposta.telefone})</b></div>
-                <div><small style={{ color: "var(--text-muted)" }}>Obra:</small> <b style={{ display: "block" }}>{modalVisualizarProposta.obra}</b></div>
-                <div><small style={{ color: "var(--text-muted)" }}>Endereço de Entrega:</small> <b style={{ display: "block" }}>{modalVisualizarProposta.endereco}</b></div>
-              </div>
-              <div style={{ background: "var(--surface-2)", padding: 12, borderRadius: 8, border: "1px solid var(--joint)", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, textAlign: "center" }}>
-                <div>
-                  <small style={{ color: "var(--text-muted)" }}>Resistência</small>
-                  <b style={{ display: "block", fontSize: 15, color: "var(--serrano-orange-text)" }}>FCK {modalVisualizarProposta.fck} MPa</b>
-                </div>
-                <div>
-                  <small style={{ color: "var(--text-muted)" }}>Volume</small>
-                  <b style={{ display: "block", fontSize: 15 }}>{modalVisualizarProposta.volumeM3} m³</b>
-                </div>
-                <div>
-                  <small style={{ color: "var(--text-muted)" }}>Bombeamento</small>
-                  <b style={{ display: "block", fontSize: 13 }}>{modalVisualizarProposta.tipoBomba}</b>
-                </div>
-                <div>
-                  <small style={{ color: "var(--text-muted)" }}>Valor Total</small>
-                  <b style={{ display: "block", fontSize: 16, color: "var(--status-ok)" }}>
-                    R$ {Number(modalVisualizarProposta.totalProposta || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                  </b>
-                </div>
-              </div>
-              <div>
-                <small style={{ color: "var(--text-muted)" }}>Condição de Pagamento:</small>
-                <div style={{ fontWeight: 600, fontSize: 13, marginTop: 2 }}>{modalVisualizarProposta.condicaoPagamento}</div>
-              </div>
-              <div>
-                <small style={{ color: "var(--text-muted)" }}>Observações Técnicas / NBR:</small>
-                <div style={{ fontSize: 12, color: "var(--text-muted)", background: "var(--surface)", padding: 8, borderRadius: 6, border: "1px solid var(--joint)", marginTop: 2 }}>
-                  {modalVisualizarProposta.observacoes || "Incluso ensaio de slump test na obra e moldagem de 4 corpos de prova com laudo assinado por nossa RT Engª Karin Prestes (CREA-MT 027300)."}
-                </div>
-              </div>
-            </div>
-            <div className="serrano-modal-footer" style={{ borderTop: "1px solid var(--joint)", paddingTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button
-                  type="button"
-                  className="btn-serrano"
-                  onClick={() => handleAtualizarStatusProposta(modalVisualizarProposta.id, "aprovada")}
-                >
-                  ✓ Marcar Aprovada
-                </button>
-                <button
-                  type="button"
-                  className="btn-serrano"
-                  style={{ background: "#25D366", color: "#fff", borderColor: "#25D366", fontWeight: 700 }}
-                  onClick={() => enviarPropostaWhatsApp(modalVisualizarProposta)}
-                >
-                  💬 WhatsApp
-                </button>
-              </div>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button
-                  type="button"
-                  className="btn-serrano"
-                  onClick={() => setModalVisualizarProposta(null)}
-                >
-                  Fechar
-                </button>
-                <button
-                  type="button"
-                  className="btn-serrano pri"
-                  onClick={() => handleConverterPropostaEmOp(modalVisualizarProposta)}
-                >
-                  📋 Converter em Ordem de Produção (OP)
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* COPILOT KYTTOIA INDUSTRIAL MODAL */}
       <ConcretoKyttoIACopilot 
         isOpen={copilotAberto} 
