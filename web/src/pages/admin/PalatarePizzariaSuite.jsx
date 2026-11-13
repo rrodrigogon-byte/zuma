@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { HOLDING_PALATARE_EMPRESA_ID, SERRANO_CONCRETO_EMPRESA_ID } from '../../lib/palatare-constants';
 
 const TABS = [
   { id: 'montador', label: 'Montador de Pizzas', icon: Pizza, badge: 'Multi-Sabores' },
@@ -45,12 +46,12 @@ const TABS = [
   { id: 'delivery', label: 'Delivery Tangará', icon: Truck, badge: 'Zonas & Motoboy' },
   { id: 'crm', label: 'Clientes 360° & CRM', icon: Users, badge: 'RFV & Paladar' },
   { id: 'bi', label: 'Inteligência de Vendas', icon: TrendingUp, badge: 'Curva ABC' },
-  { id: 'grupo', label: 'Grupo Serrano & Palatare', icon: Building2, badge: 'Holding' },
+  { id: 'grupo', label: 'Holding Grupo Palatare', icon: Building2, badge: 'Holding' },
 ];
 
 export default function PalatarePizzariaSuite() {
   const navigate = useNavigate();
-  const { user, empresaAtiva } = useAuth();
+  const { user, empresaAtiva, trocarEmpresa } = useAuth();
   
   // Obter tab inicial da URL
   const queryParams = new URLSearchParams(window.location.search);
@@ -93,6 +94,7 @@ export default function PalatarePizzariaSuite() {
   const [itensQrMesa, setItensQrMesa] = useState(['Pizza de Picanha Especial (Grande 8 Fatias)']);
   const [upsellQrAdicionado, setUpsellQrAdicionado] = useState(false);
   const [pedidoQrEnviado, setPedidoQrEnviado] = useState(false);
+  const [modalDisplayMesa, setModalDisplayMesa] = useState(null);
 
   // Carregar dados da suíte da Palatare
   const carregarDados = async () => {
@@ -1934,6 +1936,41 @@ export default function PalatarePizzariaSuite() {
             </div>
           </div>
 
+          {/* SELETOR DE MESA E DISPARO DE IMPRESSÃO DE DISPLAY */}
+          <div style={{ background: '#1A121F', border: '1px solid rgba(168, 85, 247, 0.3)', borderRadius: 12, padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <label style={{ fontSize: 13, fontWeight: 800, color: '#FFF' }}>Mesa Selecionada no Salão:</label>
+              <select
+                value={mesaQrSimulador}
+                onChange={(e) => setMesaQrSimulador(e.target.value)}
+                style={{ background: '#0F0906', border: '1px solid #A855F7', color: '#FFF', padding: '6px 12px', borderRadius: 8, fontWeight: 800, fontSize: 13 }}
+              >
+                {Array.from({ length: 20 }, (_, i) => (
+                  <option key={i+1} value={String(i+1)}>Mesa {String(i+1).padStart(2, '0')} · Salão Gourmet</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setModalDisplayMesa(mesaQrSimulador)}
+                style={{ background: '#A855F7', color: '#FFF', border: 'none', padding: '8px 16px', borderRadius: 8, fontWeight: 800, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 4px 12px rgba(168, 85, 247, 0.4)' }}
+              >
+                🖨️ Gerar Display Acrílico de Mesa (Mesa {mesaQrSimulador})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(`https://kytto.com.br/cardapio/mesa/palatare-m${mesaQrSimulador}`);
+                  alert(`Link do cardápio da Mesa ${mesaQrSimulador} copiado com sucesso!`);
+                }}
+                style={{ background: 'rgba(255,255,255,0.08)', color: '#FFF', border: '1px solid rgba(255,255,255,0.15)', padding: '8px 14px', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+              >
+                🔗 Copiar Link QR
+              </button>
+            </div>
+          </div>
+
           {/* SIMULADOR DA TELA DO CLIENTE NO CELULAR */}
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 420px) 1fr', gap: 24 }}>
             {/* Mockup do Smartphone */}
@@ -1952,7 +1989,7 @@ export default function PalatarePizzariaSuite() {
                   📱 Palatare Mobile · Salão Ao Vivo
                 </span>
                 <div style={{ fontSize: 16, fontWeight: 900, color: '#FFF' }}>
-                  Mesa 04 · Comanda #CMD-0892
+                  Mesa {mesaQrSimulador.padStart(2, '0')} · Comanda #CMD-0892
                 </div>
               </div>
 
@@ -2463,7 +2500,10 @@ export default function PalatarePizzariaSuite() {
               <div style={{ display: 'flex', gap: 12 }}>
                 <button
                   type="button"
-                  onClick={() => navigate('/admin/concreto?secao=empresa-holding')}
+                  onClick={async () => {
+                    if (trocarEmpresa) await trocarEmpresa(HOLDING_PALATARE_EMPRESA_ID);
+                    navigate('/admin/concreto?secao=empresa-holding');
+                  }}
                   style={{
                     background: '#C5A059',
                     color: '#16181B',
@@ -2484,7 +2524,10 @@ export default function PalatarePizzariaSuite() {
 
                 <button
                   type="button"
-                  onClick={() => navigate('/admin/concreto')}
+                  onClick={async () => {
+                    if (trocarEmpresa) await trocarEmpresa(SERRANO_CONCRETO_EMPRESA_ID);
+                    navigate('/admin/concreto');
+                  }}
                   style={{
                     background: '#3B82F6',
                     color: '#FFF',
@@ -2667,6 +2710,154 @@ export default function PalatarePizzariaSuite() {
               >
                 <Send size={16} /> Abrir WhatsApp Web / App
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL DE IMPRESSÃO DO DISPLAY DE MESA EM ACRÍLICO (QR CODE)  */}
+      {/* ------------------------------------------------------------- */}
+      {modalDisplayMesa && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          padding: 20
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            color: '#111827',
+            borderRadius: 20,
+            padding: '32px 28px',
+            maxWidth: 440,
+            width: '100%',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.8)',
+            textAlign: 'center',
+            border: '2px solid #E5E7EB',
+            position: 'relative'
+          }}>
+            <button
+              type="button"
+              onClick={() => setModalDisplayMesa(null)}
+              style={{
+                position: 'absolute',
+                top: 14,
+                right: 16,
+                background: 'none',
+                border: 'none',
+                fontSize: 20,
+                color: '#6B7280',
+                cursor: 'pointer'
+              }}
+            >
+              ✕
+            </button>
+
+            {/* CABEÇALHO DO DISPLAY */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 8 }}>
+              <img src="/palatare-logo.png" alt="Palatare" style={{ width: 44, height: 44, objectFit: 'contain' }} />
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: 16, fontWeight: 900, color: '#111827', letterSpacing: '-0.02em' }}>
+                  PALATARE
+                </div>
+                <div style={{ fontSize: 11, fontWeight: 800, color: '#FF6B2C', textTransform: 'uppercase' }}>
+                  Pizzaria &amp; Restaurante
+                </div>
+              </div>
+            </div>
+
+            <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 16 }}>
+              Tangará da Serra/MT · Forno a Lenha Napolitano (400°C)
+            </div>
+
+            {/* BADGE DA MESA */}
+            <div style={{
+              background: 'linear-gradient(135deg, #FF6B2C, #E05316)',
+              color: '#FFF',
+              borderRadius: 12,
+              padding: '10px 20px',
+              display: 'inline-block',
+              marginBottom: 16,
+              boxShadow: '0 4px 14px rgba(255, 107, 44, 0.4)'
+            }}>
+              <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block' }}>
+                CARDÁPIO DIGITAL NA MESA
+              </span>
+              <span style={{ fontSize: 24, fontWeight: 900, letterSpacing: '-0.02em' }}>
+                MESA {String(modalDisplayMesa).padStart(2, '0')}
+              </span>
+            </div>
+
+            {/* QR CODE GERADO */}
+            <div style={{
+              background: '#F9FAFB',
+              border: '2px dashed #D1D5DB',
+              borderRadius: 16,
+              padding: 16,
+              display: 'inline-block',
+              marginBottom: 16
+            }}>
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://kytto.com.br/cardapio/mesa/palatare-m${modalDisplayMesa}`}
+                alt={`QR Code Mesa ${modalDisplayMesa}`}
+                style={{ width: 180, height: 180, display: 'block', borderRadius: 8 }}
+              />
+              <span style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', marginTop: 8, display: 'block' }}>
+                Aponte a câmera do seu celular
+              </span>
+            </div>
+
+            {/* PASSOS DO CLIENTE */}
+            <div style={{ background: '#F3F4F6', borderRadius: 10, padding: 12, fontSize: 11.5, color: '#374151', textAlign: 'left', lineHeight: 1.5, marginBottom: 16 }}>
+              <div><b>1.</b> Monte sua pizza artesanal de fermentação 48h</div>
+              <div><b>2.</b> Escolha vinhos reserva ou chopp artesanal gelado</div>
+              <div><b>3.</b> Acompanhe a fornada a 400°C em tempo real</div>
+            </div>
+
+            {/* INFORMAÇÕES DE WI-FI */}
+            <div style={{ borderTop: '1px solid #E5E7EB', paddingTop: 10, marginBottom: 18, fontSize: 11, color: '#6B7280' }}>
+              📶 <strong>Wi-Fi:</strong> Palatare_Clientes &nbsp;|&nbsp; 🔑 <strong>Senha:</strong> pizzaforno400
+            </div>
+
+            {/* BOTÕES DE AÇÃO */}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <button
+                type="button"
+                onClick={() => setModalDisplayMesa(null)}
+                style={{ background: '#F3F4F6', color: '#374151', border: '1px solid #D1D5DB', padding: '10px 18px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Fechar
+              </button>
+
+              <button
+                type="button"
+                onClick={() => window.print()}
+                style={{
+                  background: '#FF6B2C',
+                  color: '#FFF',
+                  border: 'none',
+                  padding: '10px 22px',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontWeight: 900,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(255, 107, 44, 0.4)'
+                }}
+              >
+                🖨️ Imprimir Display (Ctrl+P)
+              </button>
+            </div>
+
+            <div style={{ fontSize: 9.5, color: '#9CA3AF', marginTop: 14 }}>
+              Grupo Palatare Participações S/A · Tecnologia Kytto &amp; KyttoIA
             </div>
           </div>
         </div>
