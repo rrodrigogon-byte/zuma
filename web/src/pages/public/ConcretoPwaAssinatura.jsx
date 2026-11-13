@@ -19,6 +19,12 @@ export default function ConcretoPwaAssinatura() {
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState(null);
   const [sucesso, setSucesso] = useState(null);
+  const [sincronizandoOffline, setSincronizandoOffline] = useState(false);
+  const [offlinePendentes, setOfflinePendentes] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('serrano_canhotos_offline') || '[]').length;
+    } catch { return 0; }
+  });
 
   // PWA Install prompt
   const [deferredPrompt, setDeferredPrompt] = useState(null);
@@ -62,6 +68,37 @@ export default function ConcretoPwaAssinatura() {
     }
 
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+  }, []);
+
+  // Sincronização automática quando reconectar à internet
+  const sincronizarCanhotosOffline = async () => {
+    try {
+      const raw = localStorage.getItem('serrano_canhotos_offline');
+      if (!raw) return;
+      const queue = JSON.parse(raw);
+      if (!Array.isArray(queue) || queue.length === 0) return;
+
+      setSincronizandoOffline(true);
+      for (const item of queue) {
+        await fetch(`/api/public/concreto/cargas/${item.cargaId}/assinar-pwa`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item.payload)
+        });
+      }
+      localStorage.removeItem('serrano_canhotos_offline');
+      setOfflinePendentes(0);
+      carregarCargas();
+    } catch (e) {
+      console.warn('Erro ao sincronizar fila offline:', e);
+    } finally {
+      setSincronizandoOffline(false);
+    }
+  };
+
+  useEffect(() => {
+    window.addEventListener('online', sincronizarCanhotosOffline);
+    return () => window.removeEventListener('online', sincronizarCanhotosOffline);
   }, []);
 
   // Obter geolocalização do dispositivo
@@ -312,16 +349,25 @@ export default function ConcretoPwaAssinatura() {
       }
     } catch (err) {
       console.warn('Erro ao salvar no servidor, salvando em cache local:', err);
-      // Salvar em cache local para operação resiliente
+      // Salvar em fila local (offline) para transmissão posterior
+      try {
+        const raw = localStorage.getItem('serrano_canhotos_offline') || '[]';
+        const queue = JSON.parse(raw);
+        queue.push({ cargaId: cargaSelecionada.id, payload, salvoEm: new Date().toISOString() });
+        localStorage.setItem('serrano_canhotos_offline', JSON.stringify(queue));
+        setOfflinePendentes(queue.length);
+      } catch {}
+
       const mockAssinatura = {
-        codigoAutenticidade: `SERRANO-NBR7212-${Date.now().toString(16).toUpperCase()}`,
+        codigoAutenticidade: `SERRANO-NBR7212-OFFLINE-${Date.now().toString(16).toUpperCase()}`,
         recebedorNome,
         recebedorDocumento,
         recebedorCargo,
         dataHoraAssinatura: new Date().toLocaleString('pt-BR'),
         slumpMedidoCm,
         volumeEfetivoM3,
-        hashSha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+        hashSha256: 'OFFLINE_SINCRONIZACAO_PENDENTE',
+        modoOffline: true
       };
       setSucesso(mockAssinatura);
     } finally {
@@ -368,6 +414,33 @@ export default function ConcretoPwaAssinatura() {
         zIndex: 50,
         boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
       }}>
+        {/* Aviso de Sincronização Offline se houver canhotos pendentes */}
+        {offlinePendentes > 0 && (
+          <div style={{
+            maxWidth: 640,
+            margin: '-12px auto 8px',
+            background: '#D97706',
+            color: '#FFF',
+            fontSize: 11,
+            fontWeight: 800,
+            padding: '4px 10px',
+            borderRadius: 6,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <span>📡 {offlinePendentes} canhoto(s) salvo(s) offline</span>
+            <button
+              type="button"
+              onClick={sincronizarCanhotosOffline}
+              disabled={sincronizandoOffline}
+              style={{ background: '#FFF', color: '#B45309', border: 'none', padding: '2px 8px', borderRadius: 4, fontWeight: 900, cursor: 'pointer', fontSize: 10 }}
+            >
+              {sincronizandoOffline ? 'Sincronizando...' : 'Sincronizar'}
+            </button>
+          </div>
+        )}
+
         <div style={{ maxWidth: 640, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{

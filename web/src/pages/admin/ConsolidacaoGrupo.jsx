@@ -20,20 +20,31 @@ import {
   Download,
   ExternalLink,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  UtensilsCrossed,
+  Factory
 } from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
 import { api, fmtR } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { isHoldingBrandContext, isConcretoBrandContext, isRestauranteBrandContext } from '../../lib/brand';
+import { HOLDING_GRUPO_PALATARE_ID, PALATARE_PIZZARIA_EMPRESA_ID, SERRANO_CONCRETO_EMPRESA_ID } from '../../lib/palatare-constants';
 import Modal from '../../components/Modal';
 
 export default function ConsolidacaoGrupo() {
   const toast = useToast();
-  const { empresaAtiva, trocarEmpresa, isPlatformAdmin } = useAuth();
+  const { empresaAtiva, trocarEmpresa, isPlatformAdmin, user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [sincronizando, setSincronizando] = useState(false);
   const [grupos, setGrupos] = useState([]);
-  const [grupoSelecionado, setGrupoSelecionado] = useState('');
+  const isPalatareGroupMember = useMemo(() => {
+    return isHoldingBrandContext(empresaAtiva) ||
+      [PALATARE_PIZZARIA_EMPRESA_ID, SERRANO_CONCRETO_EMPRESA_ID, HOLDING_GRUPO_PALATARE_ID].includes(empresaAtiva?.id);
+  }, [empresaAtiva]);
+
+  const podeAcessar = isPlatformAdmin || isPalatareGroupMember || ['admin', 'administrador', 'super_admin'].includes(user?.role);
+
+  const [grupoSelecionado, setGrupoSelecionado] = useState(isPalatareGroupMember ? 'grp-serrano-palatare-03' : '');
   const [periodo, setPeriodo] = useState('mes_atual');
   const [dados, setDados] = useState(null);
   const [eventos, setEventos] = useState([]);
@@ -44,7 +55,7 @@ export default function ConsolidacaoGrupo() {
   const [carregandoIa, setCarregandoIa] = useState(false);
 
   const carregarDados = useCallback(async () => {
-    if (!isPlatformAdmin) {
+    if (!podeAcessar) {
       setLoading(false);
       return;
     }
@@ -132,6 +143,8 @@ export default function ConsolidacaoGrupo() {
 
   const getIconeSegmento = (tipo) => {
     switch (tipo) {
+      case 'gastronomia_pizzaria': return <UtensilsCrossed style={{ width: 18, height: 18, color: '#ef4444' }} />;
+      case 'concreto_usinado_industria': return <Factory style={{ width: 18, height: 18, color: '#f97316' }} />;
       case 'barbearia_beleza': return <Scissors style={{ width: 18, height: 18, color: '#f59e0b' }} />;
       case 'varejo_suplementos_cosmeticos': return <Package style={{ width: 18, height: 18, color: '#10b981' }} />;
       case 'ecommerce_omnichannel': return <ShoppingBag style={{ width: 18, height: 18, color: '#0284c7' }} />;
@@ -140,7 +153,15 @@ export default function ConsolidacaoGrupo() {
     }
   };
 
-    if (!isPlatformAdmin) {
+  if (!podeAcessar) {
+    const urlVoltar = isRestauranteBrandContext(empresaAtiva)
+      ? '/admin/pizzaria'
+      : isConcretoBrandContext(empresaAtiva)
+      ? '/admin/concreto'
+      : isHoldingBrandContext(empresaAtiva)
+      ? '/admin/concreto?secao=empresa-holding'
+      : '/admin';
+
     return (
       <div className="p-8 max-w-4xl mx-auto text-center" style={{ minHeight: '70vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
         <div className="w-16 h-16 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center mb-6">
@@ -161,10 +182,10 @@ export default function ConsolidacaoGrupo() {
           </div>
         </div>
         <a
-          href="/admin/barbearia-erp?area=gestao&tab=Painel+de+gestão"
+          href={urlVoltar}
           className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-amber-500 text-slate-950 font-bold hover:bg-amber-400 transition-all shadow-lg shadow-amber-500/20"
         >
-          Voltar ao Painel da Barbearia Dino
+          Voltar ao Painel da {empresaAtiva?.nome || 'Unidade Operacional'}
         </a>
       </div>
     );

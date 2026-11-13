@@ -11,7 +11,12 @@ export default function HoldingGrupoPalatare({ setSecaoAtiva }) {
   const navigate = useNavigate();
   const { trocarEmpresa, empresaAtiva } = useAuth() || {};
   const [modalDossieAberto, setModalDossieAberto] = useState(false);
-  const [filtroAbaInterna, setFiltroAbaInterna] = useState('todas'); // 'todas', 'empresas', 'societario', 'fiscais', 'licencas'
+  const [filtroAbaInterna, setFiltroAbaInterna] = useState('todas'); // 'todas', 'empresas', 'dre', 'sinergias', 'esg', 'copilot', 'societario', 'fiscais', 'licencas'
+  const [voucherConstrutora, setVoucherConstrutora] = useState('Construtora MT Horizon');
+  const [voucherVolumeM3, setVoucherVolumeM3] = useState(48);
+  const [voucherGerado, setVoucherGerado] = useState(null);
+  const [copiadoVoucher, setCopiadoVoucher] = useState(false);
+  const [cenarioSimulador, setCenarioSimulador] = useState('betoneira_extra');
 
   const dadosHolding = {
     nomeGrupo: "Grupo Palatare",
@@ -377,10 +382,14 @@ export default function HoldingGrupoPalatare({ setSecaoAtiva }) {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', borderBottom: '1px solid var(--joint)', paddingBottom: 10 }}>
         {[
           { id: 'todas', label: 'Visão Completa do Conglomerado', icone: '🏢' },
-          { id: 'empresas', label: 'Empresas Controladas (Pizzaria & Concreto)', icone: '🍕🚚' },
+          { id: 'empresas', label: 'Empresas Controladas', icone: '🍕🚚' },
+          { id: 'dre', label: 'DRE & Cash Pooling Consolidado', icone: '📊' },
+          { id: 'sinergias', label: 'Hub de Sinergias & Benefícios Cruzados', icone: '🤝' },
+          { id: 'esg', label: 'Governança ESG & Sustentabilidade', icone: '🌱' },
+          { id: 'copilot', label: 'Copilot KyttoIA de Expansão', icone: '🧠' },
           { id: 'societario', label: 'Estrutura Societária & Alexandre Palatare', icone: '👔' },
           { id: 'fiscais', label: 'Matriz Tributária & Barramento A2', icone: '📑' },
-          { id: 'licencas', label: 'Licenciamento & Conformidade Ambiental', icone: '🛡️' }
+          { id: 'licencas', label: 'Licenciamento & Meio Ambiente', icone: '🛡️' }
         ].map(item => {
           const ativo = filtroAbaInterna === item.id;
           return (
@@ -988,6 +997,511 @@ export default function HoldingGrupoPalatare({ setSecaoAtiva }) {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── ABA: DRE CONSOLIDADA & CASH POOLING DO GRUPO PALATARE ─── */}
+      {(filtroAbaInterna === 'todas' || filtroAbaInterna === 'dre') && (
+        <div className="serrano-card">
+          <div className="serrano-card-h">
+            <div>
+              <h3>DRE Consolidada &amp; Gestão de Cash Pooling · Grupo Palatare</h3>
+              <small style={{ color: 'var(--text-muted)' }}>
+                Demonstração contábil unificada intercompany de receitas, custos diretos e EBITDA das operações
+              </small>
+            </div>
+            <span className="holding-gold-badge" style={{ marginLeft: 'auto' }}>
+              Margem EBITDA: 27,5%
+            </span>
+          </div>
+
+          <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {/* Grid Comparativo dos 2 Negócios + Consolidado */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+              
+              {/* Card Serrano Concreto */}
+              <div style={{ background: 'var(--surface-2)', border: '1px solid rgba(255, 112, 0, 0.3)', borderRadius: 12, padding: 18 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 20 }}>🚚</span>
+                    <b style={{ color: '#FF7000', fontSize: 14 }}>Serrano Concreto &amp; Mineração</b>
+                  </div>
+                  <span style={{ fontSize: 11, background: 'rgba(255,112,0,0.15)', color: '#FF7000', padding: '2px 8px', borderRadius: 6, fontWeight: 800 }}>
+                    79,7% da Receita
+                  </span>
+                </div>
+                <div style={{ display: 'grid', gap: 6, fontSize: 12.5 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Receita Bruta (2.800 m³):</span>
+                    <strong style={{ color: 'var(--text-main)' }}>R$ 1.120.000,00</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Tributos &amp; Deduções (10,1%):</span>
+                    <span style={{ color: '#EF4444' }}>- R$ 114.000,00</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Custos CPV (Cimento/Areia/Brita):</span>
+                    <span style={{ color: '#EF4444' }}>- R$ 460.000,00</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Despesas Fixas &amp; Folha (32 col.):</span>
+                    <span style={{ color: '#EF4444' }}>- R$ 228.000,00</span>
+                  </div>
+                  <div style={{ borderTop: '1px solid var(--joint)', paddingTop: 8, marginTop: 4, display: 'flex', justifyContent: 'space-between' }}>
+                    <b style={{ color: '#34D399' }}>EBITDA Operacional:</b>
+                    <b style={{ color: '#34D399', fontSize: 14 }}>R$ 318.000,00 (28,4%)</b>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card Palatare Pizzaria */}
+              <div style={{ background: 'var(--surface-2)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: 12, padding: 18 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 20 }}>🍕</span>
+                    <b style={{ color: '#EF4444', fontSize: 14 }}>Palatare Pizzaria &amp; Restaurante</b>
+                  </div>
+                  <span style={{ fontSize: 11, background: 'rgba(239,68,68,0.15)', color: '#EF4444', padding: '2px 8px', borderRadius: 6, fontWeight: 800 }}>
+                    20,3% da Receita
+                  </span>
+                </div>
+                <div style={{ display: 'grid', gap: 6, fontSize: 12.5 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Receita Bruta (Salão/Rodízio/Delivery):</span>
+                    <strong style={{ color: 'var(--text-main)' }}>R$ 285.000,00</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Tributos Simples Nac. (8,5%):</span>
+                    <span style={{ color: '#EF4444' }}>- R$ 24.400,00</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>CMV (Insumos/Queijos/Farinha 00):</span>
+                    <span style={{ color: '#EF4444' }}>- R$ 102.000,00</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Despesas Fixas &amp; Folha (20 col.):</span>
+                    <span style={{ color: '#EF4444' }}>- R$ 90.600,00</span>
+                  </div>
+                  <div style={{ borderTop: '1px solid var(--joint)', paddingTop: 8, marginTop: 4, display: 'flex', justifyContent: 'space-between' }}>
+                    <b style={{ color: '#34D399' }}>EBITDA Operacional:</b>
+                    <b style={{ color: '#34D399', fontSize: 14 }}>R$ 68.000,00 (23,8%)</b>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card Consolidado Grupo Palatare */}
+              <div style={{ background: 'linear-gradient(135deg, rgba(197, 160, 89, 0.15) 0%, rgba(19, 23, 29, 0.85) 100%)', border: '2px solid #C5A059', borderRadius: 12, padding: 18 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 20 }}>🏛️</span>
+                    <b style={{ color: '#C5A059', fontSize: 14 }}>Holding Grupo Palatare (Consolidado)</b>
+                  </div>
+                  <span className="holding-gold-badge">100% Alexandre Palatare</span>
+                </div>
+                <div style={{ display: 'grid', gap: 6, fontSize: 12.5 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Faturamento Bruto Mensal:</span>
+                    <strong style={{ color: '#C5A059', fontSize: 13.5 }}>R$ 1.405.000,00</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Carga Tributária Consolidada:</span>
+                    <span style={{ color: '#EF4444' }}>- R$ 138.400,00 (9,8%)</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Custos Diretos (CPV + CMV):</span>
+                    <span style={{ color: '#EF4444' }}>- R$ 562.000,00</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Despesas Corporativas (52 colab.):</span>
+                    <span style={{ color: '#EF4444' }}>- R$ 318.600,00</span>
+                  </div>
+                  <div style={{ borderTop: '2px solid #C5A059', paddingTop: 8, marginTop: 4, display: 'flex', justifyContent: 'space-between' }}>
+                    <b style={{ color: '#FFFFFF', fontSize: 14 }}>EBITDA Consolidado:</b>
+                    <b style={{ color: '#34D399', fontSize: 16 }}>R$ 386.000,00 / mês</b>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Barramento de Cash Pooling e Tesouraria Centralizada */}
+            <div style={{ background: 'var(--surface-2)', border: '1px solid var(--joint)', borderRadius: 10, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <span style={{ fontSize: 18 }}>🏦</span>
+                  <b style={{ color: 'var(--text-main)', fontSize: 13.5 }}>Sistema de Cash Pooling &amp; Compensação Intercompany Ativo</b>
+                  <span className="serrano-pill serrano-p-ok" style={{ fontSize: 10 }}>Otimização de Liquidez</span>
+                </div>
+                <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', maxWidth: 780, lineHeight: 1.45 }}>
+                  Saldos de caixa excedentes da usina de concreto garantem liquidez imediata para compras à vista de insumos com desconto na pizzaria, e vice-versa, com remuneração diária indexada a 100% do CDI e eliminação de tarifas bancárias de cheque especial.
+                </p>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block' }}>Liquidez Imediata em Tesouraria:</span>
+                <strong style={{ fontSize: 18, color: '#34D399' }}>R$ 490.000,00</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── ABA: HUB DE SINCRETISMO OPERACIONAL & BENEFÍCIOS CRUZADOS ─── */}
+      {(filtroAbaInterna === 'todas' || filtroAbaInterna === 'sinergias') && (
+        <div className="serrano-card">
+          <div className="serrano-card-h">
+            <div>
+              <h3>Hub de Sincretismo Operacional &amp; Benefícios Cruzados (B2B)</h3>
+              <small style={{ color: 'var(--text-muted)' }}>
+                Geração de valor cruzado entre a indústria do concreto e a gastronomia de alto padrão
+              </small>
+            </div>
+            <span className="serrano-pill serrano-p-ok" style={{ marginLeft: 'auto', fontWeight: 700 }}>
+              Sinergia Ativa
+            </span>
+          </div>
+
+          <div style={{ padding: 24, display: 'grid', gap: 20 }}>
+            {/* 1. Alavanca: Programa B2B Concreto & Sabor (Gerador de Vouchers VIP) */}
+            <div style={{ background: 'var(--surface-2)', border: '1px solid var(--joint)', borderRadius: 12, padding: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
+                <div>
+                  <b style={{ fontSize: 14, color: '#C5A059', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span>🍕🤝🚚</span> Programa B2B: "Concreto &amp; Sabor" — Fidelização de Construtoras Parceiras
+                  </b>
+                  <small style={{ color: 'var(--text-muted)', display: 'block', marginTop: 2 }}>
+                    Construtoras que contratam concreto usinado da Serrano recebem bonificação corporativa para jantares e confraternizações na Palatare Pizzaria
+                  </small>
+                </div>
+                <span className="holding-gold-badge">Fidelização Ibatível em Tangará</span>
+              </div>
+
+              {/* Formulário de Emissão de Voucher B2B */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, background: 'var(--surface)', padding: 16, borderRadius: 10, border: '1px solid var(--joint)', alignItems: 'flex-end' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 6 }}>
+                    Construtora / Obra Contratante:
+                  </label>
+                  <select
+                    value={voucherConstrutora}
+                    onChange={(e) => setVoucherConstrutora(e.target.value)}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--joint)', background: 'var(--surface-2)', color: 'var(--text-main)', fontSize: 12.5 }}
+                  >
+                    <option value="Construtora MT Horizon">Construtora MT Horizon (Ed. Serra Dourada)</option>
+                    <option value="AgroLog Transportes">AgroLog Transportes (Galpão Logístico)</option>
+                    <option value="Construtora Serra Alta">Construtora Serra Alta (Condomínio Fechado)</option>
+                    <option value="Engenharia Tangará B2B">Engenharia Tangará B2B (Piso Industrial)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 6 }}>
+                    Volume Contratado de Concreto (m³):
+                  </label>
+                  <select
+                    value={voucherVolumeM3}
+                    onChange={(e) => setVoucherVolumeM3(Number(e.target.value))}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--joint)', background: 'var(--surface-2)', color: 'var(--text-main)', fontSize: 12.5 }}
+                  >
+                    <option value="24">24 m³ (Lajes Pequenas) → Rodízio VIP para 2 Pessoas</option>
+                    <option value="48">48 m³ (Lajes Médias) → Rodízio VIP para 4 Pessoas + Chopps</option>
+                    <option value="96">96 m³ (Grandes Concretagens) → Mesa Executiva 8 Pessoas</option>
+                    <option value="160">160 m³ (Pisos Industriais) → Confraternização de Equipe 15 Pessoas</option>
+                  </select>
+                </div>
+
+                <div>
+                  <button
+                    type="button"
+                    className="btn-serrano pri"
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      background: 'linear-gradient(135deg, #C5A059 0%, #A68037 100%)',
+                      color: '#000',
+                      fontWeight: 900,
+                      borderRadius: 8,
+                      border: 'none',
+                      cursor: 'pointer'
+                    }}
+                    onClick={() => {
+                      const codigo = `VOUCHER-PALATARE-${Math.floor(1000 + Math.random() * 9000)}`;
+                      const desc = voucherVolumeM3 >= 160 
+                        ? 'Confraternização de Equipe de Obra (15 Rodízios + Bebidas)'
+                        : voucherVolumeM3 >= 96
+                        ? 'Mesa Executiva VIP (8 Rodízios Tradicionais + Chopps Artesanais)'
+                        : voucherVolumeM3 >= 48
+                        ? 'Jantar Executivo de Engenharia (4 Rodízios + Chopps)'
+                        : 'Jantar Cortesia Especial (2 Rodízios Tradicionais)';
+                      setVoucherGerado({
+                        codigo,
+                        construtora: voucherConstrutora,
+                        volume: voucherVolumeM3,
+                        beneficio: desc,
+                        dataValidade: 'Válido por 45 dias em Tangará da Serra/MT'
+                      });
+                    }}
+                  >
+                    ✨ Emitir Voucher VIP de Confraternização
+                  </button>
+                </div>
+              </div>
+
+              {/* Visualização do Voucher Emitido */}
+              {voucherGerado && (
+                <div style={{ marginTop: 14, background: 'linear-gradient(135deg, #1C1917 0%, #2A241F 100%)', border: '2px dashed #C5A059', borderRadius: 10, padding: 18 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 900, color: '#C5A059', textTransform: 'uppercase', letterSpacing: 1 }}>
+                        VOUCHER EXECUTIVO DE BONIFICAÇÃO · GRUPO PALATARE
+                      </div>
+                      <div style={{ fontSize: 16, fontWeight: 900, color: '#FFF', margin: '4px 0' }}>
+                        {voucherGerado.beneficio}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#D1D5DB' }}>
+                        Beneficiário: <b>{voucherGerado.construtora}</b> · Parceria Comercial Usina Serrano Concreto ({voucherGerado.volume} m³)
+                      </div>
+                      <div style={{ fontSize: 11, color: '#A3A3A3', marginTop: 4 }}>
+                        Código Oficial: <b style={{ color: '#C5A059', fontFamily: 'var(--font-data)' }}>{voucherGerado.codigo}</b> · {voucherGerado.dataValidade}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        type="button"
+                        className="btn-serrano"
+                        style={{ background: '#25D366', color: '#FFF', border: 'none', fontWeight: 800 }}
+                        onClick={() => {
+                          const msg = encodeURIComponent(
+                            `*GRUPO PALATARE · CONVITE CORPORATIVO*\n\n` +
+                            `Prezado(a) responsável pela *${voucherGerado.construtora}*,\n\n` +
+                            `Em reconhecimento à nossa parceria no fornecimento de concreto usinado com a *Serrano Concreto*, temos a honra de presenteá-los com:\n` +
+                            `🍕 *${voucherGerado.beneficio}*\n\n` +
+                            `*Código do Voucher:* ${voucherGerado.codigo}\n` +
+                            `*Onde usar:* Palatare Pizzaria & Restaurante (Rua Antônio Hortolani, Centro - Tangará da Serra/MT)\n` +
+                            `Apresente este código no caixa para desfrutar de uma experiência gastronômica memorável!\n\n` +
+                            `_Atenciosamente, Alexandre Palatare e Equipe Grupo Palatare._`
+                          );
+                          window.open(`https://wa.me/?text=${msg}`, '_blank');
+                        }}
+                      >
+                        Disparar no WhatsApp
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-serrano pri"
+                        onClick={() => window.print()}
+                      >
+                        Imprimir Cupom A4
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 2. Alavanca: Central de Compras Integradas e Frota */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+              <div style={{ background: 'var(--surface-2)', border: '1px solid var(--joint)', borderRadius: 10, padding: 16 }}>
+                <b style={{ color: '#FF7000', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <span>⛽</span> Combustível Unificado a Granel
+                </b>
+                <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                  Negociação direta de 25.000 litros mensais de Diesel S10 para a frota de betoneiras e convênio de abastecimento para as motos do delivery da pizzaria com <b>economia média de 12%</b> frente aos preços de bomba dos postos de Tangará da Serra.
+                </p>
+                <div style={{ marginTop: 10, fontSize: 11.5, color: '#34D399', fontWeight: 800 }}>
+                  Economia estimada: R$ 18.500,00 / mês
+                </div>
+              </div>
+
+              <div style={{ background: 'var(--surface-2)', border: '1px solid var(--joint)', borderRadius: 10, padding: 16 }}>
+                <b style={{ color: '#10B981', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <span>👥</span> Banco de Talentos &amp; RH Unificado (52 Colaboradores)
+                </b>
+                <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                  Políticas compartilhadas de capacitação técnica, plano odontológico corporativo e segurança no trabalho (NR-12 na usina e Boas Práticas Sanitárias da ANVISA na pizzaria), além de alimentação fornecida na pizzaria para os motoristas de betoneira.
+                </p>
+                <div style={{ marginTop: 10, fontSize: 11.5, color: '#34D399', fontWeight: 800 }}>
+                  Turnover reduzido para menos de 3% ao ano
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── ABA: GOVERNANÇA ESG & SUSTENTABILIDADE INTEGRADA ─── */}
+      {(filtroAbaInterna === 'todas' || filtroAbaInterna === 'esg') && (
+        <div className="serrano-card">
+          <div className="serrano-card-h">
+            <div>
+              <h3>Governança ESG &amp; Economia Circular · Grupo Palatare</h3>
+              <small style={{ color: 'var(--text-muted)' }}>
+                Práticas ambientais auditadas na indústria mineral e no food service sustentável
+              </small>
+            </div>
+            <span className="serrano-pill serrano-p-ok" style={{ marginLeft: 'auto', fontWeight: 700 }}>
+              Selo Verde Tangará
+            </span>
+          </div>
+
+          <div style={{ padding: 24, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
+            <div style={{ background: 'var(--surface-2)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: 10, padding: 18 }}>
+              <b style={{ color: '#10B981', fontSize: 14, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <span>💧♻️</span> Serrano: Reciclador de Água &amp; Resíduos NBR 7212
+              </b>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                <li>Sistema de decantação em 3 tanques fechados para lavagem das betoneiras.</li>
+                <li><b>Reúso de 100% da água industrial</b>, economizando 45.000 litros/dia do manancial do Rio Sepotuba.</li>
+                <li>Separação mecânica e recuperação integral de agregados miúdos (areia e brita residual).</li>
+                <li>Licença de Operação (L.O.) nº 39218/2024 emitida pela SEMA-MT com conformidade máxima.</li>
+              </ul>
+            </div>
+
+            <div style={{ background: 'var(--surface-2)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: 10, padding: 18 }}>
+              <b style={{ color: '#EF4444', fontSize: 14, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <span>🪵🔥</span> Palatare: Forno a Lenha Ecológico &amp; Queima Limpa
+              </b>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                <li>Utilização exclusiva de lenha de eucalipto 100% reflorestada com DOF (Documento de Origem Florestal).</li>
+                <li>Queima em alta temperatura (400°C - 485°C) que realiza combustão completa com fuligem zero.</li>
+                <li>Filtro lavador de fumaça na chaminé atendendo aos parâmetros de qualidade do ar da VISA Tangará.</li>
+                <li>Compostagem de resíduos orgânicos da cozinha para adubação de produtores rurais da agricultura familiar.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── ABA: COPILOT KYTTOIA DE EXPANSÃO E CENÁRIOS ESTRATÉGICOS ─── */}
+      {(filtroAbaInterna === 'todas' || filtroAbaInterna === 'copilot') && (
+        <div className="serrano-card">
+          <div className="serrano-card-h">
+            <div>
+              <h3>Copilot KyttoIA · Simulador de Expansão &amp; Cenários do Grupo Palatare</h3>
+              <small style={{ color: 'var(--text-muted)' }}>
+                Motor analítico preditivo para suporte a decisões de investimento de Alexandre Palatare
+              </small>
+            </div>
+            <span className="holding-gold-badge" style={{ marginLeft: 'auto' }}>
+              Motor KyttoIA 2.5 Flash
+            </span>
+          </div>
+
+          <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              {[
+                { id: 'betoneira_extra', label: 'Cenário 1: Aquisição de 6ª Betoneira 8m³ (Usina)', icone: '🚛' },
+                { id: 'segunda_unidade_pizzaria', label: 'Cenário 2: 2ª Unidade Palatare Express (Shopping/Cuiabá)', icone: '🍕' },
+                { id: 'energia_solar', label: 'Cenário 3: Usina Fotovoltaica Própria 75 kWp (Serrano + Palatare)', icone: '☀️' }
+              ].map(c => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`btn-serrano ${cenarioSimulador === c.id ? 'pri' : ''}`}
+                  style={{
+                    background: cenarioSimulador === c.id ? 'linear-gradient(135deg, #C5A059 0%, #A68037 100%)' : 'var(--surface-2)',
+                    color: cenarioSimulador === c.id ? '#000' : 'var(--text-main)',
+                    fontWeight: 800,
+                    fontSize: 12.5,
+                    padding: '9px 16px'
+                  }}
+                  onClick={() => setCenarioSimulador(c.id)}
+                >
+                  {c.icone} {c.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Card com Detalhamento do Cenário Escolhido */}
+            {cenarioSimulador === 'betoneira_extra' && (
+              <div style={{ background: 'var(--surface-2)', border: '1px solid #FF7000', borderRadius: 10, padding: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+                  <b style={{ color: '#FF7000', fontSize: 14 }}>Análise KyttoIA: Expansão da Frota Serrano Concreto (6ª Betoneira)</b>
+                  <span className="serrano-pill serrano-p-ok">Payback Estimado: 11,4 Meses</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 14 }}>
+                  <div style={{ background: 'var(--surface)', padding: 12, borderRadius: 8 }}>
+                    <small style={{ color: 'var(--text-muted)' }}>Investimento Estimado (CAPEX):</small>
+                    <b style={{ display: 'block', color: 'var(--text-main)', fontSize: 15, marginTop: 2 }}>R$ 680.000,00</b>
+                  </div>
+                  <div style={{ background: 'var(--surface)', padding: 12, borderRadius: 8 }}>
+                    <small style={{ color: 'var(--text-muted)' }}>Capacidade Adicional:</small>
+                    <b style={{ display: 'block', color: '#34D399', fontSize: 15, marginTop: 2 }}>+450 m³ de concreto / mês</b>
+                  </div>
+                  <div style={{ background: 'var(--surface)', padding: 12, borderRadius: 8 }}>
+                    <small style={{ color: 'var(--text-muted)' }}>Faturamento Incremental:</small>
+                    <b style={{ display: 'block', color: '#34D399', fontSize: 15, marginTop: 2 }}>+ R$ 180.000,00 / mês</b>
+                  </div>
+                  <div style={{ background: 'var(--surface)', padding: 12, borderRadius: 8 }}>
+                    <small style={{ color: 'var(--text-muted)' }}>EBITDA Líquido Adicional:</small>
+                    <b style={{ display: 'block', color: '#C5A059', fontSize: 15, marginTop: 2 }}>+ R$ 59.500,00 / mês</b>
+                  </div>
+                </div>
+                <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  <b>Parecer do Motor KyttoIA:</b> Altamente recomendado. O índice de ocupação atual das 5 betoneiras atinge 92% nos horários de pico matutinos em Tangará da Serra. A 6ª unidade elimina gargalos de espera na central Convicta e viabiliza contratos simultâneos em obras de grande porte da MT-358 sem risco de estourar a pega de 150 minutos NBR 7212.
+                </p>
+              </div>
+            )}
+
+            {cenarioSimulador === 'segunda_unidade_pizzaria' && (
+              <div style={{ background: 'var(--surface-2)', border: '1px solid #EF4444', borderRadius: 10, padding: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+                  <b style={{ color: '#EF4444', fontSize: 14 }}>Análise KyttoIA: 2ª Unidade Palatare Pizza Express</b>
+                  <span className="serrano-pill serrano-p-ok">Payback Estimado: 14,0 Meses</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 14 }}>
+                  <div style={{ background: 'var(--surface)', padding: 12, borderRadius: 8 }}>
+                    <small style={{ color: 'var(--text-muted)' }}>Investimento Estimado (CAPEX):</small>
+                    <b style={{ display: 'block', color: 'var(--text-main)', fontSize: 15, marginTop: 2 }}>R$ 240.000,00</b>
+                  </div>
+                  <div style={{ background: 'var(--surface)', padding: 12, borderRadius: 8 }}>
+                    <small style={{ color: 'var(--text-muted)' }}>Modelo de Operação:</small>
+                    <b style={{ display: 'block', color: '#34D399', fontSize: 15, marginTop: 2 }}>Balcão Rápido + Delivery</b>
+                  </div>
+                  <div style={{ background: 'var(--surface)', padding: 12, borderRadius: 8 }}>
+                    <small style={{ color: 'var(--text-muted)' }}>Faturamento Incremental:</small>
+                    <b style={{ display: 'block', color: '#34D399', fontSize: 15, marginTop: 2 }}>+ R$ 85.000,00 / mês</b>
+                  </div>
+                  <div style={{ background: 'var(--surface)', padding: 12, borderRadius: 8 }}>
+                    <small style={{ color: 'var(--text-muted)' }}>Margem de Contribuição:</small>
+                    <b style={{ display: 'block', color: '#C5A059', fontSize: 15, marginTop: 2 }}>20,2% (R$ 17.170,00/mês)</b>
+                  </div>
+                </div>
+                <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  <b>Parecer do Motor KyttoIA:</b> Recomendado para bairros com alta demanda de delivery afastados do Centro (ex: Jardim Europa e Vila Alta) ou expansão para praça de alimentação de shopping. Reutiliza a mesma central de pré-preparo de massas da matriz.
+                </p>
+              </div>
+            )}
+
+            {cenarioSimulador === 'energia_solar' && (
+              <div style={{ background: 'var(--surface-2)', border: '1px solid #10B981', borderRadius: 10, padding: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+                  <b style={{ color: '#10B981', fontSize: 14 }}>Análise KyttoIA: Usina Fotovoltaica Própria 75 kWp</b>
+                  <span className="serrano-pill serrano-p-ok">Payback Estimado: 14,8 Meses</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 14 }}>
+                  <div style={{ background: 'var(--surface)', padding: 12, borderRadius: 8 }}>
+                    <small style={{ color: 'var(--text-muted)' }}>Investimento Estimado (CAPEX):</small>
+                    <b style={{ display: 'block', color: 'var(--text-main)', fontSize: 15, marginTop: 2 }}>R$ 210.000,00</b>
+                  </div>
+                  <div style={{ background: 'var(--surface)', padding: 12, borderRadius: 8 }}>
+                    <small style={{ color: 'var(--text-muted)' }}>Geração Mensal Estimada:</small>
+                    <b style={{ display: 'block', color: '#34D399', fontSize: 15, marginTop: 2 }}>11.200 kWh / mês</b>
+                  </div>
+                  <div style={{ background: 'var(--surface)', padding: 12, borderRadius: 8 }}>
+                    <small style={{ color: 'var(--text-muted)' }}>Economia Direta na Fatura:</small>
+                    <b style={{ display: 'block', color: '#34D399', fontSize: 15, marginTop: 2 }}>- R$ 14.200,00 / mês</b>
+                  </div>
+                  <div style={{ background: 'var(--surface)', padding: 12, borderRadius: 8 }}>
+                    <small style={{ color: 'var(--text-muted)' }}>Unidades Beneficiadas:</small>
+                    <b style={{ display: 'block', color: '#C5A059', fontSize: 15, marginTop: 2 }}>Central Usina + Restaurante</b>
+                  </div>
+                </div>
+                <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  <b>Parecer do Motor KyttoIA:</b> Excelente investimento em ativos tangíveis. O terreno da usina no Distrito Industrial tem irradiação solar ideal para a instalação das placas solares em solo, abatendo o consumo elétrico dos motores da central Convicta e do ar condicionado da pizzaria via compensação de créditos na Energisa-MT.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
