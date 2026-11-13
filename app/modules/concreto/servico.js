@@ -754,7 +754,8 @@ export function inicializarDatastoreConcreto() {
   if (!Array.isArray(data.concreto_cameras_ip) || data.concreto_cameras_ip.length === 0) {
     data.concreto_cameras_ip = [
       {
-        id: 'cam-balanca-ent-01',
+        id: 'cam-01-lpr',
+        aliasId: 'cam-balanca-ent-01',
         empresaId: CONCRETO_EMPRESA_ID,
         nome: 'Balança 80t · Entrada & LPR Frontal',
         pontoInstalacao: 'balanca_entrada_lpr',
@@ -775,16 +776,19 @@ export function inicializarDatastoreConcreto() {
         codec: 'H.265+',
         status: 'online',
         latenciaMs: 14,
+        streamRtspUrl: 'rtsp://admin:@192.168.1.101:554/cam/realmonitor?channel=1&subtype=0',
+        snapshotHttpUrl: 'http://admin:@192.168.1.101:80/cgi-bin/snapshot.cgi?channel=1',
         recursosIa: { lprLeituraPlaca: true, enquadramentoBalanca: true, inspecaoEpi: true, cercaVirtual: true }
       },
       {
-        id: 'cam-balanca-sai-02',
+        id: 'cam-02-panoramica',
+        aliasId: 'cam-balanca-sai-02',
         empresaId: CONCRETO_EMPRESA_ID,
         nome: 'Balança 80t · Saída & Traseira Veicular',
         pontoInstalacao: 'balanca_saida_traseira',
         pontoRotulo: 'Balança Saída',
-        marca: 'dahua',
-        modelo: 'IPC-HFW5442T-ASE-NI',
+        marca: 'hikvision',
+        modelo: 'DS-2CD2047G2-LU ColorVu',
         ipHost: '192.168.1.102',
         portaHttp: 80,
         portaRtsp: 554,
@@ -799,6 +803,8 @@ export function inicializarDatastoreConcreto() {
         codec: 'H.265',
         status: 'online',
         latenciaMs: 18,
+        streamRtspUrl: 'rtsp://admin:@192.168.1.102:554/Streaming/Channels/101',
+        snapshotHttpUrl: 'http://admin:@192.168.1.102:80/ISAPI/Streaming/channels/101/picture',
         recursosIa: { lprLeituraPlaca: true, enquadramentoBalanca: true, inspecaoEpi: false, cercaVirtual: true }
       },
       {
@@ -5346,12 +5352,21 @@ export function construirUrlsCamera(marca, ipHost, portaHttp = 80, portaRtsp = 5
 
 export function listarCamerasIpConcreto(empresaId = CONCRETO_EMPRESA_ID) {
   const data = inicializarDatastoreConcreto();
-  return (data.concreto_cameras_ip || []).filter(c => !c.empresaId || c.empresaId === empresaId);
+  const lista = (data.concreto_cameras_ip || []).filter(c => !c.empresaId || c.empresaId === empresaId);
+  return lista.map(c => {
+    if (c.id === 'cam-balanca-ent-01' || c.pontoInstalacao === 'balanca_entrada_lpr') {
+      return { ...c, id: 'cam-01-lpr', aliasId: 'cam-balanca-ent-01', streamRtspUrl: c.streamRtspUrl || 'rtsp://admin:@192.168.1.101:554/cam/realmonitor?channel=1&subtype=0', snapshotHttpUrl: c.snapshotHttpUrl || 'http://admin:@192.168.1.101:80/cgi-bin/snapshot.cgi?channel=1' };
+    }
+    if (c.id === 'cam-balanca-sai-02' || c.pontoInstalacao === 'balanca_saida_traseira') {
+      return { ...c, id: 'cam-02-panoramica', aliasId: 'cam-balanca-sai-02', marca: 'hikvision', streamRtspUrl: c.streamRtspUrl || 'rtsp://admin:@192.168.1.102:554/Streaming/Channels/101', snapshotHttpUrl: c.snapshotHttpUrl || 'http://admin:@192.168.1.102:80/ISAPI/Streaming/channels/101/picture', recursosIa: { ...(c.recursosIa || {}), enquadramentoBalanca: true } };
+    }
+    return c;
+  });
 }
 
 export function obterCameraIpPorId(id, empresaId = CONCRETO_EMPRESA_ID) {
   const cameras = listarCamerasIpConcreto(empresaId);
-  return cameras.find(c => c.id === id) || null;
+  return cameras.find(c => c.id === id || c.aliasId === id || (id === 'cam-01-lpr' && (c.id === 'cam-balanca-ent-01' || c.pontoInstalacao === 'balanca_entrada_lpr')) || (id === 'cam-02-panoramica' && (c.id === 'cam-balanca-sai-02' || c.pontoInstalacao === 'balanca_saida_traseira'))) || null;
 }
 
 export function criarCameraIpConcreto(dados, empresaId = CONCRETO_EMPRESA_ID) {
@@ -5512,7 +5527,7 @@ export function capturarSnapshotCameraIp(id, empresaId = CONCRETO_EMPRESA_ID) {
 
 export function analisarFrameVisionKyttoIa(id, empresaId = CONCRETO_EMPRESA_ID) {
   const data = inicializarDatastoreConcreto();
-  const camera = (data.concreto_cameras_ip || []).find(c => c.id === id);
+  const camera = obterCameraIpPorId(id, empresaId);
   if (!camera) return { ok: false, erro: "Câmera não encontrada" };
 
   const agora = new Date().toISOString();
@@ -5586,6 +5601,9 @@ export function analisarFrameVisionKyttoIa(id, empresaId = CONCRETO_EMPRESA_ID) 
     criadoEm: agora
   };
 
+  if (!Array.isArray(data.concreto_eventos_vision)) {
+    data.concreto_eventos_vision = [];
+  }
   data.concreto_eventos_vision.unshift(novoEvento);
   if (data.concreto_eventos_vision.length > 50) {
     data.concreto_eventos_vision = data.concreto_eventos_vision.slice(0, 50);
