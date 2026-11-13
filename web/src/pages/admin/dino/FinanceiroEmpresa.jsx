@@ -7,7 +7,10 @@ import { useRazaoAtivo } from '../../../lib/razao-estado'
 import { brandFromContext } from '../../../lib/brand'
 import { Badge, Dialog, Table } from '../customer360/shared'
 import { downloadCsv, localDay, money, moneyK, shortDate } from './format'
-import ConciliacaoBancariaTab from '../financeiro/ConciliacaoBancariaTab'
+import ConciliacaoBancariaTab from "../financeiro/ConciliacaoBancariaTab"
+import DreEbitdaCompletoPanel from "../financeiro/DreEbitdaCompletoPanel"
+import ConciliacaoTefPixPanel from "../financeiro/ConciliacaoTefPixPanel"
+import TesourariaCofrePanel from "../financeiro/TesourariaCofrePanel"
 import '../customer360.css'
 import './dino-admin.css'
 
@@ -994,11 +997,14 @@ export default function FinanceiroEmpresa() {
     setMesSelecionado(null)
     setPaginaAtual(1)
     if (tipoCard === 'saldo') {
+      setAbaAnalitica('fluxo')
       setFiltros((prev) => ({ ...prev, tipo: '', status: 'pago', de: '', ate: '' }))
     } else if (tipoCard === 'aReceber') {
-      setFiltros((prev) => ({ ...prev, tipo: 'receita', status: 'pendente', de: periodoDatas.de, ate: periodoDatas.ate }))
+      setAbaAnalitica('receber')
+      setFiltros((prev) => ({ ...prev, tipo: 'receita', status: 'pendente', de: '', ate: '' }))
     } else if (tipoCard === 'aPagar') {
-      setFiltros((prev) => ({ ...prev, tipo: 'despesa', status: 'pendente', de: periodoDatas.de, ate: periodoDatas.ate }))
+      setAbaAnalitica('pagar')
+      setFiltros((prev) => ({ ...prev, tipo: 'despesa', status: 'pendente', de: '', ate: '' }))
     } else if (tipoCard === 'recPeriodo' || tipoCard === 'recMes') {
       setFiltros((prev) => ({ ...prev, tipo: 'receita', status: 'pago', de: periodoDatas.de, ate: periodoDatas.ate }))
     } else if (tipoCard === 'despPeriodo' || tipoCard === 'despMes') {
@@ -1522,11 +1528,17 @@ export default function FinanceiroEmpresa() {
               🔎 Detalhes
             </button>
           </div>
-          <strong style={{ color: '#10b981' }}>
-            {modoK ? moneyK(indicadoresPeriodo.aReceberPeriodo) : money(indicadoresPeriodo.aReceberPeriodo)}
+          <strong style={{ color: '#10b981', fontSize: 'clamp(18px, 1.8vw, 24px)' }}>
+            {modoK 
+              ? moneyK(indicadoresPeriodo.aReceberPeriodo > 0 ? indicadoresPeriodo.aReceberPeriodo : indicadoresPeriodo.aReceberGlobal) 
+              : money(indicadoresPeriodo.aReceberPeriodo > 0 ? indicadoresPeriodo.aReceberPeriodo : indicadoresPeriodo.aReceberGlobal)}
           </strong>
-          <div className="dadm-kpi-subval">Exato: {money(indicadoresPeriodo.aReceberPeriodo)}</div>
-          <small>{periodoFiltro === 'tudo' ? 'Pendentes totais' : 'Vencendo no período'}</small>
+          <div className="dadm-kpi-subval">
+            {indicadoresPeriodo.aReceberPeriodo > 0 
+              ? `No período: ${money(indicadoresPeriodo.aReceberPeriodo)}` 
+              : `Total pendente: ${money(indicadoresPeriodo.aReceberGlobal)}`}
+          </div>
+          <small>{indicadoresPeriodo.aReceberPeriodo > 0 ? `Vencendo em ${periodoDatas.label}` : `Vencimentos em aberto (${money(indicadoresPeriodo.aReceberGlobal)})`}</small>
         </article>
         <article
           role="button"
@@ -1547,11 +1559,17 @@ export default function FinanceiroEmpresa() {
               🔎 Detalhes
             </button>
           </div>
-          <strong style={{ color: '#e05c5c' }}>
-            {modoK ? moneyK(indicadoresPeriodo.aPagarPeriodo) : money(indicadoresPeriodo.aPagarPeriodo)}
+          <strong style={{ color: '#e05c5c', fontSize: 'clamp(18px, 1.8vw, 24px)' }}>
+            {modoK 
+              ? moneyK(indicadoresPeriodo.aPagarPeriodo > 0 ? indicadoresPeriodo.aPagarPeriodo : indicadoresPeriodo.aPagarGlobal) 
+              : money(indicadoresPeriodo.aPagarPeriodo > 0 ? indicadoresPeriodo.aPagarPeriodo : indicadoresPeriodo.aPagarGlobal)}
           </strong>
-          <div className="dadm-kpi-subval">Exato: {money(indicadoresPeriodo.aPagarPeriodo)}</div>
-          <small>{periodoFiltro === 'tudo' ? 'Pendentes totais' : 'Vencendo no período'}</small>
+          <div className="dadm-kpi-subval">
+            {indicadoresPeriodo.aPagarPeriodo > 0 
+              ? `No período: ${money(indicadoresPeriodo.aPagarPeriodo)}` 
+              : `Total pendente: ${money(indicadoresPeriodo.aPagarGlobal)}`}
+          </div>
+          <small>{indicadoresPeriodo.aPagarPeriodo > 0 ? `Vencendo em ${periodoDatas.label}` : `Vencimentos em aberto (${money(indicadoresPeriodo.aPagarGlobal)})`}</small>
         </article>
         <article
           role="button"
@@ -1678,7 +1696,7 @@ export default function FinanceiroEmpresa() {
               style={{ fontSize: 12 }}
               onClick={() => toggleCardFiltro('vencidos')}
             >
-              {cardFiltroAtivo === 'vencidos' ? '✓ Filtrando vencidos' : 'Ver os 71 vencidos'}
+              {cardFiltroAtivo === 'vencidos' ? '✓ Filtrando vencidos' : `Ver os ${vencidos.length} vencidos`}
             </button>
             <button
               type="button"
@@ -1696,7 +1714,7 @@ export default function FinanceiroEmpresa() {
       {/* Seção Analítica: Abas de Fluxo de Caixa, DRE Gerencial e Despesas por Categoria */}
       <section className="dadm-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, borderBottom: '1px solid var(--line)', paddingBottom: 10, marginBottom: 14 }}>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6, whiteSpace: 'nowrap', scrollbarWidth: 'thin' }}>
             <button
               type="button"
               className={`c360-btn ${abaAnalitica === 'fluxo' ? 'primary' : 'ghost'}`}
@@ -1829,6 +1847,21 @@ export default function FinanceiroEmpresa() {
 
         {abaAnalitica === 'raiox' && (
           <RaioXFinanceiroPanel indicadores={indicadoresPeriodo} modoK={modoK} />
+        )}
+        {abaAnalitica === 'dre_ebitda' && (
+          <div style={{ marginTop: 14 }}>
+            <DreEbitdaCompletoPanel toast={toast} />
+          </div>
+        )}
+        {abaAnalitica === 'conciliacao_tef' && (
+          <div style={{ marginTop: 14 }}>
+            <ConciliacaoTefPixPanel toast={toast} />
+          </div>
+        )}
+        {abaAnalitica === 'tesouraria' && (
+          <div style={{ marginTop: 14 }}>
+            <TesourariaCofrePanel toast={toast} />
+          </div>
         )}
       </section>
     </>}
