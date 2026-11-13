@@ -219,7 +219,7 @@ export function criarRotasPizzariaSuite() {
   router.post('/pedidos/:id/emitir-nfce', async (req, res) => {
     try {
       const data = db();
-      const pedido = (data.palatare_kds || []).find(p => p.id === req.params.id);
+      const pedido = localizarPedidoPizzariaUnificado(data, req.params.id);
       if (!pedido) return res.status(404).json({ error: 'Pedido não encontrado' });
 
       const nfce = gerarPreviaNfcePizzaria(pedido);
