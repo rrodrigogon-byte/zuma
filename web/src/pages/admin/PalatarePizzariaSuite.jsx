@@ -46,6 +46,7 @@ const TABS = [
   { id: 'delivery', label: 'Delivery Tangará', icon: Truck, badge: 'Zonas & Motoboy' },
   { id: 'crm', label: 'Clientes 360° & CRM', icon: Users, badge: 'RFV & Paladar' },
   { id: 'bi', label: 'Inteligência de Vendas', icon: TrendingUp, badge: 'Curva ABC' },
+  { id: 'implantacao', label: 'Implantação & Go-Live', icon: CheckCircle2, badge: 'Plano +100%' },
   { id: 'grupo', label: 'Holding Grupo Palatare', icon: Building2, badge: 'Holding' },
 ];
 
@@ -108,6 +109,8 @@ export default function PalatarePizzariaSuite() {
   const [modalConfigDelivery, setModalConfigDelivery] = useState(null);
   const [taxaDeliveryEditada, setTaxaDeliveryEditada] = useState(12);
   const [tempoDeliveryEditado, setTempoDeliveryEditado] = useState('35-45 min');
+  const [modalFichaTecnicaBancada, setModalFichaTecnicaBancada] = useState(false);
+  const [modalTermoHomologacao, setModalTermoHomologacao] = useState(false);
 
   // Carregar dados da suíte da Palatare
   const carregarDados = async () => {
@@ -121,6 +124,18 @@ export default function PalatarePizzariaSuite() {
       setErro(err.message || 'Falha ao carregar dados da pizzaria');
     } finally {
       setCarregando(false);
+    }
+  };
+
+  // Alternar conclusão de tarefa no checklist de implantação
+  const handleToggleTarefaImplantacao = async (tarefaId) => {
+    try {
+      const res = await api.patch(`/api/admin/palatare/implantacao/tarefa/${tarefaId}`);
+      if (res?.implantacao && dadosSuite) {
+        setDadosSuite({ ...dadosSuite, implantacao: res.implantacao });
+      }
+    } catch (err) {
+      console.warn('Erro ao alternar tarefa de implantação:', err);
     }
   };
 
@@ -2562,6 +2577,235 @@ export default function PalatarePizzariaSuite() {
       )}
 
       {/* ------------------------------------------------------------- */}
+      {/* ABA: IMPLANTAÇÃO & GO-LIVE (+100% DE FATURAMENTO)            */}
+      {/* ------------------------------------------------------------- */}
+      {tabAtiva === 'implantacao' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          
+          {/* BANNER PRINCIPAL DE IMPLANTAÇÃO */}
+          <div style={{
+            background: 'linear-gradient(135deg, #1C130D 0%, #2A170E 100%)',
+            border: '2px solid rgba(255, 107, 44, 0.4)',
+            borderRadius: 16,
+            padding: 24,
+            boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 18
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 14 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <span style={{ background: '#FF6B2C', color: '#FFF', fontSize: 11, fontWeight: 900, padding: '3px 10px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Operação Go-Live Ativa
+                  </span>
+                  <span style={{ color: '#D4AF37', fontSize: 12, fontWeight: 800 }}>
+                    ★ Grupo Palatare · Tangará da Serra/MT
+                  </span>
+                </div>
+                <h2 style={{ margin: 0, fontSize: 24, fontWeight: 900, color: '#FFF', letterSpacing: -0.5 }}>
+                  Painel Oficial de Implantação em Campo &amp; Treinamento da Equipe
+                </h2>
+                <p style={{ margin: '6px 0 0', fontSize: 13, color: '#C8B6A6', maxWidth: 850, lineHeight: 1.5 }}>
+                  Acompanhamento em tempo real das 5 frentes operacionais para alavancagem de <strong>+104,7% no faturamento bruto</strong> (para R$ 271.300,00/mês) e <strong>+269% no lucro líquido</strong> (para R$ 79.350,00/mês), com conformidade fiscal, balança digital na bancada e autoatendimento QR nas 20 mesas.
+                </p>
+              </div>
+
+              {/* BOTÕES DE AÇÃO IMEDIATA */}
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setModalFichaTecnicaBancada(true)}
+                  style={{
+                    background: '#10B981',
+                    color: '#064E3B',
+                    border: 'none',
+                    padding: '10px 16px',
+                    borderRadius: 8,
+                    fontSize: 13,
+                    fontWeight: 900,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
+                  }}
+                >
+                  📋 Ficha Técnica Plastificada (A4)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalTermoHomologacao(true)}
+                  style={{
+                    background: '#D4AF37',
+                    color: '#000',
+                    border: 'none',
+                    padding: '10px 16px',
+                    borderRadius: 8,
+                    fontSize: 13,
+                    fontWeight: 900,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    boxShadow: '0 4px 12px rgba(212, 175, 55, 0.3)'
+                  }}
+                >
+                  📜 Termo de Homologação (A4)
+                </button>
+              </div>
+            </div>
+
+            {/* BARRA DE PROGRESSO GLOBAL DO GO-LIVE */}
+            {(() => {
+              const frentes = dadosSuite?.implantacao?.frentes || [];
+              const todasTarefas = frentes.flatMap(f => f.tarefas || []);
+              const concluidas = todasTarefas.filter(t => t.concluida).length;
+              const percGlobal = todasTarefas.length ? Math.round((concluidas / todasTarefas.length) * 100) : 75;
+
+              return (
+                <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, fontSize: 13 }}>
+                    <span style={{ color: '#FFF', fontWeight: 800 }}>
+                      Progresso Global da Implantação Palatare:
+                    </span>
+                    <strong style={{ color: '#10B981', fontSize: 16 }}>
+                      {percGlobal}% CONCLUÍDO ({concluidas}/{todasTarefas.length} tarefas homologadas)
+                    </strong>
+                  </div>
+                  <div style={{ width: '100%', height: 10, background: 'rgba(255,255,255,0.1)', borderRadius: 6, overflow: 'hidden' }}>
+                    <div style={{ width: `${percGlobal}%`, height: '100%', background: 'linear-gradient(90deg, #FF6B2C 0%, #10B981 100%)', borderRadius: 6, transition: 'width 0.4s ease' }} />
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* 4 CARDS DE INDICADORES DE IMPLANTAÇÃO */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 11, color: '#A8998C', fontWeight: 700, textTransform: 'uppercase' }}>Faturamento Alvo</div>
+                <div style={{ fontSize: 20, fontWeight: 900, color: '#34D399', marginTop: 2 }}>R$ 271.300,00</div>
+                <div style={{ fontSize: 11, color: '#C8B6A6', marginTop: 2 }}>+104,7% (+R$ 138,8k/mês)</div>
+              </div>
+
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 11, color: '#A8998C', fontWeight: 700, textTransform: 'uppercase' }}>Economia de CMV</div>
+                <div style={{ fontSize: 20, fontWeight: 900, color: '#FCD34D', marginTop: 2 }}>R$ 9.600,00/mês</div>
+                <div style={{ fontSize: 11, color: '#C8B6A6', marginTop: 2 }}>Porcionamento 280g de queijo</div>
+              </div>
+
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 11, color: '#A8998C', fontWeight: 700, textTransform: 'uppercase' }}>Receita Recorrente MRR</div>
+                <div style={{ fontSize: 20, fontWeight: 900, color: '#60A5FA', marginTop: 2 }}>R$ 21.600,00/mês</div>
+                <div style={{ fontSize: 11, color: '#C8B6A6', marginTop: 2 }}>Palatare Pizza Club</div>
+              </div>
+
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 11, color: '#A8998C', fontWeight: 700, textTransform: 'uppercase' }}>Autoatendimento QR</div>
+                <div style={{ fontSize: 20, fontWeight: 900, color: '#FF6B2C', marginTop: 2 }}>20 Mesas Ativas</div>
+                <div style={{ fontSize: 11, color: '#C8B6A6', marginTop: 2 }}>Salão Gourmet &amp; Varanda</div>
+              </div>
+            </div>
+          </div>
+
+          {/* LISTA DAS 5 FRENTES DE IMPLANTAÇÃO COM CHECKLIST INTERATIVO */}
+          <div style={{ display: 'grid', gap: 16 }}>
+            {(dadosSuite?.implantacao?.frentes || []).map((frente) => (
+              <div
+                key={frente.id}
+                style={{
+                  background: '#140D09',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 14,
+                  padding: 20,
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.3)'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 17, fontWeight: 900, color: '#FFF' }}>
+                      {frente.titulo}
+                    </h3>
+                    <div style={{ fontSize: 12, color: '#A8998C', marginTop: 3 }}>
+                      👤 <strong>Responsável:</strong> {frente.responsavel} · 💡 <strong>Impacto:</strong> <span style={{ color: '#34D399' }}>{frente.impactoEsperado}</span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 120, height: 8, background: 'rgba(255,255,255,0.1)', borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{ width: `${frente.progresso}%`, height: '100%', background: frente.progresso === 100 ? '#10B981' : '#FF6B2C' }} />
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: frente.progresso === 100 ? '#10B981' : '#FF6B2C' }}>
+                      {frente.progresso}%
+                    </span>
+                  </div>
+                </div>
+
+                {/* TAREFAS DO CHECKLIST */}
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {frente.tarefas.map((tarefa) => (
+                    <div
+                      key={tarefa.id}
+                      onClick={() => handleToggleTarefaImplantacao(tarefa.id)}
+                      style={{
+                        background: tarefa.concluida ? 'rgba(16, 185, 129, 0.08)' : 'rgba(255,255,255,0.02)',
+                        border: `1px solid ${tarefa.concluida ? 'rgba(16, 185, 129, 0.3)' : 'rgba(255,255,255,0.06)'}`,
+                        borderRadius: 8,
+                        padding: '10px 14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: 6,
+                          border: `2px solid ${tarefa.concluida ? '#10B981' : '#6B7280'}`,
+                          background: tarefa.concluida ? '#10B981' : 'transparent',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#FFF',
+                          fontSize: 12,
+                          fontWeight: 900
+                        }}>
+                          {tarefa.concluida && '✓'}
+                        </div>
+                        <span style={{
+                          fontSize: 13,
+                          color: tarefa.concluida ? '#E2E8F0' : '#A8998C',
+                          textDecoration: tarefa.concluida ? 'line-through' : 'none',
+                          fontWeight: tarefa.concluida ? 600 : 500
+                        }}>
+                          {tarefa.texto}
+                        </span>
+                      </div>
+
+                      <span style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: tarefa.concluida ? '#10B981' : '#F59E0B',
+                        background: tarefa.concluida ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                        padding: '2px 8px',
+                        borderRadius: 6
+                      }}>
+                        {tarefa.concluida ? `Homologado ${tarefa.data || ''}` : tarefa.data || 'Pendente'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
       {/* ABA 7: GRUPO SERRANO & PALATARE (HOLDING & SINERGIAS) */}
       {/* ------------------------------------------------------------- */}
       {tabAtiva === 'grupo' && (
@@ -3504,6 +3748,251 @@ export default function PalatarePizzariaSuite() {
                 style={{ flex: 1, background: '#10B981', color: '#064E3B', border: 'none', padding: '10px', borderRadius: 8, fontWeight: 900, cursor: 'pointer' }}
               >
                 Salvar Zona
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: FICHA TÉCNICA PLASTIFICADA DE BANCADA (A4) */}
+      {modalFichaTecnicaBancada && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          padding: 20
+        }}>
+          <div style={{
+            background: '#FFF',
+            color: '#111',
+            borderRadius: 12,
+            padding: 30,
+            maxWidth: 680,
+            width: '100%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            boxShadow: '0 25px 70px rgba(0,0,0,0.8)',
+            fontFamily: 'system-ui, -apple-system, sans-serif'
+          }}>
+            <div style={{ borderBottom: '3px solid #E11D48', paddingBottom: 14, marginBottom: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 900, color: '#E11D48', letterSpacing: 1, textTransform: 'uppercase' }}>
+                  GRUPO PALATARE PARTICIPAÇÕES · PADRÃO OPERACIONAL DE COZINHA
+                </div>
+                <h2 style={{ margin: '4px 0 0', fontSize: 20, fontWeight: 900, color: '#0F172A' }}>
+                  🍕 Ficha Técnica Plastificada de Bancada (Padrão 280g)
+                </h2>
+                <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
+                  Palatare Pizzaria &amp; Restaurante · CNPJ 51.499.928/0001-41 · Tangará da Serra/MT
+                </div>
+              </div>
+              <span style={{ background: '#FEE2E2', color: '#991B1B', border: '1px solid #F87171', fontSize: 11, fontWeight: 900, padding: '4px 10px', borderRadius: 6 }}>
+                USO OBRIGATÓRIO NA BANCADA
+              </span>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <h4 style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 900, color: '#1E293B', textTransform: 'uppercase' }}>
+                1. Gramaturas Críticas por Tamanho e Divisão de Sabores
+              </h4>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ background: '#F1F5F9', borderBottom: '2px solid #CBD5E1' }}>
+                    <th style={{ padding: '8px', textAlign: 'left' }}>Item / Componente</th>
+                    <th style={{ padding: '8px', textAlign: 'center' }}>Pizza Grande (35cm)</th>
+                    <th style={{ padding: '8px', textAlign: 'center' }}>1/2 Sabor (50%)</th>
+                    <th style={{ padding: '8px', textAlign: 'center' }}>1/3 Sabor (33%)</th>
+                    <th style={{ padding: '8px', textAlign: 'center' }}>1/4 Sabor (25%)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
+                    <td style={{ padding: '8px', fontWeight: 700 }}>Massa Napolitana Crua</td>
+                    <td style={{ padding: '8px', textAlign: 'center', fontWeight: 800 }}>380g</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>380g</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>380g</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>380g</td>
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid #E2E8F0', background: '#FEF2F2' }}>
+                    <td style={{ padding: '8px', fontWeight: 900, color: '#991B1B' }}>Molho Pelati Italiano</td>
+                    <td style={{ padding: '8px', textAlign: 'center', fontWeight: 900, color: '#991B1B' }}>90g (1 concha)</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>90g</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>90g</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>90g</td>
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid #E2E8F0', background: '#FEFCE8' }}>
+                    <td style={{ padding: '8px', fontWeight: 900, color: '#854D0E' }}>🧀 Muçarela na Balança</td>
+                    <td style={{ padding: '8px', textAlign: 'center', fontWeight: 900, color: '#854D0E', fontSize: 14 }}>280g</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>140g cada</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>93g cada</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>70g cada</td>
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
+                    <td style={{ padding: '8px', fontWeight: 700 }}>Proteínas (Picanha/Filé)</td>
+                    <td style={{ padding: '8px', textAlign: 'center', fontWeight: 800 }}>160g total</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>80g cada</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>53g cada</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>40g cada</td>
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
+                    <td style={{ padding: '8px', fontWeight: 700 }}>Borda Recheada (Catupiry)</td>
+                    <td style={{ padding: '8px', textAlign: 'center', fontWeight: 800 }}>180g</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>180g</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>180g</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>180g</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: 12, marginBottom: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, textAlign: 'center', fontSize: 11 }}>
+                <div>
+                  <strong style={{ display: 'block', color: '#64748B' }}>Temperatura Lastro:</strong>
+                  <span style={{ fontSize: 14, fontWeight: 900, color: '#E11D48' }}>410°C - 430°C</span>
+                </div>
+                <div>
+                  <strong style={{ display: 'block', color: '#64748B' }}>Temperatura Cúpula:</strong>
+                  <span style={{ fontSize: 14, fontWeight: 900, color: '#E11D48' }}>440°C - 450°C</span>
+                </div>
+                <div>
+                  <strong style={{ display: 'block', color: '#64748B' }}>Tempo de Cocção:</strong>
+                  <span style={{ fontSize: 14, fontWeight: 900, color: '#059669' }}>90 a 110 segundos</span>
+                </div>
+              </div>
+            </div>
+            <div style={{ fontSize: 11, color: '#334155', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: 12 }}>
+              <strong>⚠️ REGRAS DE OURO DO PIZZAIOLO PALATARE:</strong>
+              <ul style={{ margin: '4px 0 0', paddingLeft: 16, display: 'grid', gap: 4 }}>
+                <li>Toda montagem deve passar pela balança digital tarada — tolerância máxima de ±10g de muçarela.</li>
+                <li>Girar a pizza no forno a cada 30 segundos com a pá redonda para tostamento uniforme e bordas pintadas (cornicione).</li>
+                <li>Ao retirar do forno, confirmar finalizações frias (rúcula, parma, azeite trufado) antes de disparar no KDS.</li>
+              </ul>
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button
+                type="button"
+                onClick={() => setModalFichaTecnicaBancada(false)}
+                style={{ flex: 1, background: '#E2E8F0', color: '#334155', border: 'none', padding: '10px', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                style={{ flex: 1, background: '#E11D48', color: '#FFF', border: 'none', padding: '10px', borderRadius: 8, fontWeight: 900, cursor: 'pointer', boxShadow: '0 4px 12px rgba(225, 29, 72, 0.3)' }}
+              >
+                🖨️ Imprimir Ficha de Bancada (A4)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: TERMO OFICIAL DE HOMOLOGAÇÃO & GO-LIVE (A4) */}
+      {modalTermoHomologacao && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          padding: 20
+        }}>
+          <div style={{
+            background: '#FFF',
+            color: '#111',
+            borderRadius: 12,
+            padding: 34,
+            maxWidth: 680,
+            width: '100%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            boxShadow: '0 25px 70px rgba(0,0,0,0.8)',
+            fontFamily: 'system-ui, -apple-system, sans-serif'
+          }}>
+            <div style={{ textAlign: 'center', borderBottom: '2px solid #0F172A', paddingBottom: 16, marginBottom: 18 }}>
+              <div style={{ fontSize: 12, fontWeight: 900, color: '#475569', letterSpacing: 1.5, textTransform: 'uppercase' }}>
+                GRUPO PALATARE PARTICIPAÇÕES LTDA × PLATAFORMA KYTTO
+              </div>
+              <h2 style={{ margin: '6px 0 0', fontSize: 21, fontWeight: 900, color: '#0F172A' }}>
+                TERMO DE HOMOLOGAÇÃO &amp; ENTRADA EM OPERAÇÃO (GO-LIVE)
+              </h2>
+              <div style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>
+                Plano Estratégico de Expansão Operacional (+100% de Lucro) · Tangará da Serra/MT
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.6, display: 'grid', gap: 12, textAlign: 'justify' }}>
+              <p style={{ margin: 0 }}>
+                Pelo presente instrumento, a <strong>PALATARE PIZZARIA &amp; RESTAURANTE LTDA</strong>, inscrita no CNPJ sob o nº <strong>51.499.928/0001-41</strong>, com sede na Rua Antônio Hortolani, nº 62-W, Centro, Tangará da Serra - MT, representada pelo Diretor Geral do <strong>GRUPO PALATARE</strong>, conjuntamente com a equipe técnica da <strong>KYTTO</strong>, declara para os devidos fins:
+              </p>
+              <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: 12, fontSize: 11 }}>
+                <strong>1. CONFORMIDADE TÉCNICA E FUNCIONAL DAS 5 FRENTES:</strong>
+                <ul style={{ margin: '4px 0 0', paddingLeft: 16, display: 'grid', gap: 3 }}>
+                  <li>✓ <strong>Balança de Bancada &amp; Ficha Técnica Digital:</strong> Padronização de 280g de muçarela homologada (-R$ 9.600/mês CMV).</li>
+                  <li>✓ <strong>Autoatendimento QR Code:</strong> Displays acrílicos das 20 mesas integrados ao KDS em produção.</li>
+                  <li>✓ <strong>Palatare Pizza Club:</strong> Planos recorrentes e cobrança automatizada Kytto Pagamentos aprovados.</li>
+                  <li>✓ <strong>Telemetria &amp; Frota Delivery:</strong> Roteirização agrupada em lote com tempo de baú abaixo de 22 minutos.</li>
+                  <li>✓ <strong>KDS Forno a Lenha Napolitano:</strong> Telas touch de bancada e expedição sincronizadas a 400°C.</li>
+                </ul>
+              </div>
+              <p style={{ margin: 0 }}>
+                Fica atestado que os sistemas atingiram estabilidade total, inexistindo pendências impeditivas, autorizando-se o início da operação comercial plena em Tangará da Serra a partir desta data.
+              </p>
+              <div style={{ textAlign: 'center', marginTop: 8, fontWeight: 700, color: '#0F172A' }}>
+                Tangará da Serra - MT, 13 de novembro de 2026.
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginTop: 24, textAlign: 'center', fontSize: 11 }}>
+                <div>
+                  <div style={{ borderTop: '1px solid #334155', paddingTop: 6, fontWeight: 800 }}>
+                    ALEXANDRE PALATARE<br/>
+                    <span style={{ fontWeight: 400, color: '#64748B' }}>Diretor Executivo · Grupo Palatare</span>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ borderTop: '1px solid #334155', paddingTop: 6, fontWeight: 800 }}>
+                    GERENTE GERAL DE OPERAÇÕES<br/>
+                    <span style={{ fontWeight: 400, color: '#64748B' }}>Palatare Pizzaria &amp; Restaurante</span>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ borderTop: '1px solid #334155', paddingTop: 6, fontWeight: 800 }}>
+                    CHEF PIZZAIOLO<br/>
+                    <span style={{ fontWeight: 400, color: '#64748B' }}>Bancada &amp; Forno Napolitano</span>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ borderTop: '1px solid #334155', paddingTop: 6, fontWeight: 800 }}>
+                    ENGENHARIA DE SOLUÇÕES KYTTO<br/>
+                    <span style={{ fontWeight: 400, color: '#64748B' }}>Plataforma Multinegócio Kytto</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
+              <button
+                type="button"
+                onClick={() => setModalTermoHomologacao(false)}
+                style={{ flex: 1, background: '#E2E8F0', color: '#334155', border: 'none', padding: '10px', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                style={{ flex: 1, background: '#0F172A', color: '#FFF', border: 'none', padding: '10px', borderRadius: 8, fontWeight: 900, cursor: 'pointer', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.3)' }}
+              >
+                🖨️ Imprimir Termo Oficial (A4)
               </button>
             </div>
           </div>

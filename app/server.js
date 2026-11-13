@@ -2609,6 +2609,7 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
         PALATARE_ENGENHARIA_CMV,
         PALATARE_PIZZA_CLUB,
         PALATARE_TELEMETRIA_FORNO,
+        PALATARE_IMPLANTACAO_CHECKLIST,
         PALATARE_EMPRESA_ID: empId
       } = await import('./palatare-pizzaria-seed.js');
       
@@ -2622,6 +2623,7 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
       const engenharia = data.palatare_engenharia || PALATARE_ENGENHARIA_CMV;
       const pizzaClub = data.palatare_pizza_club || PALATARE_PIZZA_CLUB;
       const telemetriaForno = data.palatare_forno || PALATARE_TELEMETRIA_FORNO;
+      const implantacao = data.palatare_implantacao || PALATARE_IMPLANTACAO_CHECKLIST;
 
       return res.json({ 
         ok: true, 
@@ -2634,7 +2636,8 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
         metricas,
         engenharia,
         pizzaClub,
-        telemetriaForno
+        telemetriaForno,
+        implantacao
       });
     } catch (e) {
       return res.status(500).json({ error: e.message });
@@ -2664,6 +2667,36 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
       data.palatare_kds.unshift(novoPedido);
       save();
       return res.status(201).json({ ok: true, pedido: novoPedido });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Alternar status de tarefa da implantação
+  app.patch('/api/admin/palatare/implantacao/tarefa/:id', auth, requireStaff, async (req, res) => {
+    try {
+      const data = db();
+      const { PALATARE_IMPLANTACAO_CHECKLIST } = await import('./palatare-pizzaria-seed.js');
+      data.palatare_implantacao ||= JSON.parse(JSON.stringify(PALATARE_IMPLANTACAO_CHECKLIST));
+      
+      let encontrada = null;
+      for (const frente of data.palatare_implantacao.frentes) {
+        const t = frente.tarefas.find(item => item.id === req.params.id);
+        if (t) {
+          t.concluida = req.body?.concluida !== undefined ? Boolean(req.body.concluida) : !t.concluida;
+          t.data = new Date().toLocaleDateString('pt-BR');
+          encontrada = t;
+          
+          // Recalcular progresso da frente
+          const concluidas = frente.tarefas.filter(x => x.concluida).length;
+          frente.progresso = Math.round((concluidas / frente.tarefas.length) * 100);
+          break;
+        }
+      }
+      
+      if (!encontrada) return res.status(404).json({ error: 'Tarefa de implantação não encontrada' });
+      save();
+      return res.json({ ok: true, tarefa: encontrada, implantacao: data.palatare_implantacao });
     } catch (e) {
       return res.status(500).json({ error: e.message });
     }

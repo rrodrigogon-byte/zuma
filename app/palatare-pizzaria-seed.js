@@ -837,6 +837,83 @@ export const PALATARE_TELEMETRIA_FORNO = {
   eficienciaEnergetica: "94.2% (Isolamento Refratário Duplo)"
 };
 
+export const PALATARE_IMPLANTACAO_CHECKLIST = {
+  versao: "2026.11-PROD",
+  dataInicio: "2026-11-13",
+  previsaoGoLiveTotal: "2026-11-30",
+  statusGeral: "em_implantacao",
+  unidade: "Palatare Pizzaria & Restaurante · Tangará da Serra/MT",
+  patrocinador: "Alexandre Palatare (Grupo Palatare)",
+  liderTecnico: "Engenharia de Soluções Kytto",
+  frentes: [
+    {
+      id: "frente_cmv",
+      titulo: "Frente 1: Padronização de CMV & Fichas Técnicas Digitais",
+      progresso: 85,
+      impactoEsperado: "+R$ 9.600,00/mês em redução de desperdício",
+      responsavel: "Pizzaiolo-Chefe & Controle de Qualidade",
+      tarefas: [
+        { id: "cmv_1", texto: "Instalação da balança digital de alta precisão na bancada fria de montagem", concluida: true, data: "13/11/2026" },
+        { id: "cmv_2", texto: "Padronização rigorosa de 280g de muçarela artesanal por pizza grande (8 fatias)", concluida: true, data: "13/11/2026" },
+        { id: "cmv_3", texto: "Afixação da Ficha Técnica Plastificada de Bancada para consulta imediata", concluida: true, data: "13/11/2026" },
+        { id: "cmv_4", texto: "Auditoria semanal de divergência de queijo entre compras e saídas no Kytto ERP", concluida: false, data: "Previsto 18/11" }
+      ]
+    },
+    {
+      id: "frente_autoatendimento",
+      titulo: "Frente 2: Displays Acrílicos & Autoatendimento QR Mesa",
+      progresso: 80,
+      impactoEsperado: "+R$ 41.600,00/mês (giro 20% mais rápido)",
+      responsavel: "Maître & Líder de Salão",
+      tarefas: [
+        { id: "auto_1", texto: "Ativação das rotas públicas de autoatendimento no cluster de produção (kytto.com.br)", concluida: true, data: "13/11/2026" },
+        { id: "auto_2", texto: "Impressão e montagem dos 20 displays acrílicos A5 com QR Code de mesa e Wi-Fi", concluida: true, data: "13/11/2026" },
+        { id: "auto_3", texto: "Validação da injeção de pedidos via smartphone direto no KDS Forno a Lenha", concluida: true, data: "13/11/2026" },
+        { id: "auto_4", texto: "Instrução inicial aos clientes no rodízio nos primeiros 7 dias de operação", concluida: true, data: "13/11/2026" }
+      ]
+    },
+    {
+      id: "frente_clube",
+      titulo: "Frente 3: Palatare Pizza Club (Planos de Assinatura)",
+      progresso: 65,
+      impactoEsperado: "+R$ 21.600,00/mês de Receita Recorrente (MRR)",
+      responsavel: "Gerência Comercial & CRM",
+      tarefas: [
+        { id: "clube_1", texto: "Definição dos 3 planos oficiais (Amici R$ 139, Famiglia R$ 249, Adega Wine R$ 329)", concluida: true, data: "13/11/2026" },
+        { id: "clube_2", texto: "Ativação da régua de cobrança automática e conciliação Pix/Cartão no Kytto Pagamentos", concluida: true, data: "13/11/2026" },
+        { id: "clube_3", texto: "Captação dos primeiros 25 assinantes fundadores na base VIP de Tangará da Serra", concluida: false, data: "Meta até 20/11" },
+        { id: "clube_4", texto: "Agendamento do lote de entregas prioritárias da semana (terças e quintas-feiras)", concluida: false, data: "Previsto 22/11" }
+      ]
+    },
+    {
+      id: "frente_delivery",
+      titulo: "Frente 4: Central de Roteirização & Frota de Motoboys",
+      progresso: 75,
+      impactoEsperado: "+R$ 38.000,00/mês (35min média e redução de km)",
+      responsavel: "Coordenador de Logística & Delivery",
+      tarefas: [
+        { id: "del_1", texto: "Mapeamento das zonas e taxas dos bairros de Tangará (Centro, Tarumã, Jardim Europa)", concluida: true, data: "13/11/2026" },
+        { id: "del_2", texto: "Cadastro da frota fixa de 3 motoboys com telemetria e status em tempo real", concluida: true, data: "13/11/2026" },
+        { id: "del_3", texto: "Ativação do despachador agrupado em lote (Batch Delivery até 3 pedidos)", concluida: true, data: "13/11/2026" },
+        { id: "del_4", texto: "Acompanhamento do indicador de retorno à base e tempo de baú abaixo de 22 minutos", concluida: false, data: "Em monitoramento" }
+      ]
+    },
+    {
+      id: "frente_treinamento",
+      titulo: "Frente 5: Treinamento da Equipe & Homologação",
+      progresso: 85,
+      impactoEsperado: "Alinhamento 100% da equipe e excelência operacional",
+      responsavel: "Gerente Geral Palatare & D-click/Kytto",
+      tarefas: [
+        { id: "trein_1", texto: "Treinamento prático dos pizzaiolos na operação do KDS touch em bancada", concluida: true, data: "13/11/2026" },
+        { id: "trein_2", texto: "Capacitação dos garçons para fechamento de pré-contas 80mm com 10% opcional", concluida: true, data: "13/11/2026" },
+        { id: "trein_3", texto: "Elaboração do Manual de Treinamento da Equipe e POP Operacional", concluida: true, data: "13/11/2026" },
+        { id: "trein_4", texto: "Assinatura do Termo Oficial de Homologação e Go-Live pelo Grupo Palatare", concluida: false, data: "Pronto para assinatura" }
+      ]
+    }
+  ]
+};
+
 export const PALATARE_CARDAPIO_INICIAL = [
   // Destaques da Casa & Rodízio Oficial
   { nome: "Rodízio de Pizzas Tradicional Palatare (Ter, Qua e Sex)", categoria: "Rodízio & Experiências", setor: "cozinha", preco: 59.90, unidade: "pessoa", estoque: 100, minimo: 10, ordem: 5, descricao: "Mais de 30 sabores doces e salgados assados no ponto perfeito, massas artesanais e calzones servidos à vontade à mesa." },
@@ -932,6 +1009,7 @@ export async function provisionarPalatarePizzaria({ commerceDb } = {}) {
     rootDb.palatare_engenharia = PALATARE_ENGENHARIA_CMV;
     rootDb.palatare_pizza_club = PALATARE_PIZZA_CLUB;
     rootDb.palatare_forno = PALATARE_TELEMETRIA_FORNO;
+    rootDb.palatare_implantacao = PALATARE_IMPLANTACAO_CHECKLIST;
 
     // Usuários da Palatare no JSON
     rootDb.usuarios ||= [];
