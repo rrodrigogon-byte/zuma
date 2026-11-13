@@ -114,7 +114,7 @@ import {
   STICKERS_RESTRITAS,
 } from './whatsapp-ai-persona.js';
 import { bubbleDelayMs, splitBubbles, styleModelText } from './whatsapp-ai-style.js';
-import { agendaCalendarText, buildAppAndBookingPromptReply, detectAppOrSelfBookingRequest, ensureToolLinks, extractFastScheduleChoice, fixWeekdayMistakes, obterLinkAgendaDino, serviceWithProfessional, toolMoneyValues, unbackedPrices, withSelfBookingAgendaOption } from './whatsapp-ai-normalize.js';
+import { agendaCalendarText, buildAppAndBookingPromptReply, detectAppOrSelfBookingRequest, detectDinoQuickFaq, ensureToolLinks, extractFastScheduleChoice, fixWeekdayMistakes, obterLinkAgendaDino, serviceWithProfessional, toolMoneyValues, unbackedPrices, withSelfBookingAgendaOption } from './whatsapp-ai-normalize.js';
 import { enviarFigurinha as enviarFigurinhaPersona, figurinhaDisponivel, figurinhaSuportada } from './whatsapp-figurinhas.js';
 import { mapWhatsappAiProviderLatency24h, WHATSAPP_AI_PROVIDER_RUNS_24H_CHANNEL_SQL } from './whatsapp-ai-provider-metrics.js';
 
@@ -1186,6 +1186,13 @@ async function putSessionInHandoff(session, reason, priority = 2) {
   // nova mensagem do cliente numa conversa que já está em atendimento humano.
   if (updated.rows.length) {
     void notificarHandoffParaEquipe(session, reason, prioridade).catch(() => null);
+    void recordLearningProposal(session.empresa_id, {
+      tipo: 'handoff',
+      chave: String(reason || 'transbordo_geral').slice(0, 60),
+      titulo: `Atrito / Transbordo: ${cleanText(reason, 60)}`,
+      proposta: `Atrito de atendimento registrado pelo T-Rex (${cleanText(reason, 120)}). Analisar para incorporar diretriz preventiva.`,
+      evidencias: [{ sessionId: session.id, motivo: reason, data: new Date().toISOString() }],
+    }).catch(() => null);
   }
 }
 
@@ -2553,6 +2560,15 @@ async function deterministicResponseCore(task, channel, session, message) {
     }
     const appBookingReq = detectAppOrSelfBookingRequest(message.text);
     const hasTimeMention = /\b([01]?\d|2[0-3])(?:h(\d{2})?|:(\d{2}))\b/i.test(message.text);
+    const quickFaq = detectDinoQuickFaq(message.text, { storeName: personaStore || 'Dino Barbearia' });
+    if (quickFaq && !hasTimeMention) {
+      return {
+        text: quickFaq.text,
+        kind: quickFaq.kind,
+        model: 'deterministic_dino_quick_faq',
+        provider: 'system',
+      };
+    }
     if (appBookingReq?.isRequest && !hasTimeMention) {
       const reply = buildAppAndBookingPromptReply(appBookingReq);
       return {
