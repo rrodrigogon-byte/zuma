@@ -32,6 +32,7 @@ export default function SorteiosPublico() {
   const [consultando, setConsultando] = useState(false);
   const [resultadoMeusBilhetes, setResultadoMeusBilhetes] = useState(null);
   const [erroConsulta, setErroConsulta] = useState('');
+  const [bilheteCopiado, setBilheteCopiado] = useState(null);
 
   // Máscara de telefone
   const formatarTelefoneInput = (valor) => {
@@ -39,6 +40,18 @@ export default function SorteiosPublico() {
     if (limpo.length <= 2) return limpo;
     if (limpo.length <= 7) return `(${limpo.slice(0, 2)}) ${limpo.slice(2)}`;
     return `(${limpo.slice(0, 2)}) ${limpo.slice(2, 7)}-${limpo.slice(7)}`;
+  };
+
+    const copiarBilhete = (numero) => {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        navigator.clipboard.writeText(numero);
+        setBilheteCopiado(numero);
+        setTimeout(() => setBilheteCopiado(null), 2500);
+      }
+    } catch (e) {
+      console.warn("Erro ao copiar número:", e);
+    }
   };
 
   // Carrega informações públicas da empresa e campanhas
@@ -337,8 +350,32 @@ export default function SorteiosPublico() {
                         </div>
                         <div className="sorteio-pub-bilhetes-grid">
                           {item.bilhetes.map((b, bIdx) => (
-                            <div key={bIdx} className="sorteio-pub-bilhete-card">
-                              <div className="sorteio-pub-bilhete-num">{b.numeroSorte}</div>
+                            <div
+                              key={bIdx}
+                              className="sorteio-pub-bilhete-card"
+                              onClick={() => copiarBilhete(b.numeroSorte)}
+                              style={{ cursor: "pointer", position: "relative" }}
+                              title="Clique para copiar este Número da Sorte"
+                            >
+                              <div className="sorteio-pub-bilhete-num">
+                                {b.numeroSorte}
+                                {bilheteCopiado === b.numeroSorte && (
+                                  <span style={{
+                                    position: "absolute",
+                                    top: "6px",
+                                    right: "6px",
+                                    background: "#10b981",
+                                    color: "#fff",
+                                    fontSize: "10px",
+                                    fontWeight: "800",
+                                    padding: "2px 6px",
+                                    borderRadius: "4px",
+                                    boxShadow: "0 2px 6px rgba(0,0,0,0.3)"
+                                  }}>
+                                    ✓ Copiado!
+                                  </span>
+                                )}
+                              </div>
                               <div className="sorteio-pub-bilhete-origem">
                                 {b.origem === 'barbearia_comanda' ? '💈 Barbearia' : b.origem === 'loja_perfumaria' ? '✨ Perfumaria' : '🎟️ Balcão'}
                               </div>

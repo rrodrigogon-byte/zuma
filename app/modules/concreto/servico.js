@@ -5264,7 +5264,9 @@ export function obterComparativoResistenciaNbr5739PorTraco(empresaId = CONCRETO_
       taxaEvolucao7para28,
       taxaEvolucao3para7,
       eficienciaCimentoMpaPor100Kg,
-      curvaGanhoResistencia: pontosCurva
+      curvaGanhoResistencia: pontosCurva,
+      curvaEvolucao: pontosCurva,
+      esg: Boolean(traco.seloEsg || traco.esg)
     };
   });
 
@@ -5283,6 +5285,7 @@ export function obterComparativoResistenciaNbr5739PorTraco(empresaId = CONCRETO_
       taxaCarregamentoMpaS: "0.45 ± 0.15 MPa/s (NBR 5739)"
     },
     resumoGeral: {
+      totalTracos: tracosProcessados.length,
       totalTracosHomologados: tracosProcessados.length,
       totalCpsAvaliados,
       mediaSobreresistenciaMpa: mediaSobreresistencia,

@@ -23,6 +23,7 @@ import {
   X
 } from 'lucide-react';
 import { api } from '../../../lib/api';
+import PizzariaIntegracoesAvancadas from './PizzariaIntegracoesAvancadas';
 
 export default function PizzariaHubDeliveryMulticanal() {
   const [carregando, setCarregando] = useState(true);
@@ -32,6 +33,7 @@ export default function PizzariaHubDeliveryMulticanal() {
   const [filtroCanal, setFiltroCanal] = useState('todos');
   const [filtroStatus, setFiltroStatus] = useState('todos');
   const [modalComanda, setModalComanda] = useState(null);
+  const [pedidoIntegracaoModal, setPedidoIntegracaoModal] = useState(null);
   const [notificacao, setNotificacao] = useState(null);
   const [processandoAcao, setProcessandoAcao] = useState(false);
 
@@ -216,7 +218,49 @@ export default function PizzariaHubDeliveryMulticanal() {
             </p>
           </div>
 
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => simularPedido('ifood')}
+              disabled={processandoAcao}
+              style={{
+                background: 'rgba(234, 29, 44, 0.2)',
+                color: '#EA1D2C',
+                border: '1px solid #EA1D2C',
+                padding: '10px 16px',
+                borderRadius: 10,
+                fontSize: 13,
+                fontWeight: 800,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6
+              }}
+              title="Simular chegada de pedido real do iFood para teste de cozinha e motoboy"
+            >
+              <Play size={14} /> + Simular iFood
+            </button>
+            <button
+              type="button"
+              onClick={() => simularPedido('keeta')}
+              disabled={processandoAcao}
+              style={{
+                background: 'rgba(255, 186, 0, 0.2)',
+                color: '#FFBA00',
+                border: '1px solid #FFBA00',
+                padding: '10px 16px',
+                borderRadius: 10,
+                fontSize: 13,
+                fontWeight: 800,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6
+              }}
+              title="Simular chegada de pedido real do Keeta Meituan para teste de cozinha e motoboy"
+            >
+              <Play size={14} /> + Simular Keeta
+            </button>
             <button
               type="button"
               onClick={carregarDados}
@@ -647,6 +691,27 @@ export default function PizzariaHubDeliveryMulticanal() {
 
                     <button
                       type="button"
+                      onClick={() => setPedidoIntegracaoModal(pedido)}
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(255, 107, 44, 0.25) 0%, rgba(255, 107, 44, 0.1) 100%)',
+                        color: '#FF6B2C',
+                        border: '1px solid #FF6B2C',
+                        padding: '6px 12px',
+                        borderRadius: 6,
+                        fontSize: 11,
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 5,
+                        boxShadow: '0 2px 8px rgba(255, 107, 44, 0.2)'
+                      }}
+                      title="Abrir painel de impressão térmica 80mm ESC/POS, emissão de NFC-e SEFAZ-MT e despacho de motoboy"
+                    >
+                      <Zap size={13} /> Fiscal, Motoboy & Térmica
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setModalComanda(pedido)}
                       style={{
                         background: 'rgba(255,255,255,0.08)',
@@ -978,6 +1043,14 @@ export default function PizzariaHubDeliveryMulticanal() {
       )}
 
       {/* MODAL DE IMPRESSÃO TÉRMICA ESC/POS 80MM */}
+      {pedidoIntegracaoModal && (
+        <PizzariaIntegracoesAvancadas
+          pedidoSelecionado={pedidoIntegracaoModal}
+          onClose={() => setPedidoIntegracaoModal(null)}
+          onPedidoAtualizado={carregarDados}
+        />
+      )}
+
       {modalComanda && (
         <div style={{
           position: 'fixed',
