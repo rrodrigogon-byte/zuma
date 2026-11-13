@@ -759,6 +759,13 @@ export default function BarbeariaERP({ tabInicial } = {}) {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
   const [modalFichaCompleta, setModalFichaCompleta] = useState(null);
+  useEffect(() => {
+    function handleAbrirFicha(e) {
+      if (e?.detail) setModalFichaCompleta(e.detail);
+    }
+    window.addEventListener("abrir-ficha-360-kytto", handleAbrirFicha);
+    return () => window.removeEventListener("abrir-ficha-360-kytto", handleAbrirFicha);
+  }, []);
   const [modal, setModal] = useState(null);
   const [modalItemValor, setModalItemValor] = useState(null);
   const [modalReabrir, setModalReabrir] = useState(null);
