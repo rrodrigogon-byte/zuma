@@ -87,6 +87,7 @@ export default function ConcretoUsinaERP() {
   const [modalAssinaturaAberto, setModalAssinaturaAberto] = useState(null);
   const [modalRupturaAberto, setModalRupturaAberto] = useState(null);
   const [modalNovaPropostaAberto, setModalNovaPropostaAberto] = useState(false);
+  const [modalVisualizarProposta, setModalVisualizarProposta] = useState(null);
   const [modalLaudoAberto, setModalLaudoAberto] = useState(null);
   
   // Modais de Ordens de Produção (OP)
@@ -774,6 +775,39 @@ export default function ConcretoUsinaERP() {
     }
   };
 
+  
+  const handleConverterPropostaEmOp = async (proposta) => {
+    try {
+      const res = await api.post(`/api/admin/concreto/propostas/${proposta.id}/converter-op`, {
+        slumpPrevisto: "12 ± 2 cm",
+        operador: "Carlos Eduardo"
+      });
+      if (res?.ok) {
+        toast(`Proposta #${proposta.numero} convertida na OP #${res.op?.numero || ""} com sucesso!`, "success");
+        setModalVisualizarProposta(null);
+        await carregarDados();
+        setSecaoAtiva("producao-op");
+      }
+    } catch (err) {
+      toast("Erro ao converter proposta em OP: " + err.message, "error");
+    }
+  };
+
+  const handleAtualizarStatusProposta = async (propostaId, novoStatus) => {
+    try {
+      const res = await api.put(`/api/admin/concreto/propostas/${propostaId}/status`, { status: novoStatus });
+      if (res?.ok) {
+        toast("Status da proposta atualizado para " + novoStatus, "success");
+        carregarDados();
+        if (modalVisualizarProposta && modalVisualizarProposta.id === propostaId) {
+          setModalVisualizarProposta(prev => ({ ...prev, status: novoStatus }));
+        }
+      }
+    } catch (err) {
+      toast("Erro ao atualizar status: " + err.message, "error");
+    }
+  };
+
   const enviarPropostaWhatsApp = (prop) => {
     const tel = String(prop.telefone || '').replace(/\D/g, '');
     const msg = `*SERRANO CONCRETO USINADO & MINERAÇÃO* 🚚\nTangará da Serra - MT\n\nOlá ${prop.contato || prop.cliente}! Segue a proposta oficial de concretagem:\n\n📋 *Proposta Comercial Nº ${prop.numero}*\n🏗️ *Obra:* ${prop.obra}\n📍 *Local:* ${prop.endereco}\n🧪 *Traço:* FCK ${prop.fck} MPa\n📊 *Volume:* ${prop.volumeM3} m³\n🚀 *Bombeamento:* ${prop.tipoBomba}\n💰 *Valor Total:* R$ ${Number(prop.totalProposta).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n💳 *Condição:* ${prop.condicaoPagamento}\n\nIncluso ensaio de slump test na obra e moldagem de 4 corpos de prova com laudo assinado por nossa RT Engª Karin Prestes (CREA-MT 027300).\n\nPodemos confirmar a programação da sua concretagem?`;
@@ -1184,10 +1218,26 @@ export default function ConcretoUsinaERP() {
               >
                 📊 Auditoria Metrológica das 4 Balanças (NBR 7212)
               </button>
+              <button
+                type="button"
+                className="btn-serrano"
+                style={{
+                  background: subAbaCentral === "reciclador" ? "var(--serrano-orange)" : "transparent",
+                  color: subAbaCentral === "reciclador" ? "#fff" : "var(--text)",
+                  borderColor: subAbaCentral === "reciclador" ? "var(--serrano-orange)" : "var(--joint)",
+                  fontWeight: 600,
+                  fontSize: 12
+                }}
+                onClick={() => setSubAbaCentral("reciclador")}
+              >
+                ♻️ Reciclador Ecológico (Zero Descarte)
+              </button>
             </div>
 
             {subAbaCentral === 'auditoria' ? (
               <ConcretoAuditoriaMetrologica />
+            ) : subAbaCentral === 'reciclador' ? (
+              <ConcretoRecicladorSustentabilidade />
             ) : (
           <div className="serrano-grid-2col">
             <div className="serrano-card">
@@ -2165,6 +2215,11 @@ export default function ConcretoUsinaERP() {
                   </table>
                 </div>
               </div>
+            )}
+
+            {/* SUB-ABA 5: RECICLADOR ECOLÓGICO & SOBRAS (CONAMA) */}
+            {subAbaSuprimentos === reciclador-ecologico && (
+              <ConcretoRecicladorSustentabilidade />
             )}
 
             {/* SUB-ABA 4: ADITIVOS QUÍMICOS & ÁGUA CHILLER */}
@@ -4342,6 +4397,304 @@ export default function ConcretoUsinaERP() {
           </div>
         </div>
       )}
+      
+      {/* ─── MODAL: NOVA PROPOSTA COMERCIAL DE CONCRETO ─── */}
+      {modalNovaPropostaAberto && (
+        <div className="serrano-modal-overlay">
+          <div className="serrano-modal-card" style={{ maxWidth: 640, maxHeight: "90vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--joint)", paddingBottom: 12, marginBottom: 16 }}>
+              <div>
+                <h3 style={{ margin: 0, fontFamily: "var(--font-display)", fontSize: 18 }}>Nova Proposta Comercial de Concretagem</h3>
+                <small style={{ color: "var(--text-muted)" }}>Tangará da Serra · Usina Convicta & Mineração</small>
+              </div>
+              <button
+                type="button"
+                className="btn-serrano"
+                style={{ padding: "4px 8px" }}
+                onClick={() => setModalNovaPropostaAberto(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleCriarProposta}>
+              <div className="serrano-form-row">
+                <label>Cliente / Construtora *</label>
+                <input
+                  type="text"
+                  className="serrano-input"
+                  required
+                  placeholder="Ex: Construtora MT Horizon Ltda"
+                  value={formProposta.cliente}
+                  onChange={e => setFormProposta({ ...formProposta, cliente: e.target.value })}
+                />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div className="serrano-form-row">
+                  <label>Contato / Engenheiro(a)</label>
+                  <input
+                    type="text"
+                    className="serrano-input"
+                    placeholder="Ex: Eng. Lucas Silveira"
+                    value={formProposta.contato}
+                    onChange={e => setFormProposta({ ...formProposta, contato: e.target.value })}
+                  />
+                </div>
+                <div className="serrano-form-row">
+                  <label>Telefone / WhatsApp</label>
+                  <input
+                    type="text"
+                    className="serrano-input"
+                    placeholder="(65) 99999-0000"
+                    value={formProposta.telefone}
+                    onChange={e => setFormProposta({ ...formProposta, telefone: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="serrano-form-row">
+                <label>Nome da Obra *</label>
+                <input
+                  type="text"
+                  className="serrano-input"
+                  required
+                  placeholder="Ex: Edifício Residencial Jardins · Laje 3º Pav."
+                  value={formProposta.obra}
+                  onChange={e => setFormProposta({ ...formProposta, obra: e.target.value })}
+                />
+              </div>
+              <div className="serrano-form-row">
+                <label>Endereço de Descarga</label>
+                <input
+                  type="text"
+                  className="serrano-input"
+                  placeholder="Av. Brasil, 2400 · Centro · Tangará da Serra/MT"
+                  value={formProposta.endereco}
+                  onChange={e => setFormProposta({ ...formProposta, endereco: e.target.value })}
+                />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div className="serrano-form-row">
+                  <label>Classe FCK (Resistência)</label>
+                  <select
+                    className="serrano-input"
+                    value={formProposta.fck}
+                    onChange={e => setFormProposta({ ...formProposta, fck: Number(e.target.value) })}
+                  >
+                    <option value={20}>FCK 20 MPa (R$ 380/m³)</option>
+                    <option value={25}>FCK 25 MPa (R$ 410/m³ · Padrão)</option>
+                    <option value={30}>FCK 30 MPa (R$ 440/m³ · Estrutural)</option>
+                    <option value={35}>FCK 35 MPa (R$ 480/m³ · Piso Industrial)</option>
+                    <option value={40}>FCK 40 MPa (R$ 520/m³ · Alta Resistência)</option>
+                  </select>
+                </div>
+                <div className="serrano-form-row">
+                  <label>Volume Total (m³)</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="1"
+                    className="serrano-input"
+                    value={formProposta.volumeM3}
+                    onChange={e => setFormProposta({ ...formProposta, volumeM3: Number(e.target.value) })}
+                  />
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div className="serrano-form-row">
+                  <label>Serviço de Bombeamento</label>
+                  <select
+                    className="serrano-input"
+                    value={formProposta.tipoBomba}
+                    onChange={e => setFormProposta({ ...formProposta, tipoBomba: e.target.value })}
+                  >
+                    <option value="Bomba Lança 32m">Bomba Lança 32m (R$ 750 fixo)</option>
+                    <option value="Bomba Lança 38m">Bomba Lança 38m (R$ 850 fixo)</option>
+                    <option value="Bomba Estática">Bomba Estática de Solo (R$ 700)</option>
+                    <option value="Descarga Direta (Sem Bomba)">Descarga Direta em Calha (R$ 0)</option>
+                  </select>
+                </div>
+                <div className="serrano-form-row">
+                  <label>Distância / Frete (km fora de Tangará)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    className="serrano-input"
+                    placeholder="0 km = Perímetro urbano"
+                    value={formProposta.freteKm || 0}
+                    onChange={e => setFormProposta({ ...formProposta, freteKm: Number(e.target.value) })}
+                  />
+                </div>
+              </div>
+              <div className="serrano-form-row">
+                <label>Condição de Pagamento</label>
+                <input
+                  type="text"
+                  className="serrano-input"
+                  placeholder="Ex: Boleto Faturado 14/28 DDL ou PIX à Vista"
+                  value={formProposta.condicaoPagamento}
+                  onChange={e => setFormProposta({ ...formProposta, condicaoPagamento: e.target.value })}
+                />
+              </div>
+
+              {/* Box de Estimativa em Tempo Real */}
+              {(() => {
+                const fck = Number(formProposta.fck) || 25;
+                const m3 = Number(formProposta.volumeM3) || 8;
+                const pM3 = fck === 20 ? 380 : fck === 25 ? 410 : fck === 30 ? 440 : fck === 35 ? 480 : fck === 40 ? 520 : 340;
+                const subConcreto = m3 * pM3;
+                let taxaB = 0;
+                if (formProposta.tipoBomba && formProposta.tipoBomba.toLowerCase().includes("bomba")) {
+                  taxaB = 750 + (m3 > 25 ? (m3 - 25) * 25 : 0);
+                }
+                const frete = (Number(formProposta.freteKm) || 0) * 12;
+                const total = subConcreto + taxaB + frete;
+                return (
+                  <div style={{ background: "var(--surface-2)", padding: 14, borderRadius: 8, border: "1px solid var(--joint)", marginTop: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
+                      <span>Concreto FCK {fck} MPa ({m3} m³ x R$ {pM3}):</span>
+                      <b>R$ {subConcreto.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</b>
+                    </div>
+                    {taxaB > 0 && (
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
+                        <span>Taxa de Bombeamento ({formProposta.tipoBomba}):</span>
+                        <b>R$ {taxaB.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</b>
+                      </div>
+                    )}
+                    {frete > 0 && (
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
+                        <span>Frete Regional ({formProposta.freteKm} km):</span>
+                        <b>R$ {frete.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</b>
+                      </div>
+                    )}
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, fontWeight: 800, marginTop: 8, borderTop: "1px solid var(--joint)", paddingTop: 8, color: "var(--serrano-orange-text)" }}>
+                      <span>Total Estimado da Proposta:</span>
+                      <span>R$ {total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="serrano-modal-footer" style={{ marginTop: 16 }}>
+                <button
+                  type="button"
+                  className="btn-serrano"
+                  onClick={() => setModalNovaPropostaAberto(false)}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn-serrano pri"
+                >
+                  ✓ Gerar Proposta Comercial
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL: DETALHES DA PROPOSTA COMERCIAL & CONVERSÃO EM OP ─── */}
+      {modalVisualizarProposta && (
+        <div className="serrano-modal-overlay">
+          <div className="serrano-modal-card" style={{ maxWidth: 660, maxHeight: "90vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid var(--joint)", paddingBottom: 12 }}>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <h3 style={{ margin: 0, fontFamily: "var(--font-display)", fontSize: 18 }}>
+                    Proposta Comercial Nº {modalVisualizarProposta.numero}
+                  </h3>
+                  <span className={`serrano-pill ${modalVisualizarProposta.status === "aprovada" || modalVisualizarProposta.status === "aprovada_op" ? "serrano-p-ok" : "serrano-p-warn"}`}>
+                    {modalVisualizarProposta.status === "aprovada_op" ? "✓ Convertida em OP" : modalVisualizarProposta.status === "aprovada" ? "✓ Aprovada" : modalVisualizarProposta.status}
+                  </span>
+                </div>
+                <small style={{ color: "var(--text-muted)" }}>Serrano Concreto Usinado & Mineração · Tangará da Serra - MT</small>
+              </div>
+              <button
+                type="button"
+                className="btn-serrano"
+                style={{ padding: "4px 8px" }}
+                onClick={() => setModalVisualizarProposta(null)}
+              >
+                ✕
+              </button>
+            </div>
+            <div style={{ padding: "16px 0", display: "grid", gap: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div><small style={{ color: "var(--text-muted)" }}>Cliente:</small> <b style={{ display: "block" }}>{modalVisualizarProposta.cliente}</b></div>
+                <div><small style={{ color: "var(--text-muted)" }}>Contato:</small> <b style={{ display: "block" }}>{modalVisualizarProposta.contato} ({modalVisualizarProposta.telefone})</b></div>
+                <div><small style={{ color: "var(--text-muted)" }}>Obra:</small> <b style={{ display: "block" }}>{modalVisualizarProposta.obra}</b></div>
+                <div><small style={{ color: "var(--text-muted)" }}>Endereço de Entrega:</small> <b style={{ display: "block" }}>{modalVisualizarProposta.endereco}</b></div>
+              </div>
+              <div style={{ background: "var(--surface-2)", padding: 12, borderRadius: 8, border: "1px solid var(--joint)", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, textAlign: "center" }}>
+                <div>
+                  <small style={{ color: "var(--text-muted)" }}>Resistência</small>
+                  <b style={{ display: "block", fontSize: 15, color: "var(--serrano-orange-text)" }}>FCK {modalVisualizarProposta.fck} MPa</b>
+                </div>
+                <div>
+                  <small style={{ color: "var(--text-muted)" }}>Volume</small>
+                  <b style={{ display: "block", fontSize: 15 }}>{modalVisualizarProposta.volumeM3} m³</b>
+                </div>
+                <div>
+                  <small style={{ color: "var(--text-muted)" }}>Bombeamento</small>
+                  <b style={{ display: "block", fontSize: 13 }}>{modalVisualizarProposta.tipoBomba}</b>
+                </div>
+                <div>
+                  <small style={{ color: "var(--text-muted)" }}>Valor Total</small>
+                  <b style={{ display: "block", fontSize: 16, color: "var(--status-ok)" }}>
+                    R$ {Number(modalVisualizarProposta.totalProposta || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  </b>
+                </div>
+              </div>
+              <div>
+                <small style={{ color: "var(--text-muted)" }}>Condição de Pagamento:</small>
+                <div style={{ fontWeight: 600, fontSize: 13, marginTop: 2 }}>{modalVisualizarProposta.condicaoPagamento}</div>
+              </div>
+              <div>
+                <small style={{ color: "var(--text-muted)" }}>Observações Técnicas / NBR:</small>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", background: "var(--surface)", padding: 8, borderRadius: 6, border: "1px solid var(--joint)", marginTop: 2 }}>
+                  {modalVisualizarProposta.observacoes || "Incluso ensaio de slump test na obra e moldagem de 4 corpos de prova com laudo assinado por nossa RT Engª Karin Prestes (CREA-MT 027300)."}
+                </div>
+              </div>
+            </div>
+            <div className="serrano-modal-footer" style={{ borderTop: "1px solid var(--joint)", paddingTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button
+                  type="button"
+                  className="btn-serrano"
+                  onClick={() => handleAtualizarStatusProposta(modalVisualizarProposta.id, "aprovada")}
+                >
+                  ✓ Marcar Aprovada
+                </button>
+                <button
+                  type="button"
+                  className="btn-serrano"
+                  style={{ background: "#25D366", color: "#fff", borderColor: "#25D366", fontWeight: 700 }}
+                  onClick={() => enviarPropostaWhatsApp(modalVisualizarProposta)}
+                >
+                  💬 WhatsApp
+                </button>
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button
+                  type="button"
+                  className="btn-serrano"
+                  onClick={() => setModalVisualizarProposta(null)}
+                >
+                  Fechar
+                </button>
+                <button
+                  type="button"
+                  className="btn-serrano pri"
+                  onClick={() => handleConverterPropostaEmOp(modalVisualizarProposta)}
+                >
+                  📋 Converter em Ordem de Produção (OP)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* COPILOT KYTTOIA INDUSTRIAL MODAL */}
       <ConcretoKyttoIACopilot 
         isOpen={copilotAberto} 

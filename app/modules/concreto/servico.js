@@ -1097,7 +1097,7 @@ export async function criarOrdemProducao(dados, empresaId = CONCRETO_EMPRESA_ID)
     fck,
     volumeM3,
     totalBateladas: Math.ceil(volumeM3 / 8),
-    betoneirasEscaladas: dados.betoneirasEscaladas || ['BT-01'],
+    betoneirasEscaladas: dados.betoneirasEscaladas || dados.betoneiras || ['BT-01'],
     consumoTeorico: {
       cimentoKg: cimentoTeoricoKg,
       areiaKg: areiaTeoricaKg,
@@ -1843,6 +1843,34 @@ export async function atualizarStatusProposta(propostaId, status) {
   proposta.status = status;
   save();
   return { ok: true, proposta };
+}
+
+
+export async function converterPropostaEmOp(propostaId, dadosOp = {}) {
+  const data = inicializarDatastoreConcreto();
+  const proposta = (data.concreto_propostas || []).find(p => p.id === propostaId);
+  if (!proposta) throw new Error(`Proposta ${propostaId} não encontrada.`);
+
+  const resultadoOp = await criarOrdemProducao({
+    cliente: proposta.cliente,
+    obra: proposta.obra,
+    endereco: proposta.endereco,
+    fck: proposta.fck,
+    volumeM3: proposta.volumeM3,
+    slumpPrevisto: dadosOp.slumpPrevisto || "12 ± 2 cm",
+    betoneiras: dadosOp.betoneiras || ["BT-01", "BT-02"],
+    operador: dadosOp.operador || "Carlos Eduardo",
+    motorista: dadosOp.motorista || proposta.contato || "Marcos Silveira",
+    observacoes: `Gerada a partir da Proposta Comercial #${proposta.numero}. ${proposta.observacoes || ""}`.trim()
+  }, proposta.empresaId || CONCRETO_EMPRESA_ID);
+
+  proposta.status = "aprovada_op";
+  const op = resultadoOp.ordemProducao || resultadoOp.op;
+  proposta.opGeradaId = op.id;
+  proposta.opGeradaNumero = op.numero;
+  save();
+
+  return { ok: true, op, ordemProducao: op, proposta };
 }
 
 export async function atualizarStatusVeiculoFrota(veiculoId, status, horimetro = null, motorista = null) {

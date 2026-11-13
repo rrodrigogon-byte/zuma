@@ -8,6 +8,7 @@ import {
   calcularDosagemAvancada,
   criarPropostaComercial,
   atualizarStatusProposta,
+  converterPropostaEmOp,
   atualizarStatusVeiculoFrota,
   registrarMovimentacaoInsumoSilo,
   gerarListaTecnicaBOM,
@@ -290,6 +291,17 @@ router.post('/dosagem/calcular', (req, res) => {
   });
 
   // 12. Atualizar status de proposta comercial
+  
+  // 12b. Converter proposta comercial aprovada em Ordem de Produção (OP)
+  router.post("/propostas/:id/converter-op", async (req, res) => {
+    try {
+      const resultado = await converterPropostaEmOp(req.params.id, req.body || {});
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
   router.put('/propostas/:id/status', async (req, res) => {
     try {
       const { status } = req.body;

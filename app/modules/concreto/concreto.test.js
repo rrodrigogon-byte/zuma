@@ -13,6 +13,7 @@ import {
   calcularDosagemAvancada,
   criarPropostaComercial,
   atualizarStatusProposta,
+  converterPropostaEmOp,
   atualizarStatusVeiculoFrota,
   registrarMovimentacaoInsumoSilo,
   gerarListaTecnicaBOM,
@@ -674,3 +675,51 @@ test("24. Gestão Completa de Ordens de Produção (Criar, Obter, Editar/Modific
   assert.equal(resExcluir.ok, true);
   assert.equal(resExcluir.ordemProducao.id, opId);
 });
+
+test("15. Ciclo de Proposta Comercial e Conversão em Ordem de Produção (OP)", async () => {
+  // 1. Criar proposta comercial
+  const resProp = await criarPropostaComercial({
+    cliente: "Construtora Horizonte MT",
+    contato: "Eng. Lucas Silveira",
+    telefone: "(65) 99881-2233",
+    obra: "Residencial Jardins das Oliveiras",
+    endereco: "Av. Brasil, 2400 · Tangará da Serra/MT",
+    fck: 30,
+    volumeM3: 24,
+    tipoBomba: "Bomba Lança 32m",
+    condicaoPagamento: "Boleto 21 DDL"
+  }, CONCRETO_EMPRESA_ID);
+
+  assert.equal(resProp.ok, true);
+  assert.ok(resProp.proposta.id);
+  assert.equal(resProp.proposta.fck, 30);
+  assert.equal(resProp.proposta.volumeM3, 24);
+  assert.equal(resProp.proposta.status, "enviada");
+  assert.ok(resProp.proposta.totalProposta > 0);
+
+  // 2. Mudar status para aprovada
+  const resStatus = await atualizarStatusProposta(resProp.proposta.id, "aprovada");
+  assert.equal(resStatus.ok, true);
+  assert.equal(resStatus.proposta.status, "aprovada");
+
+  // 3. Converter proposta em Ordem de Produção (OP)
+  const resConversao = await converterPropostaEmOp(resProp.proposta.id, {
+    slumpPrevisto: "12 ± 2 cm",
+    betoneiras: ["BT-01", "BT-02", "BT-03"],
+    operador: "Carlos Eduardo"
+  });
+
+  assert.equal(resConversao.ok, true);
+  assert.ok(resConversao.op.id);
+  assert.equal(resConversao.op.cliente, "Construtora Horizonte MT");
+  assert.equal(resConversao.op.fck, 30);
+  assert.equal(resConversao.op.volumeM3, 24);
+  assert.equal(resConversao.op.totalBateladas, 3);
+  assert.deepEqual(resConversao.op.betoneirasEscaladas, ["BT-01", "BT-02", "BT-03"]);
+  assert.equal(resConversao.proposta.status, "aprovada_op");
+  assert.equal(resConversao.proposta.opGeradaId, resConversao.op.id);
+
+  // Limpeza
+  await excluirOrdemProducao(resConversao.op.id, CONCRETO_EMPRESA_ID);
+});
+
