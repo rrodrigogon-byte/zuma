@@ -827,3 +827,74 @@
   border-top: 1px solid var(--joint);
   padding-top: 16px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   HOLDING GRUPO PALATARE & MULTINEGÓCIO - DESIGN SYSTEM EXECUTIVO
+   ═══════════════════════════════════════════════════════════════════════════════ */
+.holding-gold-text {
+  color: #C5A059;
+}
+.holding-gold-badge {
+  background: linear-gradient(135deg, rgba(197, 160, 89, 0.22) 0%, rgba(197, 160, 89, 0.08) 100%);
+  border: 1px solid rgba(197, 160, 89, 0.45);
+  color: #F3E5AB;
+  font-weight: 800;
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  letter-spacing: 0.5px;
+}
+.holding-kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--joint);
+  border-radius: 12px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  position: relative;
+  overflow: hidden;
+}
+.holding-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+  border-color: #C5A059;
+}
+.holding-kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #C5A059, #FF7000);
+  opacity: 0.8;
+}
+.holding-company-card {
+  background: var(--surface);
+  border: 1px solid var(--joint);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.holding-company-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.1);
+}
+.holding-tree-node {
+  background: var(--surface);
+  border: 1px solid var(--joint);
+  border-radius: 12px;
+  padding: 16px 20px;
+  position: relative;
+  transition: all 0.2s ease;
+}
+.holding-tree-node:hover {
+  border-color: #C5A059;
+  box-shadow: 0 8px 24px rgba(197, 160, 89, 0.15);
+}

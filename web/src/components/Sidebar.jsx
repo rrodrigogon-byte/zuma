@@ -1113,100 +1113,197 @@ export default function Sidebar() {
             {/* Switcher Rápido Multinegócio do Grupo Palatare */}
             {(isRestaurante || isConcreto || isHolding || isGrupoPalatareEmpresa(empresaAtiva?.id)) && (
               <div style={{
-                background: 'rgba(255, 255, 255, 0.03)',
-                border: '1px solid rgba(197, 160, 89, 0.25)',
-                borderRadius: 8,
-                padding: '8px 10px',
+                background: 'linear-gradient(180deg, #16181B 0%, #1A1D21 100%)',
+                border: '1px solid rgba(197, 160, 89, 0.35)',
+                borderRadius: 10,
+                padding: '10px 12px',
                 display: 'grid',
-                gap: 6
+                gap: 8,
+                boxShadow: '0 4px 14px rgba(0,0,0,0.25)'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 9, fontWeight: 800, color: '#C5A059', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-                    Holding Grupo Palatare
-                  </span>
-                  <span style={{ fontSize: 9, color: 'var(--muted)', background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: 4 }}>
-                    Multinegócio
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 13 }}>🏛️</span>
+                    <span style={{ fontSize: 11, fontWeight: 900, color: '#C5A059', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
+                      Grupo Palatare
+                    </span>
+                  </div>
+                  <span style={{
+                    fontSize: 9,
+                    fontWeight: 800,
+                    color: '#10b981',
+                    background: 'rgba(16, 185, 129, 0.12)',
+                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    padding: '2px 6px',
+                    borderRadius: 4
+                  }}>
+                    ● Síncrono A2
                   </span>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      trocarEmpresa(HOLDING_PALATARE_EMPRESA_ID);
-                      navigate('/admin/concreto?secao=empresa-holding');
-                    }}
-                    style={{
-                      background: (empresaAtiva?.id === HOLDING_PALATARE_EMPRESA_ID || isHolding) ? '#C5A059' : 'rgba(255,255,255,0.05)',
-                      color: (empresaAtiva?.id === HOLDING_PALATARE_EMPRESA_ID || isHolding) ? '#000' : 'var(--cream)',
-                      border: (empresaAtiva?.id === HOLDING_PALATARE_EMPRESA_ID || isHolding) ? '1px solid #C5A059' : '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: 6,
-                      padding: '6px 2px',
-                      fontSize: 10,
-                      fontWeight: 800,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 2,
-                      transition: 'all .15s'
-                    }}
-                    title="Holding Grupo Palatare (Controladora de Alexandre Palatare)"
-                  >
-                    <span style={{ fontSize: 13 }}>🏢</span>
-                    <span>Holding</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      trocarEmpresa(PALATARE_PIZZARIA_EMPRESA_ID);
-                      navigate('/admin/pizzaria');
-                    }}
-                    style={{
-                      background: empresaAtiva?.id === PALATARE_PIZZARIA_EMPRESA_ID ? '#EF4444' : 'rgba(255,255,255,0.05)',
-                      color: empresaAtiva?.id === PALATARE_PIZZARIA_EMPRESA_ID ? '#FFF' : 'var(--cream)',
-                      border: empresaAtiva?.id === PALATARE_PIZZARIA_EMPRESA_ID ? '1px solid #EF4444' : '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: 6,
-                      padding: '6px 2px',
-                      fontSize: 10,
-                      fontWeight: 800,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 2,
-                      transition: 'all .15s'
-                    }}
-                    title="Palatare Pizzaria & Restaurante"
-                  >
-                    <span style={{ fontSize: 13 }}>🍕</span>
-                    <span>Pizzaria</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      trocarEmpresa(SERRANO_CONCRETO_EMPRESA_ID);
-                      navigate('/admin/concreto');
-                    }}
-                    style={{
-                      background: empresaAtiva?.id === SERRANO_CONCRETO_EMPRESA_ID ? '#FF7000' : 'rgba(255,255,255,0.05)',
-                      color: empresaAtiva?.id === SERRANO_CONCRETO_EMPRESA_ID ? '#16181B' : 'var(--cream)',
-                      border: empresaAtiva?.id === SERRANO_CONCRETO_EMPRESA_ID ? '1px solid #FF7000' : '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: 6,
-                      padding: '6px 2px',
-                      fontSize: 10,
-                      fontWeight: 800,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 2,
-                      transition: 'all .15s'
-                    }}
-                    title="Serrano Concreto Usinado & Mineração"
-                  >
-                    <span style={{ fontSize: 13 }}>🚚</span>
-                    <span>Concreto</span>
-                  </button>
+                <div style={{ fontSize: 10, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span>Controle:</span>
+                  <b style={{ color: '#F3E5AB' }}>Alexandre Palatare</b>
+                </div>
+
+                {/* Lista Vertical de Empresas com Hierarquia Visual de Grupo */}
+                <div style={{ display: 'grid', gap: 5 }}>
+                  {/* 1. Holding */}
+                  {(() => {
+                    const ativo = (empresaAtiva?.id === HOLDING_PALATARE_EMPRESA_ID || isHolding);
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          trocarEmpresa(HOLDING_PALATARE_EMPRESA_ID);
+                          navigate('/admin/concreto?secao=empresa-holding');
+                        }}
+                        style={{
+                          background: ativo ? 'linear-gradient(90deg, rgba(197, 160, 89, 0.25) 0%, rgba(197, 160, 89, 0.1) 100%)' : 'rgba(255,255,255,0.03)',
+                          border: ativo ? '1px solid #C5A059' : '1px solid rgba(255,255,255,0.08)',
+                          borderRadius: 8,
+                          padding: '7px 9px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          cursor: 'pointer',
+                          transition: 'all .15s ease',
+                          textAlign: 'left'
+                        }}
+                        title="Holding Grupo Palatare (Controladora Geral de Alexandre Palatare)"
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{
+                            width: 24, height: 24, borderRadius: 6,
+                            background: ativo ? '#C5A059' : 'rgba(197, 160, 89, 0.2)',
+                            color: ativo ? '#000' : '#C5A059',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 12, fontWeight: 800
+                          }}>
+                            🏢
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 800, color: ativo ? '#FFF' : 'var(--cream)', lineHeight: 1.2 }}>
+                              Holding Grupo Palatare
+                            </div>
+                            <div style={{ fontSize: 9, color: '#C5A059', fontWeight: 600 }}>
+                              Controladora Geral S/A
+                            </div>
+                          </div>
+                        </div>
+                        {ativo && (
+                          <span style={{ fontSize: 9, fontWeight: 800, color: '#C5A059', background: 'rgba(197, 160, 89, 0.2)', padding: '1px 5px', borderRadius: 4 }}>
+                            Ativa
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })()}
+
+                  {/* 2. Palatare Pizzaria */}
+                  {(() => {
+                    const ativo = empresaAtiva?.id === PALATARE_PIZZARIA_EMPRESA_ID;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          trocarEmpresa(PALATARE_PIZZARIA_EMPRESA_ID);
+                          navigate('/admin/pizzaria');
+                        }}
+                        style={{
+                          marginLeft: 6,
+                          background: ativo ? 'linear-gradient(90deg, rgba(239, 68, 68, 0.25) 0%, rgba(239, 68, 68, 0.1) 100%)' : 'rgba(255,255,255,0.03)',
+                          border: ativo ? '1px solid #EF4444' : '1px solid rgba(255,255,255,0.08)',
+                          borderRadius: 8,
+                          padding: '7px 9px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          cursor: 'pointer',
+                          transition: 'all .15s ease',
+                          textAlign: 'left'
+                        }}
+                        title="Palatare Pizzaria & Restaurante (100% Grupo Palatare)"
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{
+                            width: 24, height: 24, borderRadius: 6,
+                            background: ativo ? '#EF4444' : 'rgba(239, 68, 68, 0.2)',
+                            color: '#FFF',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 12, fontWeight: 800
+                          }}>
+                            🍕
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 800, color: ativo ? '#FFF' : 'var(--cream)', lineHeight: 1.2 }}>
+                              Palatare Pizzaria
+                            </div>
+                            <div style={{ fontSize: 9, color: '#EF4444', fontWeight: 600 }}>
+                              Salão Gourmet &amp; Delivery
+                            </div>
+                          </div>
+                        </div>
+                        {ativo && (
+                          <span style={{ fontSize: 9, fontWeight: 800, color: '#EF4444', background: 'rgba(239, 68, 68, 0.2)', padding: '1px 5px', borderRadius: 4 }}>
+                            Ativa
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })()}
+
+                  {/* 3. Serrano Concreto */}
+                  {(() => {
+                    const ativo = empresaAtiva?.id === SERRANO_CONCRETO_EMPRESA_ID;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          trocarEmpresa(SERRANO_CONCRETO_EMPRESA_ID);
+                          navigate('/admin/concreto');
+                        }}
+                        style={{
+                          marginLeft: 6,
+                          background: ativo ? 'linear-gradient(90deg, rgba(255, 112, 0, 0.25) 0%, rgba(255, 112, 0, 0.1) 100%)' : 'rgba(255,255,255,0.03)',
+                          border: ativo ? '1px solid #FF7000' : '1px solid rgba(255,255,255,0.08)',
+                          borderRadius: 8,
+                          padding: '7px 9px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          cursor: 'pointer',
+                          transition: 'all .15s ease',
+                          textAlign: 'left'
+                        }}
+                        title="Serrano Concreto Usinado & Mineração (100% Grupo Palatare)"
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{
+                            width: 24, height: 24, borderRadius: 6,
+                            background: ativo ? '#FF7000' : 'rgba(255, 112, 0, 0.2)',
+                            color: ativo ? '#16181B' : '#FF7000',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 12, fontWeight: 900
+                          }}>
+                            🚚
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 800, color: ativo ? '#FFF' : 'var(--cream)', lineHeight: 1.2 }}>
+                              Serrano Concreto
+                            </div>
+                            <div style={{ fontSize: 9, color: '#FF7000', fontWeight: 600 }}>
+                              Central Dosadora NBR 7212
+                            </div>
+                          </div>
+                        </div>
+                        {ativo && (
+                          <span style={{ fontSize: 9, fontWeight: 800, color: '#FF7000', background: 'rgba(255, 112, 0, 0.2)', padding: '1px 5px', borderRadius: 4 }}>
+                            Ativa
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })()}
                 </div>
               </div>
             )}
