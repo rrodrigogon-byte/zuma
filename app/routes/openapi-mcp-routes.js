@@ -258,6 +258,41 @@ export const MCP_READONLY_TOOLS = [
     },
   },
   {
+    name: 'palatare_delivery_marketplaces',
+    description: 'Consulta o status do Hub de Delivery Multicanal da Pizzaria (iFood Brasil, Keeta Meituan, WhatsApp Kytto e Open Delivery Abrasel), métricas de faturamento e comparativo de taxas de comissão.',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'palatare_delivery_pedidos',
+    description: 'Lista e filtra pedidos em tempo real da Pizzaria recebidos via iFood, Keeta e WhatsApp, com detalhes de montagem das pizzas (fracionamento, bordas, massas) e status da entrega.',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        canal: { type: 'string', description: 'Filtro por canal: todos, ifood, keeta, whatsapp_proprio' },
+        status: { type: 'string', description: 'Filtro por status: todos, novo, preparando_forno, pronto_expedicao, despachado' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'palatare_delivery_simular',
+    description: 'Injeta um pedido simulado de marketplace (iFood ou Keeta) na linha de produção da pizzaria para homologação e testes da equipe.',
+    readOnlyHint: false,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        canal: { type: 'string', description: 'Canal a simular: ifood, keeta ou whatsapp_proprio' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'concreto_cargas',
     description: 'Consulta a programação de cargas de concreto usinado, status das betoneiras, bombas lança e traços FCK.',
     readOnlyHint: true,
@@ -785,6 +820,27 @@ export function createOpenApiAndMcpRouter({ auth, obterEmpresaIdToken, barbearia
         totalZonas: zonas.length,
         zonas
       };
+    }
+    if (name === 'palatare_delivery_marketplaces') {
+      const { obterConfiguracaoCanais, obterRelatorioConciliacaoCanais } = await import('../modules/pizzaria/delivery-marketplaces.js');
+      const cfg = obterConfiguracaoCanais();
+      const conc = obterRelatorioConciliacaoCanais();
+      return {
+        empresa: 'Palatare Pizzaria & Restaurante',
+        hub: 'Kytto Multi-Channel Delivery Hub',
+        canais: cfg.canais,
+        conciliacaoTaxas: conc
+      };
+    }
+    if (name === 'palatare_delivery_pedidos') {
+      const { listarPedidosMulticanal } = await import('../modules/pizzaria/delivery-marketplaces.js');
+      const res = listarPedidosMulticanal(undefined, args);
+      return res;
+    }
+    if (name === 'palatare_delivery_simular') {
+      const { simularPedidoMarketplace } = await import('../modules/pizzaria/delivery-marketplaces.js');
+      const res = simularPedidoMarketplace(undefined, args.canal || 'ifood');
+      return res;
     }
 
     // ==========================================

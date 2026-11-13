@@ -199,6 +199,7 @@ import { provisionarEquipeDino } from './dino-equipe-seed.js';
 import { provisionarPalatarePizzaria, PALATARE_EMPRESA_ID, PALATARE_DADOS_EMPRESA } from './palatare-pizzaria-seed.js';
 import { provisionarConcretoUsina, CONCRETO_EMPRESA_ID, CONCRETO_DADOS_EMPRESA, CONCRETO_SILOS_INICIAIS, CONCRETO_BAIAS_INICIAIS, CONCRETO_TANQUES_ADITIVOS, CONCRETO_ENTRADAS_SUPRIMENTOS, CONCRETO_BATELADAS_PROCESSO } from './concreto-usina-seed.js';
 import { criarRotasConcreto } from './modules/concreto/rotas.js';
+import { criarRotasDeliveryMarketplaces, criarRotasWebhooksDelivery } from './modules/pizzaria/rotas-delivery-marketplaces.js';
 import { sincronizarTenantsEquipes } from './tenant-provisioning.js';
 import { executarHigienizacaoGapsProducao } from './core/higienizar-gaps-producao.js';
 import { sincronizarBloqueioNoPostgres, desativarBloqueioNoPostgres, inicializarBloqueiosEquipe } from './core/barbearia-bloqueios-sync.js';
@@ -2859,6 +2860,12 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
       return res.status(500).json({ error: e.message });
     }
   });
+
+  // [kytto-pizzaria-delivery] Hub de Integração Multicanal (iFood, Keeta, WhatsApp Delivery & Open Delivery)
+  const deliveryMarketplacesRouter = criarRotasDeliveryMarketplaces({ auth, requireStaff, resolverEmpresa: resolverEmpresaDaSessao });
+  app.use('/api/admin/pizzaria/delivery', deliveryMarketplacesRouter);
+  app.use('/api/admin/palatare/delivery', deliveryMarketplacesRouter);
+  app.use('/api/webhooks/delivery', criarRotasWebhooksDelivery());
 
   // ── ROTAS PÚBLICAS DO CARDÁPIO & AUTOATENDIMENTO QR DE MESA (PALATARE & KYTTO) ──
   const resolverMesaPublica = async (token) => {

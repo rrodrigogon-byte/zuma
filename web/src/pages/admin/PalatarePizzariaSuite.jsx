@@ -34,9 +34,11 @@ import {
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { HOLDING_PALATARE_EMPRESA_ID, SERRANO_CONCRETO_EMPRESA_ID } from '../../lib/palatare-constants';
+import PizzariaHubDeliveryMulticanal from './pizzaria/PizzariaHubDeliveryMulticanal';
 
 const TABS = [
   { id: 'montador', label: 'Montador de Pizzas', icon: Pizza, badge: 'Multi-Sabores' },
+  { id: 'hub_delivery', label: 'Hub Delivery Multicanal', icon: Truck, badge: 'iFood · Keeta · WhatsApp' },
   { id: 'rodizio', label: 'Rodízio Inteligente', icon: Utensils, badge: 'Ter, Qua, Sex' },
   { id: 'engenharia', label: 'Engenharia & CMV', icon: DollarSign, badge: 'Matriz BCG +100%' },
   { id: 'clube', label: 'Pizza Club (Assinaturas)', icon: Award, badge: 'MRR Recorrente' },
