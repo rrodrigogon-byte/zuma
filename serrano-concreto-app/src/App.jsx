@@ -27,7 +27,47 @@ import {
 
 export default function App() {
   // Main Navigation state
-  const [activeTab, setActiveTab] = useState('torre');
+  const [isEmbedded] = useState(() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      return p.get('embed') === '1' || window.self !== window.top;
+    } catch {
+      return false;
+    }
+  });
+
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      return p.get('tab') || p.get('view') || p.get('subsecao') || 'torre';
+    } catch {
+      return 'torre';
+    }
+  });
+
+  // Listener para sincronização de abas e comandos via postMessage do ERP Pai
+  useEffect(() => {
+    const handleMessage = (e) => {
+      if (e.data?.type === 'CHANGE_TAB' && e.data.tab) {
+        setActiveTab(e.data.tab);
+      } else if (e.data?.type === 'SET_UNIT' && e.data.unit) {
+        setSelectedUnit(e.data.unit);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  // Notificar o ERP Pai quando a aba ativa mudar internamente
+  useEffect(() => {
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'TAB_CHANGED', tab: activeTab }, '*');
+      }
+    } catch {
+      // cross-origin guard
+    }
+  }, [activeTab]);
   const [selectedUnit, setSelectedUnit] = useState('usina'); // 'usina' | 'mineracao'
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -61,6 +101,18 @@ export default function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Suporte a links diretos para caminhão (?caminhao=1 ou ?betoneira=1)
+  useEffect(() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      if (p.has('caminhao') || p.has('betoneira')) {
+        handleOpenTicket('bal01');
+      }
+    } catch {
+      // ignore
+    }
   }, []);
 
   // Simulation clock ticker
@@ -200,9 +252,10 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FBF9F5] text-stone-800 flex flex-col font-sans">
+    <div className={`w-full bg-[#FBF9F5] text-stone-800 flex flex-col font-sans ${isEmbedded ? 'h-full min-h-full' : 'min-h-screen'}`}>
       
-      {/* Global Application Header */}
+      {/* Global Application Header - Oculto quando embutido no ERP Kytto */}
+      {!isEmbedded && (
       <Header 
         stats={stats}
         weighbridges={weighbridges}
@@ -218,11 +271,13 @@ export default function App() {
         setSelectedUnit={setSelectedUnit}
         onOpenTicket={handleOpenTicket}
       />
+      )}
 
       {/* Main Workspace: Sidebar + Dynamic Content Canvas */}
       <div className="flex-1 flex overflow-hidden">
         
-        {/* Left Navigation Sidebar */}
+        {/* Left Navigation Sidebar - Oculto quando embutido no ERP Kytto */}
+        {!isEmbedded && (
         <Sidebar 
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -230,9 +285,10 @@ export default function App() {
           setIsCollapsed={setIsSidebarCollapsed}
           stats={stats}
         />
+        )}
 
-        {/* Center / Right Content Canvas */}
-        <main className="flex-1 p-4 overflow-y-auto max-w-[1600px] mx-auto w-full">
+        {/* Center / Right Content Canvas - 100% da largura útil sem barra lateral duplicada */}
+        <main className={`flex-1 overflow-y-auto max-w-[1600px] mx-auto w-full ${isEmbedded ? 'p-3 md:p-4' : 'p-4'}`}>
           
           {/* TAB 1: TORRE DE CONTROLE (Gêmeo Digital + Feed AGORA) */}
           {activeTab === 'torre' && (

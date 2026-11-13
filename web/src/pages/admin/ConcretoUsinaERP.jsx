@@ -29,6 +29,17 @@ const CARGAS_PADRAO = [
     viagens: [{ veiculo: "BT-03", saidaUsina: "—", chegadaObra: "—", fimDescarga: "—", pegaMinutos: null }, { veiculo: "BT-04", saidaUsina: "—", chegadaObra: "—", fimDescarga: "—", pegaMinutos: null }] }
 ];
 
+export const SUBMODULOS_TORRE = [
+  { id: 'torre', label: 'Torre', icon: '🏢', badge: null, desc: 'Torre de Controle & Gêmeo Digital' },
+  { id: 'pesagem', label: 'Pesagem', icon: '⚖️', badge: 'LIVE', badgeClass: 'serrano-badge-live', desc: 'Cockpit de Balança Operacional 80t' },
+  { id: 'fila', label: 'Fila & agenda', icon: '📅', badge: null, desc: 'Fila de Caminhões & Concretagens' },
+  { id: 'antifraude', label: 'Antifraude', icon: '🛡️', badge: '1', badgeClass: 'serrano-badge-alert', desc: 'Auditoria Inteligente Motor KyttoIA' },
+  { id: 'clientes', label: 'Clientes', icon: '👥', badge: null, desc: 'Canteiros de Obras & Pedidos' },
+  { id: 'fiscal', label: 'Fiscal & integrações', icon: '🧾', badge: 'SEFAZ', badgeClass: 'serrano-badge-sefaz', desc: 'MDF-e, NF-e e CT-e' },
+  { id: 'relatorios', label: 'Relatórios', icon: '📊', badge: null, desc: 'Indicadores & Consumo de Insumos' },
+  { id: 'cadastros', label: 'Cadastros & regras', icon: '🗄️', badge: null, desc: 'Traços NBR, Frotas e Balanças' },
+];
+
 export default function ConcretoUsinaERP() {
   const { empresaAtiva, trocarEmpresa } = useAuth();
   const { toast } = useToast();
@@ -38,9 +49,40 @@ export default function ConcretoUsinaERP() {
   const [searchParams, setSearchParams] = useSearchParams();
   const secaoParam = searchParams.get('secao') || searchParams.get('tab') || 'operacao-despacho';
   const secaoAtiva = (secaoParam === 'app-campo' || secaoParam === 'app-campo-assinatura') ? 'app-campo-assinatura' : (secaoParam === 'torre' || secaoParam === 'torre-controle' || secaoParam === 'torre-pesagem') ? 'torre-pesagem' : secaoParam;
+  
+  // Submenu integrado da Torre de Controle & Pesagem
+  const subsecaoParam = searchParams.get('subsecao') || searchParams.get('subtab') || searchParams.get('view') || 'torre';
+  const [subsecaoTorre, setSubsecaoTorre] = useState(subsecaoParam);
+
+  useEffect(() => {
+    const s = searchParams.get('subsecao') || searchParams.get('subtab') || searchParams.get('view');
+    if (s && s !== subsecaoTorre) {
+      setSubsecaoTorre(s);
+    }
+  }, [searchParams]);
+
+  const setSubsecaoAtivaTorre = (subId) => {
+    setSubsecaoTorre(subId);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('secao', 'torre-pesagem');
+      next.set('subsecao', subId);
+      return next;
+    });
+  };
+
   const setSecaoAtiva = (s) => {
     const sNorm = (s === 'app-campo' || s === 'app-campo-assinatura') ? 'app-campo-assinatura' : s;
-    setSearchParams({ secao: sNorm });
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('secao', sNorm);
+      if (sNorm === 'torre-pesagem' || sNorm === 'torre-controle' || sNorm === 'torre') {
+        next.set('subsecao', subsecaoTorre || 'torre');
+      } else {
+        next.delete('subsecao');
+      }
+      return next;
+    });
     if (trocarEmpresa) {
       if (sNorm === 'empresa-holding') {
         trocarEmpresa(HOLDING_PALATARE_EMPRESA_ID);
@@ -618,7 +660,12 @@ export default function ConcretoUsinaERP() {
         {/* Topbar Limpa */}
         <header className="serrano-topbar">
           <span className="serrano-crumb">
-            Operação / <b>{secaoAtiva === 'torre-pesagem' ? 'TORRE DE PESAGEM CCO' : (secaoAtiva.split('-')[1]?.toUpperCase() || 'DESPACHO AO VIVO')}</b>
+            Operação / <b>{secaoAtiva === 'torre-pesagem' ? 'TORRE DE CONTROLE' : (secaoAtiva.split('-')[1]?.toUpperCase() || 'DESPACHO AO VIVO')}</b>
+            {secaoAtiva === 'torre-pesagem' && (
+              <> / <span style={{ color: 'var(--serrano-orange)', fontWeight: 700 }}>
+                {(SUBMODULOS_TORRE.find(m => m.id === subsecaoTorre)?.label || 'Torre').toUpperCase()}
+              </span></>
+            )}
           </span>
 
           {secaoAtiva !== 'torre-pesagem' ? (
@@ -700,6 +747,30 @@ export default function ConcretoUsinaERP() {
             </button>
           ))}
         </nav>
+
+        {/* ─── SUBMENU INTEGRADO DA TORRE DE CONTROLE (SUB-ABAS NATIVAS) ─── */}
+        {(secaoAtiva === 'torre-pesagem' || secaoAtiva === 'torre-controle') && (
+          <nav className="serrano-subnav-tabs" aria-label="Submenu Torre de Controle e Pesagem">
+            {SUBMODULOS_TORRE.map(sub => (
+              <button
+                key={sub.id}
+                type="button"
+                className={`serrano-subtab-pill ${subsecaoTorre === sub.id ? "ativo" : ""}`}
+                onClick={() => setSubsecaoAtivaTorre(sub.id)}
+                title={sub.desc}
+              >
+                <span>{sub.icon}</span>
+                <span>{sub.label}</span>
+                {sub.badge && (
+                  <span className={`serrano-subtab-badge ${sub.badgeClass || ""}`}>
+                    {sub.badge}
+                  </span>
+                )}
+              </button>
+            ))}
+          </nav>
+        )}
+
         {secaoAtiva === "operacao-despacho" && (
           <>
 
@@ -1711,6 +1782,8 @@ export default function ConcretoUsinaERP() {
         {/* ─── ABA: TORRE DE CONTROLE DE PESAGEM & GÊMEO DIGITAL ─── */}
         {(secaoAtiva === 'torre-pesagem' || secaoAtiva === 'torre-controle') && (
           <TorreDeControlePesagemSerrano
+            subsecao={subsecaoTorre}
+            onSubsecaoChange={setSubsecaoAtivaTorre}
             onVoltar={() => setSecaoAtiva('operacao-despacho')}
           />
         )}

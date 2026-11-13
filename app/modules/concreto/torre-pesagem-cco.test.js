@@ -11,8 +11,12 @@ const rootDir = path.resolve(__dirname, '../../..');
 test('Torre de Pesagem Serrano CCO: 1. Validação de Arquivos e Bundles de Produção', () => {
   const torreHtmlPath = path.join(rootDir, 'app/public/torre-pesagem.html');
   const torreSerranoHtmlPath = path.join(rootDir, 'app/public/torre-serrano/index.html');
-  const jsBundlePath = path.join(rootDir, 'app/public/torre-serrano/assets/index-bE2DuGje.js');
-  const cssBundlePath = path.join(rootDir, 'app/public/torre-serrano/assets/index-R4CQWAfK.css');
+  const assetsDir = path.join(rootDir, 'app/public/torre-serrano/assets');
+  const files = fs.readdirSync(assetsDir);
+  const jsFile = files.find(f => f.startsWith('index-') && f.endsWith('.js'));
+  const cssFile = files.find(f => f.startsWith('index-') && f.endsWith('.css'));
+  const jsBundlePath = path.join(assetsDir, jsFile || '');
+  const cssBundlePath = path.join(assetsDir, cssFile || '');
 
   assert.ok(fs.existsSync(torreHtmlPath), 'torre-pesagem.html deve existir em app/public');
   assert.ok(fs.existsSync(torreSerranoHtmlPath), 'index.html deve existir em app/public/torre-serrano');
@@ -20,13 +24,16 @@ test('Torre de Pesagem Serrano CCO: 1. Validação de Arquivos e Bundles de Prod
   assert.ok(fs.existsSync(cssBundlePath), 'CSS bundle deve existir em app/public/torre-serrano/assets');
 
   const htmlContent = fs.readFileSync(torreHtmlPath, 'utf8');
-  assert.ok(htmlContent.includes('/torre-serrano/assets/index-bE2DuGje.js'), 'HTML deve apontar para o bundle JS isolado');
-  assert.ok(htmlContent.includes('/torre-serrano/assets/index-R4CQWAfK.css'), 'HTML deve apontar para o bundle CSS isolado');
+  assert.ok(htmlContent.includes(`/torre-serrano/assets/${jsFile}`), 'HTML deve apontar para o bundle JS isolado');
+  assert.ok(htmlContent.includes(`/torre-serrano/assets/${cssFile}`), 'HTML deve apontar para o bundle CSS isolado');
   assert.ok(htmlContent.includes('Torre'), 'Título da página deve conter Torre');
 });
 
 test('Torre de Pesagem Serrano CCO: 2. Conformidade com a Diretriz de Marca KyttoIA', () => {
-  const jsBundlePath = path.join(rootDir, 'app/public/torre-serrano/assets/index-bE2DuGje.js');
+  const assetsDir = path.join(rootDir, 'app/public/torre-serrano/assets');
+  const files = fs.readdirSync(assetsDir);
+  const jsFile = files.find(f => f.startsWith('index-') && f.endsWith('.js'));
+  const jsBundlePath = path.join(assetsDir, jsFile || '');
   const jsContent = fs.readFileSync(jsBundlePath, 'utf8');
 
   // Diretriz de marca: nunca expor nomes de fornecedores de modelos base

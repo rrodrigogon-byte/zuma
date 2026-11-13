@@ -5,13 +5,14 @@ import { useNavigate } from 'react-router-dom';
  * TorreDeControlePesagemSerrano
  * 
  * Componente unificado do Centro de Controle Operacional (CCO) da Serrano Concreto & Mineração Sepotuba.
- * Integrado sem molduras ou menus redundantes ("tela dentro de tela"), com navegação sincronizada
- * e suporte nativo ao Modo Sala de Controle (tela cheia).
+ * Integrado como sub-módulo de navegação nativa no ERP Kytto, sem barras laterais duplicadas,
+ * com sincronização bidirecional de abas em tempo real e suporte a tela cheia.
  */
-export default function TorreDeControlePesagemSerrano({ onVoltar }) {
+export default function TorreDeControlePesagemSerrano({ subsecao = 'torre', onSubsecaoChange, onVoltar }) {
   const [modoTelaCheia, setModoTelaCheia] = useState(false);
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const containerRef = useRef(null);
+  const iframeRef = useRef(null);
   const navigate = useNavigate();
 
   const alternarTelaCheia = () => {
@@ -33,7 +34,11 @@ export default function TorreDeControlePesagemSerrano({ onVoltar }) {
 
   useEffect(() => {
     const handleMessage = (e) => {
-      if (e.data?.type === 'TOGGLE_FULLSCREEN') {
+      if (e.data?.type === 'TAB_CHANGED' && e.data.tab) {
+        if (onSubsecaoChange && e.data.tab !== subsecao) {
+          onSubsecaoChange(e.data.tab);
+        }
+      } else if (e.data?.type === 'TOGGLE_FULLSCREEN') {
         alternarTelaCheia();
       } else if (e.data?.type === 'NAVIGATE_SECTION') {
         if (e.data.secao === 'cameras-cftv') {
@@ -58,7 +63,18 @@ export default function TorreDeControlePesagemSerrano({ onVoltar }) {
       document.removeEventListener('fullscreenchange', handleFsChange);
       document.removeEventListener('webkitfullscreenchange', handleFsChange);
     };
-  }, [navigate, onVoltar]);
+  }, [navigate, onVoltar, onSubsecaoChange, subsecao]);
+
+  // Sincroniza a sub-seção selecionada no ERP Kytto com o iframe via postMessage sem recarregar a página
+  useEffect(() => {
+    if (iframeLoaded && iframeRef.current?.contentWindow) {
+      try {
+        iframeRef.current.contentWindow.postMessage({ type: 'CHANGE_TAB', tab: subsecao }, '*');
+      } catch {
+        // cross-origin guard
+      }
+    }
+  }, [subsecao, iframeLoaded]);
 
   return (
     <div
@@ -66,20 +82,21 @@ export default function TorreDeControlePesagemSerrano({ onVoltar }) {
       style={{
         display: 'flex',
         flexDirection: 'column',
-        height: modoTelaCheia ? '100vh' : 'calc(100vh - 138px)',
-        minHeight: 700,
+        height: modoTelaCheia ? '100vh' : 'calc(100vh - 170px)',
+        minHeight: 680,
         background: '#0D0F11',
         color: '#ECEAE6',
-        borderRadius: 0,
+        borderRadius: 8,
         overflow: 'hidden',
-        border: 'none',
+        border: '1px solid var(--joint, rgba(255, 255, 255, 0.08))',
         position: modoTelaCheia ? 'fixed' : 'relative',
         top: modoTelaCheia ? 0 : 'auto',
         left: modoTelaCheia ? 0 : 'auto',
         right: modoTelaCheia ? 0 : 'auto',
         bottom: modoTelaCheia ? 0 : 'auto',
         zIndex: modoTelaCheia ? 99999 : 1,
-        width: '100%'
+        width: '100%',
+        marginTop: 6
       }}
     >
       {modoTelaCheia && (
@@ -109,7 +126,7 @@ export default function TorreDeControlePesagemSerrano({ onVoltar }) {
         </button>
       )}
 
-      {/* ÁREA DA TORRE INTERATIVA (100% UTILIZAÇÃO DE TELA) */}
+      {/* ÁREA DA TORRE INTERATIVA (100% UTILIZAÇÃO DE TELA SEM SIDEBAR DUPLICADA) */}
       <div style={{ flex: 1, position: 'relative', minHeight: 0, width: '100%' }}>
         {!iframeLoaded && (
           <div
@@ -142,7 +159,8 @@ export default function TorreDeControlePesagemSerrano({ onVoltar }) {
           </div>
         )}
         <iframe
-          src="/torre-pesagem.html"
+          ref={iframeRef}
+          src={`/torre-pesagem.html?embed=1&tab=${encodeURIComponent(subsecao || 'torre')}`}
           title="Torre de Pesagem Serrano CCO"
           allow="fullscreen"
           allowFullScreen
