@@ -751,6 +751,178 @@ export function inicializarDatastoreConcreto() {
   if (!Array.isArray(data.concreto_tickets_balanca)) data.concreto_tickets_balanca = [];
   if (!Array.isArray(data.concreto_baias)) data.concreto_baias = CONCRETO_BAIAS_INICIAIS;
   if (!Array.isArray(data.concreto_tanques)) data.concreto_tanques = CONCRETO_TANQUES_ADITIVOS;
+  if (!Array.isArray(data.concreto_cameras_ip) || data.concreto_cameras_ip.length === 0) {
+    data.concreto_cameras_ip = [
+      {
+        id: 'cam-balanca-ent-01',
+        empresaId: CONCRETO_EMPRESA_ID,
+        nome: 'Balança 80t · Entrada & LPR Frontal',
+        pontoInstalacao: 'balanca_entrada_lpr',
+        pontoRotulo: 'Balança Entrada',
+        marca: 'intelbras',
+        modelo: 'VIP 5450 Z IA LPR',
+        ipHost: '192.168.1.101',
+        portaHttp: 80,
+        portaRtsp: 554,
+        portaOnvif: 80,
+        portaServico: 37777,
+        usuario: 'admin',
+        senha: '',
+        canal: 1,
+        substream: false,
+        fps: 30,
+        resolucao: '4K UltraHD',
+        codec: 'H.265+',
+        status: 'online',
+        latenciaMs: 14,
+        recursosIa: { lprLeituraPlaca: true, enquadramentoBalanca: true, inspecaoEpi: true, cercaVirtual: true }
+      },
+      {
+        id: 'cam-balanca-sai-02',
+        empresaId: CONCRETO_EMPRESA_ID,
+        nome: 'Balança 80t · Saída & Traseira Veicular',
+        pontoInstalacao: 'balanca_saida_traseira',
+        pontoRotulo: 'Balança Saída',
+        marca: 'dahua',
+        modelo: 'IPC-HFW5442T-ASE-NI',
+        ipHost: '192.168.1.102',
+        portaHttp: 80,
+        portaRtsp: 554,
+        portaOnvif: 80,
+        portaServico: 37777,
+        usuario: 'admin',
+        senha: '',
+        canal: 1,
+        substream: false,
+        fps: 25,
+        resolucao: '4MP Starlight',
+        codec: 'H.265',
+        status: 'online',
+        latenciaMs: 18,
+        recursosIa: { lprLeituraPlaca: true, enquadramentoBalanca: true, inspecaoEpi: false, cercaVirtual: true }
+      },
+      {
+        id: 'cam-central-dosadora-03',
+        empresaId: CONCRETO_EMPRESA_ID,
+        nome: 'Central Dosadora Convicta NBR 7212',
+        pontoInstalacao: 'central_dosadora_balancas',
+        pontoRotulo: 'Central Dosadora',
+        marca: 'positivo',
+        modelo: 'Câmera IP Smart Pro 360',
+        ipHost: '192.168.1.103',
+        portaHttp: 8899,
+        portaRtsp: 554,
+        portaOnvif: 8899,
+        portaServico: 34567,
+        usuario: 'admin',
+        senha: '',
+        canal: 1,
+        substream: false,
+        fps: 20,
+        resolucao: '1080p Full HD',
+        codec: 'H.264',
+        status: 'online',
+        latenciaMs: 22,
+        recursosIa: { lprLeituraPlaca: false, enquadramentoBalanca: false, inspecaoEpi: true, monitoramentoSilos: true }
+      },
+      {
+        id: 'cam-silos-cimento-04',
+        empresaId: CONCRETO_EMPRESA_ID,
+        nome: 'Silos 96t & Descarga de Cimento',
+        pontoInstalacao: 'silos_cimento_descarga',
+        pontoRotulo: 'Silos 96t',
+        marca: 'hikvision',
+        modelo: 'DS-2CD2047G2-LU ColorVu',
+        ipHost: '192.168.1.104',
+        portaHttp: 80,
+        portaRtsp: 554,
+        portaOnvif: 80,
+        portaServico: 8000,
+        usuario: 'admin',
+        senha: '',
+        canal: 1,
+        substream: false,
+        fps: 25,
+        resolucao: '4MP ColorVu 24/7',
+        codec: 'H.265+',
+        status: 'online',
+        latenciaMs: 16,
+        recursosIa: { lprLeituraPlaca: false, enquadramentoBalanca: false, inspecaoEpi: true, monitoramentoSilos: true }
+      },
+      {
+        id: 'cam-patio-agregados-05',
+        empresaId: CONCRETO_EMPRESA_ID,
+        nome: 'Pátio de Agregados · Areia Sepotuba & Britas',
+        pontoInstalacao: 'patio_agregados_minas',
+        pontoRotulo: 'Pátio Agregados',
+        marca: 'intelbras',
+        modelo: 'VIP 3230 B',
+        ipHost: '192.168.1.105',
+        portaHttp: 80,
+        portaRtsp: 554,
+        portaOnvif: 80,
+        portaServico: 37777,
+        usuario: 'admin',
+        senha: '',
+        canal: 1,
+        substream: false,
+        fps: 20,
+        resolucao: '2MP Full HD',
+        codec: 'H.265',
+        status: 'online',
+        latenciaMs: 19,
+        recursosIa: { lprLeituraPlaca: false, enquadramentoBalanca: false, inspecaoEpi: true, cercaVirtual: true }
+      },
+      {
+        id: 'cam-laboratorio-cps-06',
+        empresaId: CONCRETO_EMPRESA_ID,
+        nome: 'Laboratório Tecnológico & Ruptura CPs',
+        pontoInstalacao: 'laboratorio_cps_prensa',
+        pontoRotulo: 'Laboratório CPs',
+        marca: 'axis',
+        modelo: 'AXIS M1135 Mk II',
+        ipHost: '192.168.1.106',
+        portaHttp: 80,
+        portaRtsp: 554,
+        portaOnvif: 80,
+        portaServico: 80,
+        usuario: 'root',
+        senha: '',
+        canal: 1,
+        substream: false,
+        fps: 30,
+        resolucao: '1080p HDTV',
+        codec: 'H.264',
+        status: 'online',
+        latenciaMs: 12,
+        recursosIa: { lprLeituraPlaca: false, enquadramentoBalanca: false, inspecaoEpi: true, cercaVirtual: false }
+      },
+      {
+        id: 'cam-portaria-radar-07',
+        empresaId: CONCRETO_EMPRESA_ID,
+        nome: 'Portaria Usina & Radar Aproximação CCO',
+        pontoInstalacao: 'portaria_radar_cco',
+        pontoRotulo: 'Portaria & Radar CCO',
+        marca: 'intelbras',
+        modelo: 'VIP 7250 LPR',
+        ipHost: '192.168.1.107',
+        portaHttp: 80,
+        portaRtsp: 554,
+        portaOnvif: 80,
+        portaServico: 37777,
+        usuario: 'admin',
+        senha: '',
+        canal: 1,
+        substream: false,
+        fps: 30,
+        resolucao: '4K UltraHD LPR',
+        codec: 'H.265+',
+        status: 'online',
+        latenciaMs: 15,
+        recursosIa: { lprLeituraPlaca: true, enquadramentoBalanca: false, inspecaoEpi: true, cercaVirtual: true }
+      }
+    ];
+  }
   if (!Array.isArray(data.concreto_entradas_suprimentos)) data.concreto_entradas_suprimentos = CONCRETO_ENTRADAS_SUPRIMENTOS;
   if (!Array.isArray(data.concreto_bateladas)) data.concreto_bateladas = CONCRETO_BATELADAS_PROCESSO;
 
@@ -5120,69 +5292,55 @@ export function construirUrlsCamera(marca, ipHost, portaHttp = 80, portaRtsp = 5
   const auth = usuario ? encodeURIComponent(usuario) + ":" + encodeURIComponent(senha) + "@" : "";
   const hostRtsp = String(ipHost || "192.168.1.100") + ":" + String(portaRtsp || 554);
   const hostHttp = String(ipHost || "192.168.1.100") + (Number(portaHttp) !== 80 ? ":" + portaHttp : "");
+  const onvifUrl = "http://" + auth + hostHttp + "/onvif/device_service";
+
+  let streamRtspUrl = "";
+  let snapshotHttpUrl = "";
+  let marcaRotulo = "";
 
   if (m === "positivo") {
-    return {
-      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/live/ch" + (canal ? (canal - 1) : 0),
-      snapshotHttpUrl: "http://" + auth + hostHttp + "/snapshot.jpg",
-      marcaRotulo: "Positivo Casa Inteligente / Segurança"
-    };
-  }
-
-  if (m === "intelbras" || m === "dahua") {
-    return {
-      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/cam/realmonitor?channel=" + (canal || 1) + "&subtype=" + sub,
-      snapshotHttpUrl: "http://" + auth + hostHttp + "/cgi-bin/snapshot.cgi?channel=" + (canal || 1),
-      marcaRotulo: m === "intelbras" ? "Intelbras (iMDVR / VIP)" : "Dahua WizSense"
-    };
-  }
-
-  if (m === "hikvision" || m === "hilook") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/live/ch" + (canal ? (canal - 1) : 0);
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/snapshot.jpg";
+    marcaRotulo = "Positivo Casa Inteligente / Segurança";
+  } else if (m === "intelbras" || m === "dahua") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/cam/realmonitor?channel=" + (canal || 1) + "&subtype=" + sub;
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/cgi-bin/snapshot.cgi?channel=" + (canal || 1);
+    marcaRotulo = m === "intelbras" ? "Intelbras (iMDVR / VIP)" : "Dahua WizSense";
+  } else if (m === "hikvision" || m === "hilook") {
     const ch = (canal || 1) <= 16 ? (100 * (canal || 1) + (substream ? 2 : 1)) : (canal || 101);
-    return {
-      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/Streaming/Channels/" + ch,
-      snapshotHttpUrl: "http://" + auth + hostHttp + "/ISAPI/Streaming/channels/" + ch + "/picture",
-      marcaRotulo: m === "hikvision" ? "Hikvision ColorVu" : "HiLook Series"
-    };
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/Streaming/Channels/" + ch;
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/ISAPI/Streaming/channels/" + ch + "/picture";
+    marcaRotulo = m === "hikvision" ? "Hikvision ColorVu" : "HiLook Series";
+  } else if (m === "giga" || m === "multilaser") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/ch0" + (canal || 1) + (substream ? "_sub.264" : ".264");
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/cgi-bin/snapshot.cgi";
+    marcaRotulo = "Giga Security / Multilaser Pro";
+  } else if (m === "tecvoz" || m === "jfl") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/user=" + (usuario || "admin") + "&password=" + (senha || "") + "&channel=" + (canal || 1) + "&stream=" + sub + ".sdp";
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/snapshot.jpg";
+    marcaRotulo = "Tecvoz / JFL Alarmes";
+  } else if (m === "uniview" || m === "unv") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/unicast/c" + (canal || 1) + "/s" + sub + "/live";
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/images/snapshot.jpg";
+    marcaRotulo = "Uniview (UNV)";
+  } else if (m === "axis") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/axis-media/media.amp?videocodec=h264";
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/axis-cgi/jpg/image.cgi";
+    marcaRotulo = "Axis Communications";
+  } else {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/live/ch" + (canal || 1);
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/snapshot.jpg";
+    marcaRotulo = "ONVIF / RTSP Genérico";
   }
 
-  if (m === "giga" || m === "multilaser") {
-    return {
-      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/ch0" + (canal || 1) + (substream ? "_sub.264" : ".264"),
-      snapshotHttpUrl: "http://" + auth + hostHttp + "/cgi-bin/snapshot.cgi",
-      marcaRotulo: "Giga Security / Multilaser Pro"
-    };
-  }
-
-  if (m === "tecvoz" || m === "jfl") {
-    return {
-      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/user=" + (usuario || "admin") + "&password=" + (senha || "") + "&channel=" + (canal || 1) + "&stream=" + sub + ".sdp",
-      snapshotHttpUrl: "http://" + auth + hostHttp + "/snapshot.jpg",
-      marcaRotulo: "Tecvoz / JFL Alarmes"
-    };
-  }
-
-  if (m === "uniview" || m === "unv") {
-    return {
-      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/unicast/c" + (canal || 1) + "/s" + sub + "/live",
-      snapshotHttpUrl: "http://" + auth + hostHttp + "/images/snapshot.jpg",
-      marcaRotulo: "Uniview (UNV)"
-    };
-  }
-
-  if (m === "axis") {
-    return {
-      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/axis-media/media.amp?videocodec=h264",
-      snapshotHttpUrl: "http://" + auth + hostHttp + "/axis-cgi/jpg/image.cgi",
-      marcaRotulo: "Axis Communications"
-    };
-  }
-
-  // Genérico ONVIF / RTSP
   return {
-    streamRtspUrl: "rtsp://" + auth + hostRtsp + "/live/ch" + (canal || 1),
-    snapshotHttpUrl: "http://" + auth + hostHttp + "/snapshot.jpg",
-    marcaRotulo: "ONVIF / RTSP Genérico"
+    streamRtspUrl,
+    snapshotHttpUrl,
+    rtsp: streamRtspUrl,
+    snapshot: snapshotHttpUrl,
+    onvif: onvifUrl,
+    onvifUrl,
+    marcaRotulo
   };
 }
 

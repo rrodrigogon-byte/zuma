@@ -2306,7 +2306,8 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   app.get("/api/concreto/cargas/:id/romaneio-html", async (req, res) => {
     try {
       const { gerarHtmlRomaneioOficial } = await import("./modules/concreto/servico.js");
-      const html = await gerarHtmlRomaneioOficial(req.params.id);
+      const resRomaneio = await gerarHtmlRomaneioOficial(req.params.id);
+      const html = typeof resRomaneio === 'string' ? resRomaneio : (resRomaneio?.html || resRomaneio);
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       return res.send(html);
     } catch (e) {
@@ -2317,7 +2318,8 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   app.get("/api/concreto/balanca/tickets/:id/html", async (req, res) => {
     try {
       const { gerarHtmlTicketBalanca } = await import("./modules/concreto/servico.js");
-      const html = await gerarHtmlTicketBalanca(req.params.id);
+      const resTicket = await gerarHtmlTicketBalanca(req.params.id);
+      const html = typeof resTicket === 'string' ? resTicket : (resTicket?.html || resTicket);
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       return res.send(html);
     } catch (e) {
