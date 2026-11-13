@@ -8201,6 +8201,58 @@ app.post('/api/admin/barbearia/clientes/:id/movimento-credito', (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
+app.put('/api/admin/barbearia/clientes/:id/movimento-credito/:movId', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const resultado = barbeariaClienteFicha360.atualizarMovimentoCreditoCliente(empresaId, req.params.id, req.params.movId, req.body || {});
+    audit(req, 'EDITAR MOVIMENTO CREDITO BARBEARIA', `${req.params.id} mov=${req.params.movId}`);
+    res.json(resultado);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+app.delete('/api/admin/barbearia/clientes/:id/movimento-credito/:movId', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const resultado = barbeariaClienteFicha360.excluirMovimentoCreditoCliente(empresaId, req.params.id, req.params.movId);
+    audit(req, 'EXCLUIR MOVIMENTO CREDITO BARBEARIA', `${req.params.id} mov=${req.params.movId}`);
+    res.json(resultado);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+app.post('/api/admin/barbearia/clientes/:id/pacotes', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const resultado = barbeariaClienteFicha360.adicionarPacoteCliente(empresaId, req.params.id, req.body || {});
+    audit(req, 'ADICIONAR PACOTE BARBEARIA', `${req.params.id}`);
+    res.json(resultado);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+app.post('/api/admin/barbearia/clientes/:id/pacotes/:pacoteId/consumir', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const resultado = barbeariaClienteFicha360.consumirSessaoPacoteCliente(empresaId, req.params.id, req.params.pacoteId, req.body || {});
+    audit(req, 'CONSUMIR PROCEDIMENTO PACOTE', `${req.params.id} pacote=${req.params.pacoteId}`);
+    res.json(resultado);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+app.post('/api/admin/barbearia/clientes/:id/agendamentos/:ageId/status', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const status = String(req.body?.status || 'confirmado').toLowerCase();
+    const resultado = barbeariaErpKytto.atualizarAgendamento(empresaId, req.params.ageId, { status });
+    audit(req, 'STATUS AGENDAMENTO BARBEARIA', `${req.params.ageId} status=${status}`);
+    const ficha = barbeariaClienteFicha360.obterFichaCompletaCliente(empresaId, req.params.id);
+    res.json(ficha);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
 
 app.patch('/api/admin/barbearia/clientes/:id', (req, res) => {
   try {
