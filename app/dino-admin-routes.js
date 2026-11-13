@@ -1,3 +1,4 @@
+import zlib from 'zlib';
 // ============================================================================
 // ADMIN DA EMPRESA (tenant) — Financeiro, Auditoria e BI da barbearia.
 // Tudo sob /api/admin/barbearia (auth + requireStaff + escopo de empresa já
@@ -112,7 +113,21 @@ export function registerDinoAdminRoutes(app, deps) {
     if (!gestor(req, res)) return;
     try {
       const itens = financeiroKytto.listarLancamentos(legacyEmpresaId(req), { ...(req.query || {}), lojaId: legacyLojaId(req) }).map(view);
-      res.json(itens);
+      const jsonStr = JSON.stringify(itens);
+      const acceptEncoding = req.headers["accept-encoding"] || "";
+      if (acceptEncoding.includes("gzip") && jsonStr.length > 2048) {
+        zlib.gzip(Buffer.from(jsonStr, "utf8"), (err, buffer) => {
+          if (err) return res.json(itens);
+          res.writeHead(200, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Content-Encoding": "gzip",
+            "Content-Length": buffer.length,
+          });
+          res.end(buffer);
+        });
+      } else {
+        res.json(itens);
+      }
     } catch (error) { respondFinanceError(res, error); }
   });
 

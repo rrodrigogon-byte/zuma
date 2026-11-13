@@ -817,6 +817,7 @@ export default function FinanceiroEmpresa() {
   const [dre, setDre] = useState(null)
   const [categorias, setCategorias] = useState({ receita: [], despesa: [] })
   const [loading, setLoading] = useState(true)
+  const [loadingLancamentos, setLoadingLancamentos] = useState(true)
   const [erro, setErro] = useState('')
   const [filtros, setFiltros] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -895,29 +896,42 @@ export default function FinanceiroEmpresa() {
   }
 
   const load = useCallback(async () => {
-    setLoading(true)
     if (operador) {
       try { setCategorias((await api.get(`${BASE}/categorias`)) || { receita: [], despesa: [] }); setErro('') }
       catch (error) { setErro(error.message || 'Não foi possível carregar as categorias.') }
       finally { setLoading(false) }
       return
     }
+    // 1. Carregamento instantâneo do resumo e categorias (~15ms)
     try {
-      const [lista, r, f, c, d] = await Promise.all([
-        api.get(`${BASE}/lancamentos`),
+      const [r, c] = await Promise.all([
         api.get(`${BASE}/resumo`),
-        api.get(`${BASE}/fluxo`),
-        api.get(`${BASE}/categorias`),
+        api.get(`${BASE}/categorias`).catch(() => ({ receita: [], despesa: [] }))
+      ])
+      if (r) setResumo(r)
+      if (c) setCategorias(c)
+      setLoading(false)
+    } catch (errR) {
+      console.warn("Aviso ao carregar resumo rápido:", errR)
+    }
+    // 2. Carregamento dos lançamentos e fluxo
+    setLoadingLancamentos(true)
+    try {
+      const [lista, f, d] = await Promise.all([
+        api.get(`${BASE}/lancamentos`),
+        api.get(`${BASE}/fluxo`).catch(() => []),
         api.get(`${BASE}/dre?mes=${mesDre}`).catch(() => null)
       ])
       setLancamentos(Array.isArray(lista) ? lista : [])
-      setResumo(r)
       setFluxo(Array.isArray(f) ? f : [])
-      setCategorias(c || { receita: [], despesa: [] })
       setDre(d)
       setErro('')
-    } catch (error) { setErro(error.message || 'Não foi possível carregar o financeiro.') }
-    finally { setLoading(false) }
+    } catch (error) {
+      setErro(error.message || 'Não foi possível carregar os lançamentos.')
+    } finally {
+      setLoading(false)
+      setLoadingLancamentos(false)
+    }
   }, [operador, mesDre])
 
   useEffect(() => { load() }, [load, empresaAtiva?.id])
@@ -1968,7 +1982,7 @@ export default function FinanceiroEmpresa() {
         caption="Lançamentos financeiros"
         columns={columns}
         rows={listaPaginada}
-        empty={lancamentos.length ? 'Nenhum lançamento com estes filtros.' : stallone ? 'Nenhum lançamento financeiro registrado nesta empresa.' : 'Nenhum lançamento ainda. Atendimentos pagos e comandas aparecem aqui automaticamente.'}
+        empty={loadingLancamentos ? '⏳ Carregando histórico financeiro da empresa…' : lancamentos.length ? 'Nenhum lançamento com estes filtros.' : stallone ? 'Nenhum lançamento financeiro registrado nesta empresa.' : 'Nenhum lançamento ainda. Atendimentos pagos e comandas aparecem aqui automaticamente.'}
       />
 
       {/* Controles de Paginação */}
