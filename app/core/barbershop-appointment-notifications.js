@@ -580,45 +580,6 @@ export async function enqueueDueAppointmentReminders() {
   return queued;
 }
 
-
-export function gerarLinkGoogleAgenda({ titulo, inicioIso, duracaoMinutos = 45, detalhes, localizacao }) {
-  try {
-    const inicio = new Date(inicioIso);
-    if (!Number.isFinite(inicio.getTime())) return '';
-    const fim = new Date(inicio.getTime() + (Math.max(15, Number(duracaoMinutos) || 45)) * 60000);
-    const fmt = (d) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-    const dates = `${fmt(inicio)}/${fmt(fim)}`;
-    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(titulo)}&dates=${dates}&details=${encodeURIComponent(detalhes || '')}&location=${encodeURIComponent(localizacao || '')}`;
-  } catch {
-    return '';
-  }
-}
-
-export function formatarTicketDinoBloco({ tituloTicket, servico, profissional, quando, inicioIso, duracaoMinutos = 45, preco }) {
-  const linkCalendar = inicioIso ? gerarLinkGoogleAgenda({
-    titulo: `Corte / Barba: ${servico} — Barbearia Dino`,
-    inicioIso,
-    duracaoMinutos,
-    detalhes: `Agendamento com ${profissional} na Dino Barbearia & Perfumaria. Serviço: ${servico}.\nGerenciamento online: https://kytto.com.br/minha/dino`,
-    localizacao: 'Rua Avelina Jaci Bohn, 80W — Centro, Tangará da Serra/MT',
-  }) : '';
-
-  const linhas = [
-    '━━━━━━━━━━━━━━━━━━━━━━',
-    `🎫 *${tituloTicket || 'TICKET DIGITAL DE AGENDAMENTO'}*`,
-    '━━━━━━━━━━━━━━━━━━━━━━',
-    `💈 *Serviço:* ${servico}`,
-    `✂ *Profissional:* ${profissional}`,
-    `📅 *Data & Horário:* ${quando}`,
-    '📍 *Localização:* Rua Avelina Jaci Bohn, 80W — Centro',
-    preco ? `💰 *Valor:* R$ ${Number(preco).toFixed(2).replace('.', ',')}` : null,
-    linkCalendar ? `📅 *Adicionar ao Google Agenda (1 clique):*\n${linkCalendar}` : null,
-    '📲 *Link de Gerenciamento:* https://kytto.com.br/minha/dino',
-    '━━━━━━━━━━━━━━━━━━━━━━',
-  ].filter(Boolean);
-  return linhas.join('\n');
-}
-
 export function mensagem(snapshot, agendamento, cliente, evento, persona = null) {
   const servico = snapshot.servicos.find((item) => item.id === agendamento.servicoId)?.nome || 'atendimento';
   const profissional = snapshot.profissionais.find((item) => item.id === agendamento.profissionalId)?.nome || 'profissional da equipe';
@@ -639,46 +600,20 @@ export function mensagem(snapshot, agendamento, cliente, evento, persona = null)
   const quando = formatarQuando(agendamento);
   const cabecalho = `Olá, ${nomeLimpo}.`;
   const rodape = 'Esta é uma mensagem de atendimento. Para não receber estes avisos, responda SAIR.';
-  const inicioIso = agendamento.dataHora || (agendamento.dataAgenda ? `${agendamento.dataAgenda}T${agendamento.horaLocal || '08:00'}:00` : '');
-  const duracao = agendamento.duracao || agendamento.duracaoMinutos || 45;
-  const preco = agendamento.preco || agendamento.valorRecebido;
-
   if (evento === EVENTO_CONFIRMACAO_DIA) {
-    const ticket = formatarTicketDinoBloco({
-      tituloTicket: 'CONFIRMAÇÃO DE ATENDIMENTO — HOJE',
-      servico, profissional, quando, inicioIso, duracaoMinutos: duracao,
-    });
-    return `${cabecalho} Passando para confirmar seu horário de hoje: ${quando} (${servico}) com ${profissional}. Responda CONFIRMO para confirmar sua presença, ou REMARCAR se preferir outro horário. Te aguardamos!\n\n${ticket}\n\n${rodape}`;
+    return `${cabecalho} Passando para confirmar seu horário de hoje: ${quando} (${servico}) com ${profissional}. Responda CONFIRMO para confirmar sua presença, ou REMARCAR se preferir outro horário. Te aguardamos! ${rodape}`;
   }
   if (evento === 'cancelado') {
     const ehCliente = agendamento.canceladoPor === 'cliente' || String(agendamento.observacoes || '').toLowerCase().includes('pelo cliente') || String(agendamento.motivoCancelamento || '').toLowerCase().includes('cliente');
     if (ehCliente) {
-      return `${cabecalho} Confirmamos o cancelamento do seu agendamento ${quando} (${servico} com ${profissional}), conforme você solicitou. Se precisar agendar um novo horário, acesse https://kytto.com.br/agendar/dino ou entre em contato. ${rodape}`;
+      return `${cabecalho} Confirmamos o cancelamento do seu agendamento ${quando} (${servico} com ${profissional}), conforme você solicitou. Se precisar agendar um novo horário, estamos à disposição. ${rodape}`;
     }
     const motivoTexto = agendamento.motivoCancelamento && !['falta_confirmacao', 'cancelado', 'equipe'].includes(String(agendamento.motivoCancelamento).toLowerCase()) ? ` Motivo: ${limpo(agendamento.motivoCancelamento, 100)}.` : '';
     return `${cabecalho} A equipe da ${limpo(snapshot.configuracao?.nomePublico || 'barbearia', 120)} precisou cancelar seu agendamento ${quando} (${servico} com ${profissional}). Pedimos desculpas pelo imprevisto!${motivoTexto} Se precisar, entre em contato para escolher outro horário. ${rodape}`;
   }
-  if (evento === 'remarcado') {
-    const ticket = formatarTicketDinoBloco({
-      tituloTicket: 'AGENDAMENTO REMARCADO',
-      servico, profissional, quando, inicioIso, duracaoMinutos: duracao,
-    });
-    return `${cabecalho} Seu agendamento foi remarcado para ${quando}. Serviço: ${servico}. Profissional: ${profissional}.\n\n${ticket}\n\n${rodape}`;
-  }
-  if (evento === 'lembrete') {
-    const ticket = formatarTicketDinoBloco({
-      tituloTicket: 'LEMBRETE DE AGENDAMENTO',
-      servico, profissional, quando, inicioIso, duracaoMinutos: duracao,
-    });
-    return `${cabecalho} Lembrete do seu agendamento ${quandoRelativo(agendamento)}, ${quando}. Serviço: ${servico}. Profissional: ${profissional}. Responda CONFIRMO, REMARCAR ou CANCELO.\n\n${ticket}\n\n${rodape}`;
-  }
-
-  // evento === 'criado'
-  const ticket = formatarTicketDinoBloco({
-    tituloTicket: 'TICKET DIGITAL DE AGENDAMENTO',
-    servico, profissional, quando, inicioIso, duracaoMinutos: duracao, preco,
-  });
-  return `${cabecalho} Seu agendamento foi registrado para ${quando}. Serviço: ${servico}. Profissional: ${profissional}.\n\n${ticket}\n\n${rodape}`;
+  if (evento === 'remarcado') return `${cabecalho} Seu agendamento foi remarcado para ${quando}. Serviço: ${servico}. Profissional: ${profissional}. ${rodape}`;
+  if (evento === 'lembrete') return `${cabecalho} Lembrete do seu agendamento ${quandoRelativo(agendamento)}, ${quando}. Serviço: ${servico}. Profissional: ${profissional}. Responda CONFIRMO, REMARCAR ou CANCELO. ${rodape}`;
+  return `${cabecalho} Seu agendamento foi registrado para ${quando}. Serviço: ${servico}. Profissional: ${profissional}. ${rodape}`;
 }
 
 function appointmentDeliveryError(message, code, retryable = false) {

@@ -2,6 +2,10 @@ import { Router } from 'express';
 import {
   obterDadosConcreto,
   criarCargaConcreto,
+  obterCargaPorId,
+  atualizarCargaConcreto,
+  excluirCargaConcreto,
+  duplicarCargaConcreto,
   atualizarStatusCarga,
   registrarEventoViagem,
   registrarRupturaCorpoProva,
@@ -28,13 +32,29 @@ import {
   emitirRomaneioVendaAgregado,
   calcularEstatisticaResistenciaLote,
   gerarHtmlRomaneioOficial,
+  gerarHtmlLaudoOficial,
   assinarEntregaCarga,
   obterRomaneioCompleto,
   emitirTicketPesagemBalanca,
   gerarHtmlTicketBalanca,
+  obterStatusBalancaAutomacao,
+  executarComandoBalanca,
+  registrarEntradaVeiculo,
+  concluirSegundaPesagemBalanca,
+  listarTicketsBalanca,
+  obterConfiguracoesBalanca,
+  salvarConfiguracoesBalanca,
   listarMedicoesObras,
   criarMedicaoObra,
-  atualizarStatusMedicao
+  atualizarStatusMedicao,
+  ajustarUmidadeBaia,
+  reabastecerSiloOuTanque,
+  dosarBateladaProcesso,
+  obterNotasFiscaisVendas,
+  emitirNotaFiscalConcreto,
+  entregarNotaFiscal,
+  gerarDanfeHtml,
+  obterTelemetriaCelulasToledo
 } from './servico.js';
 import { CONCRETO_EMPRESA_ID } from '../../concreto-usina-seed.js';
 
@@ -199,6 +219,51 @@ export function criarRotasConcreto() {
     }
   });
 
+  // 6b. Obter carga detalhada por ID
+  router.get('/cargas/:id', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await obterCargaPorId(req.params.id, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(404).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 6c. Atualizar / Editar carga de concretagem agendada
+  router.put('/cargas/:id', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await atualizarCargaConcreto(req.params.id, req.body, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 6d. Excluir carga de concretagem agendada
+  router.delete('/cargas/:id', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await excluirCargaConcreto(req.params.id, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 6e. Duplicar agendamento de carga de concretagem
+  router.post('/cargas/:id/duplicar', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const { data, horario } = req.body || {};
+      const resultado = await duplicarCargaConcreto(req.params.id, data, horario, empresaId);
+      return res.status(201).json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
   // 7. Atualizar status de uma carga
   router.put('/cargas/:id/status', async (req, res) => {
     try {
@@ -233,7 +298,19 @@ export function criarRotasConcreto() {
   });
 
   // 10. Calculadora de dosagem NBR 7212
-  router.post('/dosagem/calcular', (req, res) => {
+    // 9b. Emitir Laudo Oficial A4 em HTML para impressão ou visualização (NBR 5739)
+  router.get('/ensaios/:loteId/laudo/html', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const html = await gerarHtmlLaudoOficial(req.params.loteId, empresaId);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    } catch (e) {
+      return res.status(404).send(`<h1>Erro ao gerar Laudo Técnico NBR 5739</h1><p>${e.message}</p>`);
+    }
+  });
+
+router.post('/dosagem/calcular', (req, res) => {
     try {
       const dosagem = calcularDosagemAvancada(req.body);
       return res.json({ ok: true, dosagem });
@@ -422,6 +499,185 @@ export function criarRotasConcreto() {
         return res.send(resultado.html);
       }
       return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 25. Obter Status da Balança Rodoviária 80t, Automação, Semáforos e Cancelas
+  router.get('/balanca/status', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await obterStatusBalancaAutomacao(empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 26. Executar Comando Remoto na Balança Rodoviária 80t (Cancelas, Semáforos, etc.)
+  router.post('/balanca/comando', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const { comando, payload } = req.body;
+      const resultado = await executarComandoBalanca(comando, payload, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 27. Listar Todos os Tickets de Balança Rodoviária com Filtros
+  router.get('/balanca/tickets', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await listarTicketsBalanca(empresaId, req.query);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 28. Registrar 1ª Pesagem (Entrada de Veículo no Pátio)
+  router.post('/balanca/entrada', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await registrarEntradaVeiculo(req.body, empresaId);
+      return res.status(201).json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 29. Concluir 2ª Pesagem (Saída e Emissão de Ticket com Líquido)
+  router.post('/balanca/saida', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await concluirSegundaPesagemBalanca(req.body, empresaId);
+      return res.status(201).json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 30. Obter Configurações da Balança Rodoviária 80t
+  router.get('/balanca/configuracoes', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await obterConfiguracoesBalanca(empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 31. Salvar Configurações da Balança Rodoviária 80t
+  router.post('/balanca/configuracoes', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await salvarConfiguracoesBalanca(req.body, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+
+  // 32. Suprimentos e Silos - Ajuste de Umidade da Areia (NBR 7212)
+  router.post('/suprimentos-silos/umidade', async (req, res) => {
+    try {
+      const { baiaId, umidadePercent } = req.body;
+      const resultado = await ajustarUmidadeBaia(baiaId, umidadePercent);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 33. Suprimentos e Silos - Recebimento de Matéria-Prima
+  router.post('/suprimentos-silos/reabastecer', async (req, res) => {
+    try {
+      const resultado = await reabastecerSiloOuTanque(req.body);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 34. Controle de Processo - Dosagem Automática de Batelada
+  router.post('/processo-producao/dosar-batelada', async (req, res) => {
+    try {
+      const resultado = await dosarBateladaProcesso(req.body);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 35. Suprimentos e Silos - Listagem consolidada
+  router.get('/suprimentos-silos', async (req, res) => {
+    try {
+      const dados = await obterDadosConcreto(resolverEmpresa(req));
+      return res.json({
+        ok: true,
+        silos: dados.silos || [],
+        baias: dados.baias || [],
+        tanques: dados.tanques || [],
+        entradasSuprimentos: dados.entradasSuprimentos || []
+      });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 36. Módulo de Vendas & Notas Fiscais (NF-e / NFS-e) - Listagem e Resumos
+  router.get('/vendas/notas', async (req, res) => {
+    try {
+      const resultado = await obterNotasFiscaisVendas(resolverEmpresa(req));
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 37. Emissão de Nova Nota Fiscal Integrada à Balança 80t e Romaneio
+  router.post('/vendas/emitir-nota', async (req, res) => {
+    try {
+      const resultado = await emitirNotaFiscalConcreto(req.body, resolverEmpresa(req));
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 38. Visualização do DANFE A4 em HTML Oficial
+  router.get('/vendas/notas/:id/danfe-html', async (req, res) => {
+    try {
+      const html = await gerarDanfeHtml(req.params.id, resolverEmpresa(req));
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    } catch (e) {
+      return res.status(400).send(`<h3>Erro ao gerar DANFE: ${e.message}</h3>`);
+    }
+  });
+
+  // 39. Entrega Multicanal da Nota Fiscal (WhatsApp / E-mail)
+  router.post('/vendas/notas/:id/entregar', async (req, res) => {
+    try {
+      const { canal, destinatario } = req.body || {};
+      const resultado = await entregarNotaFiscal(req.params.id, canal, destinatario, resolverEmpresa(req));
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 40. Telemetria das 8 Células de Carga Toledo da Balança Rodoviária 80t
+  router.get('/balanca/celulas/telemetria', async (req, res) => {
+    try {
+      const peso = req.query.peso ? Number(req.query.peso) : 0;
+      const telemetria = obterTelemetriaCelulasToledo(peso);
+      return res.json(telemetria);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
     }

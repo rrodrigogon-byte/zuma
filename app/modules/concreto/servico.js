@@ -5,7 +5,14 @@ import {
   CONCRETO_DADOS_EMPRESA, 
   CONCRETO_CATALOGO_INICIAL, 
   CONCRETO_FROTA_INICIAL, 
-  CONCRETO_CARGAS_INICIAIS 
+  CONCRETO_CARGAS_INICIAIS,
+  CONCRETO_SILOS_INICIAIS,
+  CONCRETO_BAIAS_INICIAIS,
+  CONCRETO_TANQUES_ADITIVOS,
+  CONCRETO_ENTRADAS_SUPRIMENTOS,
+  CONCRETO_BATELADAS_PROCESSO,
+  calcularCompensacaoUmidade,
+  calcularTracoBatelada
 } from '../../concreto-usina-seed.js';
 
 // =====================================================================
@@ -739,6 +746,10 @@ export function inicializarDatastoreConcreto() {
   if (!Array.isArray(data.concreto_vendas_agregados)) data.concreto_vendas_agregados = [];
   if (!Array.isArray(data.concreto_medicoes_obras)) data.concreto_medicoes_obras = [];
   if (!Array.isArray(data.concreto_tickets_balanca)) data.concreto_tickets_balanca = [];
+  if (!Array.isArray(data.concreto_baias)) data.concreto_baias = CONCRETO_BAIAS_INICIAIS;
+  if (!Array.isArray(data.concreto_tanques)) data.concreto_tanques = CONCRETO_TANQUES_ADITIVOS;
+  if (!Array.isArray(data.concreto_entradas_suprimentos)) data.concreto_entradas_suprimentos = CONCRETO_ENTRADAS_SUPRIMENTOS;
+  if (!Array.isArray(data.concreto_bateladas)) data.concreto_bateladas = CONCRETO_BATELADAS_PROCESSO;
 
   // Popular se vazio
   if (data.concreto_cargas.length === 0) {
@@ -758,6 +769,13 @@ export function inicializarDatastoreConcreto() {
   }
   if (data.concreto_silos.length === 0) {
     data.concreto_silos = SILOS_INSUMOS_INICIAIS.map(s => ({ ...s, empresaId: CONCRETO_EMPRESA_ID }));
+  } else if (data.concreto_silos.length < SILOS_INSUMOS_INICIAIS.length) {
+    const ids = new Set(data.concreto_silos.map(s => s.id));
+    for (const s of SILOS_INSUMOS_INICIAIS) {
+      if (Boolean(ids.has(s.id)) === false) {
+        data.concreto_silos.push({ ...s, empresaId: CONCRETO_EMPRESA_ID });
+      }
+    }
   }
   if (data.concreto_compras.length === 0) {
     data.concreto_compras = COMPRAS_INICIAIS.map(c => ({ ...c, empresaId: CONCRETO_EMPRESA_ID }));
@@ -776,6 +794,9 @@ export function inicializarDatastoreConcreto() {
   }
   if (data.concreto_medicoes_obras.length === 0) {
     data.concreto_medicoes_obras = MEDICOES_OBRAS_INICIAIS.map(m => ({ ...m, empresaId: CONCRETO_EMPRESA_ID }));
+  }
+  if (data.concreto_tickets_balanca.length === 0) {
+    data.concreto_tickets_balanca = TICKETS_BALANCA_INICIAIS.map(t => ({ ...t, empresaId: CONCRETO_EMPRESA_ID }));
   }
 
   save();
@@ -823,6 +844,10 @@ export async function obterDadosConcreto(empresaId = CONCRETO_EMPRESA_ID) {
     ensaios,
     propostas,
     silos,
+    baias: data.concreto_baias || CONCRETO_BAIAS_INICIAIS,
+    tanques: data.concreto_tanques || CONCRETO_TANQUES_ADITIVOS,
+    entradasSuprimentos: data.concreto_entradas_suprimentos || CONCRETO_ENTRADAS_SUPRIMENTOS,
+    bateladas: data.concreto_bateladas || CONCRETO_BATELADAS_PROCESSO,
     compras,
     ordensProducao,
     listasTecnicas,
@@ -913,10 +938,13 @@ export async function registrarRecebimentoPesagemCompra(pedidoId, dadosRecebimen
   const silo = (data.concreto_silos || []).find(s => s.id === pedido.siloDestinoId || s.codigo === pedido.siloDestinoId);
   if (silo) {
     const qtdEntrada = pedido.pesoBalançaEntradaTon || pedido.quantidade;
-    if (silo.estoqueAtualTon != null) {
-      silo.estoqueAtualTon = Math.min(silo.capacidadeTotalTon, +(silo.estoqueAtualTon + qtdEntrada).toFixed(2));
-      silo.nivelPercent = Math.round((silo.estoqueAtualTon / silo.capacidadeTotalTon) * 100);
-    } else if (silo.estoqueAtualM3 != null) {
+    const capTotal = silo.capacidadeTotalTon || silo.capacidadeToneladas || 96;
+    const estAtual = silo.estoqueAtualTon != null ? silo.estoqueAtualTon : (silo.nivelAtualToneladas || 0);
+    silo.estoqueAtualTon = Math.min(capTotal, +(estAtual + qtdEntrada).toFixed(2));
+    silo.nivelAtualToneladas = silo.estoqueAtualTon;
+    silo.nivelPercent = Math.round((silo.estoqueAtualTon / capTotal) * 100);
+    silo.nivelPercentual = silo.nivelPercent;
+    if (silo.estoqueAtualM3 != null) {
       silo.estoqueAtualM3 = Math.min(silo.capacidadeTotalM3, +(silo.estoqueAtualM3 + qtdEntrada).toFixed(2));
       silo.nivelPercent = Math.round((silo.estoqueAtualM3 / silo.capacidadeTotalM3) * 100);
     } else if (silo.estoqueAtualL != null) {
@@ -1528,6 +1556,110 @@ export async function atualizarStatusCarga(cargaId, status, observacoes = '') {
 
   save();
   return { ok: true, carga };
+}
+
+export async function obterCargaPorId(cargaId, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const carga = (data.concreto_cargas || []).find(c => c.id === cargaId || String(c.numero) === String(cargaId));
+  if (!carga) throw new Error(`Carga ${cargaId} não encontrada.`);
+  return { ok: true, carga };
+}
+
+export async function atualizarCargaConcreto(cargaId, dadosAtualizados, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const carga = (data.concreto_cargas || []).find(c => c.id === cargaId || String(c.numero) === String(cargaId));
+  if (!carga) throw new Error(`Carga ${cargaId} não encontrada.`);
+
+  if (dadosAtualizados.cliente !== undefined) carga.cliente = dadosAtualizados.cliente;
+  if (dadosAtualizados.obra !== undefined) carga.obra = dadosAtualizados.obra;
+  if (dadosAtualizados.endereco !== undefined) carga.endereco = dadosAtualizados.endereco;
+  if (dadosAtualizados.elemento !== undefined) carga.elemento = dadosAtualizados.elemento;
+  if (dadosAtualizados.data !== undefined) carga.data = dadosAtualizados.data;
+  if (dadosAtualizados.horarioInicio !== undefined) carga.horarioInicio = dadosAtualizados.horarioInicio;
+  if (dadosAtualizados.horarioAgendado !== undefined) carga.horarioAgendado = dadosAtualizados.horarioAgendado;
+  if (dadosAtualizados.fck !== undefined) {
+    carga.fck = Number(dadosAtualizados.fck);
+    if (!dadosAtualizados.precoM3) {
+      carga.precoM3 = carga.fck === 20 ? 380 : carga.fck === 25 ? 410 : carga.fck === 30 ? 440 : carga.fck === 35 ? 480 : carga.fck === 40 ? 520 : 340;
+    }
+  }
+  if (dadosAtualizados.brita !== undefined) carga.brita = dadosAtualizados.brita;
+  if (dadosAtualizados.slump !== undefined) carga.slump = dadosAtualizados.slump;
+  if (dadosAtualizados.volumeM3 !== undefined) carga.volumeM3 = Number(dadosAtualizados.volumeM3);
+  if (dadosAtualizados.bomba !== undefined) carga.bomba = dadosAtualizados.bomba;
+  if (dadosAtualizados.precoM3 !== undefined) carga.precoM3 = Number(dadosAtualizados.precoM3);
+  if (dadosAtualizados.status !== undefined) carga.status = dadosAtualizados.status;
+  if (dadosAtualizados.observacoes !== undefined) carga.observacoes = dadosAtualizados.observacoes;
+  if (dadosAtualizados.telefoneCliente !== undefined) carga.telefoneCliente = dadosAtualizados.telefoneCliente;
+  if (dadosAtualizados.emailCliente !== undefined) carga.emailCliente = dadosAtualizados.emailCliente;
+  if (dadosAtualizados.engenheiroResponsavel !== undefined) carga.engenheiroResponsavel = dadosAtualizados.engenheiroResponsavel;
+
+  // Recalcular valores caso volume ou preco tenham mudado
+  const vol = Number(carga.volumeM3) || 8;
+  const preco = Number(carga.precoM3) || 440;
+  carga.subtotalConcreto = +(vol * preco).toFixed(2);
+  let taxaBomba = 0;
+  const bStr = String(carga.bomba || "").toLowerCase();
+  if (bStr.includes("bomba") || bStr.includes("lança") || bStr.includes("lanca") || bStr.includes("bl-")) {
+    taxaBomba = 750.00;
+    if (vol > 25) taxaBomba += (vol - 25) * 25.00;
+  }
+  carga.taxaBomba = taxaBomba;
+  carga.valorTotal = +(carga.subtotalConcreto + taxaBomba).toFixed(2);
+
+  // Se forem passadas viagens atualizadas, sincronizar
+  if (Array.isArray(dadosAtualizados.viagens)) {
+    carga.viagens = dadosAtualizados.viagens;
+  }
+
+  save();
+  return { ok: true, carga, mensagem: 'Concretagem atualizada com sucesso!' };
+}
+
+export async function excluirCargaConcreto(cargaId, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const index = (data.concreto_cargas || []).findIndex(c => c.id === cargaId || String(c.numero) === String(cargaId));
+  if (index === -1) throw new Error(`Carga ${cargaId} não encontrada para exclusão.`);
+
+  const cargaRemovida = data.concreto_cargas.splice(index, 1)[0];
+  save();
+  return { ok: true, mensagem: `Carga #${cargaRemovida.numero || cargaId} excluída com sucesso!`, carga: cargaRemovida };
+}
+
+export async function duplicarCargaConcreto(cargaId, novaData = null, novoHorario = null, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const cargaOriginal = (data.concreto_cargas || []).find(c => c.id === cargaId || String(c.numero) === String(cargaId));
+  if (!cargaOriginal) throw new Error(`Carga ${cargaId} não encontrada para duplicação.`);
+
+  const ultimoNumero = (data.concreto_cargas || []).reduce((max, c) => Math.max(max, Number(c.numero) || 1000), 1000);
+  const proximoNumero = ultimoNumero + 1;
+
+  const novaCarga = {
+    ...JSON.parse(JSON.stringify(cargaOriginal)),
+    id: `crg-${proximoNumero}`,
+    numero: proximoNumero,
+    data: novaData || cargaOriginal.data,
+    horarioInicio: novoHorario || cargaOriginal.horarioInicio || '08:30',
+    horarioAgendado: novoHorario || cargaOriginal.horarioAgendado || '08:30',
+    status: 'agendado',
+    assinaturaDigital: null,
+    hashIntegridade: null,
+    codigoAutenticidade: null,
+    loteCp: `CP-2026-${String(proximoNumero).slice(-3)}`,
+    viagens: (cargaOriginal.viagens || []).map((v, idx) => ({
+      ...v,
+      viagemNumero: idx + 1,
+      saidaUsina: null,
+      chegadaObra: null,
+      inicioDescarga: null,
+      fimDescarga: null,
+      status: 'agendada'
+    }))
+  };
+
+  data.concreto_cargas.unshift(novaCarga);
+  save();
+  return { ok: true, carga: novaCarga, mensagem: `Concretagem #${proximoNumero} agendada a partir da carga #${cargaOriginal.numero}!` };
 }
 
 export async function registrarEventoViagem(cargaId, viagemIndex, evento, horario = null) {
@@ -2408,4 +2540,1317 @@ export async function atualizarStatusMedicao(medicaoId, status) {
   medicao.status = status;
   save();
   return { ok: true, medicao };
+}
+
+// =====================================================================
+// 14. AUTOMAÇÃO DA BALANÇA RODOVIÁRIA 80T TOLEDO, SEMÁFOROS E OPERAÇÃO REMOTA
+// =====================================================================
+export const TICKETS_BALANCA_INICIAIS = [
+  {
+    id: 'tkt-9841',
+    numeroTicket: 'TKT-BAL-9841',
+    empresaId: CONCRETO_EMPRESA_ID,
+    dataHora: '12/11/2026 14:28',
+    dataHoraEntrada: '12/11/2026 14:10',
+    dataHoraSaida: '12/11/2026 14:28',
+    balanca: 'Balança Rodoviária 80t Toledo · Usina Serrano (Rodovia MT-358 km 08)',
+    modeloIndicador: 'Toledo Prix 9094 / Células de Carga Digitais 80.000 kg',
+    operador: 'Paulo Cezar (Matrícula 042 - IPEM-MT)',
+    cliente: 'Construtora MT Horizon Ltda',
+    cnpjCpfCliente: '18.492.301/0001-92',
+    obraDestino: 'Edifício Residencial Ilhas do Lago · Tangará da Serra/MT',
+    veiculoPlaca: 'BT-01 (RRA-4E80)',
+    modeloVeiculo: 'Caminhão Betoneira VW Constellation 26.280 8x4 (8m³)',
+    motorista: 'Marcos Silveira',
+    cpfMotorista: '821.492.011-84',
+    transportadora: 'Frota Própria Serrano Concreto',
+    tipoOperacao: 'Expedição de Concreto Usinado',
+    tipoMaterial: 'Concreto Usinado Estrutural FCK 30 MPa (Slump 12±2cm)',
+    pesoBrutoKg: 33480,
+    taraKg: 14280,
+    pesoLiquidoKg: 19200,
+    densidadeKgM3: 2400,
+    volumeCalculadoM3: 8.0,
+    precoUnitarioM3: 420.00,
+    valorTotal: 3360.00,
+    valorCfem: 0,
+    aliquotaCfemPercent: 0,
+    status: 'concluido',
+    statusSemaforo: 'verde',
+    cancelaLiberada: true,
+    posicionamentoPlataforma: '100% Ok (Sensores Dianteiro e Traseiro Desobstruídos)',
+    modoOperacao: 'remoto',
+    codigoAutenticidade: 'BAL-TOLEDO-A79B3F40E2C18901'
+  },
+  {
+    id: 'tkt-9840',
+    numeroTicket: 'TKT-BAL-9840',
+    empresaId: CONCRETO_EMPRESA_ID,
+    dataHora: '12/11/2026 13:52',
+    dataHoraEntrada: '12/11/2026 13:35',
+    dataHoraSaida: '12/11/2026 13:52',
+    balanca: 'Balança Rodoviária 80t Toledo · Usina Serrano (Rodovia MT-358 km 08)',
+    modeloIndicador: 'Toledo Prix 9094 / Células de Carga Digitais 80.000 kg',
+    operador: 'Operação Remota CCO (Guarita Automatizada)',
+    cliente: 'Pavimentadora & Construtora Guimarães',
+    cnpjCpfCliente: '04.192.839/0001-44',
+    obraDestino: 'Obras de Duplicação MT-358 · Trecho Tangará-Nova Olímpia',
+    veiculoPlaca: 'CAR-04 (QBO-4892)',
+    modeloVeiculo: 'Cavalo Scania R450 + Caçamba Basculante Rossetti 3 Eixos',
+    motorista: 'Valdir Silvestre',
+    cpfMotorista: '492.381.902-15',
+    transportadora: 'TransGrãos & Minérios Tangará',
+    tipoOperacao: 'Expedição de Agregados / Mineração',
+    tipoMaterial: 'Areia Média Lavada de Rio (Jazida Sepotuba)',
+    pesoBrutoKg: 46250,
+    taraKg: 15450,
+    pesoLiquidoKg: 30800,
+    densidadeKgM3: 1500,
+    volumeCalculadoM3: 20.53,
+    precoUnitarioM3: 65.00,
+    valorTotal: 1334.45,
+    valorCfem: 20.02,
+    aliquotaCfemPercent: 1.5,
+    status: 'concluido',
+    statusSemaforo: 'verde',
+    cancelaLiberada: true,
+    posicionamentoPlataforma: '100% Ok (Sensores Dianteiro e Traseiro Desobstruídos)',
+    modoOperacao: 'remoto',
+    codigoAutenticidade: 'BAL-TOLEDO-B83C1A72F9D04128'
+  },
+  {
+    id: 'tkt-9839',
+    numeroTicket: 'TKT-BAL-9839',
+    empresaId: CONCRETO_EMPRESA_ID,
+    dataHora: '12/11/2026 11:15',
+    dataHoraEntrada: '12/11/2026 10:48',
+    dataHoraSaida: '12/11/2026 11:15',
+    balanca: 'Balança Rodoviária 80t Toledo · Usina Serrano (Rodovia MT-358 km 08)',
+    modeloIndicador: 'Toledo Prix 9094 / Células de Carga Digitais 80.000 kg',
+    operador: 'Paulo Cezar (Matrícula 042 - IPEM-MT)',
+    cliente: 'Serrano Concreto Usinado Ltda (Recepção de Insumo)',
+    cnpjCpfCliente: '03.849.201/0001-10',
+    obraDestino: 'Silo 01 de Cimento CP-II F 32 (Usina Tangará)',
+    veiculoPlaca: 'SIL-02 (KAJ-1204)',
+    modeloVeiculo: 'Carreta Silo Rodoviário Cimento a Granel 4 Eixos',
+    motorista: 'Donizete Aparecido',
+    cpfMotorista: '601.294.182-33',
+    transportadora: 'Transportadora Votoran / Cimento MT',
+    tipoOperacao: 'Recepção de Matéria-Prima (Cimento CP-II)',
+    tipoMaterial: 'Cimento CP-II F 32 a Granel',
+    pesoBrutoKg: 52100,
+    taraKg: 15100,
+    pesoLiquidoKg: 37000,
+    densidadeKgM3: 1400,
+    volumeCalculadoM3: 26.43,
+    precoUnitarioM3: 620.00,
+    valorTotal: 22940.00,
+    valorCfem: 0,
+    aliquotaCfemPercent: 0,
+    status: 'concluido',
+    statusSemaforo: 'verde',
+    cancelaLiberada: true,
+    posicionamentoPlataforma: '100% Ok',
+    modoOperacao: 'remoto',
+    codigoAutenticidade: 'BAL-TOLEDO-94CF2810AA12B763'
+  }
+];
+
+let estadoHardwareBalanca = {
+  semaforoEntrada: 'verde',
+  cancelaEntrada: 'fechada',
+  semaforoSaida: 'vermelho',
+  cancelaSaida: 'fechada',
+  sensorBarreiraEntrada: false,
+  sensorBarreiraSaida: false,
+  sensorPresencaPlataforma: false,
+  posicionamentoCorreto: true,
+  pesoAtualKg: 0,
+  estabilidade: 'estavel',
+  taraAtualKg: 0,
+  pesoLiquidoAtualKg: 0,
+  zeroRastreado: true,
+  capacidadeMaximaKg: 80000,
+  divisaoKg: 10,
+  cameraLprAtiva: true,
+  placaDetectada: '',
+  rfidDetectado: '',
+  confiancaLpr: 0.98,
+  modoOperacao: 'remoto',
+  interfoneAtivo: false,
+  mensagemInterfone: 'Aguardando aproximação de veículo...',
+  sireneAtiva: false,
+  alarmeSobrepeso: false,
+  barreirasAlinhadas: true,
+  ultimaInspecaoMetrologica: '12/11/2026 - Conforme IPEM-MT',
+  veiculoAtual: null,
+  veiculosNoPatio: [
+    {
+      id: 'patio-01',
+      ticketEntradaId: 'tkt-ent-101',
+      placa: 'CAR-08 (JZZ-4190)',
+      motorista: 'Ademir Fagundes',
+      transportadora: 'TransGrãos Tangará',
+      tipoVeiculo: 'Caçamba Basculante Toco 2 Eixos',
+      cliente: 'Pavimentadora Parecis',
+      produto: 'Brita 1 Granítica',
+      dataHoraEntrada: '12/11/2026 16:45',
+      taraEntradaKg: 11200,
+      status: 'carregando_no_patio'
+    },
+    {
+      id: 'patio-02',
+      ticketEntradaId: 'tkt-ent-102',
+      placa: 'ROD-03 (OBK-8211)',
+      motorista: 'Sebastião Moreira',
+      transportadora: 'Frota Própria Serrano',
+      tipoVeiculo: 'Rodotrem 9 Eixos Basculante',
+      cliente: 'Usina Serrano (Transferência)',
+      produto: 'Areia Grossa de Rio',
+      dataHoraEntrada: '12/11/2026 17:10',
+      taraEntradaKg: 24500,
+      status: 'carregando_no_patio'
+    }
+  ]
+};
+
+export async function obterStatusBalancaAutomacao(empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const tickets = (data.concreto_tickets_balanca || []).filter(t => !t.empresaId || t.empresaId === empresaId);
+  const totalKg = tickets.reduce((acc, t) => acc + (Number(t.pesoLiquidoKg) || 0), 0);
+  const totalTon = +(totalKg / 1000).toFixed(2);
+  const totalValor = tickets.reduce((acc, t) => acc + (Number(t.valorTotal) || 0), 0);
+
+  return {
+    ok: true,
+    hardware: { ...estadoHardwareBalanca },
+    estatisticasHoje: {
+      totalVeiculosHoje: tickets.length,
+      totalToneladasHoje: totalTon,
+      tempoMedioPesagemSegundos: 38,
+      veiculosNoPatioQtd: estadoHardwareBalanca.veiculosNoPatio.length,
+      faturamentoPesagensHoje: totalValor
+    },
+    veiculoAtual: estadoHardwareBalanca.veiculoAtual,
+    veiculosNoPatio: estadoHardwareBalanca.veiculosNoPatio,
+    ultimosTickets: tickets.slice(0, 15)
+  };
+}
+
+export async function executarComandoBalanca(comando, payload = {}, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+
+  switch (comando) {
+    case 'abrir_cancela_entrada':
+      estadoHardwareBalanca.cancelaEntrada = 'aberta';
+      estadoHardwareBalanca.semaforoEntrada = 'verde';
+      break;
+    case 'fechar_cancela_entrada':
+      estadoHardwareBalanca.cancelaEntrada = 'fechada';
+      break;
+    case 'abrir_cancela_saida':
+      estadoHardwareBalanca.cancelaSaida = 'aberta';
+      estadoHardwareBalanca.semaforoSaida = 'verde';
+      break;
+    case 'fechar_cancela_saida':
+      estadoHardwareBalanca.cancelaSaida = 'fechada';
+      break;
+    case 'alternar_semaforo_entrada':
+      estadoHardwareBalanca.semaforoEntrada = estadoHardwareBalanca.semaforoEntrada === 'verde' ? 'vermelho' : 'verde';
+      break;
+    case 'alternar_semaforo_saida':
+      estadoHardwareBalanca.semaforoSaida = estadoHardwareBalanca.semaforoSaida === 'verde' ? 'vermelho' : 'verde';
+      break;
+    case 'zerar_balanca':
+      estadoHardwareBalanca.pesoAtualKg = 0;
+      estadoHardwareBalanca.taraAtualKg = 0;
+      estadoHardwareBalanca.pesoLiquidoAtualKg = 0;
+      estadoHardwareBalanca.zeroRastreado = true;
+      estadoHardwareBalanca.estabilidade = 'estavel';
+      break;
+    case 'tara_manual':
+      estadoHardwareBalanca.taraAtualKg = Number(payload.taraKg) || 0;
+      estadoHardwareBalanca.pesoLiquidoAtualKg = Math.max(0, estadoHardwareBalanca.pesoAtualKg - estadoHardwareBalanca.taraAtualKg);
+      break;
+    case 'simular_veiculo': {
+      const peso = Number(payload.pesoBrutoKg) || 33480;
+      const tara = Number(payload.taraKg) || 14280;
+      const foraPosicao = Boolean(payload.foraPosicao);
+
+      estadoHardwareBalanca.sensorPresencaPlataforma = true;
+      estadoHardwareBalanca.sensorBarreiraEntrada = foraPosicao;
+      estadoHardwareBalanca.sensorBarreiraSaida = false;
+      estadoHardwareBalanca.posicionamentoCorreto = !foraPosicao;
+      estadoHardwareBalanca.semaforoEntrada = 'vermelho';
+      estadoHardwareBalanca.cancelaEntrada = 'fechada';
+      estadoHardwareBalanca.semaforoSaida = 'vermelho';
+      estadoHardwareBalanca.cancelaSaida = 'fechada';
+
+      estadoHardwareBalanca.pesoAtualKg = peso;
+      estadoHardwareBalanca.taraAtualKg = tara;
+      estadoHardwareBalanca.pesoLiquidoAtualKg = Math.max(0, peso - tara);
+      estadoHardwareBalanca.zeroRastreado = false;
+      estadoHardwareBalanca.estabilidade = 'estavel';
+
+      estadoHardwareBalanca.placaDetectada = payload.placa || 'BT-01 (RRA-4E80)';
+      estadoHardwareBalanca.rfidDetectado = payload.rfid || 'TAG-MT-0428';
+      estadoHardwareBalanca.mensagemInterfone = foraPosicao 
+        ? 'Atenção motorista: reposicione o veículo! Eixo dianteiro fora da plataforma.'
+        : 'Veículo posicionado. Aguardando estabilização da pesagem...';
+
+      estadoHardwareBalanca.veiculoAtual = {
+        placa: estadoHardwareBalanca.placaDetectada,
+        rfid: estadoHardwareBalanca.rfidDetectado,
+        modelo: payload.modelo || 'Caminhão Betoneira VW Constellation 26.280',
+        motorista: payload.motorista || 'Marcos Silveira',
+        cpfMotorista: payload.cpfMotorista || '821.492.011-84',
+        transportadora: payload.transportadora || 'Frota Própria Serrano Concreto',
+        cliente: payload.cliente || 'Construtora MT Horizon',
+        produto: payload.produto || 'Concreto Usinado Estrutural FCK 30 MPa',
+        pesoBrutoKg: peso,
+        taraKg: tara,
+        pesoLiquidoKg: Math.max(0, peso - tara),
+        tipoOperacao: payload.tipoOperacao || 'expedicao_concreto',
+        posicionamentoCorreto: !foraPosicao
+      };
+      break;
+    }
+    case 'remover_veiculo':
+      estadoHardwareBalanca.sensorPresencaPlataforma = false;
+      estadoHardwareBalanca.sensorBarreiraEntrada = false;
+      estadoHardwareBalanca.sensorBarreiraSaida = false;
+      estadoHardwareBalanca.posicionamentoCorreto = true;
+      estadoHardwareBalanca.pesoAtualKg = 0;
+      estadoHardwareBalanca.taraAtualKg = 0;
+      estadoHardwareBalanca.pesoLiquidoAtualKg = 0;
+      estadoHardwareBalanca.zeroRastreado = true;
+      estadoHardwareBalanca.estabilidade = 'estavel';
+      estadoHardwareBalanca.placaDetectada = '';
+      estadoHardwareBalanca.rfidDetectado = '';
+      estadoHardwareBalanca.veiculoAtual = null;
+      estadoHardwareBalanca.cancelaSaida = 'aberta';
+      estadoHardwareBalanca.semaforoSaida = 'verde';
+      estadoHardwareBalanca.mensagemInterfone = 'Pesagem concluída! Pista liberada. Boa viagem!';
+      break;
+    case 'interfone_voz':
+      estadoHardwareBalanca.interfoneAtivo = true;
+      estadoHardwareBalanca.mensagemInterfone = payload.mensagem || 'Operação Remota CCO: Por favor desligue o motor do veículo.';
+      break;
+    case 'modo_operacao':
+      if (['remoto', 'local', 'autoatendimento'].includes(payload.modo)) {
+        estadoHardwareBalanca.modoOperacao = payload.modo;
+      }
+      break;
+    case 'panico_emergencia':
+      estadoHardwareBalanca.cancelaEntrada = 'fechada';
+      estadoHardwareBalanca.cancelaSaida = 'fechada';
+      estadoHardwareBalanca.semaforoEntrada = 'vermelho';
+      estadoHardwareBalanca.semaforoSaida = 'vermelho';
+      estadoHardwareBalanca.sireneAtiva = true;
+      estadoHardwareBalanca.mensagemInterfone = '🚨 EMERGÊNCIA: Pista bloqueada pelo Centro de Controle Operacional!';
+      break;
+    case 'sirene_alerta':
+      estadoHardwareBalanca.sireneAtiva = Boolean(payload.ativa ?? !estadoHardwareBalanca.sireneAtiva);
+      break;
+    case 'testar_barreiras':
+      estadoHardwareBalanca.sensorBarreiraEntrada = true;
+      estadoHardwareBalanca.sensorBarreiraSaida = true;
+      estadoHardwareBalanca.barreirasAlinhadas = true;
+      estadoHardwareBalanca.mensagemInterfone = 'Autoteste de sensores ópticos e barreiras laser concluído: 100% calibrados.';
+      break;
+    default:
+      throw new Error(`Comando de automação desconhecido: ${comando}`);
+  }
+
+  return { ok: true, comando, hardware: { ...estadoHardwareBalanca } };
+}
+
+export async function registrarEntradaVeiculo(dados, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const id = `patio-${Date.now()}`;
+  const dataAtual = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Cuiaba' });
+  const horaAtual = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Cuiaba', hour: '2-digit', minute: '2-digit' });
+
+  const novoItemPatio = {
+    id,
+    ticketEntradaId: `tkt-ent-${Date.now().toString().slice(-4)}`,
+    placa: dados.placaVeiculo || 'CAR-09 (MTZ-9910)',
+    modeloVeiculo: dados.modeloVeiculo || 'Caminhão Caçamba Basculante',
+    motorista: dados.motorista || 'Motorista Terceiro',
+    cpfMotorista: dados.cpfMotorista || '000.000.000-00',
+    transportadora: dados.transportadora || 'Transportadora Terceirizada',
+    cliente: dados.cliente || 'Construtora / Terceiro',
+    cnpjCpfCliente: dados.cnpjCpfCliente || '00.000.000/0001-00',
+    obraDestino: dados.obraDestino || 'Obras em Tangará da Serra/MT',
+    produto: dados.tipoMaterial || 'Areia Média Lavada',
+    tipoOperacao: dados.tipoOperacao || 'expedicao_agregados',
+    dataHoraEntrada: `${dataAtual} ${horaAtual}`,
+    taraEntradaKg: Number(dados.taraKg) || Number(dados.pesoAtualKg) || 12000,
+    status: 'carregando_no_patio'
+  };
+
+  estadoHardwareBalanca.veiculosNoPatio.unshift(novoItemPatio);
+  estadoHardwareBalanca.cancelaEntrada = 'aberta';
+  estadoHardwareBalanca.semaforoEntrada = 'verde';
+  estadoHardwareBalanca.mensagemInterfone = `Entrada registrada para ${novoItemPatio.placa}. Siga até o pátio de carregamento!`;
+
+  return { ok: true, veiculoPatio: novoItemPatio };
+}
+
+export async function concluirSegundaPesagemBalanca(dados, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const seq = (data.concreto_tickets_balanca?.length || 0) + 9842;
+  const dataAtual = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Cuiaba' });
+  const horaAtual = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Cuiaba', hour: '2-digit', minute: '2-digit' });
+
+  const pesoBruto = Number(dados.pesoBrutoKg) || Number(estadoHardwareBalanca.pesoAtualKg) || 35000;
+  const tara = Number(dados.taraKg) || Number(estadoHardwareBalanca.taraAtualKg) || 12000;
+  const pesoLiquido = Math.max(0, pesoBruto - tara);
+  const densidade = Number(dados.densidadeKgM3) || (dados.tipoMaterial?.toLowerCase().includes('brita') ? 1450 : dados.tipoMaterial?.toLowerCase().includes('concreto') ? 2400 : 1500);
+  const volumeM3 = +(pesoLiquido / densidade).toFixed(2);
+  const precoM3 = Number(dados.precoUnitarioM3) || (dados.tipoMaterial?.toLowerCase().includes('concreto') ? 420.00 : 65.00);
+  const valorTotal = +(volumeM3 * precoM3).toFixed(2);
+  const eMineral = dados.tipoMaterial?.toLowerCase().includes('areia') || dados.tipoMaterial?.toLowerCase().includes('brita');
+  const valorCfem = eMineral ? +(valorTotal * 0.015).toFixed(2) : 0;
+
+  const hashSha256 = crypto.createHash('sha256').update(`TKT-${seq}|${dados.placaVeiculo}|${pesoLiquido}|${new Date().toISOString()}`).digest('hex');
+
+  const novoTicket = {
+    id: `tkt-${seq}`,
+    numeroTicket: `TKT-BAL-${seq}`,
+    empresaId,
+    dataHora: `${dataAtual} ${horaAtual}`,
+    dataHoraEntrada: dados.dataHoraEntrada || `${dataAtual} 13:00`,
+    dataHoraSaida: `${dataAtual} ${horaAtual}`,
+    balanca: 'Balança Rodoviária 80t Toledo · Usina Serrano (Rodovia MT-358 km 08)',
+    modeloIndicador: 'Toledo Prix 9094 / Células de Carga Digitais 80.000 kg',
+    operador: dados.operador || 'Operação Remota CCO (Guarita Automatizada)',
+    cliente: dados.cliente || 'Construtora / Terceiro',
+    cnpjCpfCliente: dados.cnpjCpfCliente || '00.000.000/0001-00',
+    obraDestino: dados.obraDestino || 'Obras em Tangará da Serra/MT',
+    veiculoPlaca: dados.placaVeiculo || 'CAR-08 (JZZ-4190)',
+    modeloVeiculo: dados.modeloVeiculo || 'Caminhão Caçamba Basculante 3 Eixos',
+    motorista: dados.motorista || 'Ademir Fagundes',
+    cpfMotorista: dados.cpfMotorista || '521.849.012-33',
+    transportadora: dados.transportadora || 'TransGrãos Tangará',
+    tipoOperacao: dados.tipoOperacao || 'Expedição de Agregados / Mineração',
+    tipoMaterial: dados.tipoMaterial || 'Brita 1 Granítica',
+    pesoBrutoKg: pesoBruto,
+    taraKg: tara,
+    pesoLiquidoKg: pesoLiquido,
+    densidadeKgM3: densidade,
+    volumeCalculadoM3: volumeM3,
+    precoUnitarioM3: precoM3,
+    valorTotal,
+    valorCfem,
+    aliquotaCfemPercent: eMineral ? 1.5 : 0,
+    assinaturaMotoristaBase64: dados.assinaturaMotoristaBase64 || null,
+    status: 'concluido',
+    statusSemaforo: 'verde',
+    cancelaLiberada: true,
+    posicionamentoPlataforma: '100% Ok (Sensores Dianteiro e Traseiro Desobstruídos)',
+    modoOperacao: estadoHardwareBalanca.modoOperacao,
+    codigoAutenticidade: `BAL-TOLEDO-${hashSha256.slice(0, 16).toUpperCase()}`
+  };
+
+  data.concreto_tickets_balanca.unshift(novoTicket);
+  if (dados.patioId) {
+    estadoHardwareBalanca.veiculosNoPatio = estadoHardwareBalanca.veiculosNoPatio.filter(p => p.id !== dados.patioId);
+  }
+  save();
+
+  estadoHardwareBalanca.cancelaSaida = 'aberta';
+  estadoHardwareBalanca.semaforoSaida = 'verde';
+  estadoHardwareBalanca.mensagemInterfone = `Pesagem final concluída (${novoTicket.pesoLiquidoKg.toLocaleString('pt-BR')} kg líquidos). Cancela liberada!`;
+
+  return { ok: true, ticket: novoTicket };
+}
+
+export async function listarTicketsBalanca(empresaId = CONCRETO_EMPRESA_ID, filtros = {}) {
+  const data = inicializarDatastoreConcreto();
+  let lista = (data.concreto_tickets_balanca || []).filter(t => !t.empresaId || t.empresaId === empresaId);
+  if (filtros.termo) {
+    const t = filtros.termo.toLowerCase();
+    lista = lista.filter(x => 
+      x.numeroTicket?.toLowerCase().includes(t) ||
+      x.veiculoPlaca?.toLowerCase().includes(t) ||
+      x.motorista?.toLowerCase().includes(t) ||
+      x.cliente?.toLowerCase().includes(t) ||
+      x.tipoMaterial?.toLowerCase().includes(t)
+    );
+  }
+  return { ok: true, total: lista.length, tickets: lista };
+}
+
+// =====================================================================
+// 15. CONFIGURAÇÕES COMPLETAS DE HARDWARE E AUTOMAÇÃO DA BALANÇA
+// =====================================================================
+export const CONFIGURACOES_BALANCA_PADRAO = {
+  modeloIndicador: 'Toledo Prix 9094',
+  protocoloComunicacao: 'Toledo P03 Contínuo',
+  portaSerial: 'COM3',
+  baudRate: 9600,
+  dataBits: 8,
+  paridade: 'N',
+  stopBits: 1,
+  capacidadeMaximaKg: 80000,
+  divisaoMetrologicaKg: 10,
+  ipCameraEntradaLpr: '192.168.1.120',
+  ipCameraSaidaLpr: '192.168.1.121',
+  ipControladorCancelas: '192.168.1.150',
+  tempoAberturaCancelaSegundos: 10,
+  fechamentoAutomaticoAposBarreira: true,
+  impressaoAutomaticaTicket: true,
+  viasImpressaoTicket: 2,
+  emitirRomaneioA4Simultaneo: false,
+  impressoraTermicaPadrao: 'Epson TM-T20X (Rede 192.168.1.200)',
+  aliquotaCfemMinerais: 1.5,
+  toleranciaContranPercent: 5.0,
+  cabecalhoTicket: {
+    razaoSocial: 'SERRANO CONCRETO USINADO & MINERAÇÃO LTDA',
+    nomeFantasia: 'Serrano Concreto & Mineração',
+    cnpj: '03.849.201/0001-10',
+    inscricaoEstadual: '13.489.201-9',
+    endereco: 'Rodovia MT-358 km 08 · Zona Rural · Tangará da Serra/MT',
+    telefone: '(65) 3326-4400',
+    portariaInmetro: 'IPEM-MT / INMETRO Portaria 042/2026'
+  }
+};
+
+export async function obterConfiguracoesBalanca(empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const cfg = data.concreto_configuracoes_balanca || { ...CONFIGURACOES_BALANCA_PADRAO, empresaId };
+  return { ok: true, configuracoes: cfg };
+}
+
+export async function salvarConfiguracoesBalanca(novasConfigs, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const atual = data.concreto_configuracoes_balanca || { ...CONFIGURACOES_BALANCA_PADRAO, empresaId };
+  const mesclado = {
+    ...atual,
+    ...novasConfigs,
+    empresaId,
+    cabecalhoTicket: {
+      ...(atual.cabecalhoTicket || {}),
+      ...(novasConfigs.cabecalhoTicket || {})
+    },
+    atualizadoEm: new Date().toISOString()
+  };
+  data.concreto_configuracoes_balanca = mesclado;
+  save();
+  return { ok: true, configuracoes: mesclado };
+}
+
+// =====================================================================
+// 14. SUPRIMENTOS, SILOS & CONTROLE DE PROCESSO NBR 7212
+// =====================================================================
+export async function ajustarUmidadeBaia(baiaId, umidadePercent) {
+  const data = inicializarDatastoreConcreto();
+  const baia = (data.concreto_baias || []).find(b => b.id === baiaId);
+  if (!baia) throw new Error(`Baia ${baiaId} não encontrada.`);
+  baia.umidadeAtualPercent = Number(umidadePercent);
+  baia.dataUltimoEnsaioUmidade = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  save();
+  return { ok: true, baia };
+}
+
+export async function reabastecerSiloOuTanque({ itemTipo, itemId, quantidade, fornecedor, placa, motorista }) {
+  const data = inicializarDatastoreConcreto();
+  let item = null;
+  const qtd = Number(quantidade) || 0;
+  if (itemTipo === 'silo') {
+    item = (data.concreto_silos || []).find(s => s.id === itemId);
+    if (!item) throw new Error(`Silo ${itemId} não encontrado.`);
+    const cap = item.capacidadeTotalTon || item.capacidadeToneladas || 100;
+    const estAtual = item.estoqueAtualTon != null ? item.estoqueAtualTon : (item.nivelAtualToneladas || 0);
+    item.estoqueAtualTon = Math.min(cap, +(estAtual + qtd).toFixed(2));
+    item.nivelAtualToneladas = item.estoqueAtualTon;
+    item.nivelPercent = Math.round((item.estoqueAtualTon / cap) * 100);
+    item.nivelPercentual = item.nivelPercent;
+    item.ultimaRecargaData = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  } else if (itemTipo === 'tanque') {
+    item = (data.concreto_tanques || []).find(t => t.id === itemId);
+    if (!item) throw new Error(`Tanque ${itemId} não encontrado.`);
+    item.nivelAtualLitros = Math.min(item.capacidadeLitros, Math.round(item.nivelAtualLitros + qtd));
+    item.nivelPercentual = Math.round((item.nivelAtualLitros / item.capacidadeLitros) * 100);
+    item.ultimaRecarga = new Date().toISOString().slice(0, 10);
+  } else if (itemTipo === 'baia') {
+    item = (data.concreto_baias || []).find(b => b.id === itemId);
+    if (!item) throw new Error(`Baia ${itemId} não encontrada.`);
+    item.nivelAtualToneladas = Math.min(item.capacidadeToneladas, Math.round(item.nivelAtualToneladas + qtd));
+    item.nivelPercentual = Math.round((item.nivelAtualToneladas / item.capacidadeToneladas) * 100);
+  }
+  const entrada = {
+    id: `rec-${Date.now()}`,
+    ticketBalanca: `TK-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+    dataHora: new Date().toISOString().slice(0, 16).replace('T', ' '),
+    insumo: item ? (item.nome || item.material || item.aditivo) : 'Insumo',
+    fornecedor: fornecedor || 'Fornecedor Homologado',
+    pesoLiquidoTon: qtd,
+    destino: item ? (item.codigo || item.nome) : itemId,
+    placaCaminhao: placa || 'BRA-2026',
+    motorista: motorista || 'Motorista Homologado',
+    statusConferencia: 'aprovado_laboratorio'
+  };
+  if (!Array.isArray(data.concreto_entradas_suprimentos)) data.concreto_entradas_suprimentos = [];
+  data.concreto_entradas_suprimentos.unshift(entrada);
+  save();
+  return { ok: true, item, entrada };
+}
+
+export async function dosarBateladaProcesso({ fck = 30, volumeM3 = 8.0, slumpAlvo = '12 ± 2 cm', operandoPor = 'Operador Central' }) {
+  const data = inicializarDatastoreConcreto();
+  const baiaAreia = (data.concreto_baias || []).find(b => b.id === 'baia-01') || { umidadeAtualPercent: 4.2 };
+  const calculo = calcularTracoBatelada({ fck, volumeM3, umidadeAreiaPercent: baiaAreia.umidadeAtualPercent });
+  const novaBatelada = {
+    id: `bat-2026-${Date.now().toString().slice(-4)}`,
+    dataHora: new Date().toISOString().slice(0, 16).replace('T', ' '),
+    fck: Number(fck),
+    volumeM3: Number(volumeM3),
+    slumpAlvo: slumpAlvo || '12 ± 2 cm',
+    balancas: {
+      cimento: { pesagemAlvoKg: calculo.cimentoKg, pesagemRealKg: calculo.cimentoKg + Math.floor(Math.random() * 5 - 2), status: 'conforme' },
+      agregados: {
+        pesagemAlvoKg: calculo.areiaCorrigidaKg + calculo.brita0Kg + calculo.brita1Kg,
+        pesagemRealKg: calculo.areiaCorrigidaKg + calculo.brita0Kg + calculo.brita1Kg + Math.floor(Math.random() * 10 - 5),
+        status: 'conforme'
+      },
+      agua: { pesagemAlvoLitros: calculo.aguaEfetivaLitros, pesagemRealLitros: calculo.aguaEfetivaLitros, status: 'conforme' },
+      aditivos: { dosagemAlvoLitros: calculo.aditivoLitros, dosagemRealLitros: calculo.aditivoLitros, status: 'conforme' }
+    },
+    tempoMisturaSegundos: 90,
+    energiaMisturadorKWh: +(1.4 * Number(volumeM3) / 8).toFixed(1),
+    statusCiclo: 'concluido_descarregado',
+    caminhaoBetoneira: 'Betoneira 02 · Placa QBX-5A90 (8m³)',
+    motorista: 'Carlos Eduardo Mendes',
+    lacreMetrologico: `INMETRO-MT-2026-${Math.floor(100000 + Math.random() * 900000)}`
+  };
+  if (!Array.isArray(data.concreto_bateladas)) data.concreto_bateladas = [];
+  data.concreto_bateladas.unshift(novaBatelada);
+  save();
+  return { ok: true, batelada: novaBatelada, calculo };
+}
+
+// =====================================================================
+// 16. TELEMETRIA INDIVIDUAL DAS 8 CÉLULAS DE CARGA TOLEDO & AUDITORIA CCO
+// =====================================================================
+export function obterTelemetriaCelulasToledo(pesoAtualKg = 0) {
+  const peso = Number(pesoAtualKg) || estadoHardwareBalanca.pesoAtualKg || 0;
+  const basePorCelula = Math.round(peso / 8);
+  
+  // 8 células de carga Toledo modelo DLC-10t (10.000 kg cada)
+  const celulas = [
+    { id: 1, posicao: 'Dianteira Esquerda (Pilar 1)', pesoKg: Math.round(basePorCelula * 1.01), mVPorV: +(2.0 * (basePorCelula * 1.01) / 10000).toFixed(4), tempC: 28.4, tensaoExcitacaoV: 10.00, resistenciaOhm: 350.2, status: 'conforme', serie: 'TOL-DLC-8841-A' },
+    { id: 2, posicao: 'Dianteira Direita (Pilar 2)', pesoKg: Math.round(basePorCelula * 0.99), mVPorV: +(2.0 * (basePorCelula * 0.99) / 10000).toFixed(4), tempC: 28.3, tensaoExcitacaoV: 10.00, resistenciaOhm: 350.1, status: 'conforme', serie: 'TOL-DLC-8841-B' },
+    { id: 3, posicao: 'Intermediária 1 Esquerda (Pilar 3)', pesoKg: Math.round(basePorCelula * 1.02), mVPorV: +(2.0 * (basePorCelula * 1.02) / 10000).toFixed(4), tempC: 28.6, tensaoExcitacaoV: 10.00, resistenciaOhm: 350.3, status: 'conforme', serie: 'TOL-DLC-8842-A' },
+    { id: 4, posicao: 'Intermediária 1 Direita (Pilar 4)', pesoKg: Math.round(basePorCelula * 0.98), mVPorV: +(2.0 * (basePorCelula * 0.98) / 10000).toFixed(4), tempC: 28.5, tensaoExcitacaoV: 10.00, resistenciaOhm: 350.2, status: 'conforme', serie: 'TOL-DLC-8842-B' },
+    { id: 5, posicao: 'Intermediária 2 Esquerda (Pilar 5)', pesoKg: Math.round(basePorCelula * 1.00), mVPorV: +(2.0 * (basePorCelula * 1.00) / 10000).toFixed(4), tempC: 28.8, tensaoExcitacaoV: 10.00, resistenciaOhm: 350.4, status: 'conforme', serie: 'TOL-DLC-8843-A' },
+    { id: 6, posicao: 'Intermediária 2 Direita (Pilar 6)', pesoKg: Math.round(basePorCelula * 1.00), mVPorV: +(2.0 * (basePorCelula * 1.00) / 10000).toFixed(4), tempC: 28.7, tensaoExcitacaoV: 10.00, resistenciaOhm: 350.3, status: 'conforme', serie: 'TOL-DLC-8843-B' },
+    { id: 7, posicao: 'Traseira Esquerda (Pilar 7)', pesoKg: Math.round(basePorCelula * 0.99), mVPorV: +(2.0 * (basePorCelula * 0.99) / 10000).toFixed(4), tempC: 28.9, tensaoExcitacaoV: 10.00, resistenciaOhm: 350.2, status: 'conforme', serie: 'TOL-DLC-8844-A' },
+    { id: 8, posicao: 'Traseira Direita (Pilar 8)', pesoKg: Math.round(basePorCelula * 1.01), mVPorV: +(2.0 * (basePorCelula * 1.01) / 10000).toFixed(4), tempC: 29.0, tensaoExcitacaoV: 10.00, resistenciaOhm: 350.5, status: 'conforme', serie: 'TOL-DLC-8844-B' }
+  ];
+
+  const totalCalculado = celulas.reduce((acc, c) => acc + c.pesoKg, 0);
+
+  return {
+    ok: true,
+    modeloCelula: 'Toledo Digital DLC-10t IP68',
+    portariaHomologacao: 'INMETRO/DIMEL nº 042/2026',
+    capacidadeTotalPlataformaKg: 80000,
+    pesoTotalMedidoKg: peso,
+    somaCelulasKg: totalCalculado,
+    desvioExcentricidadePercent: 0.12,
+    celulas
+  };
+}
+
+// =====================================================================
+// 17. MÓDULO DE VENDAS, FATURAMENTO E EMISSÃO DE NOTAS FISCAIS (NF-e / NFS-e)
+// =====================================================================
+export const NOTAS_FISCAIS_VENDAS_INICIAIS = [
+  {
+    id: "nfe-4821",
+    numeroNota: "004821",
+    serie: "1",
+    modelo: "NFS-e",
+    tipoOperacao: "saida_servico_concreto",
+    descricaoOperacao: "Prestação de Serviços de Concretagem e Bombeamento NBR 7212",
+    dataEmissao: "12/11/2026 09:30",
+    chaveAcessoSefaz: "51261103849201000110550010000048211004821014",
+    protocoloAutorizacao: "151260049281014 - 12/11/2026 09:30:15",
+    cliente: "Construtora MT Horizon Ltda",
+    cnpjCpfCliente: "28.910.420/0001-90",
+    inscricaoEstadualCliente: "13.882.100-4",
+    enderecoCliente: "Av. Brasil, 1200 · Centro · Tangará da Serra/MT",
+    telefoneCliente: "(65) 99988-1200",
+    emailCliente: "fiscal@mthorizon.com.br",
+    obraDestino: "Ed. Residencial Serra Dourada · Lajes 4º Pavimento",
+    cargaId: "crg-1001",
+    ticketBalancaId: "TK-2026-9840",
+    romaneioId: "crg-1001",
+    fckConcreto: 30,
+    tipoConcreto: "Concreto Usinado Estrutural FCK 30 MPa (Brita 1)",
+    slump: "14 ± 2 cm",
+    volumeTotalM3: 24.0,
+    densidadeKgM3: 2400,
+    pesoBrutoTotalKg: 100440,
+    taraTotalKg: 42840,
+    pesoLiquidoTotalKg: 57600,
+    precoUnitarioM3: 465.00,
+    valorTotalBruto: 11160.00,
+    subitemLc116: "07.02",
+    descricaoServicoLc116: "Execução por empreitada de obras civis - Concretagem NBR 7212",
+    valorDeducaoLegalMateriais: 7812.00,
+    baseCalculoIssqn: 3348.00,
+    aliquotaIssqn: 3.0,
+    valorIssqn: 100.44,
+    issRetido: false,
+    aliquotaIcms: 0,
+    valorIcms: 0,
+    aliquotaCfem: 0,
+    valorCfem: 0,
+    veiculosVinculados: ["BT-01 (VW Constellation)", "BT-02 (Volvo FMX)", "BT-03 (Scania P360)"],
+    statusSefaz: "autorizada",
+    statusEntrega: "entregue_whatsapp_email",
+    dataHoraEntrega: "12/11/2026 09:35",
+    responsavelEmissao: "Rodrigo Gonçalves (Gerência de Faturamento)"
+  },
+  {
+    id: "nfe-4822",
+    numeroNota: "004822",
+    serie: "1",
+    modelo: "NFS-e",
+    tipoOperacao: "saida_servico_concreto",
+    descricaoOperacao: "Fornecimento de Concreto Usinado com Fibras Estruturais NBR 7212",
+    dataEmissao: "12/11/2026 14:30",
+    chaveAcessoSefaz: "51261103849201000110550010000048221004822019",
+    protocoloAutorizacao: "151260049281015 - 12/11/2026 14:30:22",
+    cliente: "AgroLog Transportes & Logística",
+    cnpjCpfCliente: "33.456.789/0001-44",
+    enderecoCliente: "Distrito Industrial Tangará · Lote 08",
+    telefoneCliente: "(65) 99655-4422",
+    emailCliente: "contato@agrologmt.com.br",
+    obraDestino: "Piso Industrial Galpão de Cargas · Módulo 02",
+    cargaId: "crg-1002",
+    ticketBalancaId: "TK-2026-9841",
+    romaneioId: "crg-1002",
+    fckConcreto: 35,
+    tipoConcreto: "Concreto FCK 35 MPa c/ Fibras de Polipropileno",
+    slump: "14 ± 2 cm",
+    volumeTotalM3: 32.0,
+    densidadeKgM3: 2400,
+    pesoBrutoTotalKg: 133760,
+    taraTotalKg: 56960,
+    pesoLiquidoTotalKg: 76800,
+    precoUnitarioM3: 480.00,
+    valorTotalBruto: 15360.00,
+    subitemLc116: "07.02",
+    descricaoServicoLc116: "Concretagem de Pisos Industriais de Alta Resistência",
+    valorDeducaoLegalMateriais: 10752.00,
+    baseCalculoIssqn: 4608.00,
+    aliquotaIssqn: 3.0,
+    valorIssqn: 138.24,
+    issRetido: false,
+    aliquotaIcms: 0,
+    valorIcms: 0,
+    aliquotaCfem: 0,
+    valorCfem: 0,
+    veiculosVinculados: ["BT-01", "BT-02", "BT-04", "BT-05"],
+    statusSefaz: "autorizada",
+    statusEntrega: "entregue_whatsapp",
+    dataHoraEntrega: "12/11/2026 14:35",
+    responsavelEmissao: "Karin Prestes (Engenharia & Expedição)"
+  },
+  {
+    id: "nfe-4823",
+    numeroNota: "004823",
+    serie: "1",
+    modelo: "NF-e (55)",
+    tipoOperacao: "saida_venda_mercadoria",
+    descricaoOperacao: "Venda de Agregados Minerais - Areia Média Lavada de Rio",
+    dataEmissao: "12/11/2026 11:15",
+    chaveAcessoSefaz: "51261103849201000110550010000048231004823018",
+    protocoloAutorizacao: "151260049281016 - 12/11/2026 11:15:40",
+    cliente: "Pavimentadora Parecis Ltda",
+    cnpjCpfCliente: "18.390.281/0001-55",
+    enderecoCliente: "Rodovia MT-358 km 04 · Tangará da Serra/MT",
+    telefoneCliente: "(65) 99811-2030",
+    emailCliente: "compras@pavimentadoraparecis.com.br",
+    obraDestino: "Obras de Pavimentação Asfáltica Urbana",
+    cargaId: null,
+    ticketBalancaId: "tkt-bal-9841",
+    cfop: "5.101",
+    ncm: "2505.10.00",
+    tipoMaterial: "Areia Média Lavada de Rio (Sepotuba)",
+    volumeTotalM3: 20.53,
+    densidadeKgM3: 1500,
+    pesoBrutoTotalKg: 46250,
+    taraTotalKg: 15450,
+    pesoLiquidoTotalKg: 30800,
+    precoUnitarioM3: 65.00,
+    valorTotalBruto: 2002.00,
+    subitemLc116: null,
+    baseCalculoIssqn: 0,
+    aliquotaIssqn: 0,
+    valorIssqn: 0,
+    baseCalculoIcms: 2002.00,
+    aliquotaIcms: 17.0,
+    valorIcms: 340.34,
+    aliquotaCfem: 1.5,
+    valorCfem: 30.03,
+    veiculosVinculados: ["Cavalo Scania R450 Basculante Rossetti (CAR-04)"],
+    statusSefaz: "autorizada",
+    statusEntrega: "entregue_whatsapp_email",
+    dataHoraEntrega: "12/11/2026 11:20",
+    responsavelEmissao: "Operador de Balança Rodoviária 80t Toledo"
+  },
+  {
+    id: "nfe-4824",
+    numeroNota: "004824",
+    serie: "1",
+    modelo: "NF-e (55)",
+    tipoOperacao: "saida_venda_mercadoria",
+    descricaoOperacao: "Venda de Brita 1 Granítica para Drenagem e Concreto",
+    dataEmissao: "12/11/2026 15:45",
+    chaveAcessoSefaz: "51261103849201000110550010000048241004824021",
+    protocoloAutorizacao: "151260049281017 - 12/11/2026 15:45:10",
+    cliente: "Loteamento Residencial Tangará",
+    cnpjCpfCliente: "34.567.890/0001-12",
+    enderecoCliente: "Av. Tancredo Neves, 850 · Tangará da Serra/MT",
+    telefoneCliente: "(65) 99912-3456",
+    emailCliente: "financeiro@loteamentotangara.com.br",
+    obraDestino: "Drenagem Pluvial e Guias · Etapa 1",
+    cargaId: null,
+    ticketBalancaId: "tkt-bal-9842",
+    cfop: "5.101",
+    ncm: "2517.10.00",
+    tipoMaterial: "Brita 1 Granítica Estrutural (Mineração Serrano)",
+    volumeTotalM3: 18.0,
+    densidadeKgM3: 1450,
+    pesoBrutoTotalKg: 39200,
+    taraTotalKg: 13100,
+    pesoLiquidoTotalKg: 26100,
+    precoUnitarioM3: 125.00,
+    valorTotalBruto: 2250.00,
+    subitemLc116: null,
+    baseCalculoIssqn: 0,
+    aliquotaIssqn: 0,
+    valorIssqn: 0,
+    baseCalculoIcms: 2250.00,
+    aliquotaIcms: 17.0,
+    valorIcms: 382.50,
+    aliquotaCfem: 1.5,
+    valorCfem: 33.75,
+    veiculosVinculados: ["Caçamba Basculante Três Eixos (QBE-9102)"],
+    statusSefaz: "autorizada",
+    statusEntrega: "entregue_whatsapp",
+    dataHoraEntrega: "12/11/2026 15:50",
+    responsavelEmissao: "Operador de Balança Rodoviária 80t Toledo"
+  },
+  {
+    id: "nfe-4825",
+    numeroNota: "019482",
+    serie: "1",
+    modelo: "NF-e (55)",
+    tipoOperacao: "entrada_materia_prima",
+    descricaoOperacao: "Aquisição de Cimento Portland CP II-F 32 a Granel (Entrada nos Silos)",
+    dataEmissao: "12/11/2026 08:00",
+    chaveAcessoSefaz: "51261102849102000199550010000194821001948209",
+    protocoloAutorizacao: "151260049280911 - 12/11/2026 08:05:00",
+    cliente: "Votorantim Cimentos S/A (Fornecedor)",
+    cnpjCpfCliente: "01.838.728/0001-80",
+    enderecoCliente: "Fábrica Nobres/MT",
+    telefoneCliente: "(65) 3376-1000",
+    emailCliente: "nfe@votorantimcimentos.com.br",
+    obraDestino: "Silo Convicta Vertical 96 Toneladas (Usina Serrano)",
+    cargaId: null,
+    ticketBalancaId: "TKT-80T-8942",
+    cfop: "1.101",
+    ncm: "2523.29.10",
+    tipoMaterial: "Cimento Portland CP II-F 32 a Granel",
+    volumeTotalM3: 26.8,
+    densidadeKgM3: 1200,
+    pesoBrutoTotalKg: 46460,
+    taraTotalKg: 14280,
+    pesoLiquidoTotalKg: 32180,
+    precoUnitarioM3: 780.00,
+    valorTotalBruto: 20907.00,
+    subitemLc116: null,
+    baseCalculoIssqn: 0,
+    aliquotaIssqn: 0,
+    valorIssqn: 0,
+    baseCalculoIcms: 20907.00,
+    aliquotaIcms: 12.0,
+    valorIcms: 2508.84,
+    aliquotaCfem: 0,
+    valorCfem: 0,
+    veiculosVinculados: ["Carreta Silo Rodoviária (RBD-4E80)"],
+    statusSefaz: "autorizada",
+    statusEntrega: "conferido_patio_silos",
+    dataHoraEntrega: "12/11/2026 08:20",
+    responsavelEmissao: "Laboratório de Controle & Entrada de Suprimentos"
+  }
+];
+
+export async function obterNotasFiscaisVendas(empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  if (!Array.isArray(data.concreto_notas_fiscais) || data.concreto_notas_fiscais.length === 0) {
+    data.concreto_notas_fiscais = NOTAS_FISCAIS_VENDAS_INICIAIS.map(n => ({ ...n, empresaId }));
+    save();
+  }
+  const notas = (data.concreto_notas_fiscais || []).filter(n => !n.empresaId || n.empresaId === empresaId);
+  
+  const faturamentoTotalHoje = notas
+    .filter(n => n.tipoOperacao?.startsWith("saida"))
+    .reduce((acc, n) => acc + (Number(n.valorTotalBruto) || 0), 0);
+  
+  const volumeConcretoTotalM3 = notas
+    .filter(n => n.tipoOperacao === "saida_servico_concreto")
+    .reduce((acc, n) => acc + (Number(n.volumeTotalM3) || 0), 0);
+
+  const toneladasAgregadosTotal = notas
+    .filter(n => n.tipoOperacao === "saida_venda_mercadoria")
+    .reduce((acc, n) => acc + (Number(n.pesoLiquidoTotalKg) || 0) / 1000, 0);
+
+  const totalCfemRecolhida = notas
+    .reduce((acc, n) => acc + (Number(n.valorCfem) || 0), 0);
+
+  return {
+    ok: true,
+    total: notas.length,
+    notas,
+    resumo: {
+      faturamentoTotalHoje,
+      volumeConcretoTotalM3: +volumeConcretoTotalM3.toFixed(2),
+      toneladasAgregadosTotal: +toneladasAgregadosTotal.toFixed(2),
+      totalNotasEmitidas: notas.length,
+      totalCfemRecolhida: +totalCfemRecolhida.toFixed(2)
+    }
+  };
+}
+
+export async function emitirNotaFiscalConcreto(dados, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  if (!Array.isArray(data.concreto_notas_fiscais)) data.concreto_notas_fiscais = [];
+
+  const seq = (data.concreto_notas_fiscais.length || 0) + 4826;
+  const numNotaStr = String(seq).padStart(6, "0");
+  const dataAtual = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Cuiaba" });
+  const horaAtual = new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Cuiaba", hour: "2-digit", minute: "2-digit" });
+
+  const pesoBruto = Number(dados.pesoBrutoTotalKg) || Number(dados.pesoBrutoKg) || 33480;
+  const tara = Number(dados.taraTotalKg) || Number(dados.taraKg) || 14280;
+  const liquido = Math.max(0, pesoBruto - tara);
+  const densidade = Number(dados.densidadeKgM3) || (dados.tipoOperacao?.includes("concreto") ? 2400 : 1500);
+  const volumeM3 = densidade > 0 ? +(liquido / densidade).toFixed(2) : Number(dados.volumeTotalM3) || 8.0;
+
+  const precoUnit = Number(dados.precoUnitarioM3) || (dados.tipoOperacao?.includes("concreto") ? 465.00 : 65.00);
+  const valorTotal = +(volumeM3 * precoUnit).toFixed(2);
+
+  const isConcretoServico = dados.tipoOperacao === "saida_servico_concreto" || dados.modelo === "NFS-e";
+  const valorDeducaoMateriais = isConcretoServico ? +(valorTotal * 0.70).toFixed(2) : 0;
+  const baseIssqn = isConcretoServico ? Math.max(0, valorTotal - valorDeducaoMateriais) : 0;
+  const aliquotaIss = Number(dados.aliquotaIssqn) || 3.0;
+  const valorIss = isConcretoServico ? +(baseIssqn * (aliquotaIss / 100)).toFixed(2) : 0;
+
+  const aliquotaIcms = !isConcretoServico ? Number(dados.aliquotaIcms) || 17.0 : 0;
+  const valorIcms = !isConcretoServico ? +(valorTotal * (aliquotaIcms / 100)).toFixed(2) : 0;
+
+  const isMineral = dados.tipoMaterial?.toLowerCase().includes("areia") || dados.tipoMaterial?.toLowerCase().includes("brita");
+  const aliquotaCfem = isMineral ? Number(dados.aliquotaCfem) || 1.5 : 0;
+  const valorCfem = isMineral ? +(valorTotal * (aliquotaCfem / 100)).toFixed(2) : 0;
+
+  const randChave = Math.floor(100000000 + Math.random() * 900000000);
+  const chaveAcesso = `5126110384920100011055001${numNotaStr}100${randChave}1`;
+  const protocolo = `1512600${Math.floor(1000000 + Math.random() * 9000000)} - ${dataAtual} ${horaAtual}:10`;
+
+  const novaNota = {
+    id: `nfe-${numNotaStr}`,
+    numeroNota: numNotaStr,
+    serie: "1",
+    modelo: isConcretoServico ? "NFS-e" : "NF-e (55)",
+    tipoOperacao: dados.tipoOperacao || (isConcretoServico ? "saida_servico_concreto" : "saida_venda_mercadoria"),
+    descricaoOperacao: dados.descricaoOperacao || (isConcretoServico ? `Prestação de Serviços de Concretagem ${dados.tipoConcreto || "FCK 30 MPa"}` : `Venda de ${dados.tipoMaterial || "Agregados Minerais"}`),
+    dataEmissao: `${dataAtual} ${horaAtual}`,
+    chaveAcessoSefaz: chaveAcesso,
+    protocoloAutorizacao: protocolo,
+    cliente: dados.cliente || "Cliente Cadastrado",
+    cnpjCpfCliente: dados.cnpjCpfCliente || "00.000.000/0001-00",
+    inscricaoEstadualCliente: dados.inscricaoEstadualCliente || "ISENTO",
+    enderecoCliente: dados.enderecoCliente || "Tangará da Serra/MT",
+    telefoneCliente: dados.telefoneCliente || "(65) 99999-0000",
+    emailCliente: dados.emailCliente || "financeiro@cliente.com.br",
+    obraDestino: dados.obraDestino || "Obra em Tangará da Serra/MT",
+    cargaId: dados.cargaId || null,
+    ticketBalancaId: dados.ticketBalancaId || `TK-2026-${seq}`,
+    romaneioId: dados.romaneioId || null,
+    fckConcreto: Number(dados.fckConcreto) || 30,
+    tipoConcreto: dados.tipoConcreto || "Concreto Usinado Estrutural FCK 30 MPa",
+    slump: dados.slump || "14 ± 2 cm",
+    volumeTotalM3: volumeM3,
+    densidadeKgM3: densidade,
+    pesoBrutoTotalKg: pesoBruto,
+    taraTotalKg: tara,
+    pesoLiquidoTotalKg: liquido,
+    precoUnitarioM3: precoUnit,
+    valorTotalBruto: valorTotal,
+    cfop: dados.cfop || (isConcretoServico ? "07.02" : "5.101"),
+    ncm: dados.ncm || (isMineral ? "2505.10.00" : "3824.50.00"),
+    subitemLc116: isConcretoServico ? "07.02" : null,
+    descricaoServicoLc116: isConcretoServico ? "Execução por empreitada de obras civis - Concretagem NBR 7212" : null,
+    valorDeducaoLegalMateriais: valorDeducaoMateriais,
+    baseCalculoIssqn: baseIssqn,
+    aliquotaIssqn: aliquotaIss,
+    valorIssqn: valorIss,
+    issRetido: Boolean(dados.issRetido),
+    baseCalculoIcms: !isConcretoServico ? valorTotal : 0,
+    aliquotaIcms: aliquotaIcms,
+    valorIcms: valorIcms,
+    aliquotaCfem: aliquotaCfem,
+    valorCfem: valorCfem,
+    veiculosVinculados: Array.isArray(dados.veiculosVinculados) ? dados.veiculosVinculados : [dados.veiculoPlaca || "BT-01 (RRA-4E80)"],
+    statusSefaz: "autorizada",
+    statusEntrega: "emitida_aguardando_envio",
+    dataHoraEntrega: null,
+    responsavelEmissao: dados.responsavelEmissao || "Rodrigo Gonçalves (Gerência de Faturamento)",
+    empresaId
+  };
+
+  data.concreto_notas_fiscais.unshift(novaNota);
+  save();
+
+  return { ok: true, nota: novaNota };
+}
+
+export async function entregarNotaFiscal(notaId, canal = "whatsapp", destinatario = "", empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const nota = (data.concreto_notas_fiscais || []).find(n => n.id === notaId || n.numeroNota === notaId);
+  if (!nota) throw new Error(`Nota Fiscal ${notaId} não encontrada.`);
+
+  const dataHora = new Date().toLocaleString("pt-BR", { timeZone: "America/Cuiaba" });
+  nota.statusEntrega = `entregue_${canal}`;
+  nota.dataHoraEntrega = dataHora;
+  nota.ultimoDestinatarioEntrega = destinatario || nota.telefoneCliente || nota.emailCliente;
+  save();
+
+  return {
+    ok: true,
+    notaId: nota.id,
+    canal,
+    destinatario: nota.ultimoDestinatarioEntrega,
+    dataHora,
+    status: nota.statusEntrega
+  };
+}
+
+export async function gerarDanfeHtml(notaId, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const nota = (data.concreto_notas_fiscais || []).find(n => n.id === notaId || n.numeroNota === notaId) || NOTAS_FISCAIS_VENDAS_INICIAIS[0];
+  const cfg = data.concreto_configuracoes_balanca || CONFIGURACOES_BALANCA_PADRAO;
+  const header = cfg.cabecalhoTicket || CONFIGURACOES_BALANCA_PADRAO.cabecalhoTicket;
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>DANFE - NF nº ${nota.numeroNota} · Serrano Concreto & Mineração</title>
+  <style>
+    @page { size: A4 portrait; margin: 10mm; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 11px; color: #000; margin: 0; padding: 10px; background: #fff; }
+    .danfe-box { border: 1.5px solid #000; padding: 8px; margin-bottom: 6px; }
+    .header-grid { display: grid; grid-template-columns: 2fr 1.2fr 1.8fr; gap: 8px; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 8px; }
+    .bold { font-weight: bold; }
+    .text-center { text-align: center; }
+    .text-right { text-align: right; }
+    .table-danfe { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    .table-danfe th, .table-danfe td { border: 1px solid #000; padding: 4px; font-size: 10px; }
+    .table-danfe th { background: #f0f0f0; }
+    .barcode { font-family: monospace; font-size: 14px; letter-spacing: 2px; text-align: center; border: 1px dashed #333; padding: 6px; margin-top: 4px; background: #fafafa; }
+    @media print {
+      body { padding: 0; }
+      .no-print { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="background:#0F172A; color:#FFF; padding:10px 16px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; border-radius:6px;">
+    <div><strong>Visualização do Documento Fiscal Autorizado SEFAZ-MT</strong> · Chave: ${nota.chaveAcessoSefaz}</div>
+    <button onclick="window.print()" style="background:#0284C7; color:#FFF; border:none; padding:6px 14px; border-radius:4px; font-weight:bold; cursor:pointer;">🖨️ Imprimir DANFE A4</button>
+  </div>
+
+  <div class="danfe-box">
+    <div class="header-grid">
+      <div>
+        <div style="font-size:16px; font-weight:900; color:#C2410C;">${header.razaoSocial}</div>
+        <div class="bold">${header.nomeFantasia}</div>
+        <div>${header.endereco}</div>
+        <div>CNPJ: ${header.cnpj} · IE: ${header.inscricaoEstadual}</div>
+        <div>Telefone: ${header.telefone}</div>
+      </div>
+      <div class="text-center" style="border-left:1px solid #000; border-right:1px solid #000; padding:0 6px;">
+        <div style="font-size:14px; font-weight:900;">${nota.modelo === 'NFS-e' ? 'DANFSE' : 'DANFE'}</div>
+        <div style="font-size:9px;">Documento Auxiliar da Nota Fiscal ${nota.modelo === 'NFS-e' ? 'de Serviços' : 'Eletrônica'}</div>
+        <div style="font-size:12px; margin-top:6px;"><strong>Nº ${nota.numeroNota}</strong></div>
+        <div style="font-size:10px;">Série ${nota.serie} · Folha 1/1</div>
+      </div>
+      <div>
+        <div class="bold" style="font-size:9px;">CHAVE DE ACESSO AUTORIZADA SEFAZ-MT:</div>
+        <div class="barcode">${nota.chaveAcessoSefaz}</div>
+        <div style="font-size:9px; margin-top:4px;"><strong>PROTOCOLO:</strong> ${nota.protocoloAutorizacao}</div>
+      </div>
+    </div>
+
+    <!-- NATUREZA DA OPERAÇÃO -->
+    <div style="display:grid; grid-template-columns:3fr 1fr; border-bottom:1px solid #000; padding-bottom:4px; margin-bottom:6px;">
+      <div><strong>NATUREZA DA OPERAÇÃO:</strong> ${nota.descricaoOperacao}</div>
+      <div class="text-right"><strong>DATA EMISSÃO:</strong> ${nota.dataEmissao}</div>
+    </div>
+
+    <!-- DESTINATÁRIO -->
+    <div style="background:#f8f8f8; padding:4px; font-weight:bold; border-bottom:1px solid #000;">DESTINATÁRIO / TOMADOR DOS SERVIÇOS</div>
+    <div style="display:grid; grid-template-columns:2fr 1fr 1fr; gap:6px; padding:6px 0; border-bottom:1px solid #000;">
+      <div><strong>NOME/RAZÃO SOCIAL:</strong> ${nota.cliente}</div>
+      <div><strong>CNPJ/CPF:</strong> ${nota.cnpjCpfCliente}</div>
+      <div><strong>INSC. ESTADUAL:</strong> ${nota.inscricaoEstadualCliente || 'ISENTO'}</div>
+      <div><strong>ENDEREÇO/CIDADE:</strong> ${nota.enderecoCliente}</div>
+      <div><strong>LOCAL DA OBRA:</strong> ${nota.obraDestino}</div>
+      <div><strong>TELEFONE:</strong> ${nota.telefoneCliente}</div>
+    </div>
+
+    <!-- DADOS DOS PRODUTOS / SERVIÇOS / BALANÇA -->
+    <div style="background:#f8f8f8; padding:4px; font-weight:bold; border-bottom:1px solid #000; margin-top:6px;">DADOS DOS PRODUTOS / SERVIÇOS E MEDIÇÕES METROLÓGICAS</div>
+    <table class="table-danfe">
+      <thead>
+        <tr>
+          <th>Item / Código</th>
+          <th>Descrição do Material / Serviço Técnico</th>
+          <th>NCM / LC116</th>
+          <th>CFOP</th>
+          <th>Unid.</th>
+          <th>Volume (m³)</th>
+          <th>Peso Líquido</th>
+          <th>Tara Balança</th>
+          <th>Peso Bruto</th>
+          <th>Preço Unit.</th>
+          <th>Valor Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="text-center">01</td>
+          <td><strong>${nota.tipoConcreto || nota.tipoMaterial}</strong><br><small>${nota.obraDestino} · Slump: ${nota.slump || '14 ± 2 cm'}</small></td>
+          <td class="text-center">${nota.subitemLc116 || nota.ncm || '07.02'}</td>
+          <td class="text-center">${nota.cfop || '5.101'}</td>
+          <td class="text-center">m³</td>
+          <td class="text-right bold">${nota.volumeTotalM3} m³</td>
+          <td class="text-right bold" style="color:#047857;">${Number(nota.pesoLiquidoTotalKg || 0).toLocaleString('pt-BR')} kg</td>
+          <td class="text-right">${Number(nota.taraTotalKg || 0).toLocaleString('pt-BR')} kg</td>
+          <td class="text-right">${Number(nota.pesoBrutoTotalKg || 0).toLocaleString('pt-BR')} kg</td>
+          <td class="text-right">R$ ${Number(nota.precoUnitarioM3 || 0).toFixed(2)}</td>
+          <td class="text-right bold">R$ ${Number(nota.valorTotalBruto || 0).toFixed(2)}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- TRIBUTOS E DEDUÇÕES FISCAIS -->
+    <div style="display:grid; grid-template-columns:repeat(5, 1fr); gap:6px; margin-top:8px; border:1px solid #000; padding:6px; background:#fafafa;">
+      <div>
+        <div style="font-size:9px;">VALOR TOTAL NOTA</div>
+        <div class="bold" style="font-size:13px;">R$ ${Number(nota.valorTotalBruto || 0).toFixed(2)}</div>
+      </div>
+      ${nota.modelo === 'NFS-e' ? `
+      <div>
+        <div style="font-size:9px;">DEDUÇÃO MATERIAIS (LC 116)</div>
+        <div class="bold">R$ ${Number(nota.valorDeducaoLegalMateriais || 0).toFixed(2)}</div>
+      </div>
+      <div>
+        <div style="font-size:9px;">BASE CÁLCULO ISSQN</div>
+        <div class="bold">R$ ${Number(nota.baseCalculoIssqn || 0).toFixed(2)}</div>
+      </div>
+      <div>
+        <div style="font-size:9px;">ALÍQUOTA ISSQN (${nota.aliquotaIssqn}%)</div>
+        <div class="bold" style="color:#0284C7;">R$ ${Number(nota.valorIssqn || 0).toFixed(2)}</div>
+      </div>
+      ` : `
+      <div>
+        <div style="font-size:9px;">BASE CÁLCULO ICMS</div>
+        <div class="bold">R$ ${Number(nota.baseCalculoIcms || 0).toFixed(2)}</div>
+      </div>
+      <div>
+        <div style="font-size:9px;">VALOR ICMS (17% MT)</div>
+        <div class="bold" style="color:#0284C7;">R$ ${Number(nota.valorIcms || 0).toFixed(2)}</div>
+      </div>
+      <div>
+        <div style="font-size:9px;">ROYALTIES CFEM (1,5%)</div>
+        <div class="bold" style="color:#D97706;">R$ ${Number(nota.valorCfem || 0).toFixed(2)}</div>
+      </div>
+      `}
+      <div>
+        <div style="font-size:9px;">STATUS TRANSMISSÃO</div>
+        <div class="bold" style="color:#10B981;">✓ AUTORIZADA SEFAZ-MT</div>
+      </div>
+    </div>
+
+    <!-- DADOS COMPLEMENTARES E VÍNCULO COM A BALANÇA E ROMANEIO -->
+    <div style="border:1px solid #000; padding:6px; margin-top:8px; font-size:10px; line-height:1.4;">
+      <div class="bold" style="border-bottom:1px solid #ccc; padding-bottom:2px; margin-bottom:4px;">INFORMAÇÕES COMPLEMENTARES / CONTROLE METROLÓGICO NBR 7212</div>
+      <div><strong>TICKET BALANÇA RODOVIÁRIA 80T:</strong> ${nota.ticketBalancaId} · PBT Conferido na Balança Toledo Prix 9094 (Portaria IPEM-MT 042/2026).</div>
+      <div><strong>ROMANEIO DE CARGA NBR 7212:</strong> ${nota.romaneioId || 'ROM-' + nota.numeroNota} · Proibida adição de água na obra sem autorização expressa do fiscal.</div>
+      <div><strong>VEÍCULOS / FROTA:</strong> ${Array.isArray(nota.veiculosVinculados) ? nota.veiculosVinculados.join(' · ') : nota.veiculosVinculados}</div>
+      <div><strong>DOCUMENTO FISCAL AUTENTICADO:</strong> Emitido sob as normas da Lei Complementar nº 116/2003 e RICMS do Estado de Mato Grosso.</div>
+    </div>
+
+    <!-- CANHOTO DE RECEBIMENTO -->
+    <div style="margin-top:16px; border-top:2px dashed #000; padding-top:8px;">
+      <div style="font-size:9px; text-align:center;">RECEBEMOS DA SERRANO CONCRETO USINADO & MINERAÇÃO LTDA OS PRODUTOS/SERVIÇOS CONSTANTES NA NOTA FISCAL Nº ${nota.numeroNota}</div>
+      <div style="display:grid; grid-template-columns:1fr 2fr; gap:16px; margin-top:12px;">
+        <div style="border-bottom:1px solid #000; height:26px;">DATA: ____/____/2026</div>
+        <div style="border-bottom:1px solid #000; height:26px;">IDENTIFICAÇÃO E ASSINATURA DO RECEBEDOR:</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+export async function gerarHtmlLaudoOficial(loteId, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  let ensaio = (data.concreto_ensaios || []).find(e => e.id === loteId || e.lote === loteId);
+  if (!ensaio) {
+    ensaio = (ENSAIOS_INICIAIS || []).find(e => e.id === loteId || e.lote === loteId) || ENSAIOS_INICIAIS[0];
+  }
+
+  const media7d = (ensaio.corposProva || []).filter(c => c.idadeDias === 7 && c.tensaoMpa != null);
+  const media28d = (ensaio.corposProva || []).filter(c => c.idadeDias === 28 && c.tensaoMpa != null);
+  const val7d = media7d.length ? +(media7d.reduce((a, b) => a + b.tensaoMpa, 0) / media7d.length).toFixed(1) : '-';
+  const val28d = media28d.length ? +(media28d.reduce((a, b) => a + b.tensaoMpa, 0) / media28d.length).toFixed(1) : (ensaio.fckEstimado28d || 'Aguardando 28d');
+
+  const rows = (ensaio.corposProva || []).map((cp, idx) => `
+    <tr>
+      <td style="padding:6px; border:1px solid #94a3b8; text-align:center;">${cp.id}</td>
+      <td style="padding:6px; border:1px solid #94a3b8; text-align:center; font-weight:bold;">${cp.idadeDias} dias</td>
+      <td style="padding:6px; border:1px solid #94a3b8; text-align:center;">${cp.dataRuptura || 'Em câmara úmida'}</td>
+      <td style="padding:6px; border:1px solid #94a3b8; text-align:center;">${cp.diametroMm || 100.0} × ${cp.alturaMm || 200.0}</td>
+      <td style="padding:6px; border:1px solid #94a3b8; text-align:right;">${cp.forcaKn ? cp.forcaKn.toFixed(1) + ' kN' : '—'}</td>
+      <td style="padding:6px; border:1px solid #94a3b8; text-align:right; font-weight:bold; font-size:13px; color:${cp.tensaoMpa && cp.tensaoMpa >= ensaio.fckProjeto ? '#166534' : '#1e293b'};">
+        ${cp.tensaoMpa ? cp.tensaoMpa.toFixed(1) + ' MPa' : 'Aguardando'}
+      </td>
+      <td style="padding:6px; border:1px solid #94a3b8; text-align:center;">
+        ${cp.percentualFck ? cp.percentualFck.toFixed(1) + '%' : '—'}
+      </td>
+      <td style="padding:6px; border:1px solid #94a3b8; text-align:center; font-family:monospace; font-weight:bold;">
+        ${cp.tipoRuptura ? 'Tipo ' + cp.tipoRuptura : '—'}
+      </td>
+      <td style="padding:6px; border:1px solid #94a3b8; text-align:center; font-size:11px;">
+        ${cp.tipoPreparoBase === 'neoprene' ? 'Almofada Neoprene 70 Shore' : 'Retificação Diamantada'}
+      </td>
+    </tr>
+  `).join('');
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Laudo de Ensaio à Compressão NBR 5739 - ${ensaio.lote}</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #0f172a; background: #fff; line-height: 1.4; }
+    .laudo-box { max-width: 800px; margin: 0 auto; border: 2px solid #0f172a; padding: 24px; }
+    .header { display: flex; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; }
+    .header-logo { font-size: 26px; font-weight: 900; color: #ea580c; letter-spacing: -1px; }
+    .header-info { margin-left: auto; text-align: right; font-size: 11px; color: #475569; }
+    .grid-info { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; font-size: 12px; margin-bottom: 16px; background: #f8fafc; padding: 12px; border-radius: 4px; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
+    th { background: #e2e8f0; border: 1px solid #94a3b8; padding: 6px; font-weight: bold; }
+    .aprovado-badge { display: inline-block; padding: 6px 14px; background: #dcfce7; color: #166534; font-weight: bold; border-radius: 4px; border: 1px solid #86efac; }
+    .footer { margin-top: 24px; padding-top: 16px; border-top: 1px solid #cbd5e1; font-size: 11px; color: #64748b; display: flex; justify-content: space-between; align-items: flex-end; }
+    .signature { text-align: center; border-top: 1px solid #0f172a; padding-top: 4px; width: 240px; }
+    @media print { body { padding: 0; } .laudo-box { border: none; padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="laudo-box">
+    <div class="header">
+      <div>
+        <div class="header-logo">SERRANO CONCRETO</div>
+        <div style="font-size:11px; font-weight:bold; color:#334155;">SERRANO CONCRETO USINADO & MINERAÇÃO LTDA</div>
+        <div style="font-size:10px; color:#64748b;">CNPJ: 10.456.789/0001-42 · Rod. MT-358, km 12, Pátio Industrial, Tangará da Serra/MT</div>
+      </div>
+      <div class="header-info">
+        <div style="font-size:14px; font-weight:bold; color:#0f172a;">LAUDO TÉCNICO Nº ${ensaio.laudoNumero}</div>
+        <div>ABNT NBR 5738 / NBR 5739 / NBR 12655</div>
+        <div>Emissão: 12/11/2026 18:30</div>
+      </div>
+    </div>
+
+    <div style="text-align:center; font-weight:bold; font-size:15px; margin-bottom:12px; text-transform:uppercase;">
+      Certificado de Ensaio de Compressão Axial em Corpos de Prova Cilíndricos
+    </div>
+
+    <div class="grid-info">
+      <div><strong>Cliente / Contratante:</strong> ${ensaio.cliente}</div>
+      <div><strong>Lote de Concreto:</strong> ${ensaio.lote}</div>
+      <div><strong>Obra / Aplicação:</strong> ${ensaio.obra}</div>
+      <div><strong>Traço / FCK de Projeto:</strong> ${ensaio.fckProjeto} MPa (${ensaio.tracoCodigo || 'TR-30-BRITA1'})</div>
+      <div><strong>Endereço da Obra:</strong> ${ensaio.endereco || 'Tangará da Serra/MT'}</div>
+      <div><strong>Slump Test de Recebimento:</strong> ${ensaio.slumpMedidoCm} cm (tolerância ${ensaio.slumpProjeto})</div>
+      <div><strong>Data de Moldagem:</strong> ${ensaio.dataMoldagem}</div>
+      <div><strong>Cura:</strong> Câmara Úmida NBR 9479 (23.0 ± 2.0 °C, Umidade ≥ 95%)</div>
+      <div><strong>Equipamento de Ruptura:</strong> Prensa Digital Eletro-Hidráulica Solotest 200t (Calibrada RBC nº 2026-0812)</div>
+      <div><strong>Taxa de Carregamento:</strong> 0,45 ± 0,15 MPa/s conforme ABNT NBR 5739</div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>CP</th>
+          <th>Idade</th>
+          <th>Data Ruptura</th>
+          <th>Dimensões (mm)</th>
+          <th>Carga (kN)</th>
+          <th>Tensão (MPa)</th>
+          <th>% do FCK</th>
+          <th>Ruptura NBR 5739</th>
+          <th>Preparo da Base</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>
+
+    <div style="margin-top:16px; background:#f0fdf4; border:1px solid #86efac; border-radius:6px; padding:12px; display:flex; align-items:center; justify-content:space-between;">
+      <div>
+        <div style="font-size:12px; color:#166534; font-weight:bold;">RESULTADO GLOBAL DO LOTE:</div>
+        <div style="font-size:11px; color:#14532d; margin-top:2px;">
+          Média 7 dias: <b>${val7d} MPa</b> | fck estimado 28 dias: <b style="font-size:14px; color:#166534;">${val28d} MPa</b>
+          (${typeof val28d === 'number' ? ((val28d / ensaio.fckProjeto) * 100).toFixed(1) + '%' : '114.0%'} do especificado)
+        </div>
+      </div>
+      <div>
+        <span class="aprovado-badge">✓ CONFORME ABNT NBR 12655</span>
+      </div>
+    </div>
+
+    <div style="margin-top:14px; font-size:10px; color:#64748b; line-height:1.4;">
+      <strong>Notas Metrológicas e Normativas:</strong><br/>
+      1. Corpos de prova cilíndricos de 100 mm × 200 mm moldados e curados de acordo com a ABNT NBR 5738.<br/>
+      2. Ensaio de compressão executado conforme prescrições da ABNT NBR 5739 com leitura digital direta de força e cálculo de tensão.<br/>
+      3. Classificação do padrão de ruptura conforme figuras da NBR 5739 (Tipos A a G). Padrão predominante: Tipo A (Cônica) e Tipo B (Cônica e bipartida), indicando carregamento homogêneo e bases perfeitamente planas.<br/>
+      4. A amostragem foi realizada na calha de descarga da betoneira na usina/obra atendendo aos requisitos da ABNT NBR 7212.
+    </div>
+
+    <div class="footer">
+      <div>
+        <div><strong>Controle Tecnológico Interno Serrano</strong></div>
+        <div>Laboratório de Concreto e Agregados · Tangará da Serra/MT</div>
+      </div>
+      <div class="signature">
+        <div style="font-weight:bold; font-size:12px;">${ensaio.responsavelTecnico}</div>
+        <div style="font-size:10px; color:#64748b;">Responsável Técnica de Laboratório</div>
+        <div style="font-size:9px; color:#94a3b8;">ART de Desempenho Tecnológico MT-2026-0812-CONC</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
 }

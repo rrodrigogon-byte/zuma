@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import {
   obterDadosConcreto,
   criarCargaConcreto,
+  obterCargaPorId,
+  atualizarCargaConcreto,
+  excluirCargaConcreto,
+  duplicarCargaConcreto,
   atualizarStatusCarga,
   registrarEventoViagem,
   registrarRupturaCorpoProva,
@@ -33,9 +37,21 @@ import {
   excluirOrdemProducao,
   apontarPesagemOrdemProducao,
   gerarHtmlOrdemProducaoOficial,
+  obterStatusBalancaAutomacao,
+  executarComandoBalanca,
+  registrarEntradaVeiculo,
+  concluirSegundaPesagemBalanca,
+  listarTicketsBalanca,
+  obterConfiguracoesBalanca,
+  salvarConfiguracoesBalanca,
   listarMedicoesObras,
   criarMedicaoObra,
   atualizarStatusMedicao,
+  obterNotasFiscaisVendas,
+  emitirNotaFiscalConcreto,
+  entregarNotaFiscal,
+  gerarDanfeHtml,
+  obterTelemetriaCelulasToledo,
   INSUMOS_MATERIA_PRIMA,
   TRACOS_NORMATIZADOS
 } from './servico.js';
@@ -346,21 +362,263 @@ test('13. Emissão de Ticket de Pesagem da Balança Rodoviária de Mineração (
   assert.ok(resHtml.html.includes('Toledo 80t'));
 });
 
-test('14. Gestão Completa de Ordens de Produção (Criar, Obter, Editar/Modificar, Apontar Pesagem, Imprimir e Excluir)', async () => {
+test('14. Automação da Balança Rodoviária 80t Toledo: Status e Hardware de Semáforos e Cancelas', async () => {
+  const resStatus = await obterStatusBalancaAutomacao(CONCRETO_EMPRESA_ID);
+  assert.equal(resStatus.ok, true);
+  assert.ok(resStatus.hardware);
+  assert.equal(resStatus.hardware.capacidadeMaximaKg, 80000);
+  assert.ok(['verde', 'vermelho'].includes(resStatus.hardware.semaforoEntrada));
+  assert.ok(['aberta', 'fechada', 'movimento'].includes(resStatus.hardware.cancelaEntrada));
+  assert.ok(resStatus.estatisticasHoje.totalVeiculosHoje >= 3);
+  assert.ok(resStatus.veiculosNoPatio.length >= 1);
+  assert.ok(resStatus.ultimosTickets.length >= 3);
+});
+
+test('15. Execução de Comandos Remotos na Balança: Cancelas, Semáforos e Simulação de Veículo', async () => {
+  // 1. Abrir cancela de entrada remotamente
+  const cmd1 = await executarComandoBalanca('abrir_cancela_entrada', {}, CONCRETO_EMPRESA_ID);
+  assert.equal(cmd1.ok, true);
+  assert.equal(cmd1.hardware.cancelaEntrada, 'aberta');
+  assert.equal(cmd1.hardware.semaforoEntrada, 'verde');
+
+  // 2. Simular posicionamento de veículo na balança (Betoneira BT-01)
+  const cmdSim = await executarComandoBalanca('simular_veiculo', {
+    placa: 'BT-01 (RRA-4E80)',
+    modelo: 'Caminhão Betoneira VW Constellation 26.280',
+    pesoBrutoKg: 33480,
+    taraKg: 14280,
+    foraPosicao: false
+  }, CONCRETO_EMPRESA_ID);
+  assert.equal(cmdSim.ok, true);
+  assert.equal(cmdSim.hardware.pesoAtualKg, 33480);
+  assert.equal(cmdSim.hardware.pesoLiquidoAtualKg, 19200);
+  assert.equal(cmdSim.hardware.posicionamentoCorreto, true);
+  assert.equal(cmdSim.hardware.sensorPresencaPlataforma, true);
+
+  // 3. Simular alerta de eixo fora da plataforma
+  const cmdAlerta = await executarComandoBalanca('simular_veiculo', {
+    foraPosicao: true,
+    pesoBrutoKg: 30000
+  }, CONCRETO_EMPRESA_ID);
+  assert.equal(cmdAlerta.hardware.posicionamentoCorreto, false);
+  assert.equal(cmdAlerta.hardware.sensorBarreiraEntrada, true);
+
+  // 4. Liberar e zerar balança
+  const cmdZerar = await executarComandoBalanca('zerar_balanca', {}, CONCRETO_EMPRESA_ID);
+  assert.equal(cmdZerar.hardware.pesoAtualKg, 0);
+  assert.equal(cmdZerar.hardware.zeroRastreado, true);
+});
+
+test('16. Fluxo de Dupla Pesagem Rodoviária: 1ª Pesagem Entrada e 2ª Pesagem Saída', async () => {
+  // 1. Entrada de Caçamba Basculante vazia para carregar brita (Tara)
+  const resEntrada = await registrarEntradaVeiculo({
+    placaVeiculo: 'CAR-15 (QBZ-7710)',
+    motorista: 'Laércio Silveira',
+    transportadora: 'TransParecis',
+    cliente: 'Construtora Vale do Sepotuba',
+    tipoMaterial: 'Brita 1 Granítica',
+    tipoOperacao: 'expedicao_agregados',
+    taraKg: 13200
+  }, CONCRETO_EMPRESA_ID);
+
+  assert.equal(resEntrada.ok, true);
+  assert.equal(resEntrada.veiculoPatio.taraEntradaKg, 13200);
+  assert.equal(resEntrada.veiculoPatio.status, 'carregando_no_patio');
+
+  // 2. Concluir 2ª pesagem na saída (carregado com 32.400 kg brutos)
+  const resSaida = await concluirSegundaPesagemBalanca({
+    patioId: resEntrada.veiculoPatio.id,
+    placaVeiculo: 'CAR-15 (QBZ-7710)',
+    modeloVeiculo: 'Caminhão Caçamba Basculante 3 Eixos',
+    motorista: 'Laércio Silveira',
+    cliente: 'Construtora Vale do Sepotuba',
+    tipoMaterial: 'Brita 1 Granítica',
+    pesoBrutoKg: 32400,
+    taraKg: 13200,
+    densidadeKgM3: 1450,
+    precoUnitarioM3: 125.00
+  }, CONCRETO_EMPRESA_ID);
+
+  assert.equal(resSaida.ok, true);
+  assert.equal(resSaida.ticket.pesoLiquidoKg, 19200); // 32400 - 13200
+  assert.equal(resSaida.ticket.volumeCalculadoM3, 13.24); // 19200 / 1450
+  assert.equal(resSaida.ticket.valorTotal, 1655.00); // 13.24 * 125
+  assert.equal(resSaida.ticket.valorCfem, 24.82); // 1.5% CFEM mineração
+  assert.ok(resSaida.ticket.codigoAutenticidade.startsWith('BAL-TOLEDO-'));
+
+  // 3. Listar tickets e verificar presença
+  const resListar = await listarTicketsBalanca(CONCRETO_EMPRESA_ID, { termo: 'CAR-15' });
+  assert.equal(resListar.ok, true);
+  assert.ok(resListar.total >= 1);
+});
+
+test('17. Configurações da Balança Rodoviária 80t: Consulta e Atualização de Hardware', async () => {
+  // 1. Obter configurações padrão
+  const resCfg = await obterConfiguracoesBalanca(CONCRETO_EMPRESA_ID);
+  assert.equal(resCfg.ok, true);
+  assert.equal(resCfg.configuracoes.modeloIndicador, 'Toledo Prix 9094');
+  assert.equal(resCfg.configuracoes.divisaoMetrologicaKg, 10);
+  assert.equal(resCfg.configuracoes.aliquotaCfemMinerais, 1.5);
+
+  // 2. Atualizar configurações técnicas
+  const resSalvar = await salvarConfiguracoesBalanca({
+    portaSerial: 'COM4',
+    baudRate: 19200,
+    tempoAberturaCancelaSegundos: 15,
+    impressoraTermicaPadrao: 'Epson TM-T20X Guarita 1'
+  }, CONCRETO_EMPRESA_ID);
+
+  assert.equal(resSalvar.ok, true);
+  assert.equal(resSalvar.configuracoes.portaSerial, 'COM4');
+  assert.equal(resSalvar.configuracoes.baudRate, 19200);
+  assert.equal(resSalvar.configuracoes.tempoAberturaCancelaSegundos, 15);
+});
+
+test('18. Módulo de Vendas & Notas Fiscais: Emissão Integrada de Concreto e Agregados', async () => {
+  // 1. Listar notas fiscais existentes e verificar resumo
+  const resListar = await obterNotasFiscaisVendas(CONCRETO_EMPRESA_ID);
+  assert.equal(resListar.ok, true);
+  assert.ok(resListar.total >= 5);
+  assert.ok(resListar.resumo.faturamentoTotalHoje > 0);
+  assert.ok(resListar.resumo.volumeConcretoTotalM3 > 0);
+
+  // 2. Emitir nova NFS-e de Concretagem FCK 30 MPa com peso da balança 80t
+  const resEmitir = await emitirNotaFiscalConcreto({
+    cliente: 'Construtora Tangará Obras Civis',
+    cnpjCpfCliente: '19.450.810/0001-22',
+    enderecoCliente: 'Av. Brasil, 450 · Tangará da Serra/MT',
+    telefoneCliente: '(65) 99888-4455',
+    emailCliente: 'fiscal@tangaraobras.com.br',
+    obraDestino: 'Pavimentação e Lajes Galpão Comercial',
+    tipoOperacao: 'saida_servico_concreto',
+    tipoConcreto: 'Concreto Usinado Estrutural FCK 30 MPa',
+    densidadeKgM3: 2400,
+    pesoBrutoTotalKg: 33480,
+    taraTotalKg: 14280, // Líquido = 19.200 kg -> 8.0 m³
+    precoUnitarioM3: 465.00,
+    aliquotaIssqn: 3.0,
+    veiculoPlaca: 'BT-01 (RRA-4E80)',
+    ticketBalancaId: 'TK-2026-9999'
+  }, CONCRETO_EMPRESA_ID);
+
+  assert.equal(resEmitir.ok, true);
+  assert.equal(resEmitir.nota.modelo, 'NFS-e');
+  assert.equal(resEmitir.nota.pesoLiquidoTotalKg, 19200);
+  assert.equal(resEmitir.nota.volumeTotalM3, 8.0);
+  assert.equal(resEmitir.nota.valorTotalBruto, 3720.00); // 8 * 465
+  assert.equal(resEmitir.nota.valorDeducaoLegalMateriais, 2604.00); // 70% dedução materiais LC 116
+  assert.equal(resEmitir.nota.baseCalculoIssqn, 1116.00);
+  assert.equal(resEmitir.nota.valorIssqn, 33.48); // 3% sobre base
+  assert.ok(resEmitir.nota.chaveAcessoSefaz.length === 44);
+});
+
+test('19. Visualização do DANFE A4 em HTML e Entrega via WhatsApp/E-mail', async () => {
+  // 1. Gerar DANFE HTML oficial
+  const htmlDanfe = await gerarDanfeHtml('nfe-4821', CONCRETO_EMPRESA_ID);
+  assert.ok(typeof htmlDanfe === 'string');
+  assert.ok(htmlDanfe.includes('DANFSE') || htmlDanfe.includes('DANFE'));
+  assert.ok(htmlDanfe.includes('SERRANO CONCRETO USINADO & MINERAÇÃO LTDA'));
+  assert.ok(htmlDanfe.includes('51261103849201000110550010000048211004821014'));
+
+  // 2. Disparar entrega por WhatsApp
+  const resEntrega = await entregarNotaFiscal('nfe-4821', 'whatsapp', '(65) 99988-1200', CONCRETO_EMPRESA_ID);
+  assert.equal(resEntrega.ok, true);
+  assert.equal(resEntrega.status, 'entregue_whatsapp');
+});
+
+test('20. Telemetria das 8 Células de Carga Toledo Digital DLC-10t', async () => {
+  const telemetria = obterTelemetriaCelulasToledo(33480);
+  assert.equal(telemetria.ok, true);
+  assert.equal(telemetria.celulas.length, 8);
+  assert.equal(telemetria.pesoTotalMedidoKg, 33480);
+  assert.ok(telemetria.celulas[0].pesoKg > 4000);
+  assert.ok(telemetria.celulas[0].mVPorV > 0);
+  assert.equal(telemetria.celulas[0].status, 'conforme');
+});
+
+test('21. Edição e Detalhamento Completo de Concretagem Agendada (Alterar e Salvar)', async () => {
+  // 1. Criar carga de teste para agendamento
+  const resCriar = await criarCargaConcreto({
+    cliente: 'Engenharia Tangará Obras',
+    obra: 'Condomínio Reserva da Serra · Bloco C',
+    fck: 25,
+    volumeM3: 16,
+    bomba: 'BL-01 · Lança 32 m',
+    data: '2026-11-15',
+    horarioInicio: '09:00'
+  }, CONCRETO_EMPRESA_ID);
+
+  assert.equal(resCriar.ok, true);
+  const cargaId = resCriar.carga.id;
+
+  // 2. Atualizar todos os detalhes da concretagem (aumentar volume, alterar FCK e horário)
+  const resAtualizar = await atualizarCargaConcreto(cargaId, {
+    fck: 30, // Upgrade para FCK 30
+    volumeM3: 24, // 24 m³
+    horarioAgendado: '10:30',
+    brita: 'Brita 1 Granítica',
+    slump: '14 ± 2 cm',
+    observacoes: 'Cliente solicitou reforço na laje com FCK 30 e início às 10:30'
+  }, CONCRETO_EMPRESA_ID);
+
+  assert.equal(resAtualizar.ok, true);
+  assert.equal(resAtualizar.carga.fck, 30);
+  assert.equal(resAtualizar.carga.volumeM3, 24);
+  assert.equal(resAtualizar.carga.horarioAgendado, '10:30');
+  assert.ok(resAtualizar.carga.valorTotal > 10000);
+
+  // 3. Obter por ID e checar persistência
+  const resGet = await obterCargaPorId(cargaId, CONCRETO_EMPRESA_ID);
+  assert.equal(resGet.ok, true);
+  assert.equal(resGet.carga.volumeM3, 24);
+});
+
+test('22. Duplicação de Agendamento de Concretagem para Nova Data/Horário', async () => {
+  const resDup = await duplicarCargaConcreto('crg-1001', '2026-11-18', '14:00', CONCRETO_EMPRESA_ID);
+  assert.equal(resDup.ok, true);
+  assert.ok(resDup.carga.numero > 1001);
+  assert.equal(resDup.carga.data, '2026-11-18');
+  assert.equal(resDup.carga.horarioAgendado, '14:00');
+  assert.equal(resDup.carga.status, 'agendado');
+  assert.equal(resDup.carga.assinaturaDigital, null);
+});
+
+test('23. Exclusão de Concretagem da Programação', async () => {
+  // Criar carga temporária para excluir
+  const temp = await criarCargaConcreto({
+    cliente: 'Cliente Temp Excluir',
+    obra: 'Obra Temp',
+    volumeM3: 8,
+    fck: 20
+  }, CONCRETO_EMPRESA_ID);
+
+  const idTemp = temp.carga.id;
+  const resExcluir = await excluirCargaConcreto(idTemp, CONCRETO_EMPRESA_ID);
+  assert.equal(resExcluir.ok, true);
+
+  // Tentar obter a carga excluída deve lançar erro
+  await assert.rejects(
+    async () => await obterCargaPorId(idTemp, CONCRETO_EMPRESA_ID),
+    /não encontrada/
+  );
+});
+
+
+test("24. Gestão Completa de Ordens de Produção (Criar, Obter, Editar/Modificar, Apontar Pesagem, Imprimir e Excluir)", async () => {
   // 1. Criar Nova OP
   const resCriar = await criarOrdemProducao({
-    cliente: 'Construtora Tangará Prime',
-    obra: 'Residencial Monte Libano · Lajes',
+    cliente: "Construtora Tangará Prime",
+    obra: "Residencial Monte Libano · Lajes",
     fck: 30,
     volumeM3: 24,
-    betoneirasEscaladas: ['BT-02', 'BT-04'],
-    operador: 'Marcos Vinicius',
-    slumpPrevistoCm: '12 ± 2 cm'
+    betoneirasEscaladas: ["BT-02", "BT-04"],
+    operador: "Marcos Vinicius",
+    slumpPrevistoCm: "12 ± 2 cm"
   }, CONCRETO_EMPRESA_ID);
 
   assert.equal(resCriar.ok, true);
   const opId = resCriar.ordemProducao.id;
-  assert.ok(resCriar.ordemProducao.numero.startsWith('OP-2026-'));
+  assert.ok(resCriar.ordemProducao.numero.startsWith("OP-2026-"));
   assert.equal(resCriar.ordemProducao.fck, 30);
   assert.equal(resCriar.ordemProducao.volumeM3, 24);
   assert.equal(resCriar.ordemProducao.totalBateladas, 3);
@@ -369,23 +627,23 @@ test('14. Gestão Completa de Ordens de Produção (Criar, Obter, Editar/Modific
   // 2. Obter OP por ID
   const resObter = await obterOrdemProducao(opId, CONCRETO_EMPRESA_ID);
   assert.equal(resObter.ok, true);
-  assert.equal(resObter.ordemProducao.cliente, 'Construtora Tangará Prime');
+  assert.equal(resObter.ordemProducao.cliente, "Construtora Tangará Prime");
 
   // 3. Atualizar/Modificar OP (modificar volume, FCK e status)
   const resAtualizar = await atualizarOrdemProducao(opId, {
     volumeM3: 32,
     fck: 35,
-    status: 'em_pesagem',
-    motorista: 'Adilson de Oliveira',
-    observacoes: 'Urgência na concretagem da laje 2'
+    status: "em_pesagem",
+    motorista: "Adilson de Oliveira",
+    observacoes: "Urgência na concretagem da laje 2"
   }, CONCRETO_EMPRESA_ID);
 
   assert.equal(resAtualizar.ok, true);
   assert.equal(resAtualizar.ordemProducao.volumeM3, 32);
   assert.equal(resAtualizar.ordemProducao.fck, 35);
   assert.equal(resAtualizar.ordemProducao.totalBateladas, 4);
-  assert.equal(resAtualizar.ordemProducao.status, 'em_pesagem');
-  assert.equal(resAtualizar.ordemProducao.motorista, 'Adilson de Oliveira');
+  assert.equal(resAtualizar.ordemProducao.status, "em_pesagem");
+  assert.equal(resAtualizar.ordemProducao.motorista, "Adilson de Oliveira");
 
   // 4. Apontar Pesagem Real da Balança dos Silos
   const resApontamento = await apontarPesagemOrdemProducao(opId, {
@@ -395,22 +653,22 @@ test('14. Gestão Completa de Ordens de Produção (Criar, Obter, Editar/Modific
     aguaL: 5280,
     aditivoL: 108.8,
     slumpMedidoCm: 14.0,
-    lacreCarga: 'LACRE-MT-4401',
-    status: 'concluida'
+    lacreCarga: "LACRE-MT-4401",
+    status: "concluida"
   }, CONCRETO_EMPRESA_ID);
 
   assert.equal(resApontamento.ok, true);
   assert.equal(resApontamento.ordemProducao.consumoRealBalança.cimentoKg, 13500);
   assert.equal(resApontamento.ordemProducao.consumoRealBalança.slumpMedidoCm, 14.0);
-  assert.equal(resApontamento.ordemProducao.status, 'concluida');
+  assert.equal(resApontamento.ordemProducao.status, "concluida");
 
   // 5. Gerar HTML de Impressão Oficial NBR 7212
   const html = gerarHtmlOrdemProducaoOficial(resApontamento.ordemProducao);
-  assert.ok(html.includes('Serrano Concreto Usinado'));
+  assert.ok(html.includes("Serrano Concreto Usinado"));
   assert.ok(html.includes(resCriar.ordemProducao.numero));
-  assert.ok(html.includes('13.500 kg'));
-  assert.ok(html.includes('FCK 35 MPa'));
-  assert.ok(html.includes('NBR 7212'));
+  assert.ok(html.includes("13.500 kg"));
+  assert.ok(html.includes("FCK 35 MPa"));
+  assert.ok(html.includes("NBR 7212"));
 
   // 6. Excluir OP
   const resExcluir = await excluirOrdemProducao(opId, CONCRETO_EMPRESA_ID);
