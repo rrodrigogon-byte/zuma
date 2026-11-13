@@ -945,7 +945,8 @@ export default function CadastrosMestres() {
             </Linha>
             <Linha>
               <Campo label="CNPJ"><input value={empresaForm.cnpj} onChange={(e) => setEmpresaForm({ ...empresaForm, cnpj: e.target.value })} placeholder="00.000.000/0001-00" /></Campo>
-              <Campo label="Inscrição Estadual"><input value={empresaForm.inscricaoEstadual} onChange={(e) => setEmpresaForm({ ...empresaForm, inscricaoEstadual: e.target.value })} /></Campo>
+              <Campo label="Inscrição Estadual (SEFAZ)"><input value={empresaForm.inscricaoEstadual} onChange={(e) => setEmpresaForm({ ...empresaForm, inscricaoEstadual: e.target.value })} placeholder="Ex: 14.229.191-9" /></Campo>
+              <Campo label="Inscrição Municipal"><input value={empresaForm.inscricaoMunicipal || ""} onChange={(e) => setEmpresaForm({ ...empresaForm, inscricaoMunicipal: e.target.value })} placeholder="Ex: 30297" /></Campo>
             </Linha>
             <Linha>
               <Campo label="E-mail Corporativo"><input type="email" value={empresaForm.email} onChange={(e) => setEmpresaForm({ ...empresaForm, email: e.target.value })} placeholder="contato@empresa.com" /></Campo>

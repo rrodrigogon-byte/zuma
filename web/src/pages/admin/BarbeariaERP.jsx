@@ -1,3 +1,4 @@
+import DinoCardFiscalIdentificacao from "./dino/DinoCardFiscalIdentificacao";
 import SorteiosCampanhas from "./SorteiosCampanhas";
 import BarbeariaNovoAgendamentoModal from "./BarbeariaNovoAgendamentoModal";
 import BarbeariaComandasAbertas from "./BarbeariaComandasAbertas";
@@ -14600,6 +14601,12 @@ export default function BarbeariaERP({ tabInicial } = {}) {
               </Link>
             </div>
           </header>
+          {isDinoBrand && (
+            <DinoCardFiscalIdentificacao
+              empresaAtiva={empresaAtiva}
+              configuracao={configuracao}
+            />
+          )}
           <div style={styles.contextBar} aria-label="Contexto operacional">
             <div style={styles.contextBarItem}>
               <span>Área ativa</span>

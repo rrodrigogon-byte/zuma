@@ -554,7 +554,12 @@ export default function Empresas() {
 
                     <div>
                       <span style={{ color: '#64748b', display: 'block', fontSize: 11 }}>Inscrição Estadual</span>
-                      <strong style={{ color: '#334155' }}>{emp.inscricaoEstadual || 'Isento / Não inf.'}</strong>
+                      <strong style={{ color: '#16a34a' }}>{emp.inscricaoEstadual || 'Isento / Não inf.'}</strong>
+                    </div>
+
+                    <div>
+                      <span style={{ color: '#64748b', display: 'block', fontSize: 11 }}>Inscrição Municipal</span>
+                      <strong style={{ color: '#0284c7' }}>{emp.inscricaoMunicipal || 'Isento / Não inf.'}</strong>
                     </div>
 
                     <div>

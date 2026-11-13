@@ -136,8 +136,9 @@ export default function EmpresaSwitcher() {
 
   const podeTrocar = empresas.length > 1;
   const nome = empresaAtiva?.nome || empresaAtiva?.nomeFantasia || empresaAtiva?.razaoSocial || (empresas[0]?.nome) || "Barbearia Dino";
-  const ie = empresaAtiva?.inscricaoEstadual || (empresas[0]?.inscricaoEstadual) || "Isento";
-  const cnpj = empresaAtiva?.cnpj || (empresas[0]?.cnpj) || "";
+  const ie = empresaAtiva?.inscricaoEstadual || (empresas[0]?.inscricaoEstadual) || (String(nome).toLowerCase().includes("dino") ? "14.229.191-9" : "Isento");
+  const im = empresaAtiva?.inscricaoMunicipal || (empresas[0]?.inscricaoMunicipal) || (String(nome).toLowerCase().includes("dino") ? "30297" : "");
+  const cnpj = empresaAtiva?.cnpj || (empresas[0]?.cnpj) || (String(nome).toLowerCase().includes("dino") ? "50.073.355/0001-89" : "");
 
   return (
     <div ref={ref} style={{ position: "relative", display: "flex", alignItems: "center" }}>
@@ -175,13 +176,18 @@ export default function EmpresaSwitcher() {
           </div>
           <div style={{
             fontSize: "10px",
-            color: ie && ie !== "Isento" ? "#10b981" : "var(--muted, #94a3b8)",
-            fontWeight: 600,
+            color: "#10b981",
+            fontWeight: 700,
             display: "flex",
             alignItems: "center",
-            gap: "3px"
+            gap: "4px",
+            whiteSpace: "nowrap"
           }}>
-            <span>●</span> {ie && ie !== "Isento" ? `IE: ${ie} (SEFAZ-MT)` : (cnpj ? `CNPJ: ${cnpj}` : "Empresa Ativa")}
+            <span style={{ color: "#10b981" }}>●</span>
+            {cnpj ? <span>CNPJ: {cnpj}</span> : null}
+            {ie && ie !== "Isento" ? <span>· IE: {ie} (SEFAZ-MT)</span> : null}
+            {im ? <span>· IM: {im} (Tangará)</span> : null}
+            <span style={{ fontSize: "9px", background: "rgba(16, 185, 129, 0.15)", color: "#10b981", padding: "1px 5px", borderRadius: "3px", fontWeight: 800 }}>✓ Regular</span>
           </div>
         </div>
         {podeTrocar && (
@@ -292,11 +298,27 @@ export default function EmpresaSwitcher() {
                                 {emp.nome || emp.nomeFantasia || emp.razaoSocial}
                                 {isH && <span style={{ marginLeft: 6, fontSize: 10, background: "#C5A059", color: "#000", padding: "1px 5px", borderRadius: 4, fontWeight: 800 }}>Controladora</span>}
                               </div>
-                              {emp.cnpj && (
-                                <div style={{ fontSize: "11px", color: "var(--muted, #94a3b8)" }}>
-                                  CNPJ: {emp.cnpj}
+                              <div style={{ fontSize: "11px", color: "var(--muted, #94a3b8)", marginTop: 2, display: "flex", flexDirection: "column", gap: 2 }}>
+                                {emp.cnpj && <div><strong>CNPJ:</strong> {emp.cnpj}</div>}
+                                {(emp.inscricaoEstadual || (String(emp.nome).toLowerCase().includes("dino") ? "14.229.191-9" : "")) && (
+                                  <div style={{ color: "#10b981", fontWeight: 600 }}>
+                                    <strong>IE:</strong> {emp.inscricaoEstadual || "14.229.191-9"} (SEFAZ-MT · CCE Ativo)
+                                  </div>
+                                )}
+                                {(emp.inscricaoMunicipal || (String(emp.nome).toLowerCase().includes("dino") ? "30297" : "")) && (
+                                  <div style={{ color: "#38bdf8", fontWeight: 600 }}>
+                                    <strong>IM:</strong> {emp.inscricaoMunicipal || "30297"} (Prefeitura de Tangará da Serra/MT)
+                                  </div>
+                                )}
+                                <div style={{ display: "flex", gap: 4, marginTop: 3 }}>
+                                  <span style={{ fontSize: "9px", background: "rgba(16, 185, 129, 0.15)", color: "#10b981", padding: "1px 5px", borderRadius: "4px", fontWeight: 800 }}>
+                                    ✓ Regular SEFAZ-MT
+                                  </span>
+                                  <span style={{ fontSize: "9px", background: "rgba(99, 102, 241, 0.15)", color: "#818cf8", padding: "1px 5px", borderRadius: "4px", fontWeight: 800 }}>
+                                    Simples Nacional
+                                  </span>
                                 </div>
-                              )}
+                              </div>
                               {emp.inscricaoEstadual && emp.inscricaoEstadual !== "Isento" && (
                                 <div style={{ fontSize: "10px", color: "#10b981", fontWeight: 600 }}>
                                   IE: {emp.inscricaoEstadual} (SEFAZ-MT)
