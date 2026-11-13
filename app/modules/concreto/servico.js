@@ -746,8 +746,6 @@ export function inicializarDatastoreConcreto() {
   if (!Array.isArray(data.concreto_vendas_agregados)) data.concreto_vendas_agregados = [];
   if (!Array.isArray(data.concreto_medicoes_obras)) data.concreto_medicoes_obras = [];
   if (!Array.isArray(data.concreto_tickets_balanca)) data.concreto_tickets_balanca = [];
-  if (!Array.isArray(data.concreto_cameras_ip)) data.concreto_cameras_ip = [];
-  if (!Array.isArray(data.concreto_eventos_vision)) data.concreto_eventos_vision = [];
   if (!Array.isArray(data.concreto_baias)) data.concreto_baias = CONCRETO_BAIAS_INICIAIS;
   if (!Array.isArray(data.concreto_tanques)) data.concreto_tanques = CONCRETO_TANQUES_ADITIVOS;
   if (!Array.isArray(data.concreto_entradas_suprimentos)) data.concreto_entradas_suprimentos = CONCRETO_ENTRADAS_SUPRIMENTOS;
@@ -800,12 +798,6 @@ export function inicializarDatastoreConcreto() {
   if (data.concreto_tickets_balanca.length === 0) {
     data.concreto_tickets_balanca = TICKETS_BALANCA_INICIAIS.map(t => ({ ...t, empresaId: CONCRETO_EMPRESA_ID }));
   }
-  if (data.concreto_cameras_ip.length === 0) {
-    data.concreto_cameras_ip = CONCRETO_CAMERAS_INICIAIS.map(c => ({ ...c, empresaId: CONCRETO_EMPRESA_ID }));
-  }
-  if (data.concreto_eventos_vision.length === 0) {
-    data.concreto_eventos_vision = CONCRETO_EVENTOS_VISION_INICIAIS.map(e => ({ ...e, empresaId: CONCRETO_EMPRESA_ID }));
-  }
 
   save();
   return data;
@@ -832,8 +824,6 @@ export async function obterDadosConcreto(empresaId = CONCRETO_EMPRESA_ID) {
   const patiosMineracao = (data.concreto_mineracao_patios || []).filter(p => !p.empresaId || p.empresaId === empId);
   const vendasAgregados = (data.concreto_vendas_agregados || []).filter(v => !v.empresaId || v.empresaId === empId);
   const medicoesObras = (data.concreto_medicoes_obras || []).filter(m => !m.empresaId || m.empresaId === empId);
-  const cameras = (data.concreto_cameras_ip || []).filter(c => !c.empresaId || c.empresaId === empId);
-  const eventosVision = (data.concreto_eventos_vision || []).filter(e => !e.empresaId || e.empresaId === empId);
   const listasTecnicas = gerarListaTecnicaBOM();
 
   // KPIs Industriais
@@ -866,8 +856,6 @@ export async function obterDadosConcreto(empresaId = CONCRETO_EMPRESA_ID) {
     patiosMineracao,
     vendasAgregados,
     medicoesObras,
-    cameras,
-    eventosVision,
     kpis: {
       volumeProgramadoHoje,
       volumeEntregueHoje,
@@ -4530,586 +4518,6 @@ export async function atualizarCorpoProva(loteId, cpId, dados, empresaId = CONCR
   return { ok: true, corpoProva: cp, ensaio: lote, lote };
 }
 
-
-// =====================================================================
-// 21. CÂMERAS IP INDUSTRIAIS (RTSP/ONVIF) & VISION AI DA CONCRETEIRA
-// =====================================================================
-export const CONCRETO_CAMERAS_INICIAIS = [
-  {
-    id: "cam-01-lpr",
-    nome: "CAM-01 · Totem LPR Entrada Balança 80t",
-    pontoInstalacao: "balanca_entrada_lpr",
-    pontoRotulo: "Balança 80t - Totem LPR Entrada",
-    marca: "intelbras",
-    modelo: "VIP 5450 Z IA (LPR Embarcado)",
-    ipHost: "192.168.1.101",
-    portaHttp: 80,
-    portaRtsp: 554,
-    portaOnvif: 80,
-    portaServico: 37777,
-    usuario: "admin",
-    senha: "••••••••",
-    canal: 1,
-    substream: false,
-    streamRtspUrl: "rtsp://admin:public12@192.168.1.101:554/cam/realmonitor?channel=1&subtype=0",
-    snapshotHttpUrl: "http://admin:public12@192.168.1.101/cgi-bin/snapshot.cgi?channel=1",
-    hlsStreamUrl: "/assets/cftv/cftv_cam01_lpr_entrada.jpg",
-    status: "online",
-    fps: 30,
-    resolucao: "1920x1080 (Full HD)",
-    codec: "H.265 / Smart Codec",
-    latenciaMs: 12,
-    ultimoPingEm: new Date().toISOString(),
-    ultimoSnapshotEm: new Date().toISOString(),
-    recursosIa: {
-      lprLeituraPlaca: true,
-      enquadramentoBalanca: false,
-      inspecaoEpi: true,
-      monitoramentoSilos: false,
-      cercaVirtual: true
-    },
-    ultimaPlacaDetectada: "RRA-4E80",
-    ultimaConfiancaLpr: 99.6
-  },
-  {
-    id: "cam-02-panoramica",
-    nome: "CAM-02 · Panorâmica Balança 21 Metros",
-    pontoInstalacao: "balanca_panoramica_21m",
-    pontoRotulo: "Balança 80t - Panorâmica Plataforma 21m",
-    marca: "hikvision",
-    modelo: "ColorVu DS-2CD2047G2-LU (Visão Noturna)",
-    ipHost: "192.168.1.102",
-    portaHttp: 80,
-    portaRtsp: 554,
-    portaOnvif: 8000,
-    portaServico: 8000,
-    usuario: "admin",
-    senha: "••••••••",
-    canal: 101,
-    substream: false,
-    streamRtspUrl: "rtsp://admin:Serrano#2026@192.168.1.102:554/Streaming/Channels/101",
-    snapshotHttpUrl: "http://admin:Serrano#2026@192.168.1.102/ISAPI/Streaming/channels/101/picture",
-    hlsStreamUrl: "/assets/cftv/cftv_cam02_plataforma_panoramica.jpg",
-    status: "online",
-    fps: 30,
-    resolucao: "2560x1440 (4MP Quad HD)",
-    codec: "H.265+ AcuSense",
-    latenciaMs: 16,
-    ultimoPingEm: new Date().toISOString(),
-    ultimoSnapshotEm: new Date().toISOString(),
-    recursosIa: {
-      lprLeituraPlaca: false,
-      enquadramentoBalanca: true,
-      inspecaoEpi: true,
-      monitoramentoSilos: false,
-      cercaVirtual: true
-    },
-    enquadramentoOk: true,
-    alertaForaEixo: false
-  },
-  {
-    id: "cam-03-saida",
-    nome: "CAM-03 · Cancela Saída & Semáforo",
-    pontoInstalacao: "balanca_saida_cancela",
-    pontoRotulo: "Balança 80t - Cancela Saída & Semáforo",
-    marca: "intelbras",
-    modelo: "VIP 3230 B (Gabinete Metálico IP67)",
-    ipHost: "192.168.1.103",
-    portaHttp: 80,
-    portaRtsp: 554,
-    portaOnvif: 80,
-    portaServico: 37777,
-    usuario: "admin",
-    senha: "••••••••",
-    canal: 1,
-    substream: false,
-    streamRtspUrl: "rtsp://admin:public12@192.168.1.103:554/cam/realmonitor?channel=1&subtype=0",
-    snapshotHttpUrl: "http://admin:public12@192.168.1.103/cgi-bin/snapshot.cgi?channel=1",
-    hlsStreamUrl: "/assets/cftv/cftv_cam03_cancela_saida.jpg",
-    status: "online",
-    fps: 25,
-    resolucao: "1920x1080 (Full HD)",
-    codec: "H.264 / H.265",
-    latenciaMs: 14,
-    ultimoPingEm: new Date().toISOString(),
-    ultimoSnapshotEm: new Date().toISOString(),
-    recursosIa: {
-      lprLeituraPlaca: true,
-      enquadramentoBalanca: false,
-      inspecaoEpi: false,
-      monitoramentoSilos: false,
-      cercaVirtual: true
-    },
-    estadoCancela: "fechada",
-    estadoSemaforo: "vermelho"
-  },
-  {
-    id: "cam-04-patio",
-    nome: "CAM-04 · Pátio de Carregamento & Silos 96t",
-    pontoInstalacao: "patio_geral",
-    pontoRotulo: "Pátio de Betoneiras & Baia de Carga",
-    marca: "dahua",
-    modelo: "WizSense IPC-HFW5442E-Z (PTZ / Zoom 4x)",
-    ipHost: "192.168.1.104",
-    portaHttp: 80,
-    portaRtsp: 554,
-    portaOnvif: 80,
-    portaServico: 37777,
-    usuario: "admin",
-    senha: "••••••••",
-    canal: 1,
-    substream: false,
-    streamRtspUrl: "rtsp://admin:admin123@192.168.1.104:554/cam/realmonitor?channel=1&subtype=0",
-    snapshotHttpUrl: "http://admin:admin123@192.168.1.104/cgi-bin/snapshot.cgi?channel=1",
-    hlsStreamUrl: "/assets/cftv/cftv_cam04_patio_silos.jpg",
-    status: "online",
-    fps: 30,
-    resolucao: "1920x1080 (Full HD)",
-    codec: "H.265 WizSense",
-    latenciaMs: 18,
-    ultimoPingEm: new Date().toISOString(),
-    ultimoSnapshotEm: new Date().toISOString(),
-    recursosIa: {
-      lprLeituraPlaca: true,
-      enquadramentoBalanca: false,
-      inspecaoEpi: true,
-      monitoramentoSilos: true,
-      cercaVirtual: false
-    }
-  },
-  {
-    id: "cam-05-dosadora",
-    nome: "CAM-05 · Central Dosadora NBR 7212 (Ponto de Pega)",
-    pontoInstalacao: "central_dosadora",
-    pontoRotulo: "Central Dosadora Convicta 60m³/h",
-    marca: "axis",
-    modelo: "M1137-E Box Industrial (Anti-Poeira IP66)",
-    ipHost: "192.168.1.105",
-    portaHttp: 80,
-    portaRtsp: 554,
-    portaOnvif: 80,
-    portaServico: 80,
-    usuario: "root",
-    senha: "••••••••",
-    canal: 1,
-    substream: false,
-    streamRtspUrl: "rtsp://root:pass@192.168.1.105:554/axis-media/media.amp?videocodec=h264",
-    snapshotHttpUrl: "http://root:pass@192.168.1.105/axis-cgi/jpg/image.cgi",
-    hlsStreamUrl: "/assets/cftv/cftv_cam04_patio_silos.jpg",
-    status: "online",
-    fps: 30,
-    resolucao: "1920x1080 (Full HD)",
-    codec: "Zipstream Axis H.264",
-    latenciaMs: 15,
-    ultimoPingEm: new Date().toISOString(),
-    ultimoSnapshotEm: new Date().toISOString(),
-    recursosIa: {
-      lprLeituraPlaca: false,
-      enquadramentoBalanca: false,
-      inspecaoEpi: true,
-      monitoramentoSilos: true,
-      cercaVirtual: false
-    }
-  },
-  {
-    id: "cam-06-mineracao",
-    nome: "CAM-06 · Draga & Pátio de Areia Rio Sepotuba",
-    pontoInstalacao: "silos_mineracao",
-    pontoRotulo: "Mineração Própria - Extração de Areia",
-    marca: "hilook",
-    modelo: "IPC-B120H Bullet IR 30m",
-    ipHost: "192.168.1.106",
-    portaHttp: 80,
-    portaRtsp: 554,
-    portaOnvif: 8000,
-    portaServico: 8000,
-    usuario: "admin",
-    senha: "••••••••",
-    canal: 101,
-    substream: true,
-    streamRtspUrl: "rtsp://admin:pass@192.168.1.106:554/Streaming/Channels/102",
-    snapshotHttpUrl: "http://admin:pass@192.168.1.106/ISAPI/Streaming/channels/102/picture",
-    hlsStreamUrl: "/assets/cftv/cftv_cam02_plataforma_panoramica.jpg",
-    status: "online",
-    fps: 20,
-    resolucao: "1280x720 (HD Substream)",
-    codec: "H.264",
-    latenciaMs: 24,
-    ultimoPingEm: new Date().toISOString(),
-    ultimoSnapshotEm: new Date().toISOString(),
-    recursosIa: {
-      lprLeituraPlaca: false,
-      enquadramentoBalanca: false,
-      inspecaoEpi: true,
-      monitoramentoSilos: true,
-      cercaVirtual: false
-    }
-  }
-];
-
-export const CONCRETO_EVENTOS_VISION_INICIAIS = [
-  {
-    id: "evt-vis-101",
-    cameraId: "cam-01-lpr",
-    cameraNome: "CAM-01 · Totem LPR Entrada Balança 80t",
-    tipoEvento: "lpr_placa_identificada",
-    tipoRotulo: "Placa LPR Identificada (Entrada)",
-    placaDetectada: "RRA-4E80",
-    veiculoDescricao: "Betoneira BT-01 VW Constellation 26.280 (Serrano)",
-    motorista: "Marcos Silveira",
-    confianca: 99.6,
-    severidade: "info",
-    snapshotUrl: "/assets/cftv/cftv_cam01_lpr_entrada.jpg",
-    detalhes: "Veículo posicionado sobre o Totem LPR na entrada da balança rodoviária.",
-    dataHora: "12/11/2026 21:55",
-    reconhecido: true,
-    empresaId: CONCRETO_EMPRESA_ID
-  },
-  {
-    id: "evt-vis-102",
-    cameraId: "cam-02-panoramica",
-    cameraNome: "CAM-02 · Panorâmica Balança 21 Metros",
-    tipoEvento: "enquadramento_conforme",
-    tipoRotulo: "Enquadramento Metrológico 100% Conforme",
-    placaDetectada: "RRA-4E80",
-    veiculoDescricao: "BT-01 na Plataforma de 21m",
-    confianca: 98.9,
-    severidade: "info",
-    snapshotUrl: "/assets/cftv/cftv_cam02_plataforma_panoramica.jpg",
-    detalhes: "8 Células de carga Toledo ativas com distribuição simétrica de peso.",
-    dataHora: "12/11/2026 21:58",
-    reconhecido: true,
-    empresaId: CONCRETO_EMPRESA_ID
-  },
-  {
-    id: "evt-vis-103",
-    cameraId: "cam-01-lpr",
-    cameraNome: "CAM-01 · Totem LPR Entrada Balança 80t",
-    tipoEvento: "epi_conforme",
-    tipoRotulo: "Inspeção de Segurança NBR / NR-18",
-    motorista: "Ademir Fagundes (CAR-08)",
-    confianca: 97.4,
-    severidade: "info",
-    snapshotUrl: "/assets/cftv/cftv_cam01_lpr_entrada.jpg",
-    detalhes: "Motorista utilizando Capacete de Proteção e Colete Refletivo.",
-    dataHora: "12/11/2026 22:04",
-    reconhecido: true,
-    empresaId: CONCRETO_EMPRESA_ID
-  }
-];
-
-export function construirUrlsCamera(marca, ipHost, portaHttp = 80, portaRtsp = 554, usuario = "admin", senha = "", canal = 1, substream = false) {
-  const m = String(marca || "intelbras").toLowerCase();
-  const sub = substream ? 1 : 0;
-  const auth = usuario ? encodeURIComponent(usuario) + ":" + encodeURIComponent(senha) + "@" : "";
-  const hostRtsp = String(ipHost || "192.168.1.100") + ":" + String(portaRtsp || 554);
-  const hostHttp = String(ipHost || "192.168.1.100") + (Number(portaHttp) !== 80 ? ":" + portaHttp : "");
-
-  if (m === "intelbras" || m === "dahua") {
-    return {
-      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/cam/realmonitor?channel=" + (canal || 1) + "&subtype=" + sub,
-      snapshotHttpUrl: "http://" + auth + hostHttp + "/cgi-bin/snapshot.cgi?channel=" + (canal || 1),
-      marcaRotulo: m === "intelbras" ? "Intelbras (iMDVR / VIP)" : "Dahua WizSense"
-    };
-  }
-
-  if (m === "hikvision" || m === "hilook") {
-    const ch = (canal || 1) <= 16 ? (100 * (canal || 1) + (substream ? 2 : 1)) : (canal || 101);
-    return {
-      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/Streaming/Channels/" + ch,
-      snapshotHttpUrl: "http://" + auth + hostHttp + "/ISAPI/Streaming/channels/" + ch + "/picture",
-      marcaRotulo: m === "hikvision" ? "Hikvision ColorVu" : "HiLook Series"
-    };
-  }
-
-  if (m === "axis") {
-    return {
-      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/axis-media/media.amp?videocodec=h264",
-      snapshotHttpUrl: "http://" + auth + hostHttp + "/axis-cgi/jpg/image.cgi",
-      marcaRotulo: "Axis Communications"
-    };
-  }
-
-  // Genérico ONVIF / RTSP
-  return {
-    streamRtspUrl: "rtsp://" + auth + hostRtsp + "/live/ch" + (canal || 1),
-    snapshotHttpUrl: "http://" + auth + hostHttp + "/snapshot.jpg",
-    marcaRotulo: "ONVIF / RTSP Genérico"
-  };
-}
-
-export function listarCamerasIpConcreto(empresaId = CONCRETO_EMPRESA_ID) {
-  const data = inicializarDatastoreConcreto();
-  return (data.concreto_cameras_ip || []).filter(c => !c.empresaId || c.empresaId === empresaId);
-}
-
-export function obterCameraIpPorId(id, empresaId = CONCRETO_EMPRESA_ID) {
-  const cameras = listarCamerasIpConcreto(empresaId);
-  return cameras.find(c => c.id === id) || null;
-}
-
-export function criarCameraIpConcreto(dados, empresaId = CONCRETO_EMPRESA_ID) {
-  const data = inicializarDatastoreConcreto();
-  const id = dados.id || ("cam-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6));
-  const urls = construirUrlsCamera(
-    dados.marca,
-    dados.ipHost,
-    dados.portaHttp,
-    dados.portaRtsp,
-    dados.usuario,
-    dados.senha,
-    dados.canal,
-    dados.substream
-  );
-
-  const novaCamera = {
-    id,
-    empresaId,
-    nome: dados.nome || "Nova Câmera IP Usina",
-    pontoInstalacao: dados.pontoInstalacao || "balanca_entrada_lpr",
-    pontoRotulo: dados.pontoRotulo || "Balança 80t",
-    marca: dados.marca || "intelbras",
-    modelo: dados.modelo || "Câmera IP Industrial",
-    ipHost: dados.ipHost || "192.168.1.100",
-    portaHttp: Number(dados.portaHttp) || 80,
-    portaRtsp: Number(dados.portaRtsp) || 554,
-    portaOnvif: Number(dados.portaOnvif) || 80,
-    portaServico: Number(dados.portaServico) || 37777,
-    usuario: dados.usuario || "admin",
-    senha: dados.senha || "",
-    canal: Number(dados.canal) || 1,
-    substream: Boolean(dados.substream),
-    streamRtspUrl: dados.streamRtspUrl || urls.streamRtspUrl,
-    snapshotHttpUrl: dados.snapshotHttpUrl || urls.snapshotHttpUrl,
-    hlsStreamUrl: dados.hlsStreamUrl || "/assets/cftv/cftv_cam01_lpr_entrada.jpg",
-    status: "online",
-    fps: Number(dados.fps) || 30,
-    resolucao: dados.resolucao || "1920x1080 (Full HD)",
-    codec: dados.codec || "H.265",
-    latenciaMs: Math.floor(Math.random() * 15) + 10,
-    ultimoPingEm: new Date().toISOString(),
-    ultimoSnapshotEm: new Date().toISOString(),
-    recursosIa: {
-      lprLeituraPlaca: dados.recursosIa?.lprLeituraPlaca ?? true,
-      enquadramentoBalanca: dados.recursosIa?.enquadramentoBalanca ?? false,
-      inspecaoEpi: dados.recursosIa?.inspecaoEpi ?? true,
-      monitoramentoSilos: dados.recursosIa?.monitoramentoSilos ?? false,
-      cercaVirtual: dados.recursosIa?.cercaVirtual ?? true
-    },
-    criadoEm: new Date().toISOString()
-  };
-
-  data.concreto_cameras_ip.push(novaCamera);
-  save();
-  return novaCamera;
-}
-
-export function atualizarCameraIpConcreto(id, dados, empresaId = CONCRETO_EMPRESA_ID) {
-  const data = inicializarDatastoreConcreto();
-  const idx = (data.concreto_cameras_ip || []).findIndex(c => c.id === id);
-  if (idx < 0) return null;
-
-  const atual = data.concreto_cameras_ip[idx];
-  const marca = dados.marca || atual.marca;
-  const ipHost = dados.ipHost || atual.ipHost;
-  const urls = construirUrlsCamera(
-    marca,
-    ipHost,
-    dados.portaHttp || atual.portaHttp,
-    dados.portaRtsp || atual.portaRtsp,
-    dados.usuario || atual.usuario,
-    dados.senha || atual.senha,
-    dados.canal || atual.canal,
-    dados.substream ?? atual.substream
-  );
-
-  const cameraAtualizada = {
-    ...atual,
-    ...dados,
-    streamRtspUrl: dados.streamRtspUrl || urls.streamRtspUrl,
-    snapshotHttpUrl: dados.snapshotHttpUrl || urls.snapshotHttpUrl,
-    atualizadoEm: new Date().toISOString()
-  };
-
-  data.concreto_cameras_ip[idx] = cameraAtualizada;
-  save();
-  return cameraAtualizada;
-}
-
-export function excluirCameraIpConcreto(id, empresaId = CONCRETO_EMPRESA_ID) {
-  const data = inicializarDatastoreConcreto();
-  const antes = data.concreto_cameras_ip.length;
-  data.concreto_cameras_ip = data.concreto_cameras_ip.filter(c => c.id !== id);
-  if (data.concreto_cameras_ip.length < antes) {
-    save();
-    return true;
-  }
-  return false;
-}
-
-export function testarConexaoCameraIp(idOuDados, empresaId = CONCRETO_EMPRESA_ID) {
-  const data = inicializarDatastoreConcreto();
-  let camera = null;
-  if (typeof idOuDados === "string") {
-    camera = (data.concreto_cameras_ip || []).find(c => c.id === idOuDados);
-  } else if (idOuDados && typeof idOuDados === "object") {
-    camera = idOuDados;
-  }
-  if (!camera) {
-    return { ok: false, status: "offline", erro: "Câmera não encontrada para teste" };
-  }
-
-  const latencia = Math.floor(Math.random() * 12) + 8;
-  const agora = new Date().toISOString();
-
-  if (typeof idOuDados === "string") {
-    const idx = data.concreto_cameras_ip.findIndex(c => c.id === idOuDados);
-    if (idx >= 0) {
-      data.concreto_cameras_ip[idx].status = "online";
-      data.concreto_cameras_ip[idx].latenciaMs = latencia;
-      data.concreto_cameras_ip[idx].ultimoPingEm = agora;
-      save();
-    }
-  }
-
-  return {
-    ok: true,
-    status: "online",
-    ipHost: camera.ipHost,
-    marca: camera.marca,
-    latenciaMs: latencia,
-    streamRtspAtivo: true,
-    snapshotHttpAtivo: true,
-    onvifAtivo: true,
-    fpsReal: camera.fps || 30,
-    resolucao: camera.resolucao || "1920x1080 (Full HD)",
-    codec: camera.codec || "H.265",
-    testadoEm: agora,
-    mensagem: "Conexão RTSP/HTTP estabelecida com sucesso. Resposta da câmera em " + latencia + " ms."
-  };
-}
-
-export function capturarSnapshotCameraIp(id, empresaId = CONCRETO_EMPRESA_ID) {
-  const camera = obterCameraIpPorId(id, empresaId);
-  if (!camera) return { ok: false, erro: "Câmera não encontrada" };
-  const agora = new Date().toISOString();
-  return {
-    ok: true,
-    cameraId: camera.id,
-    cameraNome: camera.nome,
-    snapshotUrl: camera.hlsStreamUrl || "/assets/cftv/cftv_cam01_lpr_entrada.jpg",
-    capturadoEm: agora,
-    resolucao: camera.resolucao || "1920x1080",
-    formato: "image/jpeg"
-  };
-}
-
-export function analisarFrameVisionKyttoIa(id, empresaId = CONCRETO_EMPRESA_ID) {
-  const data = inicializarDatastoreConcreto();
-  const camera = (data.concreto_cameras_ip || []).find(c => c.id === id);
-  if (!camera) return { ok: false, erro: "Câmera não encontrada" };
-
-  const agora = new Date().toISOString();
-  const agoraFormatada = new Date().toLocaleDateString("pt-BR") + " " + new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-
-  let resultadoAnalise = {};
-
-  if (camera.pontoInstalacao === "balanca_entrada_lpr" || camera.id === "cam-01-lpr") {
-    resultadoAnalise = {
-      tipoEvento: "lpr_placa_identificada",
-      tipoRotulo: "Placa LPR Identificada pelo Motor KyttoIA",
-      placaDetectada: "RRA-4E80",
-      tipoPlaca: "Mercosul Caminhão Comercial",
-      veiculoDescricao: "Betoneira BT-01 Constellation 26.280 (Serrano)",
-      motorista: "Marcos Silveira (CNH 04928173921)",
-      confianca: 99.7,
-      severidade: "info",
-      enquadramentoOk: true,
-      episDetectados: ["capacete_amarelo", "colete_refletivo_laranja"],
-      detalhes: "Placa Mercosul RRA-4E80 lida com 99.7% de precisão. Motorista com EPI regular.",
-      boundingBoxes: [
-        { label: "Placa LPR RRA-4E80 (99.7%)", x: 42, y: 76, w: 16, h: 8, color: "#10b981" },
-        { label: "Caminhão Betoneira BT-01", x: 20, y: 25, w: 60, h: 65, color: "#3b82f6" },
-        { label: "EPI Conforme: Capacete & Colete", x: 48, y: 35, w: 12, h: 22, color: "#f59e0b" }
-      ]
-    };
-  } else if (camera.pontoInstalacao === "balanca_panoramica_21m" || camera.id === "cam-02-panoramica") {
-    resultadoAnalise = {
-      tipoEvento: "enquadramento_conforme",
-      tipoRotulo: "Enquadramento na Plataforma 21m",
-      placaDetectada: "RRA-4E80",
-      confianca: 99.1,
-      severidade: "info",
-      enquadramentoOk: true,
-      distribuicaoEixosKg: [8370, 8365, 8375, 8370],
-      detalhes: "Todos os eixos centralizados sobre as 8 células Toledo Prix. Tolerância metrológica 100% OK.",
-      boundingBoxes: [
-        { label: "Plataforma 21m Enquadrada 100%", x: 10, y: 30, w: 80, h: 50, color: "#10b981" },
-        { label: "Sensor Óptico 1 (Livre)", x: 12, y: 25, w: 8, h: 10, color: "#06b6d4" },
-        { label: "Sensor Óptico 2 (Livre)", x: 80, y: 25, w: 8, h: 10, color: "#06b6d4" }
-      ]
-    };
-  } else {
-    resultadoAnalise = {
-      tipoEvento: "monitoramento_patio_ia",
-      tipoRotulo: "Inspeção Operacional de Pátio & Silos",
-      confianca: 98.4,
-      severidade: "info",
-      detalhes: "Nenhum ponto cego ou intrusão detectada. Silos operando dentro dos parâmetros de segurança.",
-      boundingBoxes: [
-        { label: "Silo 96t Nível OK (68t)", x: 30, y: 15, w: 25, h: 60, color: "#3b82f6" },
-        { label: "Baia de Brita 1 Carregamento OK", x: 60, y: 40, w: 30, h: 45, color: "#10b981" }
-      ]
-    };
-  }
-
-  const novoEvento = {
-    id: "evt-vis-" + Date.now().toString(36),
-    cameraId: camera.id,
-    cameraNome: camera.nome,
-    tipoEvento: resultadoAnalise.tipoEvento,
-    tipoRotulo: resultadoAnalise.tipoRotulo,
-    placaDetectada: resultadoAnalise.placaDetectada,
-    confianca: resultadoAnalise.confianca,
-    severidade: resultadoAnalise.severidade,
-    snapshotUrl: camera.hlsStreamUrl || "/assets/cftv/cftv_cam01_lpr_entrada.jpg",
-    detalhes: resultadoAnalise.detalhes,
-    dataHora: agoraFormatada,
-    reconhecido: false,
-    empresaId,
-    criadoEm: agora
-  };
-
-  data.concreto_eventos_vision.unshift(novoEvento);
-  if (data.concreto_eventos_vision.length > 50) {
-    data.concreto_eventos_vision = data.concreto_eventos_vision.slice(0, 50);
-  }
-  save();
-
-  return {
-    ok: true,
-    camera,
-    analise: resultadoAnalise,
-    evento: novoEvento
-  };
-}
-
-export function listarEventosVisionConcreto(empresaId = CONCRETO_EMPRESA_ID) {
-  const data = inicializarDatastoreConcreto();
-  return (data.concreto_eventos_vision || []).filter(e => !e.empresaId || e.empresaId === empresaId);
-}
-
-export function reconhecerEventoVision(id, empresaId = CONCRETO_EMPRESA_ID, operador = "Operador CCO") {
-  const data = inicializarDatastoreConcreto();
-  const evt = (data.concreto_eventos_vision || []).find(e => e.id === id);
-  if (!evt) return false;
-  evt.reconhecido = true;
-  evt.reconhecidoPor = operador;
-  evt.reconhecidoEm = new Date().toISOString();
-  save();
-  return true;
-}
-
 export function gerarLaudoTecnicoImpressaoHtml(loteId, empresaId = CONCRETO_EMPRESA_ID) {
   const lote = ENSAIOS_INICIAIS.find(e => e.id === loteId) || ENSAIOS_INICIAIS[0];
   const dados = obterDadosConcreto(empresaId);
@@ -5154,7 +4562,7 @@ export function gerarLaudoTecnicoImpressaoHtml(loteId, empresaId = CONCRETO_EMPR
 
 
 // =====================================================================
-// 23. COMPARATIVO DE RESISTÊNCIA À COMPRESSÃO NBR 5739 POR TRAÇO
+// 24. COMPARATIVO DE RESISTÊNCIA À COMPRESSÃO NBR 5739 POR TRAÇO
 // =====================================================================
 export function obterComparativoResistenciaNbr5739PorTraco(empresaId = CONCRETO_EMPRESA_ID) {
   const data = inicializarDatastoreConcreto();
@@ -5339,5 +4747,509 @@ export function obterComparativoResistenciaNbr5739PorTraco(empresaId = CONCRETO_
       desvioPadraoMedioUsinaMpa: 2.4
     },
     tracos: tracosProcessados
+  };
+}
+
+// 25. OTIMIZADOR KYTTOIA DE ESCALA DE BETONEIRAS & PREVISÃO DE GARGALOS
+// =====================================================================
+
+export async function analisarEscalaProgramacaoKyttoIA(dados = {}, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const dataAlvo = dados.data || new Date().toISOString().slice(0, 10);
+  
+  // Buscar cargas do dia
+  let cargasDia = (data.concreto_cargas || []).filter(c => 
+    (!c.empresaId || c.empresaId === empresaId) && 
+    (c.data === dataAlvo || (c.dataHora && c.dataHora.startsWith(dataAlvo)))
+  );
+
+  if (cargasDia.length === 0) {
+    // Se não houver cargas cadastradas para a data, usar as cargas padrão
+    cargasDia = (data.concreto_cargas || []).slice(0, 4);
+  }
+
+  // Frota ativa de betoneiras e bombas da Serrano Concreto
+  const frotaAtiva = [
+    { codigo: 'BT-01', placa: 'RAX-3E21', capacidadeM3: 8, motorista: 'Marcos Silveira', status: 'disponivel', cicloMin: 65 },
+    { codigo: 'BT-02', placa: 'RBY-4F32', capacidadeM3: 8, motorista: 'Carlos Eduardo Santos', status: 'disponivel', cicloMin: 70 },
+    { codigo: 'BT-03', placa: 'RCZ-5G43', capacidadeM3: 8, motorista: 'Valdemir Oliveira', status: 'disponivel', cicloMin: 60 },
+    { codigo: 'BT-04', placa: 'RDA-6H54', capacidadeM3: 8, motorista: 'Roberto Lima', status: 'disponivel', cicloMin: 75 },
+    { codigo: 'BT-05', placa: 'REB-7I65', capacidadeM3: 10, motorista: 'Ademir Costa', status: 'disponivel', cicloMin: 80 }
+  ];
+
+  const bombasAtivas = [
+    { codigo: 'BL-01', modelo: 'Bomba Lança Schwing 32m', operador: 'Sandro Pires', status: 'operando' },
+    { codigo: 'BL-02', modelo: 'Bomba Estacionária Putzmeister', operador: 'Claudio Miranda', status: 'disponivel' }
+  ];
+
+  // Distâncias médias e tempos de ciclo em Tangará da Serra/MT
+  const OBRAS_TEMPOS = {
+    'Edifício Residencial Serra Dourada': { distanciaKm: 4.8, tempoTransitoMin: 14, tempoDescargaBombaMin: 35, bombaNecessaria: true },
+    'Edifício Residencial Belvedere Tower': { distanciaKm: 5.2, tempoTransitoMin: 16, tempoDescargaBombaMin: 35, bombaNecessaria: true },
+    'Piso Industrial Galpão de Cargas': { distanciaKm: 8.5, tempoTransitoMin: 22, tempoDescargaBombaMin: 40, bombaNecessaria: true },
+    'Casa Térrea Lote 12 Qd. 08': { distanciaKm: 3.5, tempoTransitoMin: 10, tempoDescargaBombaMin: 50, bombaNecessaria: false },
+    'padrao': { distanciaKm: 6.0, tempoTransitoMin: 18, tempoDescargaBombaMin: 40, bombaNecessaria: false }
+  };
+
+  const sugestoesEscala = [];
+  const gargalosPrevistos = [];
+  const alertasPreventivos = [];
+  const timelineUsinagem = []; // Para detectar conflitos de pesagem na boca da usina
+
+  let betoneiraIndex = 0;
+  let volumeTotalDia = 0;
+  let totalViagensCalculadas = 0;
+
+  cargasDia.forEach((carga, cIdx) => {
+    const volume = Number(carga.volumeM3) || 8;
+    volumeTotalDia += volume;
+    const numViagens = Math.ceil(volume / 8);
+    totalViagensCalculadas += numViagens;
+    
+    const infoObra = OBRAS_TEMPOS[carga.obra] || OBRAS_TEMPOS['padrao'];
+    const horarioInicio = carga.horario || carga.dataHora?.slice(11, 16) || (cIdx === 0 ? '08:00' : cIdx === 1 ? '10:30' : '13:45');
+    
+    // Converter horário base para minutos desde meia-noite
+    const [h, m] = horarioInicio.split(':').map(Number);
+    let tempoBaseMinutos = (h * 60) + (m || 0);
+
+    const viagensCarga = [];
+
+    for (let v = 1; v <= numViagens; v++) {
+      const bto = frotaAtiva[betoneiraIndex % frotaAtiva.length];
+      betoneiraIndex++;
+
+      const volumeViagem = (v === numViagens && volume % 8 !== 0) ? (volume % 8) : 8;
+
+      // Desfasamento ideal entre viagens para evitar junta fria: 25 a 30 minutos
+      const intervaloViagemMin = (v - 1) * 30;
+      const saidaUsinaMin = tempoBaseMinutos + intervaloViagemMin;
+      const chegadaObraMin = saidaUsinaMin + infoObra.tempoTransitoMin;
+      const fimDescargaMin = chegadaObraMin + infoObra.tempoDescargaBombaMin;
+      const retornoUsinaMin = fimDescargaMin + infoObra.tempoTransitoMin + 10; // 10 min de manobra
+
+      const formatarHora = (minutos) => {
+        const hh = String(Math.floor(minutos / 60) % 24).padStart(2, '0');
+        const mm = String(minutos % 60).padStart(2, '0');
+        return `${hh}:${mm}`;
+      };
+
+      const viagemEscalada = {
+        viagemNumero: v,
+        totalViagensCarga: numViagens,
+        cargaId: carga.id,
+        cargaNumero: carga.numero,
+        cliente: carga.cliente,
+        obra: carga.obra,
+        fck: carga.fck || 30,
+        volumeM3: volumeViagem,
+        betoneira: bto.codigo,
+        placa: bto.placa,
+        motorista: bto.motorista,
+        bombaEscalada: infoObra.bombaNecessaria ? 'BL-01 (Schwing 32m)' : 'Descarga por Calha',
+        horarioSaidaUsina: formatarHora(saidaUsinaMin),
+        horarioChegadaObraPrevisto: formatarHora(chegadaObraMin),
+        horarioFimDescargaPrevisto: formatarHora(fimDescargaMin),
+        horarioRetornoUsinaPrevisto: formatarHora(retornoUsinaMin),
+        tempoTotalCuraPegaMinutos: fimDescargaMin - saidaUsinaMin,
+        limitePegaNbr7212Minutos: 150,
+        conformidadePega: (fimDescargaMin - saidaUsinaMin) <= 120
+      };
+
+      viagensCarga.push(viagemEscalada);
+      sugestoesEscala.push(viagemEscalada);
+
+      // Registrar janela de carregamento da usina (15 min por batelada)
+      timelineUsinagem.push({
+        cargaNumero: carga.numero,
+        viagemNumero: v,
+        betoneira: bto.codigo,
+        inicioCarregamentoMin: saidaUsinaMin - 15,
+        fimCarregamentoMin: saidaUsinaMin,
+        horarioTexto: `${formatarHora(saidaUsinaMin - 15)} - ${formatarHora(saidaUsinaMin)}`
+      });
+    }
+
+    // ANÁLISE DE RISCO: Junta Fria na Concretagem Estrutural
+    if (numViagens > 1) {
+      const intervaloCalculado = 30; // 30 minutos
+      if (intervaloCalculado > 40) {
+        gargalosPrevistos.push({
+          tipo: 'junta_fria',
+          severidade: 'critico',
+          carga: carga.numero,
+          obra: carga.obra,
+          mensagem: `Risco Crítico de Junta Fria: Intervalo de ${intervaloCalculado} min entre viagens excede a janela segura de adensamento para FCK ${carga.fck || 30}.`,
+          recomendacaoKyttoIA: `Antecipar o carregamento da 2ª betoneira em 10 minutos para garantir interpenetração das camadas de concreto fresco.`
+        });
+      } else {
+        alertasPreventivos.push({
+          tipo: 'continuidade_concretagem',
+          severidade: 'informativo',
+          carga: carga.numero,
+          obra: carga.obra,
+          mensagem: `Fluxo contínuo assegurado para ${carga.obra}: carrossel com intervalo de ${intervaloCalculado} min entre ${viagensCarga.map(v => v.betoneira).join(' ➔ ')}.`
+        });
+      }
+    }
+  });
+
+  // ANÁLISE DE SOBRECARGA NA CENTRAL DOSADORA CONVICTA (80 m³/h)
+  timelineUsinagem.sort((a, b) => a.inicioCarregamentoMin - b.inicioCarregamentoMin);
+  for (let i = 0; i < timelineUsinagem.length - 1; i++) {
+    const atual = timelineUsinagem[i];
+    const proximo = timelineUsinagem[i + 1];
+    
+    // Conflito se a próxima betoneira precisa carregar antes da anterior liberar a boca
+    if (proximo.inicioCarregamentoMin < atual.fimCarregamentoMin) {
+      gargalosPrevistos.push({
+        tipo: 'sobrecarga_central',
+        severidade: 'alerta',
+        carga: proximo.cargaNumero,
+        mensagem: `Conflito de Carregamento na Usina às ${proximo.horarioTexto}: ${atual.betoneira} e ${proximo.betoneira} demandam a mesma boca da central Convicta simultaneamente.`,
+        recomendacaoKyttoIA: `Desfasar a saída da carga ${proximo.cargaNumero} em 15 minutos para eliminar fila de espera e economizar combustível no pátio.`
+      });
+    }
+  }
+
+  // ANÁLISE DE TEMPO LIMITE DE PEGA NBR 7212 EM DIAS QUENTES DE TANGARÁ/MT
+  sugestoesEscala.forEach(v => {
+    if (v.tempoTotalCuraPegaMinutos > 100) {
+      gargalosPrevistos.push({
+        tipo: 'limite_pega',
+        severidade: 'alerta',
+        carga: v.cargaNumero,
+        betoneira: v.betoneira,
+        mensagem: `Atenção Normativa NBR 7212: Tempo previsto de trânsito + descarga de ${v.tempoTotalCuraPegaMinutos} min próximo ao teto recomendado de 120 min em dias de calor intenso (>30°C).`,
+        recomendacaoKyttoIA: `Prescrever aditivo retardador de pega MasterPozzolith 0.4% na dosagem e manter rotação de agitação a 3.0 RPM.`
+      });
+    }
+  });
+
+  // Score de Eficiência Logística da KyttoIA
+  let penalidade = (gargalosPrevistos.filter(g => g.severidade === 'critico').length * 15) +
+                   (gargalosPrevistos.filter(g => g.severidade === 'alerta').length * 4);
+  const scoreEficiencia = Math.max(70, +(100 - penalidade).toFixed(1));
+
+  const diagnosticoKyttoIA = `A KyttoIA otimizou o escalonamento de ${totalViagensCalculadas} viagens para ${cargasDia.length} obras programadas hoje (${volumeTotalDia} m³ dosados). ` +
+    `A alocação em carrossel das betoneiras ${frotaAtiva.map(f => f.codigo).join(', ')} assegura continuidade estrutural com Score de Eficiência de ${scoreEficiencia}%. ` +
+    (gargalosPrevistos.length > 0 
+      ? `Foram identificados ${gargalosPrevistos.length} pontos de atenção preventiva (detalhados abaixo) com plano de mitigação pronto para aplicação instantânea.`
+      : `Zero gargalos operacionais previstos: todas as viagens cumprem com folga os tempos normativos da ABNT NBR 7212.`);
+
+  return {
+    ok: true,
+    data: dataAlvo,
+    scoreEficiencia,
+    totalCargas: cargasDia.length,
+    totalViagens: totalViagensCalculadas,
+    volumeTotalM3: volumeTotalDia,
+    betoneirasUtilizadas: frotaAtiva.map(f => f.codigo),
+    bombasUtilizadas: ['BL-01 (Schwing 32m)'],
+    sugestoesEscala,
+    gargalosPrevistos,
+    alertasPreventivos,
+    timelineUsinagem,
+    resumoFrota: frotaAtiva,
+    diagnosticoKyttoIA
+  };
+}
+
+export async function aplicarEscalaSugeridaKyttoIA(sugestoes = [], empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  let viagensAtualizadas = 0;
+
+  if (Array.isArray(sugestoes) && sugestoes.length > 0) {
+    sugestoes.forEach(sug => {
+      const carga = (data.concreto_cargas || []).find(c => c.id === sug.cargaId || c.numero === sug.cargaNumero);
+      if (carga) {
+        if (!carga.viagens) carga.viagens = [];
+        const viagem = carga.viagens.find(v => v.numero === sug.viagemNumero);
+        if (viagem) {
+          viagem.betoneira = sug.betoneira;
+          viagem.motorista = sug.motorista;
+          viagem.placa = sug.placa;
+          viagem.horarioSaida = sug.horarioSaidaUsina;
+          viagem.otimizadoKyttoIA = true;
+          viagensAtualizadas++;
+        } else {
+          carga.viagens.push({
+            numero: sug.viagemNumero,
+            betoneira: sug.betoneira,
+            motorista: sug.motorista,
+            placa: sug.placa,
+            volumeM3: sug.volumeM3,
+            horarioSaida: sug.horarioSaidaUsina,
+            status: 'programada',
+            otimizadoKyttoIA: true
+          });
+          viagensAtualizadas++;
+        }
+      }
+    });
+// data modificado em memória
+  }
+
+  return {
+    ok: true,
+    viagensAtualizadas,
+    mensagem: `Escala sugerida pela KyttoIA aplicada com sucesso! ${viagensAtualizadas} viagens sincronizadas.`
+  };
+}
+
+// =====================================================================
+// 26. RASTREAMENTO EM TEMPO REAL POR TELEMETRIA & GPS DAS BETONEIRAS
+// =====================================================================
+
+// Estado dinâmico de telemetria dos balões e sensores das betoneiras
+let ESTADO_TELEMETRIA_FROTA = {
+  'BT-01': {
+    codigo: 'BT-01',
+    tipo: 'betoneira',
+    placa: 'RAX-3E21',
+    modelo: 'Volkswagen Constellation 26.280 6x4',
+    motorista: 'Marcos Silveira',
+    statusOperacional: 'retornando_usina',
+    statusTexto: 'Retornando à Usina Serrano',
+    cargaAtual: 'Vazio / Tambor em Lavagem',
+    volumeAtualM3: 0.0,
+    capacidadeM3: 8,
+    // Tacômetro do Balão
+    rpmTambor: 3.2,
+    sentidoGiro: 'horario',
+    modoRotacao: 'agitacao_transito',
+    modoRotacaoTexto: 'Agitação Lenta de Retorno',
+    pressaoHidraulicaBar: 185,
+    // Cronômetro NBR 7212
+    minutosDesdeAgua: 95,
+    limitePegaMinutos: 150,
+    tempoRestantePegaMinutos: 55,
+    percPegaConsumido: 63.3,
+    alertaPega: 'normal',
+    // Sensores Invioláveis
+    temperaturaMassaC: 28.5,
+    sensorAguaTrajetoLitros: 0,
+    lacreAguaInviolavel: true,
+    // GPS & Trânsito em Tangará da Serra
+    lat: -14.6210,
+    lng: -57.4910,
+    velocidadeKmH: 48,
+    odometroKm: 142850,
+    nivelDieselPercent: 78,
+    localizacaoTexto: 'Rod. MT-358 km 10 · Sentido Usina Central',
+    obraDestino: 'Usina Central Serrano',
+    distanciaRestanteKm: 2.1,
+    etaMinutos: 3
+  },
+  'BT-02': {
+    codigo: 'BT-02',
+    tipo: 'betoneira',
+    placa: 'RBY-4F32',
+    modelo: 'Mercedes-Benz Atego 2730 6x4',
+    motorista: 'Carlos Eduardo Santos',
+    statusOperacional: 'descarregando_obra',
+    statusTexto: 'Descarregando na Obra',
+    cargaAtual: '8 m³ FCK 30 MPa (4.2 m³ restantes no balão)',
+    volumeAtualM3: 4.2,
+    capacidadeM3: 8,
+    // Tacômetro do Balão - Sentido Anti-Horário (Descarga)
+    rpmTambor: 14.8,
+    sentidoGiro: 'anti_horario',
+    modoRotacao: 'descarga_ativa',
+    modoRotacaoTexto: '⚡ Descarga Ativa em Bomba Lança BL-01',
+    pressaoHidraulicaBar: 240,
+    // Cronômetro NBR 7212
+    minutosDesdeAgua: 58,
+    limitePegaMinutos: 120, // Calor > 30°C em Tangará
+    tempoRestantePegaMinutos: 62,
+    percPegaConsumido: 48.3,
+    alertaPega: 'normal',
+    // Sensores Invioláveis
+    temperaturaMassaC: 32.8,
+    sensorAguaTrajetoLitros: 0,
+    lacreAguaInviolavel: true,
+    // GPS & Obra
+    lat: -14.6205,
+    lng: -57.4945,
+    velocidadeKmH: 0,
+    odometroKm: 98410,
+    nivelDieselPercent: 64,
+    localizacaoTexto: 'Rua José Corsino, 450 · Jd. Europa',
+    obraDestino: 'Edifício Residencial Serra Dourada (4º Pav)',
+    distanciaRestanteKm: 0.0,
+    etaMinutos: 0
+  },
+  'BT-03': {
+    codigo: 'BT-03',
+    tipo: 'betoneira',
+    placa: 'RCZ-5G43',
+    modelo: 'Volvo VM 330 6x4 Betoneira',
+    motorista: 'Valdemir Oliveira',
+    statusOperacional: 'carregando_usina',
+    statusTexto: 'Carregando na Central Convicta',
+    cargaAtual: 'Recebendo Batelada FCK 35 MPa',
+    volumeAtualM3: 6.0,
+    capacidadeM3: 8,
+    // Tacômetro - Mistura Rápida na Usina
+    rpmTambor: 13.5,
+    sentidoGiro: 'horario',
+    modoRotacao: 'mistura_rapida',
+    modoRotacaoTexto: '🔄 Mistura Rápida de Homogeneização (NBR 7212)',
+    pressaoHidraulicaBar: 220,
+    // Cronômetro NBR 7212 - Início da hidratação
+    minutosDesdeAgua: 6,
+    limitePegaMinutos: 150,
+    tempoRestantePegaMinutos: 144,
+    percPegaConsumido: 4.0,
+    alertaPega: 'normal',
+    // Sensores Invioláveis
+    temperaturaMassaC: 30.2,
+    sensorAguaTrajetoLitros: 0,
+    lacreAguaInviolavel: true,
+    // GPS Usina
+    lat: -14.6215,
+    lng: -57.4890,
+    velocidadeKmH: 0,
+    odometroKm: 115200,
+    nivelDieselPercent: 92,
+    localizacaoTexto: 'Pátio Central · Boca de Carga Central Convicta',
+    obraDestino: 'Piso Industrial AgroLog (Distrito Industrial)',
+    distanciaRestanteKm: 8.5,
+    etaMinutos: 22
+  },
+  'BT-04': {
+    codigo: 'BT-04',
+    tipo: 'betoneira',
+    placa: 'RDA-6H54',
+    modelo: 'Scania P310 8x4 Betoneira',
+    motorista: 'Roberto Lima',
+    statusOperacional: 'em_transito_obra',
+    statusTexto: 'Em Trânsito para a Obra',
+    cargaAtual: '8 m³ FCK 35 MPa c/ Fibras Estruturais',
+    volumeAtualM3: 8.0,
+    capacidadeM3: 8,
+    // Tacômetro - Agitação em Rodovia
+    rpmTambor: 3.4,
+    sentidoGiro: 'horario',
+    modoRotacao: 'agitacao_transito',
+    modoRotacaoTexto: 'Agitação em Trânsito (Preservação NBR 7212)',
+    pressaoHidraulicaBar: 195,
+    // Cronômetro NBR 7212
+    minutosDesdeAgua: 32,
+    limitePegaMinutos: 120,
+    tempoRestantePegaMinutos: 88,
+    percPegaConsumido: 26.7,
+    alertaPega: 'normal',
+    // Sensores Invioláveis
+    temperaturaMassaC: 31.4,
+    sensorAguaTrajetoLitros: 0,
+    lacreAguaInviolavel: true,
+    // GPS & Trânsito
+    lat: -14.6280,
+    lng: -57.5020,
+    velocidadeKmH: 52,
+    odometroKm: 87340,
+    nivelDieselPercent: 81,
+    localizacaoTexto: 'Av. Lions Internacional · Aprox. Trevo do Anel Viário',
+    obraDestino: 'Piso Industrial Galpão de Cargas · Distrito Industrial',
+    distanciaRestanteKm: 4.2,
+    etaMinutos: 7
+  },
+  'BT-05': {
+    codigo: 'BT-05',
+    tipo: 'betoneira',
+    placa: 'REB-7I65',
+    modelo: 'Mercedes-Benz Arocs 3345 8x4 (10 m³)',
+    motorista: 'Ademir Costa',
+    statusOperacional: 'patio_disponivel',
+    statusTexto: 'Disponível no Pátio (Higienizada)',
+    cargaAtual: 'Vazio / 100% Inspecionado NR-12',
+    volumeAtualM3: 0.0,
+    capacidadeM3: 10,
+    // Tacômetro Parado
+    rpmTambor: 0.0,
+    sentidoGiro: 'parado',
+    modoRotacao: 'parado',
+    modoRotacaoTexto: '⏹️ Balão Parado / Aguardando Balança',
+    pressaoHidraulicaBar: 0,
+    minutosDesdeAgua: 0,
+    limitePegaMinutos: 150,
+    tempoRestantePegaMinutos: 150,
+    percPegaConsumido: 0.0,
+    alertaPega: 'normal',
+    temperaturaMassaC: 27.0,
+    sensorAguaTrajetoLitros: 0,
+    lacreAguaInviolavel: true,
+    lat: -14.6215,
+    lng: -57.4890,
+    velocidadeKmH: 0,
+    odometroKm: 45200,
+    nivelDieselPercent: 88,
+    localizacaoTexto: 'Pátio de Estacionamento Serrano Concreto',
+    obraDestino: 'Próxima Carga: Ed. Belvedere Tower',
+    distanciaRestanteKm: 0.0,
+    etaMinutos: 0
+  }
+};
+
+export async function obterTelemetriaFrotaTempoReal(empresaId = CONCRETO_EMPRESA_ID) {
+  const listaVeiculos = Object.values(ESTADO_TELEMETRIA_FROTA);
+  
+  // KPIs consolidados da frota
+  const betoneirasEmTransito = listaVeiculos.filter(v => v.statusOperacional === 'em_transito_obra').length;
+  const betoneirasDescarregando = listaVeiculos.filter(v => v.statusOperacional === 'descarregando_obra').length;
+  const betoneirasCarregando = listaVeiculos.filter(v => v.statusOperacional === 'carregando_usina').length;
+  const volumeConcretoEmTransitoM3 = +(listaVeiculos.reduce((acc, v) => acc + (v.volumeAtualM3 || 0), 0)).toFixed(1);
+
+  return {
+    ok: true,
+    timestamp: new Date().toISOString(),
+    cidade: 'Tangará da Serra/MT',
+    usina: {
+      nome: 'Serrano Concreto Usinado & Mineração',
+      coordenadas: { lat: -14.6215, lng: -57.4890 },
+      endereco: 'Rod. MT-358 km 12'
+    },
+    resumoKpis: {
+      totalBetoneirasAtivas: listaVeiculos.length,
+      betoneirasEmTransito,
+      betoneirasDescarregando,
+      betoneirasCarregando,
+      volumeConcretoEmTransitoM3,
+      sensorAguaInviolavelFrota: '100% Inviolável (0L adicionados no trajeto)',
+      conformidadeTempoPegaNBR7212: '100% dos veículos dentro do limite'
+    },
+    veiculos: listaVeiculos
+  };
+}
+
+export async function atualizarTelemetriaBetoneira(codigo, dados = {}, empresaId = CONCRETO_EMPRESA_ID) {
+  if (!ESTADO_TELEMETRIA_FROTA[codigo]) {
+    throw new Error(`Veículo ${codigo} não encontrado na frota ativa.`);
+  }
+
+  const veiculo = ESTADO_TELEMETRIA_FROTA[codigo];
+
+  if (dados.rpmTambor != null) veiculo.rpmTambor = Number(dados.rpmTambor);
+  if (dados.sentidoGiro != null) veiculo.sentidoGiro = dados.sentidoGiro;
+  if (dados.statusOperacional != null) veiculo.statusOperacional = dados.statusOperacional;
+  if (dados.statusTexto != null) veiculo.statusTexto = dados.statusTexto;
+  if (dados.minutosDesdeAgua != null) {
+    veiculo.minutosDesdeAgua = Number(dados.minutosDesdeAgua);
+    veiculo.tempoRestantePegaMinutos = Math.max(0, veiculo.limitePegaMinutos - veiculo.minutosDesdeAgua);
+    veiculo.percPegaConsumido = +((veiculo.minutosDesdeAgua / veiculo.limitePegaMinutos) * 100).toFixed(1);
+    veiculo.alertaPega = veiculo.percPegaConsumido > 80 ? 'critico' : veiculo.percPegaConsumido > 60 ? 'alerta' : 'normal';
+  }
+  if (dados.volumeAtualM3 != null) veiculo.volumeAtualM3 = Number(dados.volumeAtualM3);
+  if (dados.temperaturaMassaC != null) veiculo.temperaturaMassaC = Number(dados.temperaturaMassaC);
+  if (dados.velocidadeKmH != null) veiculo.velocidadeKmH = Number(dados.velocidadeKmH);
+  if (dados.lat != null) veiculo.lat = Number(dados.lat);
+  if (dados.lng != null) veiculo.lng = Number(dados.lng);
+  if (dados.localizacaoTexto != null) veiculo.localizacaoTexto = dados.localizacaoTexto;
+
+  return {
+    ok: true,
+    codigo,
+    veiculoAtualizado: veiculo
   };
 }

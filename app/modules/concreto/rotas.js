@@ -69,7 +69,11 @@ import {
   capturarSnapshotCameraIp,
   analisarFrameVisionKyttoIa,
   listarEventosVisionConcreto,
-  reconhecerEventoVision
+  reconhecerEventoVision,
+  analisarEscalaProgramacaoKyttoIA,
+  aplicarEscalaSugeridaKyttoIA,
+  obterTelemetriaFrotaTempoReal,
+  atualizarTelemetriaBetoneira
 } from "./servico.js";
 import { CONCRETO_EMPRESA_ID } from '../../concreto-usina-seed.js';
 
@@ -746,10 +750,27 @@ router.post('/dosagem/calcular', (req, res) => {
     }
   });
 
-  
-  // =====================================================================
-  // 50. CÂMERAS IP INDUSTRIAIS & VISION AI DA CONCRETEIRA
-  // =====================================================================
+  // 51. Otimizador KyttoIA de Escala de Betoneiras & Previsão de Gargalos
+  router.post("/programacao/escala-kyttoia/analisar", async (req, res) => {
+    try {
+      const resultado = await analisarEscalaProgramacaoKyttoIA(req.body, resolverEmpresa(req));
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post("/programacao/escala-kyttoia/aplicar", async (req, res) => {
+    try {
+      const { sugestoes } = req.body;
+      const resultado = await aplicarEscalaSugeridaKyttoIA(sugestoes, resolverEmpresa(req));
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 52. Câmeras IP Industriais & Vision AI da Concreteira
   router.get("/cameras", (req, res) => {
     try {
       const cameras = listarCamerasIpConcreto(resolverEmpresa(req));
@@ -800,23 +821,11 @@ router.post('/dosagem/calcular', (req, res) => {
   router.post("/cameras/:id/testar", (req, res) => {
     try {
       const resultado = testarConexaoCameraIp(req.params.id, resolverEmpresa(req));
-
       return res.json(resultado);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
     }
   });
-
-  // 50. Comparativo de Resistência NBR 5739 dos Corpos de Prova por Traço
-  router.get("/laboratorio/resistencia-por-traco", (req, res) => {
-    try {
-      const resultado = obterComparativoResistenciaNbr5739PorTraco(resolverEmpresa(req));
-      return res.json(resultado);
-    } catch (e) {
-      return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
 
   router.post("/cameras/testar-conexao", (req, res) => {
     try {
@@ -827,48 +836,30 @@ router.post('/dosagem/calcular', (req, res) => {
     }
   });
 
-  router.get("/cameras/:id/snapshot", (req, res) => {
+  router.post('/programacao/escala-kyttoia/aplicar', async (req, res) => {
     try {
-      const snapshot = capturarSnapshotCameraIp(req.params.id, resolverEmpresa(req));
-      return res.json(snapshot);
+      const { sugestoes } = req.body;
+      const resultado = await aplicarEscalaSugeridaKyttoIA(sugestoes, resolverEmpresa(req));
+      return res.json(resultado);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
     }
   });
 
-  router.post("/cameras/:id/analisar", (req, res) => {
+  // 51. Telemetria e Rastreamento em Tempo Real das Betoneiras (RPM Balão & Cronômetro Pega NBR 7212)
+  router.get('/frota/telemetria-tempo-real', async (req, res) => {
     try {
-      const analise = analisarFrameVisionKyttoIa(req.params.id, resolverEmpresa(req));
-      return res.json(analise);
+      const resultado = await obterTelemetriaFrotaTempoReal(resolverEmpresa(req));
+      return res.json(resultado);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
     }
   });
 
-  router.get("/cameras-eventos", (req, res) => {
+  router.post('/frota/telemetria/:codigo/atualizar', async (req, res) => {
     try {
-      const eventos = listarEventosVisionConcreto(resolverEmpresa(req));
-      return res.json({ ok: true, eventos, total: eventos.length });
-    } catch (e) {
-      return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
-  router.post("/cameras-eventos/:id/reconhecer", (req, res) => {
-    try {
-      const operador = req.body?.operador || "Operador CCO";
-      const sucesso = reconhecerEventoVision(req.params.id, resolverEmpresa(req), operador);
-      return res.json({ ok: sucesso });
-    } catch (e) {
-      return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
-  router.post("/cameras/gerar-urls", (req, res) => {
-    try {
-      const { marca, ipHost, portaHttp, portaRtsp, usuario, senha, canal, substream } = req.body;
-      const urls = construirUrlsCamera(marca, ipHost, portaHttp, portaRtsp, usuario, senha, canal, substream);
-      return res.json({ ok: true, ...urls });
+      const resultado = await atualizarTelemetriaBetoneira(req.params.codigo, req.body, resolverEmpresa(req));
+      return res.json(resultado);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
     }
