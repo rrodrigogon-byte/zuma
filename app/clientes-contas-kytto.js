@@ -67,7 +67,8 @@ function normalizarCliente(payload = {}) {
     ...camposNascimento(payload),
     nome: texto(payload.nome, 120),
     tipo: ['pf', 'pj'].includes(String(payload.tipo || '').toLowerCase()) ? String(payload.tipo).toLowerCase() : 'pf',
-    cpfCnpj: texto(payload.cpfCnpj ?? payload.cpf_cnpj, 20),
+    cpfCnpj: texto(payload.cpfCnpj ?? payload.cpf_cnpj ?? payload.cpf, 20),
+    cpf: texto(payload.cpf ?? payload.cpfCnpj ?? payload.cpf_cnpj, 20),
     email: texto(payload.email, 100).toLowerCase(),
     telefone: texto(payload.telefone, 30),
     endereco: texto(payload.endereco, 240),
@@ -98,6 +99,8 @@ function normalizarContaReceber(payload = {}) {
   return {
     clienteId: texto(payload.clienteId ?? payload.cliente_id, 80),
     mesaNumero: Math.max(0, Math.floor(numero(payload.mesaNumero ?? payload.mesa_numero))),
+    comandaNumero: texto(payload.comandaNumero ?? payload.comanda_numero, 40),
+    comandaId: texto(payload.comandaId ?? payload.comanda_id, 80),
     descricao: texto(payload.descricao, 200),
     valor: Math.max(0, numero(payload.valor)),
     dataVencimento: normalizarData(payload.dataVencimento ?? payload.data_vencimento),

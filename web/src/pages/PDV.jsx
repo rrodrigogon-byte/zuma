@@ -5,6 +5,7 @@ import { enfileirarVendaOffline, entregarFilaAoAgente, imprimirViaAgenteLocal, r
 import { useToast } from '../hooks/useToast'
 import { useAuth } from '../lib/auth'
 import { barAdminPath, barPath } from '../lib/bar-api'
+import BalancaRodoviariaCockpit from './admin/concreto/BalancaRodoviariaCockpit'
 
 // ─── PIX EMV BR Code builder ───────────────────────────────────────────────
 function pixField(id, value) {
@@ -300,6 +301,7 @@ const PAY_OPTIONS = [
 
 const TABS = [
   { key: 'mesas', icon: '🍽', label: 'Mesas' },
+  { key: 'balanca', icon: '⚖️', label: 'Balança 80t' },
   { key: 'offline', icon: '📡', label: 'Contingência' },
   { key: 'vendas', icon: '📊', label: 'Vendas' },
 ]
@@ -380,7 +382,10 @@ export default function PDV() {
   const [novaVirtual, setNovaVirtual] = useState({ nome: '', local: '' })
   const [novaMesaNome, setNovaMesaNome] = useState('')
   const [loading, setLoading] = useState(false)
-  const [activeTab, setActiveTab] = useState('mesas')
+  const [activeTab, setActiveTab] = useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    return p.get('tab') || 'mesas';
+  })
   const [carrinhoOffline, setCarrinhoOffline] = useState([])
   const [pagamentoOffline, setPagamentoOffline] = useState('dinheiro')
   const [processandoOffline, setProcessandoOffline] = useState(false)
@@ -1052,6 +1057,12 @@ export default function PDV() {
           style={{ background: '#294F6C', border: '1.5px solid #FF6B2C', borderRadius: 8, color: '#FFF4EC', fontSize: 11, padding: '5px 9px', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
           💰 Caixa
         </button>
+        {/* Botão Atalho Rápido Balança Rodoviária 80t */}
+        <button
+          onClick={() => setActiveTab('balanca')}
+          style={{ background: activeTab === 'balanca' ? '#FF6B2C' : '#294F6C', border: '1.5px solid #00D2FF', borderRadius: 8, color: '#FFF4EC', fontSize: 11, padding: '5px 9px', cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap' }}>
+          ⚖️ Balança 80t
+        </button>
       </div>
 
       {/* Conteúdo por aba */}
@@ -1260,6 +1271,13 @@ export default function PDV() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Aba Balança Rodoviária 80t Toledo & Automação Remota */}
+      {activeTab === 'balanca' && (
+        <div style={{ paddingBottom: 70 }}>
+          <BalancaRodoviariaCockpit onVoltar={() => setActiveTab('mesas')} />
         </div>
       )}
 

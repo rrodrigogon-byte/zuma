@@ -197,6 +197,7 @@ const PatrimonioAtivos = lazy(() => import('./pages/admin/PatrimonioAtivos'))
 const LojaModa        = lazy(() => import('./pages/admin/LojaModa'))
 const PalatarePizzariaSuite = lazyWithRetry(() => import("./pages/admin/PalatarePizzariaSuite"))
 const ConcretoUsinaERP = lazyWithRetry(() => import("./pages/admin/ConcretoUsinaERP"))
+const BalancaRodoviariaCockpit = lazyWithRetry(() => import("./pages/admin/concreto/BalancaRodoviariaCockpit"))
 const BarbeariaERP    = lazyWithRetry(() => import("./pages/admin/BarbeariaERP"))
 const SorteiosCampanhas = lazyWithRetry(() => import('./pages/admin/SorteiosCampanhas'))
 const SorteiosPublico   = lazyWithRetry(() => import('./pages/public/SorteiosPublico'))
@@ -296,6 +297,9 @@ export default function App() {
         {/* Operacional (staff) — com aliases /admin/* para URLs amigáveis */}
         <Route path="/pdv"            element={<Protected need="staff"><Layout><PDV /></Layout></Protected>} />
         <Route path="/admin/pdv"      element={<Protected need="staff"><Layout><PDV /></Layout></Protected>} />
+        <Route path="/balanca-rodoviaria" element={<Protected need="staff"><Layout><BalancaRodoviariaCockpit /></Layout></Protected>} />
+        <Route path="/admin/balanca-rodoviaria" element={<Protected need="staff"><Layout><BalancaRodoviariaCockpit /></Layout></Protected>} />
+        <Route path="/pdv/balanca" element={<Protected need="staff"><Layout><BalancaRodoviariaCockpit /></Layout></Protected>} />
         <Route path="/kds"            element={<Protected need="staff"><Layout noSidebar><KDS /></Layout></Protected>} />
         <Route path="/admin/kds"      element={<Protected need="staff"><Layout noSidebar><KDS /></Layout></Protected>} />
         <Route path="/portaria"       element={<Protected need="staff"><Layout noSidebar><Portaria /></Layout></Protected>} />
@@ -416,7 +420,8 @@ export default function App() {
           <Route path="/admin/palatare" element={<Layout><PalatarePizzariaSuite /></Layout>} />
           <Route path="/admin/concreto" element={<Layout><ConcretoUsinaERP /></Layout>} />
           <Route path="/admin/usina-concreto" element={<Layout><ConcretoUsinaERP /></Layout>} />
-<Route path="/admin/sorteios" element={<Layout><SorteiosCampanhas /></Layout>} />
+          <Route path="/admin/balanca" element={<Layout><BalancaRodoviariaCockpit /></Layout>} />
+          <Route path="/admin/sorteios" element={<Layout><SorteiosCampanhas /></Layout>} />
           <Route path="/admin/sorteio" element={<Layout><SorteiosCampanhas /></Layout>} />
           <Route path="/admin/barbearia-erp"   element={<Layout><BarbeariaERP /></Layout>} />
           <Route path="/admin/barbearia"        element={<Layout><Barbearia /></Layout>} />
