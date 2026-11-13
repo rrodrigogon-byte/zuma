@@ -491,11 +491,17 @@ export const NAV_RESTAURANTE_GROUPS = [
   {
     label: 'Hoje na Pizzaria', aberto: true,
     items: [
-      { to: '/admin', icon: '📊', label: 'Painel Palatare Suite', end: true },
+      { to: '/admin/pizzaria', icon: '📊', label: 'Painel Palatare Suite', end: true },
+      { to: '/admin/pizzaria?tab=hub_delivery', icon: '🛵', label: 'Hub Delivery Multicanal', badge: 'iFood' },
       { to: '/admin/pizzaria?tab=montador', icon: '🍕', label: 'Montador de Pizzas' },
       { to: '/admin/pizzaria?tab=rodizio', icon: '🍽️', label: 'Rodízio Inteligente' },
+      { to: '/admin/pizzaria?tab=engenharia', icon: '📈', label: 'Engenharia & CMV +100%' },
+      { to: '/admin/pizzaria?tab=clube', icon: '👑', label: 'Pizza Club (Assinaturas)' },
+      { to: '/admin/pizzaria?tab=autoatendimento', icon: '📱', label: 'Autoatendimento QR Mesa' },
+      { to: '/admin/pizzaria?tab=forno', icon: '🔥', label: 'Telemetria Forno 400°C' },
       { to: '/admin/pizzaria?tab=kds', icon: '👨‍🍳', label: 'KDS Forno a Lenha', badge: true },
       { to: '/admin/pizzaria?tab=delivery', icon: '🛵', label: 'Delivery Tangará' },
+      { to: '/admin/pizzaria?tab=implantacao', icon: '✅', label: 'Implantação & Homologação' },
       { to: '/admin/mesas', icon: '🪑', label: 'Mesas & Salão' },
       { to: '/pdv', icon: '🛒', label: 'PDV & Caixa', badge: true },
       { to: '/admin/inteligencia-vendas', icon: '🚀', label: 'Como Vender Mais com IA' },
@@ -571,6 +577,7 @@ export const NAV_HOLDING_GROUPS = [
       { to: "/admin/concreto?secao=empresa-holding", icon: "📊", label: "DRE Consolidada & Cash Pooling" },
       { to: "/admin/concreto?secao=empresa-holding", icon: "🤝", label: "Hub de Sinergias B2B (Concreto & Sabor)" },
       { to: "/admin/concreto?secao=empresa-holding", icon: "🌱", label: "Governança ESG & Economia Circular" },
+      { to: "/admin/concreto?secao=empresa-holding", icon: "💎", label: "Dividendos & Remuneração Acionária" },
       { to: "/admin/concreto?secao=empresa-holding", icon: "🤖", label: "Copilot KyttoIA de Expansão" },
       { to: "/admin/consolidacao-grupo", icon: "🏛️", label: "Consolidação Geral dos Negócios" },
     ],
@@ -579,7 +586,9 @@ export const NAV_HOLDING_GROUPS = [
     label: "Empresas Controladas", aberto: true,
     items: [
       { to: "/admin/pizzaria", icon: "🍕", label: "Palatare Pizzaria & Restaurante" },
+      { to: "/admin/pizzaria?tab=hub_delivery", icon: "🛵", label: "Hub Delivery Palatare (iFood · Keeta)" },
       { to: "/admin/concreto", icon: "🚚", label: "Serrano Concreto Usinado & Mineração" },
+      { to: "/admin/concreto?secao=app-campo-assinatura", icon: "📱", label: "Serrano App de Campo & Canhoto (PWA)" },
     ],
   },
   {
@@ -596,6 +605,8 @@ export const NAV_HOLDING_GROUPS = [
 
 const NAV_HOLDING_PUBLIC = [
   { to: '/admin/concreto?secao=empresa-holding', icon: '🏢', label: 'Portal Corporativo' },
+  { to: '/concreto/app', icon: '📱', label: 'App Serrano de Campo' },
+  { to: '/mesa/palatare-m4', icon: '🍽️', label: 'Cardápio Digital Palatare' },
   { to: '/admin/consolidacao-grupo', icon: '🏛️', label: 'Transparência & Consolidação' },
 ];
 
@@ -604,6 +615,7 @@ export const NAV_CONCRETO_GROUPS = [
     label: "Operação", aberto: true,
     items: [
       { to: "/admin/concreto?secao=operacao-despacho", icon: "🚚", label: "Despacho ao Vivo" },
+      { to: "/admin/concreto?secao=app-campo-assinatura", icon: "📱", label: "App PWA & Canhoto em Campo" },
       { to: "/admin/concreto?secao=operacao-programacao", icon: "📅", label: "Programação de Cargas" },
       { to: "/admin/concreto?secao=operacao-frota", icon: "🚛", label: "Frota & Telemetria" },
       { to: "/pdv", icon: "⚖️", label: "Balança Rodoviária & Balcão" },
@@ -650,11 +662,14 @@ export const NAV_CONCRETO_GROUPS = [
 ];
 
 const NAV_PALATARE_PUBLIC = [
+  { to: '/mesa/palatare-m4', icon: '🍽️', label: 'Cardápio Digital Mesa' },
   { to: 'https://www.instagram.com/palataretga/', icon: '↗', label: 'Instagram @palataretga', novaGuia: true },
   { to: 'https://wa.me/message/QYC36PECPJISF1', icon: '🛵', label: 'WhatsApp Pedidos', novaGuia: true },
 ]
 
 const NAV_CONCRETO_PUBLIC = [
+  { to: '/concreto/app', icon: '📱', label: 'App PWA Motorista & Cliente' },
+  { to: '/api/public/concreto/download-apk', icon: '📥', label: 'Baixar APK Android', novaGuia: true },
   { to: '/admin/concreto', icon: '🚚', label: 'Painel da Usina' },
 ]
 

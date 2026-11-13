@@ -11,6 +11,8 @@ export default function HoldingGrupoPalatare({ setSecaoAtiva }) {
   const navigate = useNavigate();
   const { trocarEmpresa, empresaAtiva } = useAuth() || {};
   const [modalDossieAberto, setModalDossieAberto] = useState(false);
+  const [modalDividendosAberto, setModalDividendosAberto] = useState(false);
+  const [payoutPercentual, setPayoutPercentual] = useState(55);
   const [filtroAbaInterna, setFiltroAbaInterna] = useState('todas'); // 'todas', 'empresas', 'dre', 'sinergias', 'esg', 'copilot', 'societario', 'fiscais', 'licencas'
   const [voucherConstrutora, setVoucherConstrutora] = useState('Construtora MT Horizon');
   const [voucherVolumeM3, setVoucherVolumeM3] = useState(48);
@@ -386,6 +388,7 @@ export default function HoldingGrupoPalatare({ setSecaoAtiva }) {
           { id: 'dre', label: 'DRE & Cash Pooling Consolidado', icone: '📊' },
           { id: 'sinergias', label: 'Hub de Sinergias & Benefícios Cruzados', icone: '🤝' },
           { id: 'esg', label: 'Governança ESG & Sustentabilidade', icone: '🌱' },
+          { id: 'dividendos', label: 'Dividendos & Remuneração Acionária', icone: '💎' },
           { id: 'copilot', label: 'Copilot KyttoIA de Expansão', icone: '🧠' },
           { id: 'societario', label: 'Estrutura Societária & Alexandre Palatare', icone: '👔' },
           { id: 'fiscais', label: 'Matriz Tributária & Barramento A2', icone: '📑' },
@@ -1506,6 +1509,99 @@ export default function HoldingGrupoPalatare({ setSecaoAtiva }) {
         </div>
       )}
 
+      {/* ─── ABA: DIVIDENDOS, PAYOUT & REMUNERAÇÃO ACIONÁRIA ISENTA (LEI 9.249/95) ─── */}
+      {(filtroAbaInterna === 'todas' || filtroAbaInterna === 'dividendos') && (
+        <div className="serrano-card">
+          <div className="serrano-card-h">
+            <div>
+              <h3>Política de Dividendos &amp; Remuneração Acionária Isenta (Holding S/A)</h3>
+              <small style={{ color: 'var(--text-muted)' }}>
+                Demonstrativo de apuração e distribuição isenta de lucros conforme o Art. 10 da Lei nº 9.249/95 para Alexandre Palatare
+              </small>
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginLeft: 'auto' }}>
+              <span className="holding-gold-badge">
+                IRRF 0% · Isenção Legal
+              </span>
+              <button
+                type="button"
+                className="btn-serrano pri"
+                style={{ background: '#C5A059', color: '#000', fontWeight: 900, border: 'none', padding: '6px 14px', borderRadius: 8, fontSize: 12 }}
+                onClick={() => setModalDividendosAberto(true)}
+              >
+                📜 Emitir Ata de Dividendos A4
+              </button>
+            </div>
+          </div>
+
+          <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {/* Destaque com 4 KPIs de Dividendos */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14 }}>
+              <div style={{ background: 'var(--surface-2)', border: '1px solid var(--joint)', borderRadius: 10, padding: 14 }}>
+                <small style={{ color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', fontWeight: 700 }}>Lucro Líquido Consolidado</small>
+                <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--text-main)', marginTop: 4 }}>R$ 326.000,00<span style={{ fontSize: 12, fontWeight: 600 }}>/mês</span></div>
+                <small style={{ color: '#10B981', fontSize: 11 }}>R$ 3.912.000,00/ano</small>
+              </div>
+              <div style={{ background: 'var(--surface-2)', border: '1px solid var(--joint)', borderRadius: 10, padding: 14 }}>
+                <small style={{ color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', fontWeight: 700 }}>Reserva Legal (5% Lei 6.404)</small>
+                <div style={{ fontSize: 22, fontWeight: 900, color: '#38BDF8', marginTop: 4 }}>R$ 16.300,00<span style={{ fontSize: 12, fontWeight: 600 }}>/mês</span></div>
+                <small style={{ color: 'var(--text-muted)', fontSize: 11 }}>R$ 195.600,00/ano (Fundo Estatutário)</small>
+              </div>
+              <div style={{ background: 'rgba(197, 160, 89, 0.08)', border: '1px solid rgba(197, 160, 89, 0.35)', borderRadius: 10, padding: 14 }}>
+                <small style={{ color: '#C5A059', fontSize: 11, textTransform: 'uppercase', fontWeight: 800 }}>Dividendos a Alexandre Palatare ({payoutPercentual}%)</small>
+                <div style={{ fontSize: 22, fontWeight: 900, color: '#C5A059', marginTop: 4 }}>
+                  R$ {((309700 * (payoutPercentual / 100))).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<span style={{ fontSize: 12, fontWeight: 600 }}>/mês</span>
+                </div>
+                <small style={{ color: '#10B981', fontSize: 11 }}>Líquido em Conta · 0% Imposto de Renda</small>
+              </div>
+              <div style={{ background: 'var(--surface-2)', border: '1px solid var(--joint)', borderRadius: 10, padding: 14 }}>
+                <small style={{ color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', fontWeight: 700 }}>Retenção CAPEX / Caixa ({100 - payoutPercentual}%)</small>
+                <div style={{ fontSize: 22, fontWeight: 900, color: '#10B981', marginTop: 4 }}>
+                  R$ {((309700 * ((100 - payoutPercentual) / 100))).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<span style={{ fontSize: 12, fontWeight: 600 }}>/mês</span>
+                </div>
+                <small style={{ color: 'var(--text-muted)', fontSize: 11 }}>Cash Pooling &amp; Expansão de Ativos</small>
+              </div>
+            </div>
+
+            {/* Simulador Interativo de Payout */}
+            <div style={{ background: 'var(--surface-2)', borderRadius: 10, padding: 18, border: '1px solid var(--joint)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <b style={{ color: 'var(--text-main)', fontSize: 13.5 }}>
+                  Simulador de Payout de Dividendos da Diretoria: <span style={{ color: '#C5A059', fontSize: 16 }}>{payoutPercentual}%</span>
+                </b>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  Base Distribuível: R$ 309.700,00/mês (Lucro após Reserva Legal)
+                </span>
+              </div>
+              <input
+                type="range"
+                min={20}
+                max={85}
+                step={5}
+                value={payoutPercentual}
+                onChange={(e) => setPayoutPercentual(Number(e.target.value))}
+                style={{ width: '100%', accentColor: '#C5A059', cursor: 'pointer', height: 6 }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+                <span>20% (Conservador / Alta Retenção)</span>
+                <span>55% (Recomendado KyttoIA)</span>
+                <span>85% (Máxima Distribuição Acionária)</span>
+              </div>
+            </div>
+
+            {/* Detalhamento Legal e Bancário */}
+            <div style={{ background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.25)', borderRadius: 10, padding: 16 }}>
+              <b style={{ color: '#10B981', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <span>⚖️</span> Amparo Legal &amp; Blindagem Tributária
+              </b>
+              <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55 }}>
+                Conforme prevê o <strong>Art. 10 da Lei nº 9.249/1995</strong> e as normas da Receita Federal do Brasil, os lucros e dividendos apurados pelas pessoas jurídicas e distribuídos aos seus sócios ou acionistas <strong>não sofrem incidência de Imposto de Renda Retido na Fonte (IRRF)</strong> nem na Declaração de Ajuste Anual de IRPF de Alexandre Palatare. O crédito é efetuado via transferência bancária direta da conta da Holding (Sicredi / Banco do Brasil) com emissão automática de comprovante e escrituração contábil no SPED ECD/ECF.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── MODAL: DOSSIÊ CORPORATIVO OFICIAL A4 ─── */}
       {modalDossieAberto && (
         <div className="serrano-modal-overlay" style={{
@@ -1669,6 +1765,165 @@ export default function HoldingGrupoPalatare({ setSecaoAtiva }) {
                 type="button"
                 className="btn-serrano"
                 onClick={() => setModalDossieAberto(false)}
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                className="btn-serrano pri"
+                style={{ background: '#C5A059', borderColor: '#C5A059', color: '#000', fontWeight: 800 }}
+                onClick={() => window.print()}
+              >
+                🖨️ Imprimir / Salvar PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL: ATA OFICIAL DE DELIBERAÇÃO DE DIVIDENDOS A4 ─── */}
+      {modalDividendosAberto && (
+        <div className="serrano-modal-overlay" style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: 16
+        }}>
+          <div className="serrano-modal-card" style={{
+            maxWidth: 780,
+            width: '100%',
+            maxHeight: '92vh',
+            overflowY: 'auto',
+            background: '#FFFFFF',
+            color: '#16181B',
+            borderRadius: 14,
+            padding: 32,
+            boxShadow: '0 25px 60px rgba(0,0,0,0.6)',
+            fontFamily: 'var(--font-body)'
+          }}>
+            {/* Cabeçalho Oficial */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              borderBottom: '3px solid #C5A059',
+              paddingBottom: 16,
+              marginBottom: 20
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <img src="/palatare-logo.png" alt="Palatare" style={{ width: 52, height: 52, borderRadius: '50%', border: '2px solid #C5A059' }} />
+                <div style={{ width: 2, height: 40, background: '#DDD' }} />
+                <div style={{ width: 48, height: 48, borderRadius: 10, background: '#FF7000', color: '#16181B', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 18 }}>
+                  SC
+                </div>
+                <div>
+                  <div style={{ fontSize: 17, fontWeight: 900, color: '#16181B', letterSpacing: 0.5 }}>
+                    HOLDING GRUPO PALATARE PARTICIPAÇÕES S/A
+                  </div>
+                  <div style={{ fontSize: 11, color: '#C5A059', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                    Ata de Reunião da Diretoria · Distribuição de Dividendos Isentos
+                  </div>
+                  <div style={{ fontSize: 10.5, color: '#6B6F75' }}>
+                    CNPJ 51.499.928/0001-01 · Tangará da Serra / Mato Grosso
+                  </div>
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span style={{
+                  background: '#E5F3EA',
+                  color: '#1A7A43',
+                  padding: '4px 10px',
+                  borderRadius: 6,
+                  fontWeight: 800,
+                  fontSize: 11
+                }}>
+                  ● Lei 9.249/95 Art. 10
+                </span>
+                <div style={{ fontSize: 10, color: '#888', marginTop: 4 }}>
+                  Exercício Contábil 2026
+                </div>
+              </div>
+            </div>
+
+            {/* Conteúdo Formal da Deliberação */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, fontSize: 12.5, lineHeight: 1.6, color: '#2C3036' }}>
+              <p style={{ margin: 0, textAlign: 'justify' }}>
+                Aos <strong>{new Date().toLocaleDateString('pt-BR')}</strong>, na sede social da <strong>Holding Grupo Palatare Participações S/A</strong>, em Tangará da Serra/MT, reuniu-se a Diretoria Executiva sob a presidência do Sócio-Controlador <strong>Alexandre Palatare</strong>, com a presença da Controladoria Geral do Centro de Serviços Compartilhados (CSC).
+              </p>
+
+              <div style={{ background: '#F8F9FA', border: '1px solid #E9ECEF', borderRadius: 8, padding: 14 }}>
+                <b style={{ color: '#C5A059', display: 'block', marginBottom: 6 }}>1. DELIBERAÇÃO SOBRE O RESULTADO CONSOLIDADO:</b>
+                <p style={{ margin: 0 }}>
+                  Examinados os balancetes mensais das empresas controladas (<strong>Palatare Pizzaria &amp; Restaurante</strong> e <strong>Serrano Concreto Usinado &amp; Mineração</strong>), apurou-se o <strong>Lucro Líquido Mensal Consolidado de R$ 326.000,00</strong>. Destinou-se 5% (R$ 16.300,00) à Reserva Legal Estatutária (Lei 6.404/76), restando o montante líquido de <strong>R$ 309.700,00</strong> para destinação.
+                </p>
+              </div>
+
+              <div style={{ background: '#F8F9FA', border: '1px solid #E9ECEF', borderRadius: 8, padding: 14 }}>
+                <b style={{ color: '#10B981', display: 'block', marginBottom: 6 }}>2. APROVAÇÃO DO PAYOUT E CRÉDITO ISENTO DE IRRF:</b>
+                <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                  <tbody>
+                    <tr style={{ borderBottom: '1px solid #DDD' }}>
+                      <td style={{ padding: '6px 0' }}>Beneficiário / Acionista Titular:</td>
+                      <td style={{ padding: '6px 0', textAlign: 'right' }}><b>Alexandre Palatare (100% das ações ordinárias)</b></td>
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid #DDD' }}>
+                      <td style={{ padding: '6px 0' }}>Percentual Aprovado de Payout:</td>
+                      <td style={{ padding: '6px 0', textAlign: 'right' }}><b>{payoutPercentual}% do saldo disponível</b></td>
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid #DDD' }}>
+                      <td style={{ padding: '6px 0' }}>Valor do Dividendo Líquido Creditado:</td>
+                      <td style={{ padding: '6px 0', textAlign: 'right', color: '#C5A059', fontSize: 14 }}>
+                        <b>R$ {((309700 * (payoutPercentual / 100))).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b>
+                      </td>
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid #DDD' }}>
+                      <td style={{ padding: '6px 0' }}>Retenção para Expansão (CAPEX &amp; Caixa):</td>
+                      <td style={{ padding: '6px 0', textAlign: 'right', color: '#10B981' }}>
+                        <b>R$ {((309700 * ((100 - payoutPercentual) / 100))).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '6px 0' }}>Tributação Incidentes na Fonte (IRRF):</td>
+                      <td style={{ padding: '6px 0', textAlign: 'right', color: '#15803D' }}><b>0,00% (Isenção Total · Art. 10 Lei 9.249/95)</b></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ borderTop: '1px solid #E9ECEF', paddingTop: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 10 }}>
+                <div style={{ textAlign: 'center', width: 260 }}>
+                  <div style={{ borderBottom: '1px solid #333', marginBottom: 4, height: 28 }}></div>
+                  <b>Alexandre Palatare</b><br />
+                  <small style={{ color: '#666' }}>Diretor-Presidente &amp; Acionista Controlador</small>
+                </div>
+                <div style={{ textAlign: 'center', width: 260 }}>
+                  <div style={{ borderBottom: '1px solid #333', marginBottom: 4, height: 28 }}></div>
+                  <b>Controladoria Geral do CSC</b><br />
+                  <small style={{ color: '#666' }}>SPED Contábil ECD/ECF · Grupo Palatare</small>
+                </div>
+              </div>
+            </div>
+
+            {/* Rodapé do Modal */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: 12,
+              marginTop: 24,
+              borderTop: '1px solid #DDD',
+              paddingTop: 16
+            }}>
+              <button
+                type="button"
+                className="btn-serrano"
+                onClick={() => setModalDividendosAberto(false)}
               >
                 Fechar
               </button>

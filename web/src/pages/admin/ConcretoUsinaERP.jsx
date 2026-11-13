@@ -34,11 +34,13 @@ export default function ConcretoUsinaERP() {
   // Estados de layout e tema
   const [themeDark, setThemeDark] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
-  const secaoAtiva = searchParams.get('secao') || searchParams.get('tab') || 'operacao-despacho';
+  const secaoParam = searchParams.get('secao') || searchParams.get('tab') || 'operacao-despacho';
+  const secaoAtiva = (secaoParam === 'app-campo' || secaoParam === 'app-campo-assinatura') ? 'app-campo-assinatura' : secaoParam;
   const setSecaoAtiva = (s) => {
-    setSearchParams({ secao: s });
+    const sNorm = (s === 'app-campo' || s === 'app-campo-assinatura') ? 'app-campo-assinatura' : s;
+    setSearchParams({ secao: sNorm });
     if (trocarEmpresa) {
-      if (s === 'empresa-holding') {
+      if (sNorm === 'empresa-holding') {
         trocarEmpresa(HOLDING_PALATARE_EMPRESA_ID);
       } else if (empresaAtiva?.id === HOLDING_PALATARE_EMPRESA_ID) {
         trocarEmpresa(SERRANO_CONCRETO_EMPRESA_ID);
@@ -1701,7 +1703,7 @@ export default function ConcretoUsinaERP() {
         )}
 
         {/* ─── ABA: APP PWA & CANHOTO DIGITAL EM CAMPO (APK / TOUCH) ─── */}
-        {secaoAtiva === 'app-campo-assinatura' && (
+        {(secaoAtiva === 'app-campo-assinatura' || secaoAtiva === 'app-campo') && (
           <ConcretoAppCampoPainel
             cargas={cargas}
             frota={frota}
