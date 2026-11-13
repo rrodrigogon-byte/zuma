@@ -1,1 +1,0 @@
-import{j as i}from"./index-CS-LNV37.js";import n from"./DinoInteligenciaVendasIa-DyobHs-r.js";function t(){return i.jsx("div",{style:{padding:"24px 28px",maxWidth:1400,margin:"0 auto"},children:i.jsx(n,{})})}export{t as default};

@@ -576,6 +576,11 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
             style={{ background: abaPrincipal === 'configuracoes' ? '#0284C7' : 'transparent', color: abaPrincipal === 'configuracoes' ? '#FFF' : '#94A3B8', border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>
             ⚙️ Hardware
           </button>
+          <a
+            href="/admin/concreto?secao=torre-pesagem"
+            style={{ background: '#FF7000', color: '#16181B', textDecoration: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '11px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            🗼 Torre de Controle
+          </a>
         </div>
       </div>
 

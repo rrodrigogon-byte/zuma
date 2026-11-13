@@ -14,6 +14,9 @@ import {
   calcularCompensacaoUmidade,
   calcularTracoBatelada
 } from '../../concreto-usina-seed.js';
+import { executarAnaliseEscalaKyttoIA, simularSlumpLossML } from './ia-programacao.js';
+
+export { simularSlumpLossML };
 
 // =====================================================================
 // 1. CONSTANTES E CATÁLOGO DE INSUMOS DE MATÉRIA-PRIMA
@@ -4617,200 +4620,14 @@ export async function analisarEscalaProgramacaoKyttoIA(dados = {}, empresaId = C
   
   // Buscar cargas do dia
   let cargasDia = (data.concreto_cargas || []).filter(c => 
-    (!c.empresaId || c.empresaId === empresaId) && 
     (c.data === dataAlvo || (c.dataHora && c.dataHora.startsWith(dataAlvo)))
   );
 
   if (cargasDia.length === 0) {
-    // Se não houver cargas cadastradas para a data, usar as cargas padrão
     cargasDia = (data.concreto_cargas || []).slice(0, 4);
   }
 
-  // Frota ativa de betoneiras e bombas da Serrano Concreto
-  const frotaAtiva = [
-    { codigo: 'BT-01', placa: 'RAX-3E21', capacidadeM3: 8, motorista: 'Marcos Silveira', status: 'disponivel', cicloMin: 65 },
-    { codigo: 'BT-02', placa: 'RBY-4F32', capacidadeM3: 8, motorista: 'Carlos Eduardo Santos', status: 'disponivel', cicloMin: 70 },
-    { codigo: 'BT-03', placa: 'RCZ-5G43', capacidadeM3: 8, motorista: 'Valdemir Oliveira', status: 'disponivel', cicloMin: 60 },
-    { codigo: 'BT-04', placa: 'RDA-6H54', capacidadeM3: 8, motorista: 'Roberto Lima', status: 'disponivel', cicloMin: 75 },
-    { codigo: 'BT-05', placa: 'REB-7I65', capacidadeM3: 10, motorista: 'Ademir Costa', status: 'disponivel', cicloMin: 80 }
-  ];
-
-  const bombasAtivas = [
-    { codigo: 'BL-01', modelo: 'Bomba Lança Schwing 32m', operador: 'Sandro Pires', status: 'operando' },
-    { codigo: 'BL-02', modelo: 'Bomba Estacionária Putzmeister', operador: 'Claudio Miranda', status: 'disponivel' }
-  ];
-
-  // Distâncias médias e tempos de ciclo em Tangará da Serra/MT
-  const OBRAS_TEMPOS = {
-    'Edifício Residencial Serra Dourada': { distanciaKm: 4.8, tempoTransitoMin: 14, tempoDescargaBombaMin: 35, bombaNecessaria: true },
-    'Edifício Residencial Belvedere Tower': { distanciaKm: 5.2, tempoTransitoMin: 16, tempoDescargaBombaMin: 35, bombaNecessaria: true },
-    'Piso Industrial Galpão de Cargas': { distanciaKm: 8.5, tempoTransitoMin: 22, tempoDescargaBombaMin: 40, bombaNecessaria: true },
-    'Casa Térrea Lote 12 Qd. 08': { distanciaKm: 3.5, tempoTransitoMin: 10, tempoDescargaBombaMin: 50, bombaNecessaria: false },
-    'padrao': { distanciaKm: 6.0, tempoTransitoMin: 18, tempoDescargaBombaMin: 40, bombaNecessaria: false }
-  };
-
-  const sugestoesEscala = [];
-  const gargalosPrevistos = [];
-  const alertasPreventivos = [];
-  const timelineUsinagem = []; // Para detectar conflitos de pesagem na boca da usina
-
-  let betoneiraIndex = 0;
-  let volumeTotalDia = 0;
-  let totalViagensCalculadas = 0;
-
-  cargasDia.forEach((carga, cIdx) => {
-    const volume = Number(carga.volumeM3) || 8;
-    volumeTotalDia += volume;
-    const numViagens = Math.ceil(volume / 8);
-    totalViagensCalculadas += numViagens;
-    
-    const infoObra = OBRAS_TEMPOS[carga.obra] || OBRAS_TEMPOS['padrao'];
-    const horarioInicio = carga.horario || carga.dataHora?.slice(11, 16) || (cIdx === 0 ? '08:00' : cIdx === 1 ? '10:30' : '13:45');
-    
-    // Converter horário base para minutos desde meia-noite
-    const [h, m] = horarioInicio.split(':').map(Number);
-    let tempoBaseMinutos = (h * 60) + (m || 0);
-
-    const viagensCarga = [];
-
-    for (let v = 1; v <= numViagens; v++) {
-      const bto = frotaAtiva[betoneiraIndex % frotaAtiva.length];
-      betoneiraIndex++;
-
-      const volumeViagem = (v === numViagens && volume % 8 !== 0) ? (volume % 8) : 8;
-
-      // Desfasamento ideal entre viagens para evitar junta fria: 25 a 30 minutos
-      const intervaloViagemMin = (v - 1) * 30;
-      const saidaUsinaMin = tempoBaseMinutos + intervaloViagemMin;
-      const chegadaObraMin = saidaUsinaMin + infoObra.tempoTransitoMin;
-      const fimDescargaMin = chegadaObraMin + infoObra.tempoDescargaBombaMin;
-      const retornoUsinaMin = fimDescargaMin + infoObra.tempoTransitoMin + 10; // 10 min de manobra
-
-      const formatarHora = (minutos) => {
-        const hh = String(Math.floor(minutos / 60) % 24).padStart(2, '0');
-        const mm = String(minutos % 60).padStart(2, '0');
-        return `${hh}:${mm}`;
-      };
-
-      const viagemEscalada = {
-        viagemNumero: v,
-        totalViagensCarga: numViagens,
-        cargaId: carga.id,
-        cargaNumero: carga.numero,
-        cliente: carga.cliente,
-        obra: carga.obra,
-        fck: carga.fck || 30,
-        volumeM3: volumeViagem,
-        betoneira: bto.codigo,
-        placa: bto.placa,
-        motorista: bto.motorista,
-        bombaEscalada: infoObra.bombaNecessaria ? 'BL-01 (Schwing 32m)' : 'Descarga por Calha',
-        horarioSaidaUsina: formatarHora(saidaUsinaMin),
-        horarioChegadaObraPrevisto: formatarHora(chegadaObraMin),
-        horarioFimDescargaPrevisto: formatarHora(fimDescargaMin),
-        horarioRetornoUsinaPrevisto: formatarHora(retornoUsinaMin),
-        tempoTotalCuraPegaMinutos: fimDescargaMin - saidaUsinaMin,
-        limitePegaNbr7212Minutos: 150,
-        conformidadePega: (fimDescargaMin - saidaUsinaMin) <= 120
-      };
-
-      viagensCarga.push(viagemEscalada);
-      sugestoesEscala.push(viagemEscalada);
-
-      // Registrar janela de carregamento da usina (15 min por batelada)
-      timelineUsinagem.push({
-        cargaNumero: carga.numero,
-        viagemNumero: v,
-        betoneira: bto.codigo,
-        inicioCarregamentoMin: saidaUsinaMin - 15,
-        fimCarregamentoMin: saidaUsinaMin,
-        horarioTexto: `${formatarHora(saidaUsinaMin - 15)} - ${formatarHora(saidaUsinaMin)}`
-      });
-    }
-
-    // ANÁLISE DE RISCO: Junta Fria na Concretagem Estrutural
-    if (numViagens > 1) {
-      const intervaloCalculado = 30; // 30 minutos
-      if (intervaloCalculado > 40) {
-        gargalosPrevistos.push({
-          tipo: 'junta_fria',
-          severidade: 'critico',
-          carga: carga.numero,
-          obra: carga.obra,
-          mensagem: `Risco Crítico de Junta Fria: Intervalo de ${intervaloCalculado} min entre viagens excede a janela segura de adensamento para FCK ${carga.fck || 30}.`,
-          recomendacaoKyttoIA: `Antecipar o carregamento da 2ª betoneira em 10 minutos para garantir interpenetração das camadas de concreto fresco.`
-        });
-      } else {
-        alertasPreventivos.push({
-          tipo: 'continuidade_concretagem',
-          severidade: 'informativo',
-          carga: carga.numero,
-          obra: carga.obra,
-          mensagem: `Fluxo contínuo assegurado para ${carga.obra}: carrossel com intervalo de ${intervaloCalculado} min entre ${viagensCarga.map(v => v.betoneira).join(' ➔ ')}.`
-        });
-      }
-    }
-  });
-
-  // ANÁLISE DE SOBRECARGA NA CENTRAL DOSADORA CONVICTA (80 m³/h)
-  timelineUsinagem.sort((a, b) => a.inicioCarregamentoMin - b.inicioCarregamentoMin);
-  for (let i = 0; i < timelineUsinagem.length - 1; i++) {
-    const atual = timelineUsinagem[i];
-    const proximo = timelineUsinagem[i + 1];
-    
-    // Conflito se a próxima betoneira precisa carregar antes da anterior liberar a boca
-    if (proximo.inicioCarregamentoMin < atual.fimCarregamentoMin) {
-      gargalosPrevistos.push({
-        tipo: 'sobrecarga_central',
-        severidade: 'alerta',
-        carga: proximo.cargaNumero,
-        mensagem: `Conflito de Carregamento na Usina às ${proximo.horarioTexto}: ${atual.betoneira} e ${proximo.betoneira} demandam a mesma boca da central Convicta simultaneamente.`,
-        recomendacaoKyttoIA: `Desfasar a saída da carga ${proximo.cargaNumero} em 15 minutos para eliminar fila de espera e economizar combustível no pátio.`
-      });
-    }
-  }
-
-  // ANÁLISE DE TEMPO LIMITE DE PEGA NBR 7212 EM DIAS QUENTES DE TANGARÁ/MT
-  sugestoesEscala.forEach(v => {
-    if (v.tempoTotalCuraPegaMinutos > 100) {
-      gargalosPrevistos.push({
-        tipo: 'limite_pega',
-        severidade: 'alerta',
-        carga: v.cargaNumero,
-        betoneira: v.betoneira,
-        mensagem: `Atenção Normativa NBR 7212: Tempo previsto de trânsito + descarga de ${v.tempoTotalCuraPegaMinutos} min próximo ao teto recomendado de 120 min em dias de calor intenso (>30°C).`,
-        recomendacaoKyttoIA: `Prescrever aditivo retardador de pega MasterPozzolith 0.4% na dosagem e manter rotação de agitação a 3.0 RPM.`
-      });
-    }
-  });
-
-  // Score de Eficiência Logística da KyttoIA
-  let penalidade = (gargalosPrevistos.filter(g => g.severidade === 'critico').length * 15) +
-                   (gargalosPrevistos.filter(g => g.severidade === 'alerta').length * 4);
-  const scoreEficiencia = Math.max(70, +(100 - penalidade).toFixed(1));
-
-  const diagnosticoKyttoIA = `A KyttoIA otimizou o escalonamento de ${totalViagensCalculadas} viagens para ${cargasDia.length} obras programadas hoje (${volumeTotalDia} m³ dosados). ` +
-    `A alocação em carrossel das betoneiras ${frotaAtiva.map(f => f.codigo).join(', ')} assegura continuidade estrutural com Score de Eficiência de ${scoreEficiencia}%. ` +
-    (gargalosPrevistos.length > 0 
-      ? `Foram identificados ${gargalosPrevistos.length} pontos de atenção preventiva (detalhados abaixo) com plano de mitigação pronto para aplicação instantânea.`
-      : `Zero gargalos operacionais previstos: todas as viagens cumprem com folga os tempos normativos da ABNT NBR 7212.`);
-
-  return {
-    ok: true,
-    data: dataAlvo,
-    scoreEficiencia,
-    totalCargas: cargasDia.length,
-    totalViagens: totalViagensCalculadas,
-    volumeTotalM3: volumeTotalDia,
-    betoneirasUtilizadas: frotaAtiva.map(f => f.codigo),
-    bombasUtilizadas: ['BL-01 (Schwing 32m)'],
-    sugestoesEscala,
-    gargalosPrevistos,
-    alertasPreventivos,
-    timelineUsinagem,
-    resumoFrota: frotaAtiva,
-    diagnosticoKyttoIA
-  };
+  return executarAnaliseEscalaKyttoIA(cargasDia, dataAlvo, dados);
 }
 
 export async function aplicarEscalaSugeridaKyttoIA(sugestoes = [], empresaId = CONCRETO_EMPRESA_ID) {
@@ -5304,6 +5121,14 @@ export function construirUrlsCamera(marca, ipHost, portaHttp = 80, portaRtsp = 5
   const hostRtsp = String(ipHost || "192.168.1.100") + ":" + String(portaRtsp || 554);
   const hostHttp = String(ipHost || "192.168.1.100") + (Number(portaHttp) !== 80 ? ":" + portaHttp : "");
 
+  if (m === "positivo") {
+    return {
+      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/live/ch" + (canal ? (canal - 1) : 0),
+      snapshotHttpUrl: "http://" + auth + hostHttp + "/snapshot.jpg",
+      marcaRotulo: "Positivo Casa Inteligente / Segurança"
+    };
+  }
+
   if (m === "intelbras" || m === "dahua") {
     return {
       streamRtspUrl: "rtsp://" + auth + hostRtsp + "/cam/realmonitor?channel=" + (canal || 1) + "&subtype=" + sub,
@@ -5318,6 +5143,30 @@ export function construirUrlsCamera(marca, ipHost, portaHttp = 80, portaRtsp = 5
       streamRtspUrl: "rtsp://" + auth + hostRtsp + "/Streaming/Channels/" + ch,
       snapshotHttpUrl: "http://" + auth + hostHttp + "/ISAPI/Streaming/channels/" + ch + "/picture",
       marcaRotulo: m === "hikvision" ? "Hikvision ColorVu" : "HiLook Series"
+    };
+  }
+
+  if (m === "giga" || m === "multilaser") {
+    return {
+      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/ch0" + (canal || 1) + (substream ? "_sub.264" : ".264"),
+      snapshotHttpUrl: "http://" + auth + hostHttp + "/cgi-bin/snapshot.cgi",
+      marcaRotulo: "Giga Security / Multilaser Pro"
+    };
+  }
+
+  if (m === "tecvoz" || m === "jfl") {
+    return {
+      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/user=" + (usuario || "admin") + "&password=" + (senha || "") + "&channel=" + (canal || 1) + "&stream=" + sub + ".sdp",
+      snapshotHttpUrl: "http://" + auth + hostHttp + "/snapshot.jpg",
+      marcaRotulo: "Tecvoz / JFL Alarmes"
+    };
+  }
+
+  if (m === "uniview" || m === "unv") {
+    return {
+      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/unicast/c" + (canal || 1) + "/s" + sub + "/live",
+      snapshotHttpUrl: "http://" + auth + hostHttp + "/images/snapshot.jpg",
+      marcaRotulo: "Uniview (UNV)"
     };
   }
 
