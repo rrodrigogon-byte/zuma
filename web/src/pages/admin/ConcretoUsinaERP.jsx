@@ -2224,7 +2224,7 @@ export default function ConcretoUsinaERP() {
             )}
 
             {/* SUB-ABA 5: RECICLADOR ECOLÓGICO & SOBRAS (CONAMA) */}
-            {subAbaSuprimentos === reciclador-ecologico && (
+            {subAbaSuprimentos === 'reciclador-ecologico' && (
               <ConcretoRecicladorSustentabilidade />
             )}
 

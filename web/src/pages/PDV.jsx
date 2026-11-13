@@ -361,6 +361,17 @@ function MesaCard({ m, onClick }) {
 export default function PDV() {
   const { toast } = useToast()
   const { user, lojaAtiva } = useAuth()
+  const ehConcreto = (() => {
+    const s = `${lojaAtiva?.segmento || ""} ${lojaAtiva?.tipo || ""} ${lojaAtiva?.nome || ""} ${user?.empresaAtivaNome || ""} ${user?.empresaNome || ""} ${user?.empresa || ""}`.toLowerCase();
+    return s.includes("concreto") || s.includes("serrano") || s.includes("usina") || s.includes("mineracao") || s.includes("mineração");
+  })();
+
+  const tabsExibidas = ehConcreto ? [
+    { key: "balanca", icon: "⚖️", label: "Balança 80t" },
+    { key: "concreto-vendas", icon: "🚚", label: "Balcão Concreto" },
+    { key: "vendas", icon: "📊", label: "Histórico & Caixa" },
+    { key: "offline", icon: "📡", label: "Contingência" },
+  ] : TABS;
   const [mesas, setMesas] = useState({ fisicas: [], virtuais: [] })
   const [cardapio, setCardapio] = useState([])
   const [combos, setCombos] = useState([])
@@ -384,8 +395,24 @@ export default function PDV() {
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState(() => {
     const p = new URLSearchParams(window.location.search);
-    return p.get('tab') || 'mesas';
+    const param = p.get("tab");
+    if (param) return param;
+    try {
+      const authData = JSON.parse(localStorage.getItem("auth_user") || localStorage.getItem("usuario") || "{}");
+      const emp = `${authData?.empresaAtivaNome || ""} ${authData?.empresaNome || ""} ${authData?.empresa || ""}`.toLowerCase();
+      if (emp.includes("concreto") || emp.includes("serrano") || emp.includes("mineracao") || emp.includes("mineração")) {
+        return "balanca";
+      }
+    } catch {}
+    return "mesas";
   })
+
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    if (!p.get("tab") && ehConcreto && activeTab === "mesas") {
+      setActiveTab("balanca");
+    }
+  }, [ehConcreto, activeTab])
   const [carrinhoOffline, setCarrinhoOffline] = useState([])
   const [pagamentoOffline, setPagamentoOffline] = useState('dinheiro')
   const [processandoOffline, setProcessandoOffline] = useState(false)
@@ -1041,7 +1068,9 @@ export default function PDV() {
         </div>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 18, fontWeight: 800, color: '#FFF4EC', lineHeight: 1 }}>PDV</div>
-          <div style={{ fontSize: 10, opacity: 0.55, marginTop: 2 }}>{abertas.length} mesa{abertas.length !== 1 ? 's' : ''} abertas</div>
+          <div style={{ fontSize: 10, opacity: 0.7, marginTop: 2, color: ehConcreto ? "#00D2FF" : "inherit" }}>
+            {ehConcreto ? "Balança 80t & Expedição de Cargas" : `${abertas.length} mesa${abertas.length !== 1 ? "s" : ""} abertas`}
+          </div>
         </div>
         <div style={S.bannerStat}>
           <span style={S.bannerLabel}>Vendas</span>
@@ -1281,9 +1310,82 @@ export default function PDV() {
         </div>
       )}
 
+      
+      {/* Aba Balcão de Concreto & Cargas da Usina */}
+      {activeTab === "concreto-vendas" && (
+        <div style={{ padding: "20px 16px 80px", maxWidth: 1100, margin: "0 auto", color: "#FFF4EC" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: "#FF9B72" }}>Balcão de Concreto Usinado & Agregados</h2>
+              <small style={{ color: "rgba(255,244,236,0.6)" }}>Tangará da Serra / MT · Usina Convicta & Mineração Serrano</small>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => setActiveTab("balanca")}
+                style={{ background: "#294F6C", border: "1.5px solid #00D2FF", borderRadius: 8, color: "#FFF4EC", padding: "8px 14px", fontWeight: 700, cursor: "pointer" }}
+              >
+                ⚖️ Pesar Veículo na Balança 80t
+              </button>
+              <button
+                onClick={() => window.location.href = "/admin/concreto"}
+                style={{ background: "#FF6B2C", border: "none", borderRadius: 8, color: "#FFF4EC", padding: "8px 14px", fontWeight: 700, cursor: "pointer" }}
+              >
+                🚚 Central da Usina
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
+            {/* Bloco 1: Concreto Usinado por Classe FCK */}
+            <div style={{ background: "#17354F", border: "1.5px solid #294F6C", borderRadius: 12, padding: 18 }}>
+              <h3 style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 700, color: "#FF6B2C" }}>🏗️ Concreto Usinado NBR 7212 (m³)</h3>
+              <div style={{ display: "grid", gap: 10 }}>
+                {[
+                  { fck: "FCK 20 MPa", desc: "Calçadas, contrapisos e fundações leves", preco: "R$ 380,00 / m³" },
+                  { fck: "FCK 25 MPa", desc: "Vigas, pilares e lajes residenciais (Padrão)", preco: "R$ 410,00 / m³" },
+                  { fck: "FCK 30 MPa", desc: "Estruturas de edifícios e lajes armadas", preco: "R$ 440,00 / m³" },
+                  { fck: "FCK 35 MPa", desc: "Pisos industriais e tráfego pesado", preco: "R$ 480,00 / m³" },
+                  { fck: "FCK 40 MPa", desc: "Alta resistência e obras especiais", preco: "R$ 520,00 / m³" },
+                ].map((item, idx) => (
+                  <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#142F49", padding: "10px 12px", borderRadius: 8, border: "1px solid #294F6C" }}>
+                    <div>
+                      <b style={{ display: "block", fontSize: 14 }}>{item.fck}</b>
+                      <small style={{ color: "rgba(255,244,236,0.6)" }}>{item.desc}</small>
+                    </div>
+                    <span style={{ fontWeight: 800, color: "#00D2FF", whiteSpace: "nowrap" }}>{item.preco}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Bloco 2: Agregados Minerais & Silos */}
+            <div style={{ background: "#17354F", border: "1.5px solid #294F6C", borderRadius: 12, padding: 18 }}>
+              <h3 style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 700, color: "#00D2FF" }}>⛏️ Agregados Minerais & Silos (Ton / m³)</h3>
+              <div style={{ display: "grid", gap: 10 }}>
+                {[
+                  { prod: "Areia Média Lavada", desc: "Pátio Draga 01 · Tangará", preco: "R$ 68,00 / ton" },
+                  { prod: "Areia Fina / Filtrada", desc: "Argamassa e acabamentos", preco: "R$ 75,00 / ton" },
+                  { prod: "Brita 0 (Pedrisco Limpo)", desc: "Concreto usinado e pré-moldados", preco: "R$ 88,00 / ton" },
+                  { prod: "Brita 1 (19mm Granítica)", desc: "Estruturas e pavimentação", preco: "R$ 82,00 / ton" },
+                  { prod: "Pó de Pedra / Rachão", desc: "Base de pavimentação e aterro", preco: "R$ 58,00 / ton" },
+                ].map((item, idx) => (
+                  <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#142F49", padding: "10px 12px", borderRadius: 8, border: "1px solid #294F6C" }}>
+                    <div>
+                      <b style={{ display: "block", fontSize: 14 }}>{item.prod}</b>
+                      <small style={{ color: "rgba(255,244,236,0.6)" }}>{item.desc}</small>
+                    </div>
+                    <span style={{ fontWeight: 800, color: "#FF9B72", whiteSpace: "nowrap" }}>{item.preco}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Bottom tabs */}
       <div style={S.bottomTabs}>
-        {TABS.map(t => (
+        {tabsExibidas.map(t => (
           <button key={t.key} style={S.tabBtn(activeTab === t.key)} onClick={() => setActiveTab(t.key)}>
             <span style={S.tabIcon}>{t.icon}</span>
             <span>{t.label}</span>
