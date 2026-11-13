@@ -223,18 +223,18 @@ export default function AnalyticsReports({ stats, silos }) {
             {silos.map(silo => (
               <div key={silo.id} className="p-3 rounded-xl border border-stone-200 bg-stone-50/70">
                 <div className="flex items-center justify-between font-bold text-stone-900 mb-1">
-                  <span>{silo.codigo} · {silo.tipo}</span>
-                  <span className="font-mono text-serrano-700">{silo.nivelPct}%</span>
+                  <span>{silo.codigo || silo.id} · {silo.tipo || silo.nome}</span>
+                  <span className="font-mono text-serrano-700">{silo.nivelPct != null ? silo.nivelPct : 0}%</span>
                 </div>
                 <div className="w-full bg-stone-200 h-2 rounded-full overflow-hidden">
                   <div 
-                    className={`h-full rounded-full ${silo.nivelPct < 40 ? 'bg-amber-500' : 'bg-serrano-500'}`}
-                    style={{ width: `${silo.nivelPct}%` }}
+                    className={`h-full rounded-full ${(silo.nivelPct || 0) < 40 ? 'bg-amber-500' : 'bg-serrano-500'}`}
+                    style={{ width: `${silo.nivelPct || 0}%` }}
                   />
                 </div>
                 <div className="mt-2 flex items-center justify-between text-[11px] text-stone-500">
-                  <span>Atual: <strong className="text-stone-800 font-mono">{silo.nivelAtualTon} t</strong> de {silo.capacidadeTotalTon} t</span>
-                  <span>Consumo hoje: <strong className="text-stone-800 font-mono">{silo.consumoHojeTon} t</strong></span>
+                  <span>Atual: <strong className="text-stone-800 font-mono">{silo.nivelAtualTon || silo.atualTons || 0} t</strong> de {silo.capacidadeTotalTon || silo.capacidadeTons || 100} t</span>
+                  <span>Consumo hoje: <strong className="text-stone-800 font-mono">{silo.consumoHojeTon || silo.consumoHojeTons || 0} t</strong></span>
                 </div>
               </div>
             ))}

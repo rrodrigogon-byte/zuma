@@ -164,17 +164,28 @@ export default function App() {
         }
 
         if (silosApi?.ok && Array.isArray(silosApi.silos)) {
-          setSilos(silosApi.silos.map((s, idx) => ({
-            id: s.id || `SILO-0${idx + 1}`,
-            nome: s.nome || s.tipo || `Silo 0${idx + 1}`,
-            tipo: s.tipo || 'Cimento CP-II-F-32',
-            capacidadeTons: s.capacidadeTons || 120,
-            atualTons: s.atualTons || 62.4,
-            nivelPct: s.nivelPct || Math.round((s.atualTons / (s.capacidadeTons || 120)) * 100),
-            consumoHojeTons: s.consumoHojeTons || 28.6,
-            pressaoFiltroKpa: s.pressaoFiltroKpa || 3.8,
-            temperatura: s.temperatura || 29.4
-          })));
+          setSilos(silosApi.silos.map((s, idx) => {
+            const cap = Number(s.capacidadeTotalTon || s.capacidadeTons || 120);
+            const atual = Number(s.estoqueAtualTon || s.nivelAtualTon || s.atualTons || 60);
+            const rawPct = s.nivelPercent != null ? s.nivelPercent : (s.nivelPct != null ? s.nivelPct : Math.round((atual / (cap || 1)) * 100));
+            const pct = isNaN(rawPct) ? 50 : Number(rawPct);
+            const consumo = Number(s.consumoHojeTon || s.consumoHojeTons || 20);
+            return {
+              id: s.id || `silo-0${idx + 1}`,
+              codigo: s.codigo || `CIM-0${idx + 1}`,
+              nome: s.nome || s.insumo || s.tipo || `Silo 0${idx + 1}`,
+              tipo: s.insumo || s.tipo || 'Cimento CP-II-F-32',
+              capacidadeTotalTon: cap,
+              capacidadeTons: cap,
+              nivelAtualTon: atual,
+              atualTons: atual,
+              nivelPct: pct,
+              consumoHojeTon: consumo,
+              consumoHojeTons: consumo,
+              pressaoFiltroKpa: s.pressaoFiltroKpa || 3.8,
+              temperatura: s.temperatura || 29.4
+            };
+          }));
         }
       } catch (err) {
         console.warn('[Torre CCO] Inicialização usando cache local:', err.message);

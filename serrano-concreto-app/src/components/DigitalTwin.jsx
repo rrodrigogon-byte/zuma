@@ -163,18 +163,18 @@ export default function DigitalTwin({
               </div>
               {/* 3 Silos Graphic */}
               <div className="flex items-end justify-between gap-2 mt-2 h-20 px-1">
-                {silos.map((s) => (
+                {silos.slice(0, 3).map((s) => (
                   <div key={s.id} className="flex-1 flex flex-col items-center">
                     <div className="w-full bg-stone-200 rounded-t-sm h-14 relative overflow-hidden flex items-end">
                       <div 
                         className={`absolute bottom-0 w-full transition-all duration-500 ${
-                          s.nivelPct < 40 ? 'bg-amber-500' : 'bg-stone-500'
+                          (s.nivelPct || 0) < 40 ? 'bg-amber-500' : 'bg-stone-500'
                         }`}
-                        style={{ height: `${s.nivelPct}%` }}
+                        style={{ height: `${s.nivelPct || 0}%` }}
                       />
                     </div>
                     <div className="text-[9px] font-bold text-stone-700 mt-1 font-mono">
-                      {s.nivelPct}%
+                      {s.nivelPct != null ? s.nivelPct : 0}%
                     </div>
                   </div>
                 ))}
