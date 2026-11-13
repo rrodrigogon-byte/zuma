@@ -2272,6 +2272,40 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
     }
     return varejoRouter(req, res, next);
   });
+  // [kytto-concreto] Rotas públicas de impressão e visualização de documentos oficiais
+  app.get("/api/concreto/laudos/:id/aceitacao-html", async (req, res) => {
+    try {
+      const { gerarHtmlLaudoAceitacaoEstatistica } = await import("./modules/concreto/servico.js");
+      const html = await gerarHtmlLaudoAceitacaoEstatistica(req.params.id);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.send(html);
+    } catch (e) {
+      return res.status(400).send(`<h3>Erro ao gerar Laudo NBR 12655: ${e.message}</h3>`);
+    }
+  });
+
+  app.get("/api/concreto/cargas/:id/romaneio-html", async (req, res) => {
+    try {
+      const { gerarHtmlRomaneioOficial } = await import("./modules/concreto/servico.js");
+      const html = await gerarHtmlRomaneioOficial(req.params.id);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.send(html);
+    } catch (e) {
+      return res.status(400).send(`<h3>Erro ao gerar Romaneio NBR 7212: ${e.message}</h3>`);
+    }
+  });
+
+  app.get("/api/concreto/balanca/tickets/:id/html", async (req, res) => {
+    try {
+      const { gerarHtmlTicketBalanca } = await import("./modules/concreto/servico.js");
+      const html = await gerarHtmlTicketBalanca(req.params.id);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.send(html);
+    } catch (e) {
+      return res.status(400).send(`<h3>Erro ao gerar Ticket Balança: ${e.message}</h3>`);
+    }
+  });
+
   // [kytto-concreto] Módulo de Concreto Usinado, Cargas, Central e Usina
   const concretoRouter = criarRotasConcreto();
   app.use('/api/admin/concreto', auth, requireStaff, concretoRouter);

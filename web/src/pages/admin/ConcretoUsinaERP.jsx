@@ -652,6 +652,8 @@ export default function ConcretoUsinaERP() {
             </button>
           ))}
         </nav>
+        {secaoAtiva === "operacao-despacho" && (
+          <>
 
         <div className="serrano-ph">
           <div>
@@ -713,8 +715,6 @@ export default function ConcretoUsinaERP() {
         </div>
 
         {/* ─── ESCALA DA FROTA / GANTT INDUSTRIAL (07h às 17h) ─── */}
-        {secaoAtiva === 'operacao-despacho' && (
-          <>
             <div className="serrano-card">
               <div className="serrano-card-h">
                 <h3>Escala da frota</h3>
