@@ -1648,6 +1648,10 @@ const tefRouter = createTefRouter({
   }
 });
 app.use('/api/admin/tef', auth, requireStaff, tefRouter);
+// [kytto-sorteios] Módulo de Sorteios & Campanhas Premiadas Kytto (Barbearia, Perfumaria e E-commerce)
+const sorteiosRouter = criarRotasSorteios({ legacyEmpresaId, audit });
+app.use(['/api/admin/sorteios', '/api/admin/sorteio'], auth, requireStaff, sorteiosRouter);
+app.use(['/api/publico/sorteios', '/api/public/sorteios'], criarRotasPublicasSorteios());
 
 // Commerce Core PostgreSQL fica opt-in até DATABASE_URL, migrations, tenant e
 // checklist de rollout estarem aprovados. O runtime legado continua intacto.
@@ -2259,10 +2263,7 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   // [kytto-varejo] Supermercado/varejo sobre o estoque único: preço por unidade, promoções, lotes, etiquetas e transferências.
   const varejoRouter = createVarejoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: FUSO_KYTTO });
   app.use('/api/admin/varejo', auth, requireStaff, varejoRouter);
-  // [kytto-sorteios] Módulo de Sorteios & Campanhas Premiadas Kytto (Barbearia, Perfumaria e E-commerce)
-  const sorteiosRouter = criarRotasSorteios({ legacyEmpresaId, audit });
-  app.use(['/api/admin/sorteios', '/api/admin/sorteio'], auth, requireStaff, sorteiosRouter);
-  app.use(['/api/publico/sorteios', '/api/public/sorteios'], criarRotasPublicasSorteios());
+
   // [kytto-erp] Hub Central ERP 360: Propostas Comerciais, Ordens de Serviço, Romaneios e Patrimônio
   const erpRouter = createErpAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial });
   app.use('/api/admin/erp', auth, requireStaff, erpRouter);

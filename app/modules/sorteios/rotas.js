@@ -5,10 +5,11 @@ export function criarRotasSorteios({ legacyEmpresaId, audit } = {}) {
   const router = Router();
 
   const getEmpresaId = (req) => {
-    if (typeof legacyEmpresaId === 'function') {
-      return legacyEmpresaId(req);
-    }
-    return req.headers['x-empresa-id'] || req.user?.empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    const raw = (typeof legacyEmpresaId === 'function' ? legacyEmpresaId(req) : null) ||
+                req.headers['x-empresa-id'] ||
+                req.user?.empresaId ||
+                'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    return sorteiosServico.normalizarEmpresaId(raw);
   };
 
   /* ══════════════════════════════════════════════════════════════════════════
