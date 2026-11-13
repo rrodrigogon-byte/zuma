@@ -265,6 +265,12 @@ function DespesasCategoriaPanel({ dre, onSelectCategoria }) {
 
 // Painel Detalhado de Contas a Receber
 function ContasReceberPanel({ lancamentos, hoje, modoK, onMarcarPago, onNovo }) {
+  function cobrarWhatsApp(item) {
+    const nomeCliente = (item.descricao || "").replace(/^Comanda de barbearia [^\—]+—\s*/, "").replace(/\s*\([^\)]*\)\s*$/, "").trim() || "Cliente";
+    const valorFormatado = money(item.valor);
+    const texto = encodeURIComponent("Olá, " + nomeCliente + "! Tudo bem?\nPassando para enviar o resumo da sua comanda pendente na Barbearia Dino no valor de " + valorFormatado + ".\n\nPara sua comodidade, nossa chave PIX oficial é:\n👉 65999056008\n\nQualquer dúvida estamos à disposição! 💈✂️");
+    window.open("https://api.whatsapp.com/send?text=" + texto, "_blank");
+  }
   const [busca, setBusca] = useState('')
   const [filtroStatus, setFiltroStatus] = useState('pendente')
 
@@ -412,14 +418,25 @@ function ContasReceberPanel({ lancamentos, hoje, modoK, onMarcarPago, onNovo }) 
                     </td>
                     <td style={{ padding: '8px 10px', textAlign: 'right' }}>
                       {item.status === 'pendente' ? (
-                        <button
-                          type="button"
-                          className="c360-btn primary"
-                          style={{ fontSize: 11, padding: '3px 8px' }}
-                          onClick={() => onMarcarPago(item)}
-                        >
-                          ✓ Receber
-                        </button>
+                        <div style={{ display: 'inline-flex', gap: 6, justifyContent: 'flex-end' }}>
+                          <button
+                            type="button"
+                            className="c360-btn primary"
+                            style={{ fontSize: 11, padding: '3px 8px' }}
+                            onClick={() => onMarcarPago(item)}
+                          >
+                            ✓ Receber
+                          </button>
+                          <button
+                            type="button"
+                            className="c360-btn ghost"
+                            style={{ fontSize: 11, padding: '3px 8px', color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.4)' }}
+                            onClick={() => cobrarWhatsApp(item)}
+                            title="Enviar lembrete amigável com chave PIX pelo WhatsApp"
+                          >
+                            💬 WhatsApp
+                          </button>
+                        </div>
                       ) : (
                         <span style={{ fontSize: 11, color: 'var(--muted)' }}>Liquidado</span>
                       )}
@@ -2027,7 +2044,7 @@ export default function FinanceiroEmpresa() {
     {/* Modal de Confirmação para Liquidar as 71 despesas vencidas do Avec */}
     <Dialog
       open={modalLiquidarVencidos}
-      title="Liquidar todas as 71 despesas vencidas?"
+      title={"Liquidar todas as " + vencidos.length + " despesas vencidas?"}
       labelId="fin-liquidar-vencidos"
       onClose={() => setModalLiquidarVencidos(false)}
       actions={<>
