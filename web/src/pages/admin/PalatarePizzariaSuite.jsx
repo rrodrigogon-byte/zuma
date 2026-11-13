@@ -4061,6 +4061,15 @@ export default function PalatarePizzariaSuite() {
         </div>
       )}
 
+
+      {/* Modal de Integrações Avançadas: Spooler Térmico, NFC-e & Despacho Motoboy */}
+      {pedidoIntegracaoModal && (
+        <PizzariaIntegracoesAvancadas
+          pedidoSelecionado={pedidoIntegracaoModal}
+          onClose={() => setPedidoIntegracaoModal(null)}
+          onPedidoAtualizado={carregarDados}
+        />
+      )}
     </div>
   );
 }
