@@ -126,6 +126,7 @@ import {
   commerceLojaIdFromLegacy,
   legacyEmpresaIdFromCommerce,
   legacyLojaIdFromCommerce,
+  lojasEquivalentes,
 } from './core/legacy-commerce-scope.js';
 import { listAdminUserDirectory } from './core/admin-user-directory.js';
 import { createPlatformAdministratorRouter } from './core/commerce-platform-grant-routes.js';
@@ -6329,6 +6330,52 @@ app.get('/api/admin/barbearia/agenda', (req, res) => {
     res.json({ ok: true, agendamentos, total: agendamentos.length });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
+app.get('/api/admin/barbearia/agenda/auditoria-cancelamentos', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const lojaId = legacyLojaId(req);
+    const cancelados = listarAgendamentosBarbearia(empresaId, { status: 'cancelado', lojaId });
+    const de = req.query?.de ? String(req.query.de).slice(0, 10) : '';
+    const ate = req.query?.ate ? String(req.query.ate).slice(0, 10) : '';
+    const filtrados = cancelados.filter((item) => {
+      const dia = String(item.dataAgenda || item.dataHora || '').slice(0, 10);
+      if (de && dia < de) return false;
+      if (ate && dia > ate) return false;
+      return true;
+    });
+    const porOrigem = {};
+    const porUsuario = {};
+    const porMotivo = {};
+    for (const item of filtrados) {
+      const orig = item.origem || 'nao_informada';
+      const user = item.canceladoPor || 'equipe';
+      const motivo = item.motivoCancelamento || 'sem_motivo';
+      porOrigem[orig] = (porOrigem[orig] || 0) + 1;
+      porUsuario[user] = (porUsuario[user] || 0) + 1;
+      porMotivo[motivo] = (porMotivo[motivo] || 0) + 1;
+    }
+    res.json({
+      ok: true,
+      total: filtrados.length,
+      resumo: { porOrigem, porUsuario, porMotivo },
+      cancelamentos: filtrados.map((item) => ({
+        id: item.id,
+        clienteNome: item.clienteNome,
+        clienteTelefone: item.clienteTelefone,
+        profissionalNome: item.profissionalNome,
+        servicoNome: item.servicoNome,
+        dataAgenda: item.dataAgenda,
+        horaLocal: item.horaLocal,
+        status: item.status,
+        origem: item.origem,
+        canceladoPor: item.canceladoPor,
+        motivoCancelamento: item.motivoCancelamento,
+        lojaId: item.lojaId,
+        atualizadoEm: item.atualizadoEm || item.dataCriacao,
+      })),
+    });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
 app.get('/api/admin/barbearia/agenda/:id', (req, res) => {
   const agendamento = listarAgendamentosBarbearia(legacyEmpresaId(req), { lojaId: legacyLojaId(req) }).find(item => item.id === String(req.params.id));
   if (!agendamento) return res.status(404).json({ error: 'Agendamento não encontrado na empresa ativa.' });
@@ -6376,6 +6423,7 @@ app.patch('/api/admin/barbearia/agenda/:id', async (req, res) => {
     const anterior = listarAgendamentosBarbearia(empresaId, { lojaId }).find((item) => item.id === String(req.params.id));
     const agendamento = barbeariaErpKytto.atualizarAgendamento(empresaId, req.params.id, { ...(req.body || {}), lojaId, usuario: req.user?.email || req.user?.nome || '', origem: 'admin' }, { permitirEncaixe: req.body?.encaixe === true, horaOperacionalEstrita: true });
     if (!agendamento) return res.status(404).json({ error: 'Agendamento não encontrado na empresa ativa.' });
+    audit(req, 'BARBEARIA AGENDAMENTO ATUALIZADO', `${agendamento.id} cliente="${agendamento.clienteNome || ''}" ${remarcado ? 'REMARCADO' : ''}`.trim());
     const remarcado = anterior && ['dataHora', 'dataAgenda', 'profissionalId', 'servicoId'].some((campo) => String(anterior[campo] || '') !== String(agendamento[campo] || ''));
     const notificacao = remarcado
       ? await queueAppointmentNotifications({ empresaId, lojaId, legacyEmpresaId: empresaId }, agendamento, 'remarcado').catch(() => ({ queued: 0, skipped: true, reason: 'queue_unavailable' }))
@@ -6396,7 +6444,7 @@ app.patch('/api/admin/barbearia/agenda/:id/status', async (req, res) => {
     const lojaId = legacyLojaId(req);
     const atual = listarAgendamentosBarbearia(empresaId, { lojaId })
       .find((item) => item.id === String(req.params.id));
-    if (!atual || (lojaId && atual.lojaId !== lojaId)) {
+    if (!atual || !lojasEquivalentes(empresaId, atual.lojaId, lojaId)) {
       return res.status(404).json({ error: 'Agendamento não encontrado na empresa/unidade ativa.' });
     }
     const status = String(req.body?.status || '');
@@ -6571,6 +6619,7 @@ app.patch('/api/admin/barbearia/agenda/:id/status', async (req, res) => {
         avaliacao = { queued: 0, skipped: true, reason: 'queue_unavailable' };
       }
     }
+    audit(req, status === 'cancelado' ? 'BARBEARIA AGENDAMENTO CANCELADO' : 'BARBEARIA AGENDAMENTO STATUS', `${agendamento.id} status=${status} cliente="${agendamento.clienteNome || ''}" por="${dadosStatus.canceladoPor || req.user?.nome || 'atendente'}" motivo="${dadosStatus.motivoCancelamento || ''}"`.trim());
     res.json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(empresaId, agendamento), financeiro, notificacao, listaEspera, indicacao, avaliacao, cashback, vale, assinatura: assinatura ? { id: assinatura.assinatura.id, sessoesRestantes: assinatura.sessoesRestantes, usosNoCiclo: assinatura.usosNoCiclo } : null });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });

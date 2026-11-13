@@ -21,7 +21,7 @@ import * as clientesKytto from '../clientes-contas-kytto.js';
 import { phoneMatchKey } from './whatsapp-phone.js';
 import { cancelPendingAppointmentNotifications, queueAppointmentNotifications, queueWaitlistNotifications } from './barbershop-appointment-notifications.js';
 import * as captacao from '../dino-captacao-kytto.js';
-import { DINO_COMMERCE_EMPRESA_ID, DINO_COMMERCE_LOJA_ID } from './legacy-commerce-scope.js';
+import { DINO_COMMERCE_EMPRESA_ID, DINO_COMMERCE_LOJA_ID, lojasEquivalentes } from './legacy-commerce-scope.js';
 import {
   createScheduledAppointment as pgCreate,
   listSchedulingAvailability as pgAvailability,
@@ -784,7 +784,7 @@ function agendamentosDoTelefone(empresa, phone, { includePast = false, lojaId, t
   const diaHoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' }).format(new Date(agora));
   const limitePassado = includePast ? 0 : agora - (Number(toleranceHours) || 0) * 3600000;
   return barbearia.listarAgendamentos(empresa, {})
-    .filter((item) => !unidade || !item.lojaId || String(item.lojaId) === unidade)
+    .filter((item) => !unidade || lojasEquivalentes(empresa, item.lojaId, unidade))
     .filter((item) => phoneMatchKey(item.clienteTelefone) === chave)
     .filter((item) => includeCancelled || !['cancelado', 'nao_compareceu'].includes(item.status))
     .filter((item) => includePast || item.dataAgenda === diaHoje || instanteAgendamento(item) >= limitePassado)

@@ -49,3 +49,14 @@ export function commerceLojaIdFromLegacy(lojaId, empresaId = '') {
   }
   return store;
 }
+
+// Confere se duas lojas são equivalentes ou compatíveis dentro de uma empresa.
+// Agendamentos antigos ou migrados sem lojaId assumem/herdam a loja ativa.
+// Na Dino Barbearia, o id legado 'dino-web-estoque' equivale à Matriz canônica.
+export function lojasEquivalentes(empresaId, lojaA, lojaB) {
+  const a = clean(lojaA);
+  const b = clean(lojaB);
+  if (!a || !b) return true;
+  if (a === b) return true;
+  return legacyLojaIdFromCommerce(a, empresaId) === legacyLojaIdFromCommerce(b, empresaId);
+}

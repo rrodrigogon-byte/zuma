@@ -4,7 +4,7 @@ import { subscriptionStart } from './core/subscription-calendar.js';
 import crypto from 'node:crypto';
 import { identificarCliente, indiceIdentidadeClientes } from './barbearia-identidade.js';
 import { canonizarRegistroAvec, historicoAvecVigente } from './dino-historico-avec.js';
-import { legacyLojaIdFromCommerce } from './core/legacy-commerce-scope.js';
+import { legacyLojaIdFromCommerce, lojasEquivalentes } from './core/legacy-commerce-scope.js';
 import { db, save, nextId } from './db.js';
 import * as financeiroKytto from './financeiro-central-kytto.js';
 import * as clientesKytto from './clientes-contas-kytto.js';
@@ -1294,7 +1294,7 @@ export function listarAgendamentos(empresaId, filtros = {}) {
     .filter((item) => !filtros.ate || String(item.dataAgenda || chaveDia(item.dataHora)).slice(0, 10) <= String(filtros.ate).slice(0, 10))
     .filter((item) => !filtros.status || item.status === String(filtros.status))
     .filter((item) => !filtros.profissionalId || String(filtros.profissionalId).split(',').map(id => id.trim()).includes(item.profissionalId))
-    .filter((item) => !filtros.lojaId || !item.lojaId || item.lojaId === String(filtros.lojaId))
+    .filter((item) => !filtros.lojaId || lojasEquivalentes(empresaId, item.lojaId, filtros.lojaId))
     .filter((item) => {
       if (!telFiltro) return true;
       const tItem = String(item.clienteTelefone || '').replace(/\D/g, '');
@@ -4459,10 +4459,15 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}, opcoe
   const estado = estadoEmpresa(empresaId);
   const atual = estado.agendamentos[String(agendamentoId)];
   if (!atual || atual.empresaId !== String(empresaId)) return null;
-  if (dados.lojaId !== undefined && texto(dados.lojaId, 120) !== texto(atual.lojaId, 120)) return null;
+  const lojaInformada = dados.lojaId !== undefined ? texto(dados.lojaId, 120) : '';
+  const lojaAtual = texto(atual.lojaId, 120);
+  if (!lojasEquivalentes(empresaId, lojaAtual, lojaInformada)) return null;
   const statusAntes = atual.status;
   const antes = { dataHora: atual.dataHora, dataAgenda: atual.dataAgenda, horaLocal: atual.horaLocal, profissionalId: atual.profissionalId, servicoId: atual.servicoId };
   const agendamento = agendamentoNormalizado(dados, atual, opcoes);
+  if (!agendamento.lojaId && lojaInformada) {
+    agendamento.lojaId = legacyLojaIdFromCommerce(lojaInformada, empresaId);
+  }
   const STATUS_VALIDOS = ['agendado', 'confirmado', 'concluido', 'cancelado', 'nao_compareceu'];
   agendamento.status = (dados.status && STATUS_VALIDOS.includes(dados.status)) ? dados.status : atual.status;
   if (agendamento.status === 'cancelado') {
@@ -4531,7 +4536,12 @@ export function alterarStatusAgendamento(empresaId, agendamentoId, status, dados
   const estado = estadoEmpresa(empresaId);
   const atual = estado.agendamentos[String(agendamentoId)];
   if (!atual || atual.empresaId !== String(empresaId)) return null;
-  if (dados.lojaId !== undefined && texto(dados.lojaId, 120) !== texto(atual.lojaId, 120)) return null;
+  const lojaInformada = dados.lojaId !== undefined ? texto(dados.lojaId, 120) : '';
+  const lojaAtual = texto(atual.lojaId, 120);
+  if (!lojasEquivalentes(empresaId, lojaAtual, lojaInformada)) return null;
+  if (!atual.lojaId && lojaInformada) {
+    atual.lojaId = legacyLojaIdFromCommerce(lojaInformada, empresaId);
+  }
   const novoStatus = String(status || '');
   if (!STATUS.has(novoStatus)) throw new Error('Status de atendimento inválido.');
   if (novoStatus !== atual.status && !TRANSICOES[atual.status]?.has(novoStatus)) {
@@ -4594,7 +4604,7 @@ function estadoConfirmacaoInicial() {
 export function inicializarConfirmacaoAutomatica(empresaId, agendamentoId, { lojaId = '' } = {}) {
   if (obterConfiguracao(empresaId).confirmacaoAutomaticaAtiva !== true) return null;
   const atual = estadoEmpresa(empresaId).agendamentos[String(agendamentoId)];
-  if (!atual || atual.empresaId !== String(empresaId) || (lojaId && atual.lojaId && String(atual.lojaId) !== String(lojaId))) return null;
+  if (!atual || atual.empresaId !== String(empresaId) || (lojaId && !lojasEquivalentes(empresaId, atual.lojaId, lojaId))) return null;
   if (atual.status !== 'agendado') return null;
   if (atual.confirmacaoAutomatica?.ativa === true) return { ...atual };
   atual.confirmacaoAutomatica = estadoConfirmacaoInicial();
@@ -4606,7 +4616,7 @@ export function inicializarConfirmacaoAutomatica(empresaId, agendamentoId, { loj
 export function registrarConfirmacaoAutomaticaEnviada(empresaId, agendamentoId, etapa, { lojaId = '', enviadoEm = new Date() } = {}) {
   if (obterConfiguracao(empresaId).confirmacaoAutomaticaAtiva !== true) return null;
   const atual = estadoEmpresa(empresaId).agendamentos[String(agendamentoId)];
-  if (!atual || atual.empresaId !== String(empresaId) || (lojaId && atual.lojaId && String(atual.lojaId) !== String(lojaId)) || atual.status !== 'agendado') return null;
+  if (!atual || atual.empresaId !== String(empresaId) || (lojaId && !lojasEquivalentes(empresaId, atual.lojaId, lojaId)) || atual.status !== 'agendado') return null;
   if (atual.confirmacaoAutomatica?.ativa !== true) atual.confirmacaoAutomatica = estadoConfirmacaoInicial();
   const instante = new Date(enviadoEm);
   if (!Number.isFinite(instante.valueOf())) return null;
