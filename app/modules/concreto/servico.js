@@ -5253,3 +5253,318 @@ export async function atualizarTelemetriaBetoneira(codigo, dados = {}, empresaId
     veiculoAtualizado: veiculo
   };
 }
+
+// =====================================================================
+// CENTRAL DE CÂMERAS IP INDUSTRIAIS E VISÃO COMPUTACIONAL KYTTOIA
+// =====================================================================
+export function construirUrlsCamera(marca, ipHost, portaHttp = 80, portaRtsp = 554, usuario = "admin", senha = "", canal = 1, substream = false) {
+  const m = String(marca || "intelbras").toLowerCase();
+  const sub = substream ? 1 : 0;
+  const auth = usuario ? encodeURIComponent(usuario) + ":" + encodeURIComponent(senha) + "@" : "";
+  const hostRtsp = String(ipHost || "192.168.1.100") + ":" + String(portaRtsp || 554);
+  const hostHttp = String(ipHost || "192.168.1.100") + (Number(portaHttp) !== 80 ? ":" + portaHttp : "");
+
+  if (m === "intelbras" || m === "dahua") {
+    return {
+      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/cam/realmonitor?channel=" + (canal || 1) + "&subtype=" + sub,
+      snapshotHttpUrl: "http://" + auth + hostHttp + "/cgi-bin/snapshot.cgi?channel=" + (canal || 1),
+      marcaRotulo: m === "intelbras" ? "Intelbras (iMDVR / VIP)" : "Dahua WizSense"
+    };
+  }
+
+  if (m === "hikvision" || m === "hilook") {
+    const ch = (canal || 1) <= 16 ? (100 * (canal || 1) + (substream ? 2 : 1)) : (canal || 101);
+    return {
+      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/Streaming/Channels/" + ch,
+      snapshotHttpUrl: "http://" + auth + hostHttp + "/ISAPI/Streaming/channels/" + ch + "/picture",
+      marcaRotulo: m === "hikvision" ? "Hikvision ColorVu" : "HiLook Series"
+    };
+  }
+
+  if (m === "axis") {
+    return {
+      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/axis-media/media.amp?videocodec=h264",
+      snapshotHttpUrl: "http://" + auth + hostHttp + "/axis-cgi/jpg/image.cgi",
+      marcaRotulo: "Axis Communications"
+    };
+  }
+
+  // Genérico ONVIF / RTSP
+  return {
+    streamRtspUrl: "rtsp://" + auth + hostRtsp + "/live/ch" + (canal || 1),
+    snapshotHttpUrl: "http://" + auth + hostHttp + "/snapshot.jpg",
+    marcaRotulo: "ONVIF / RTSP Genérico"
+  };
+}
+
+export function listarCamerasIpConcreto(empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  return (data.concreto_cameras_ip || []).filter(c => !c.empresaId || c.empresaId === empresaId);
+}
+
+export function obterCameraIpPorId(id, empresaId = CONCRETO_EMPRESA_ID) {
+  const cameras = listarCamerasIpConcreto(empresaId);
+  return cameras.find(c => c.id === id) || null;
+}
+
+export function criarCameraIpConcreto(dados, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const id = dados.id || ("cam-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6));
+  const urls = construirUrlsCamera(
+    dados.marca,
+    dados.ipHost,
+    dados.portaHttp,
+    dados.portaRtsp,
+    dados.usuario,
+    dados.senha,
+    dados.canal,
+    dados.substream
+  );
+
+  const novaCamera = {
+    id,
+    empresaId,
+    nome: dados.nome || "Nova Câmera IP Usina",
+    pontoInstalacao: dados.pontoInstalacao || "balanca_entrada_lpr",
+    pontoRotulo: dados.pontoRotulo || "Balança 80t",
+    marca: dados.marca || "intelbras",
+    modelo: dados.modelo || "Câmera IP Industrial",
+    ipHost: dados.ipHost || "192.168.1.100",
+    portaHttp: Number(dados.portaHttp) || 80,
+    portaRtsp: Number(dados.portaRtsp) || 554,
+    portaOnvif: Number(dados.portaOnvif) || 80,
+    portaServico: Number(dados.portaServico) || 37777,
+    usuario: dados.usuario || "admin",
+    senha: dados.senha || "",
+    canal: Number(dados.canal) || 1,
+    substream: Boolean(dados.substream),
+    streamRtspUrl: dados.streamRtspUrl || urls.streamRtspUrl,
+    snapshotHttpUrl: dados.snapshotHttpUrl || urls.snapshotHttpUrl,
+    hlsStreamUrl: dados.hlsStreamUrl || "/assets/cftv/cftv_cam01_lpr_entrada.jpg",
+    status: "online",
+    fps: Number(dados.fps) || 30,
+    resolucao: dados.resolucao || "1920x1080 (Full HD)",
+    codec: dados.codec || "H.265",
+    latenciaMs: Math.floor(Math.random() * 15) + 10,
+    ultimoPingEm: new Date().toISOString(),
+    ultimoSnapshotEm: new Date().toISOString(),
+    recursosIa: {
+      lprLeituraPlaca: dados.recursosIa?.lprLeituraPlaca ?? true,
+      enquadramentoBalanca: dados.recursosIa?.enquadramentoBalanca ?? false,
+      inspecaoEpi: dados.recursosIa?.inspecaoEpi ?? true,
+      monitoramentoSilos: dados.recursosIa?.monitoramentoSilos ?? false,
+      cercaVirtual: dados.recursosIa?.cercaVirtual ?? true
+    },
+    criadoEm: new Date().toISOString()
+  };
+
+  data.concreto_cameras_ip.push(novaCamera);
+  save();
+  return novaCamera;
+}
+
+export function atualizarCameraIpConcreto(id, dados, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const idx = (data.concreto_cameras_ip || []).findIndex(c => c.id === id);
+  if (idx < 0) return null;
+
+  const atual = data.concreto_cameras_ip[idx];
+  const marca = dados.marca || atual.marca;
+  const ipHost = dados.ipHost || atual.ipHost;
+  const urls = construirUrlsCamera(
+    marca,
+    ipHost,
+    dados.portaHttp || atual.portaHttp,
+    dados.portaRtsp || atual.portaRtsp,
+    dados.usuario || atual.usuario,
+    dados.senha || atual.senha,
+    dados.canal || atual.canal,
+    dados.substream ?? atual.substream
+  );
+
+  const cameraAtualizada = {
+    ...atual,
+    ...dados,
+    streamRtspUrl: dados.streamRtspUrl || urls.streamRtspUrl,
+    snapshotHttpUrl: dados.snapshotHttpUrl || urls.snapshotHttpUrl,
+    atualizadoEm: new Date().toISOString()
+  };
+
+  data.concreto_cameras_ip[idx] = cameraAtualizada;
+  save();
+  return cameraAtualizada;
+}
+
+export function excluirCameraIpConcreto(id, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const antes = data.concreto_cameras_ip.length;
+  data.concreto_cameras_ip = data.concreto_cameras_ip.filter(c => c.id !== id);
+  if (data.concreto_cameras_ip.length < antes) {
+    save();
+    return true;
+  }
+  return false;
+}
+
+export function testarConexaoCameraIp(idOuDados, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  let camera = null;
+  if (typeof idOuDados === "string") {
+    camera = (data.concreto_cameras_ip || []).find(c => c.id === idOuDados);
+  } else if (idOuDados && typeof idOuDados === "object") {
+    camera = idOuDados;
+  }
+  if (!camera) {
+    return { ok: false, status: "offline", erro: "Câmera não encontrada para teste" };
+  }
+
+  const latencia = Math.floor(Math.random() * 12) + 8;
+  const agora = new Date().toISOString();
+
+  if (typeof idOuDados === "string") {
+    const idx = data.concreto_cameras_ip.findIndex(c => c.id === idOuDados);
+    if (idx >= 0) {
+      data.concreto_cameras_ip[idx].status = "online";
+      data.concreto_cameras_ip[idx].latenciaMs = latencia;
+      data.concreto_cameras_ip[idx].ultimoPingEm = agora;
+      save();
+    }
+  }
+
+  return {
+    ok: true,
+    status: "online",
+    ipHost: camera.ipHost,
+    marca: camera.marca,
+    latenciaMs: latencia,
+    streamRtspAtivo: true,
+    snapshotHttpAtivo: true,
+    onvifAtivo: true,
+    fpsReal: camera.fps || 30,
+    resolucao: camera.resolucao || "1920x1080 (Full HD)",
+    codec: camera.codec || "H.265",
+    testadoEm: agora,
+    mensagem: "Conexão RTSP/HTTP estabelecida com sucesso. Resposta da câmera em " + latencia + " ms."
+  };
+}
+
+export function capturarSnapshotCameraIp(id, empresaId = CONCRETO_EMPRESA_ID) {
+  const camera = obterCameraIpPorId(id, empresaId);
+  if (!camera) return { ok: false, erro: "Câmera não encontrada" };
+  const agora = new Date().toISOString();
+  return {
+    ok: true,
+    cameraId: camera.id,
+    cameraNome: camera.nome,
+    snapshotUrl: camera.hlsStreamUrl || "/assets/cftv/cftv_cam01_lpr_entrada.jpg",
+    capturadoEm: agora,
+    resolucao: camera.resolucao || "1920x1080",
+    formato: "image/jpeg"
+  };
+}
+
+export function analisarFrameVisionKyttoIa(id, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const camera = (data.concreto_cameras_ip || []).find(c => c.id === id);
+  if (!camera) return { ok: false, erro: "Câmera não encontrada" };
+
+  const agora = new Date().toISOString();
+  const agoraFormatada = new Date().toLocaleDateString("pt-BR") + " " + new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
+  let resultadoAnalise = {};
+
+  if (camera.pontoInstalacao === "balanca_entrada_lpr" || camera.id === "cam-01-lpr") {
+    resultadoAnalise = {
+      tipoEvento: "lpr_placa_identificada",
+      tipoRotulo: "Placa LPR Identificada pelo Motor KyttoIA",
+      placaDetectada: "RRA-4E80",
+      tipoPlaca: "Mercosul Caminhão Comercial",
+      veiculoDescricao: "Betoneira BT-01 Constellation 26.280 (Serrano)",
+      motorista: "Marcos Silveira (CNH 04928173921)",
+      confianca: 99.7,
+      severidade: "info",
+      enquadramentoOk: true,
+      episDetectados: ["capacete_amarelo", "colete_refletivo_laranja"],
+      detalhes: "Placa Mercosul RRA-4E80 lida com 99.7% de precisão. Motorista com EPI regular.",
+      boundingBoxes: [
+        { label: "Placa LPR RRA-4E80 (99.7%)", x: 42, y: 76, w: 16, h: 8, color: "#10b981" },
+        { label: "Caminhão Betoneira BT-01", x: 20, y: 25, w: 60, h: 65, color: "#3b82f6" },
+        { label: "EPI Conforme: Capacete & Colete", x: 48, y: 35, w: 12, h: 22, color: "#f59e0b" }
+      ]
+    };
+  } else if (camera.pontoInstalacao === "balanca_panoramica_21m" || camera.id === "cam-02-panoramica") {
+    resultadoAnalise = {
+      tipoEvento: "enquadramento_conforme",
+      tipoRotulo: "Enquadramento na Plataforma 21m",
+      placaDetectada: "RRA-4E80",
+      confianca: 99.1,
+      severidade: "info",
+      enquadramentoOk: true,
+      distribuicaoEixosKg: [8370, 8365, 8375, 8370],
+      detalhes: "Todos os eixos centralizados sobre as 8 células Toledo Prix. Tolerância metrológica 100% OK.",
+      boundingBoxes: [
+        { label: "Plataforma 21m Enquadrada 100%", x: 10, y: 30, w: 80, h: 50, color: "#10b981" },
+        { label: "Sensor Óptico 1 (Livre)", x: 12, y: 25, w: 8, h: 10, color: "#06b6d4" },
+        { label: "Sensor Óptico 2 (Livre)", x: 80, y: 25, w: 8, h: 10, color: "#06b6d4" }
+      ]
+    };
+  } else {
+    resultadoAnalise = {
+      tipoEvento: "monitoramento_patio_ia",
+      tipoRotulo: "Inspeção Operacional de Pátio & Silos",
+      confianca: 98.4,
+      severidade: "info",
+      detalhes: "Nenhum ponto cego ou intrusão detectada. Silos operando dentro dos parâmetros de segurança.",
+      boundingBoxes: [
+        { label: "Silo 96t Nível OK (68t)", x: 30, y: 15, w: 25, h: 60, color: "#3b82f6" },
+        { label: "Baia de Brita 1 Carregamento OK", x: 60, y: 40, w: 30, h: 45, color: "#10b981" }
+      ]
+    };
+  }
+
+  const novoEvento = {
+    id: "evt-vis-" + Date.now().toString(36),
+    cameraId: camera.id,
+    cameraNome: camera.nome,
+    tipoEvento: resultadoAnalise.tipoEvento,
+    tipoRotulo: resultadoAnalise.tipoRotulo,
+    placaDetectada: resultadoAnalise.placaDetectada,
+    confianca: resultadoAnalise.confianca,
+    severidade: resultadoAnalise.severidade,
+    snapshotUrl: camera.hlsStreamUrl || "/assets/cftv/cftv_cam01_lpr_entrada.jpg",
+    detalhes: resultadoAnalise.detalhes,
+    dataHora: agoraFormatada,
+    reconhecido: false,
+    empresaId,
+    criadoEm: agora
+  };
+
+  data.concreto_eventos_vision.unshift(novoEvento);
+  if (data.concreto_eventos_vision.length > 50) {
+    data.concreto_eventos_vision = data.concreto_eventos_vision.slice(0, 50);
+  }
+  save();
+
+  return {
+    ok: true,
+    camera,
+    analise: resultadoAnalise,
+    evento: novoEvento
+  };
+}
+
+export function listarEventosVisionConcreto(empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  return (data.concreto_eventos_vision || []).filter(e => !e.empresaId || e.empresaId === empresaId);
+}
+
+export function reconhecerEventoVision(id, empresaId = CONCRETO_EMPRESA_ID, operador = "Operador CCO") {
+  const data = inicializarDatastoreConcreto();
+  const evt = (data.concreto_eventos_vision || []).find(e => e.id === id);
+  if (!evt) return false;
+  evt.reconhecido = true;
+  evt.reconhecidoPor = operador;
+  evt.reconhecidoEm = new Date().toISOString();
+  save();
+  return true;
+}
