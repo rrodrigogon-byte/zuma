@@ -182,7 +182,7 @@ export function gerarComandaCozinhaEscPos(pedido) {
   txt += '          PALATARE FORNERIA ARTESANAL           \n';
   txt += '           FORNO A LENHA NAPOLITANO             \n';
   txt += '================================================\n';
-  txt += `COMANDA: ${pedido.comanda || 'CMD-0000'} | ORIGEM: ${pedido.origem || 'BALCAO'}\n`;
+  txt += `COMANDA: ${pedido.comanda || pedido.id || pedido.comandaId || 'CMD-0000'} | ORIGEM: ${pedido.origem || 'BALCAO'}\n`;
   txt += `DATA/HORA: ${dataHora}\n`;
   txt += `CLIENTE: ${pedido.cliente || 'CLIENTE'}\n`;
   if (pedido.tipo === 'delivery') {
@@ -394,4 +394,387 @@ export function chamarGarcomMesa(mesaNumero, motivo = 'atendimento') {
 
   eventBus.registrarEvento('mesa:garcom_chamado', notificacao);
   return notificacao;
+}
+
+
+// ============================================================================
+// 7. GESTÃO DE ESTOQUE DE INSUMOS CRÍTICOS & FARINHA 00 ITALIANA
+// ============================================================================
+export const ESTOQUE_INSUMOS_INICIAL = [
+  {
+    id: "ins-01",
+    nome: "Farinha 00 Italiana (Le 5 Stagioni)",
+    categoria: "Farinhas & Massas",
+    unidade: "kg",
+    saldoAtual: 340.0,
+    estoqueMinimo: 100.0,
+    pontoReposicao: 150.0,
+    custoMedioUnitario: 9.80,
+    fornecedorPrincipal: "Importadora La Pastina / Distribuidor Cuiabá",
+    diasCobertura: 14,
+    alertaReposicao: false
+  },
+  {
+    id: "ins-02",
+    nome: "Tomate Pelati San Marzano D.O.P. (Latas 2,5kg)",
+    categoria: "Molhos & Pelati",
+    unidade: "lata",
+    saldoAtual: 42.0,
+    estoqueMinimo: 20.0,
+    pontoReposicao: 30.0,
+    custoMedioUnitario: 34.50,
+    fornecedorPrincipal: "Distribuidora Gastronômica Centro-Oeste",
+    diasCobertura: 12,
+    alertaReposicao: false
+  },
+  {
+    id: "ins-03",
+    nome: "Queijo Muçarela Curada Artesanal (Bloco)",
+    categoria: "Laticínios & Queijos",
+    unidade: "kg",
+    saldoAtual: 185.0,
+    estoqueMinimo: 80.0,
+    pontoReposicao: 120.0,
+    custoMedioUnitario: 36.90,
+    fornecedorPrincipal: "Laticínio Scala / Randon MT",
+    diasCobertura: 9,
+    alertaReposicao: false
+  },
+  {
+    id: "ins-04",
+    nome: "Legítimo Requeijão Cremoso Catupiry Original (1,5kg)",
+    categoria: "Laticínios & Queijos",
+    unidade: "bisnaga",
+    saldoAtual: 28.0,
+    estoqueMinimo: 15.0,
+    pontoReposicao: 25.0,
+    custoMedioUnitario: 48.00,
+    fornecedorPrincipal: "Distribuidora Catupiry Regional MT",
+    diasCobertura: 11,
+    alertaReposicao: false
+  },
+  {
+    id: "ins-05",
+    nome: "Filé Mignon Bovino Resfriado (Limpo)",
+    categoria: "Carnes Nobres",
+    unidade: "kg",
+    saldoAtual: 45.0,
+    estoqueMinimo: 25.0,
+    pontoReposicao: 40.0,
+    custoMedioUnitario: 68.00,
+    fornecedorPrincipal: "Frigorífico Marfrig / Tangará Carnes",
+    diasCobertura: 7,
+    alertaReposicao: false
+  },
+  {
+    id: "ins-06",
+    nome: "Picanha Bovina Especial Maturada",
+    categoria: "Carnes Nobres",
+    unidade: "kg",
+    saldoAtual: 38.0,
+    estoqueMinimo: 20.0,
+    pontoReposicao: 35.0,
+    custoMedioUnitario: 78.00,
+    fornecedorPrincipal: "Tangará Carnes Nobres",
+    diasCobertura: 8,
+    alertaReposicao: false
+  },
+  {
+    id: "ins-07",
+    nome: "Presunto Cru Tipo Parma Fatiado D.O.P.",
+    categoria: "Frios Especiais",
+    unidade: "kg",
+    saldoAtual: 12.5,
+    estoqueMinimo: 8.0,
+    pontoReposicao: 15.0,
+    custoMedioUnitario: 145.00,
+    fornecedorPrincipal: "Empório Gourmet Cuiabá",
+    diasCobertura: 15,
+    alertaReposicao: false
+  },
+  {
+    id: "ins-08",
+    nome: "Lenha de Eucalipto Seca e Certificada (Forno 400°C)",
+    categoria: "Combustíveis Forno",
+    unidade: "m³",
+    saldoAtual: 8.5,
+    estoqueMinimo: 4.0,
+    pontoReposicao: 6.0,
+    custoMedioUnitario: 180.00,
+    fornecedorPrincipal: "Madeireira & Reflorestamento Tangará",
+    diasCobertura: 21,
+    alertaReposicao: false
+  },
+  {
+    id: "ins-09",
+    nome: "Caixa Oitavada Térmica Laminada 35cm (Grande)",
+    categoria: "Embalagens Delivery",
+    unidade: "un",
+    saldoAtual: 450.0,
+    estoqueMinimo: 200.0,
+    pontoReposicao: 350.0,
+    custoMedioUnitario: 3.20,
+    fornecedorPrincipal: "Gráfica & Embalagens Tangará",
+    diasCobertura: 15,
+    alertaReposicao: false
+  }
+];
+
+export function listarEstoqueInsumos() {
+  const data = db();
+  return data.palatare_estoque_insumos || ESTOQUE_INSUMOS_INICIAL;
+}
+
+export function darBaixaInsumosPedido(pedido) {
+  const data = db();
+  const estoque = data.palatare_estoque_insumos || [...ESTOQUE_INSUMOS_INICIAL];
+  
+  // Consumos médios por pizza grande (35cm):
+  // - 0.280 kg de farinha 00
+  // - 0.120 kg (0.048 lata) de pelati
+  // - 0.250 kg de queijo muçarela
+  // - 1 caixa de delivery (se delivery)
+  const itens = pedido.itens || [];
+  const qtdPizzas = itens.length || 1;
+  const isDelivery = pedido.tipo === "delivery" || pedido.mesa === "Delivery";
+
+  for (const item of estoque) {
+    if (item.id === "ins-01") item.saldoAtual = Math.max(0, item.saldoAtual - (0.28 * qtdPizzas));
+    if (item.id === "ins-02") item.saldoAtual = Math.max(0, item.saldoAtual - (0.05 * qtdPizzas));
+    if (item.id === "ins-03") item.saldoAtual = Math.max(0, item.saldoAtual - (0.25 * qtdPizzas));
+    if (item.id === "ins-09" && isDelivery) item.saldoAtual = Math.max(0, item.saldoAtual - qtdPizzas);
+    item.alertaReposicao = item.saldoAtual <= item.pontoReposicao;
+  }
+
+  data.palatare_estoque_insumos = estoque;
+  save();
+
+  eventBus.registrarEvento("estoque:baixa_producao", {
+    pedidoId: pedido.id || pedido.comandaId,
+    qtdPizzas,
+    dataHora: new Date().toISOString()
+  });
+
+  return estoque;
+}
+
+// ============================================================================
+// 8. ROTEAMENTO MULTI-IMPRESSORAS (COZINHA/FORNO vs BAR/BEBIDAS vs CAIXA)
+// ============================================================================
+export const CONFIG_IMPRESSORAS_PRACAS = [
+  {
+    id: "praca-forno",
+    nome: "Forno a Lenha & Bancada Napolitana",
+    tipo: "cozinha",
+    ip: "192.168.1.201",
+    porta: 9100,
+    larguraMm: 80,
+    colunas: 48,
+    cortaPapelAutomatico: true,
+    categoriasDestino: ["pizzas", "calzones", "massas"]
+  },
+  {
+    id: "praca-bar",
+    nome: "Bar & Adega Climatizada",
+    tipo: "bar",
+    ip: "192.168.1.202",
+    porta: 9100,
+    larguraMm: 80,
+    colunas: 48,
+    cortaPapelAutomatico: true,
+    categoriasDestino: ["vinhos", "drinks", "bebidas", "chopp"]
+  },
+  {
+    id: "praca-expedicao",
+    nome: "Expedição & Frente de Caixa",
+    tipo: "caixa",
+    ip: "192.168.1.203",
+    porta: 9100,
+    larguraMm: 80,
+    colunas: 48,
+    cortaPapelAutomatico: true,
+    categoriasDestino: ["todas", "motoboy", "nfce"]
+  }
+];
+
+export function gerarComandasMultiPracas(pedido) {
+  const comandaForno = gerarComandaCozinhaEscPos(pedido);
+  
+  // Separar comanda do Bar caso existam bebidas ou vinhos
+  const comandaBar = `@aE================================================
+           PALATARE - COMANDA DE BAR            
+================================================E a 
+COMANDA: ${pedido.id || pedido.comandaId || "CMD-0892"}
+MESA / ORIGEM: ${pedido.mesa || "Mesa 04"}
+CLIENTE: ${pedido.cliente || "Dr. Ricardo Mendonça"}
+HORARIO: ${new Date().toLocaleTimeString("pt-BR")}
+------------------------------------------------
+BEBIDAS & ADEGA SOLICITADAS:
+------------------------------------------------
+[1x] Vinho Primitivo di Manduria DOC (Taça)
+[1x] Chopp Artesanal Pilsen 500ml Palatare
+[1x] Água Mineral San Pellegrino c/ Gás 505ml
+------------------------------------------------
+OBS: Servir imediatamente à mesa.
+================================================
+VB `;
+
+  const cupomExpedicao = gerarCupomMotoboyEscPos(pedido);
+
+  return {
+    forno: comandaForno,
+    bar: comandaBar,
+    expedicao: cupomExpedicao,
+    pracas: CONFIG_IMPRESSORAS_PRACAS
+  };
+}
+
+// ============================================================================
+// 9. PAINEL TV DE SENHAS & DISPLAY DE RETIRADA / MOTOBOYS
+// ============================================================================
+export function obterEstadoPainelTv() {
+  const data = db();
+  const pedidos = data.palatare_pedidos_kds || [
+    {
+      id: "CMD-0893",
+      cliente: "Thiago Brandão",
+      status: "bancada",
+      tipo: "delivery",
+      canal: "whatsapp",
+      tempoEstimadoMin: 35,
+      horarioPedido: "20:08"
+    },
+    {
+      id: "CMD-0892",
+      cliente: "Dr. Ricardo Mendonça",
+      status: "forno",
+      tipo: "salao",
+      mesa: "Mesa 04",
+      tempoNoFornoMin: 4,
+      temperaturaFornoC: 410,
+      horarioPedido: "20:12"
+    },
+    {
+      id: "CMD-0890",
+      cliente: "Dra. Juliana Barreto",
+      status: "corte",
+      tipo: "salao",
+      mesa: "Mesa 09",
+      prontoParaRetirada: true,
+      horarioPedido: "19:55"
+    },
+    {
+      id: "CMD-0888",
+      cliente: "Eduardo Bertolini",
+      status: "em_rota",
+      tipo: "delivery",
+      entregador: "Cleber Santos",
+      horarioPedido: "19:42"
+    }
+  ];
+
+  const preparandoForno = pedidos.filter(p => p.status === "bancada" || p.status === "forno");
+  const prontosRetirada = pedidos.filter(p => p.status === "corte" || p.prontoParaRetirada);
+  const emRota = pedidos.filter(p => p.status === "em_rota");
+
+  return {
+    horaAtual: new Date().toLocaleTimeString("pt-BR"),
+    forno: {
+      temperaturaAtualC: 405,
+      pizzasAssandoAgora: 4,
+      capacidadeMaximaLastro: 6,
+      tempoMedioCoccaoMin: 3.0
+    },
+    preparandoNoForno: preparandoForno.map(p => ({
+      comanda: p.id,
+      cliente: p.cliente,
+      destino: p.mesa || "Delivery",
+      status: p.status === "forno" ? "Assando no Forno (400°C)" : "Montagem na Bancada",
+      tempoDecorrido: p.tempoNoFornoMin ? `${p.tempoNoFornoMin} min` : "Recente"
+    })),
+    prontosParaRetirada: prontosRetirada.map(p => ({
+      comanda: p.id,
+      cliente: p.cliente,
+      destino: p.mesa || "Balcão Retirada",
+      chamadaEm: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    })),
+    emRotaEntrega: emRota.map(p => ({
+      comanda: p.id,
+      cliente: p.cliente,
+      motoboy: p.entregador || "Cleber Santos",
+      status: "Em Rota de Entrega"
+    })),
+    ultimaChamadaVoz: prontosRetirada.length > 0 ? `Pedido ${prontosRetirada[0].id} pronto para retirada!` : null
+  };
+}
+
+// ============================================================================
+// 10. PROGRAMA DE FIDELIDADE "PALATARE PASS" & CASHBACK
+// ============================================================================
+export const SALDOS_FIDELIDADE_INICIAIS = {
+  "(65) 99654-2201": {
+    cliente: "Dr. Ricardo Mendonça",
+    pedidosTotais: 14,
+    selosAcumulados: 8,
+    selosParaPizzaGratis: 10,
+    saldoCashbackReais: 24.50,
+    categoriaFidelidade: "Cliente Ouro - Membro Famiglia Palatare",
+    descontoExclusivoWhatsPct: 5
+  },
+  "(65) 99981-3344": {
+    cliente: "Eduardo Bertolini",
+    pedidosTotais: 9,
+    selosAcumulados: 9,
+    selosParaPizzaGratis: 10,
+    saldoCashbackReais: 18.20,
+    categoriaFidelidade: "Cliente Prata",
+    descontoExclusivoWhatsPct: 5
+  },
+  "(65) 99877-6622": {
+    cliente: "Thiago Brandão",
+    pedidosTotais: 6,
+    selosAcumulados: 6,
+    selosParaPizzaGratis: 10,
+    saldoCashbackReais: 12.00,
+    categoriaFidelidade: "Cliente Bronze",
+    descontoExclusivoWhatsPct: 0
+  }
+};
+
+export function obterPerfilFidelidade(telefone) {
+  const telLimpo = (telefone || "").replace(/\D/g, "");
+  for (const [key, val] of Object.entries(SALDOS_FIDELIDADE_INICIAIS)) {
+    if (key.replace(/\D/g, "") === telLimpo) return val;
+  }
+  // Cliente novo
+  return {
+    cliente: "Novo Membro Palatare",
+    pedidosTotais: 1,
+    selosAcumulados: 1,
+    selosParaPizzaGratis: 10,
+    saldoCashbackReais: 5.00,
+    categoriaFidelidade: "Membro de Boas-Vindas",
+    descontoExclusivoWhatsPct: 0
+  };
+}
+
+export function creditarCashbackPedido(telefone, valorPedido) {
+  const perfil = obterPerfilFidelidade(telefone);
+  const cashbackGanho = Number((valorPedido * 0.05).toFixed(2));
+  perfil.saldoCashbackReais += cashbackGanho;
+  perfil.pedidosTotais += 1;
+  perfil.selosAcumulados = (perfil.selosAcumulados % 10) + 1;
+  
+  eventBus.registrarEvento("fidelidade:cashback_creditado", {
+    telefone,
+    cashbackGanho,
+    saldoNovo: perfil.saldoCashbackReais,
+    selos: perfil.selosAcumulados
+  });
+
+  return {
+    perfil,
+    cashbackGanho,
+    mensagemWhatsApp: `🍕 Olá ${perfil.cliente}! Seu pedido na Palatare rendeu R$ ${cashbackGanho.toFixed(2).replace(".", ",")} de Cashback! Seu saldo total no Palatare Pass agora é de R$ ${perfil.saldoCashbackReais.toFixed(2).replace(".", ",")}. Faltam ${10 - perfil.selosAcumulados} pedidos para você ganhar 1 Pizza Grande da Casa inteiramente grátis!`
+  };
 }

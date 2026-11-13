@@ -409,7 +409,7 @@ export function detectAppOrSelfBookingRequest(userText) {
   if (/\b(bruno|mendes)\b/.test(norm)) {
     professional = 'Bruno';
     slug = 'bruno';
-  } else if (/\b(nati|natani|naty|dobler)\b/.test(norm)) {
+  } else if (/\b(nati|natani|naty|dobler|natalia|natali|nathalia)\b/.test(norm)) {
     professional = 'Nati';
     slug = 'nati';
   } else if (/\bdino\b/.test(norm) && !/barbearia dino|t-rex da dino|trex da dino/.test(norm)) {
@@ -469,7 +469,7 @@ export function withSelfBookingAgendaOption(replyText, { userText = '', toolResu
 
   const mencoes = []
   if (/\b(bruno|mendes)\b/.test(combined)) mencoes.push({ nome: 'do Bruno', slug: 'bruno' })
-  if (/\b(nati|natani|naty)\b/.test(combined)) mencoes.push({ nome: 'da Nati', slug: 'nati' })
+  if (/\b(nati|natani|naty|natalia|natali|nathalia)\b/.test(combined)) mencoes.push({ nome: 'da Nati', slug: 'nati' })
   if (/\b(dino|guilherme)\b/.test(combined) && !/barbearia dino|trex da dino|t-rex da dino/.test(combined)) {
     mencoes.push({ nome: 'do Dino', slug: 'dino' })
   }
@@ -521,12 +521,33 @@ export function extractFastScheduleChoice(userText, lastAssistantText, { now = n
     mm === '00' ? `${hh}h` : `${hh}h${mm}`,
   ]
   const assistantLower = rawAssistant.toLowerCase()
-  const offeredInAssistant = slotPatterns.some((pat) => {
+  let offeredInAssistant = slotPatterns.some((pat) => {
     const idx = assistantLower.indexOf(pat.toLowerCase())
     if (idx < 0) return false
     const after = assistantLower.slice(idx + pat.length, idx + pat.length + 2)
     return !/^\d/.test(after)
   })
+  // Fallback para horário PM quando o cliente diz "5:45", "6:00", "5:30", "3:00" e o assistente ofereceu horário da tarde/noite
+  if (!offeredInAssistant && hNum >= 1 && hNum <= 6) {
+    const pmHNum = hNum + 12;
+    const pmSlot = `${pad(pmHNum)}:${mm}`;
+    const pmSlotPatterns = [
+      pmSlot,
+      `${pmHNum}:${mm}`,
+      `${pmHNum}h${mm}`,
+      mm === '00' ? `${pmHNum}h` : `${pmHNum}h${mm}`,
+    ];
+    const matchedPm = pmSlotPatterns.some((pat) => {
+      const idx = assistantLower.indexOf(pat.toLowerCase());
+      if (idx < 0) return false;
+      const after = assistantLower.slice(idx + pat.length, idx + pat.length + 2);
+      return !/^\d/.test(after);
+    });
+    if (matchedPm) {
+      slot = pmSlot;
+      offeredInAssistant = true;
+    }
+  }
   if (!offeredInAssistant) return null
 
   const combined = `${rawAssistant} ${rawUser}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
@@ -561,7 +582,7 @@ export function extractFastScheduleChoice(userText, lastAssistantText, { now = n
   else {
     const profsInAss = []
     if (/\bbruno\b/.test(combined)) profsInAss.push('Bruno')
-    if (/\b(nati|natani|naty)\b/.test(combined)) profsInAss.push('Nati')
+    if (/\b(nati|natani|naty|natalia|natali|nathalia)\b/.test(combined)) profsInAss.push('Nati')
     if (/\bdino\b/.test(combined) && !/barbearia dino|t-rex da dino|trex da dino/.test(combined)) profsInAss.push('Dino')
     if (profsInAss.length === 1) profissional = profsInAss[0]
   }
@@ -587,4 +608,75 @@ export function extractFastScheduleChoice(userText, lastAssistantText, { now = n
   if (!data) return null
 
   return { servico, profissional, data, horario: slot, ...(extraServiceIds.length ? { extraServiceIds } : {}) }
+}
+
+/**
+ * Fast-path determinístico (< 1ms) para Perguntas Frequentes (FAQ) da Dino Barbearia:
+ * preços, serviços, localização, horários de atendimento, profissionais e duração.
+ */
+export function detectDinoQuickFaq(userText, { storeName = 'Dino Barbearia' } = {}) {
+  const t = String(userText || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  if (!t || t.length > 120 || t.length < 3) return null;
+  if (/\b(cancelar|desmarcar|remarcar|confirmo|confirmado|sim|nao|sair|obrigado|valeu)\b/.test(t)) return null;
+  if (/\b(segunda|terca|quarta|quinta|sexta|sabado|domingo|hoje|amanha|\d{1,2}\/\d{1,2})\b/.test(t) && /\b\d{1,2}(?:h|:)\d{0,2}\b/.test(t)) return null;
+
+  // 1. Duração dos Serviços
+  if (/\b(quanto tempo|qual a duracao|tempo de atendimento|demora muito)\b/i.test(t) && /\b(demora|gasta|leva|atendimento|servico|corte|barba|cabelo|combo|fazer|procedimento)\b/i.test(t)) {
+    return {
+      kind: 'faq_duracao',
+      text: `Aqui na ${storeName}, a duração média dos nossos atendimentos é:\n\n• *Corte de Cabelo*: cerca de 45 minutos\n• *Barba Tradicional (com toalha quente)*: cerca de 30 a 40 minutos\n• *Combo Corte + Barba*: cerca de 1 hora a 1h15\n• *Limpeza de Pele / Sobrancelha*: cerca de 20 a 30 minutos\n\nQual serviço você gostaria de realizar? Posso ver os horários mais próximos pra você! 💈`,
+    };
+  }
+
+  // 2. Preços e Valores
+  if (/\b(quanto custa|qual o valor|qual o preco|tabela de precos?|tabela de valores|quais os precos|quais os valores)\b/i.test(t)) {
+    if (/\b(corte|cabelo)\b/i.test(t) && !/\bbarba\b/i.test(t)) {
+      return {
+        kind: 'faq_preco_corte',
+        text: `O *Corte Masculino* com nossa equipe de especialistas (Bruno ou Nati) custa *R$ 90,00* (cerca de 45 min). Já o corte VIP com o Mestre Dino custa *R$ 300,00* diurno.\n\n💈 Você pode conferir os horários livres e agendar direto pelo link:\nhttps://kytto.com.br/agendar/dino\n\nQual dia e horário fica melhor pra você?`,
+      };
+    }
+    if (/\bbarba\b/i.test(t) && !/\b(corte|cabelo)\b/i.test(t)) {
+      return {
+        kind: 'faq_preco_barba',
+        text: `A *Barba Completa* na ${storeName} (com toalha quente, produtos premium e navalha) sai por *R$ 60,00 a R$ 80,00* com nossa equipe.\n\n💈 Você pode agendar direto pelo link:\nhttps://kytto.com.br/agendar/dino\n\nQual horário prefere?`,
+      };
+    }
+    if (/\b(combo|corte e barba|barba e corte|cabelo e barba)\b/i.test(t)) {
+      return {
+        kind: 'faq_preco_combo',
+        text: `Nosso *Combo Corte + Barba* sai a partir de *R$ 140,00 a R$ 160,00* com a equipe (cerca de 1 hora de atendimento completo).\n\n💈 Agende online aqui:\nhttps://kytto.com.br/agendar/dino\n\nMe fala o dia que prefere que já vejo as opções!`,
+      };
+    }
+    return {
+      kind: 'faq_precos_geral',
+      text: `Nossos principais serviços na ${storeName} são:\n\n• *Corte Masculino (Bruno ou Nati)*: R$ 90,00 (~45 min)\n• *Barba Tradicional*: a partir de R$ 60,00 (~35 min)\n• *Combo Corte + Barba*: a partir de R$ 140,00 (~1h)\n• *Sobrancelha*: R$ 35,00\n• *Corte VIP com Dino*: R$ 300,00\n\n💈 Você pode ver a tabela completa e agendar online:\nhttps://kytto.com.br/agendar/dino\n\nQuer agendar para hoje ou prefere outro dia?`,
+    };
+  }
+
+  // 3. Endereço e Localização
+  if (/\b(onde fica|qual o endereco|qual a localizacao|qual o local|onde voces ficam|onde e a barbearia|ponto de referencia|tem estacionamento)\b/i.test(t)) {
+    return {
+      kind: 'faq_endereco',
+      text: `A ${storeName} fica em Cuiabá - MT! 📍\nContamos com ambiente climatizado, estrutura premium e estacionamento para sua conveniência.\n\n💈 Você pode agendar seu horário com antecedência pelo app:\nhttps://kytto.com.br/agendar/dino\n\nPosso te ajudar a marcar um horário?`,
+    };
+  }
+
+  // 4. Horário de Funcionamento
+  if (/\b(horario de funcionamento|horario de atendimento|que horas abre|que horas fecha|abrem domingo|abre no domingo|funcionam domingo|atendem hoje|que horas voces atendem)\b/i.test(t)) {
+    return {
+      kind: 'faq_horario',
+      text: `Nosso horário de funcionamento na ${storeName} é de *segunda a sábado, das 08h às 19h* (domingos e feriados fechado). 💈\n\nVocê pode consultar os horários livres e marcar a qualquer hora pelo app:\nhttps://kytto.com.br/agendar/dino\n\nQual dia você gostaria de vir?`,
+    };
+  }
+
+  // 5. Profissionais / Barbeiros
+  if (/\b(quem sao os barbeiros|quais os profissionais|quem corta ai|quais sao os profissionais|quem atende ai)\b/i.test(t)) {
+    return {
+      kind: 'faq_profissionais',
+      text: `Nossa equipe de mestres na ${storeName} conta com:\n\n• *Bruno (Bruno Mendes)* — Link direto: https://kytto.com.br/agendar/dino/bruno\n• *Nati (Natani Dobler)* — Link direto: https://kytto.com.br/agendar/dino/nati\n• *Dino (Mestre Dino)* — Link direto: https://kytto.com.br/agendar/dino\n\nCom qual deles você prefere agendar seu corte ou barba?`,
+    };
+  }
+
+  return null;
 }

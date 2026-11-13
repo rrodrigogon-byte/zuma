@@ -106,6 +106,7 @@ const PaymentRedirect = lazy(() => import('./pages/public/PaymentRedirect'))
 const NotFound   = lazy(() => import('./pages/NotFound'))
 const TotemAutoatendimento = lazy(() => import('./pages/public/TotemAutoatendimento'))
 const PainelTVLoja = lazy(() => import('./pages/public/PainelTVLoja'))
+const PainelTVPizzaria = lazy(() => import('./pages/public/PainelTVPizzaria'))
 
 const Dashboard  = lazy(() => import('./pages/admin/Dashboard'))
 const Usuarios   = lazy(() => import('./pages/admin/Usuarios'))
@@ -507,6 +508,8 @@ export default function App() {
         <Route path="/totem/:storeSlug" element={<TotemAutoatendimento />} />
         <Route path="/painel-tv" element={<PainelTVLoja />} />
         <Route path="/painel-senhas" element={<PainelTVLoja />} />
+        <Route path="/painel-pizzaria-tv" element={<PainelTVPizzaria />} />
+        <Route path="/painel-pedidos-tv" element={<PainelTVPizzaria />} />
         <Route path="*" element={<Layout><NotFound /></Layout>} />
       </Routes>
     </Suspense>

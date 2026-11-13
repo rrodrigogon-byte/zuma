@@ -1340,13 +1340,35 @@ export default function PalatarePizzariaSuite() {
                 Controle em tempo real de preparação na bancada, cocção a 400°C no forno a lenha e expedição.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={carregarDados}
-              style={{ background: 'rgba(255,255,255,0.08)', color: '#FFF', border: 'none', padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
-            >
-              <RefreshCw size={14} /> Atualizar Fila
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <a
+                href="/painel-pedidos-tv"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  background: 'linear-gradient(135deg, #EA580C, #C2410C)',
+                  color: '#FFF',
+                  textDecoration: 'none',
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontWeight: 800,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  boxShadow: '0 4px 14px rgba(234, 88, 12, 0.4)'
+                }}
+              >
+                📺 Painel TV Senhas (Display Balcão)
+              </a>
+              <button
+                type="button"
+                onClick={carregarDados}
+                style={{ background: 'rgba(255,255,255,0.08)', color: '#FFF', border: 'none', padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <RefreshCw size={14} /> Atualizar Fila
+              </button>
+            </div>
           </div>
 
           {/* 4 PRAÇAS KDS */}

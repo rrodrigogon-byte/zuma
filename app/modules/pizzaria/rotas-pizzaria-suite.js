@@ -15,7 +15,14 @@ import {
   gerarCupomMotoboyEscPos,
   gerarPreviaNfcePizzaria,
   listarCardapioPublico,
-  chamarGarcomMesa
+  chamarGarcomMesa,
+  listarEstoqueInsumos,
+  darBaixaInsumosPedido,
+  gerarComandasMultiPracas,
+  CONFIG_IMPRESSORAS_PRACAS,
+  obterEstadoPainelTv,
+  obterPerfilFidelidade,
+  creditarCashbackPedido
 } from './pizzaria-suite-completa.js';
 import {
   PALATARE_DADOS_EMPRESA,
@@ -414,6 +421,53 @@ export function criarRotasPizzariaSuite() {
     return res.json({ ok: true, eventos: eventBus.historicoEventos });
   });
 
+
+  // 14. Gestão de Insumos Críticos & Farinha 00
+  router.get('/estoque-insumos', (req, res) => {
+    return res.json({ ok: true, estoque: listarEstoqueInsumos() });
+  });
+
+  router.post('/dar-baixa-insumos', (req, res) => {
+    const pedido = req.body || {};
+    const estoqueAtualizado = darBaixaInsumosPedido(pedido);
+    return res.json({ ok: true, mensagem: 'Baixa de insumos realizada com sucesso!', estoque: estoqueAtualizado });
+  });
+
+  // 15. Roteamento Multi-Impressoras (Forno / Bar / Caixa)
+  router.get('/spooler/multi-pracas/:pedidoId', (req, res) => {
+    const data = db();
+    const pedidos = data.palatare_pedidos_kds || PALATARE_KDS_FILA;
+    const pedido = pedidos.find(p => p.id === req.params.pedidoId) || {
+      id: req.params.pedidoId,
+      cliente: 'Dr. Ricardo Mendonça',
+      mesa: 'Mesa 04',
+      itens: [{ nome: 'Pizza Filé Mignon ao Gorgonzola (8 Fatias)', preco: 92.00 }]
+    };
+    const comandas = gerarComandasMultiPracas(pedido);
+    return res.json({ ok: true, comandas });
+  });
+
+  router.get('/spooler/config-pracas', (req, res) => {
+    return res.json({ ok: true, pracas: CONFIG_IMPRESSORAS_PRACAS });
+  });
+
+  // 16. Painel TV de Senhas & Chamadas Balcão
+  router.get('/painel-tv', (req, res) => {
+    return res.json({ ok: true, painel: obterEstadoPainelTv() });
+  });
+
+  // 17. Programa de Fidelidade Palatare Pass
+  router.get('/fidelidade/:telefone', (req, res) => {
+    const perfil = obterPerfilFidelidade(req.params.telefone);
+    return res.json({ ok: true, perfil });
+  });
+
+  router.post('/fidelidade/creditar', (req, res) => {
+    const { telefone, valor } = req.body || {};
+    const resultado = creditarCashbackPedido(telefone, Number(valor || 100));
+    return res.json({ ok: true, ...resultado });
+  });
+
   return router;
 }
 
@@ -429,6 +483,17 @@ export function criarRotasPizzariaPublico() {
   router.post('/mesa/:numero/chamar-garcom', (req, res) => {
     const notificacao = chamarGarcomMesa(req.params.numero, req.body?.motivo);
     return res.json({ ok: true, notificacao, mensagem: 'Garçom notificado com sucesso!' });
+  });
+
+  // Painel TV de Senhas Público (para Telas e TVs de Salão)
+  router.get('/painel-tv', (req, res) => {
+    return res.json({ ok: true, painel: obterEstadoPainelTv() });
+  });
+
+  // Consulta de Saldo Palatare Pass / Cashback
+  router.get('/fidelidade/:telefone', (req, res) => {
+    const perfil = obterPerfilFidelidade(req.params.telefone);
+    return res.json({ ok: true, perfil });
   });
 
   return router;
