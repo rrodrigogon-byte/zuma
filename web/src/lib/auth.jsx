@@ -25,7 +25,7 @@ function readStorage(key, fallback = null) {
 function readEmpresaAtivaInicial() {
   const atual = readStorage('sp_empresa_ativa')
   if (!isDinoDedicatedHost()) return atual
-  const empresas = empresasComFallbackDino(readStorage('sp_empresas_acessiveis', []))
+  const empresas = garantirEmpresasCanonicas(readStorage('sp_empresas_acessiveis', []))
   const dino = Array.isArray(empresas) ? empresas.find((empresa) => isDinoBrandContext(empresa)) : null
   const empresaAtiva = dino || DINO_COMPANY
   try { localStorage.setItem('sp_empresa_ativa', JSON.stringify(empresaAtiva)) } catch { /* armazenamento opcional */ }
@@ -119,6 +119,9 @@ function garantirLojasCanonicas(lojas) {
   }
   return lista
 }
+// Aliases de compatibilidade histórica
+const empresasComFallbackDino = garantirEmpresasCanonicas
+const lojasComFallbackDino = garantirLojasCanonicas
 
 function selecionarLojaDoContexto(lojas, empresa, atual = null) {
   const selecionada = selecionarLojaAutomatica(lojas, empresa?.id, atual)
@@ -225,12 +228,12 @@ export function AuthProvider({ children }) {
     localStorage.setItem(site ? 'sp_site_token' : 'sp_token', token)
     localStorage.setItem('sp_user', JSON.stringify(userData))
     const empresasRecebidas = Array.isArray(sessao.empresas_acessiveis) ? sessao.empresas_acessiveis : []
-    const empresas = empresasComFallbackDino(empresasRecebidas)
+    const empresas = garantirEmpresasCanonicas(empresasRecebidas)
     const empresa = isDinoDedicatedHost()
       ? (empresas.find((item) => isDinoBrandContext(item)) || DINO_COMPANY)
       : empresaNova
     const lojasRecebidas = normalizarLojas(Array.isArray(sessao.lojas_acessiveis) ? sessao.lojas_acessiveis : [])
-    const lojas = lojasComFallbackDino(lojasRecebidas)
+    const lojas = garantirLojasCanonicas(lojasRecebidas)
     const loja = selecionarLojaDoContexto(lojas, empresa, lojaNova)
     if (empresas.length > 0) {
       localStorage.setItem('sp_empresas_acessiveis', JSON.stringify(empresas))
@@ -303,7 +306,7 @@ export function AuthProvider({ children }) {
   // `substituir`: true = a lista é a completa da sessão; '<empresaId>' = completa só dessa empresa;
   // ausente = complemento parcial (ex.: lojas das vitrines do e-commerce), que só acrescenta.
   const atualizarContextoLojas = ({ empresa, empresas_acessiveis: empresas, loja, lojas_acessiveis: lojas, substituir = false }) => {
-    const empresasAtualizadas = Array.isArray(empresas) ? filtrarEmpresasPorUsuario(empresasComFallbackDino(empresas), user) : null
+    const empresasAtualizadas = Array.isArray(empresas) ? filtrarEmpresasPorUsuario(garantirEmpresasCanonicas(empresas), user) : null
     const empresaRecebida = empresa || empresaAtiva
     const empresaAtualizada = isDinoDedicatedHost()
       ? (empresasAtualizadas?.find((item) => isDinoBrandContext(item)) || (isDinoBrandContext(empresaRecebida) ? empresaRecebida : DINO_COMPANY))
@@ -321,7 +324,7 @@ export function AuthProvider({ children }) {
       const mescladas = substituir
         ? substituirLojas(lojasAcessiveisRef.current, lojas, { empresaId: substituir === true ? null : substituir })
         : mesclarLojas(lojasAcessiveisRef.current, lojas)
-      const lojasAtualizadas = lojasComFallbackDino(mescladas)
+      const lojasAtualizadas = garantirLojasCanonicas(mescladas)
       localStorage.setItem('sp_lojas_acessiveis', JSON.stringify(lojasAtualizadas))
       setLojasAcessiveis(lojasAtualizadas)
       const selecionada = selecionarLojaDoContexto(lojasAtualizadas, empresaAtualizada, loja || lojaAtiva)

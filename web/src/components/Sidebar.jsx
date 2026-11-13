@@ -1368,6 +1368,7 @@ export default function Sidebar() {
         ? [
             { to: "/admin/concreto", icon: "🚚", label: "Expedição & Cargas", badge: true },
             { to: "/pdv", icon: "⚖️", label: "Balança & Balcão", badge: false },
+            { to: "/admin/concreto?secao=cameras-cftv", icon: "📹", label: "Câmeras & Vision AI", badge: false },
           ]
         : isClube
         ? NAV_OP.filter((item) => item.to !== "/loja-atendimento")

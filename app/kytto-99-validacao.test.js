@@ -350,3 +350,28 @@ test("PDV Concreteira: abas especializadas Balança 80t e Balcão Concreto sem M
   assert.ok(pdvCode.includes("concreto-vendas"), "Deve incluir a aba Balcão Concreto para a concreteira");
   assert.ok(pdvCode.includes("activeTab === \"mesas\" && ehConcreto"), "Mesas deve ter fallback para Balança 80t quando for concreteira");
 });
+
+test("Concreteira: Central de Câmeras IP Industriais & Vision AI KyttoIA", async () => {
+  const servicoConcreto = await import("./modules/concreto/servico.js");
+  const cameras = servicoConcreto.listarCamerasIpConcreto();
+  assert.ok(Array.isArray(cameras), "Deve listar câmeras IP");
+  assert.ok(cameras.length >= 6, "Deve ter 6 câmeras industriais cadastradas");
+
+  const camLpr = cameras.find(c => c.id === "cam-01-lpr");
+  assert.ok(camLpr, "CAM-01 LPR deve existir");
+  assert.equal(camLpr.marca, "intelbras");
+
+  const testeConexao = servicoConcreto.testarConexaoCameraIp("cam-01-lpr");
+  assert.equal(testeConexao.ok, true);
+  assert.equal(testeConexao.status, "online");
+
+  const analise = servicoConcreto.analisarFrameVisionKyttoIa("cam-01-lpr");
+  assert.equal(analise.ok, true);
+  assert.equal(analise.analise.placaDetectada, "RRA-4E80");
+  assert.ok(analise.analise.confianca >= 99);
+
+  const compVisionCode = fs.readFileSync(new URL("../web/src/pages/admin/concreto/ConcretoCamerasVisionAI.jsx", import.meta.url), "utf8");
+  assert.ok(compVisionCode.includes("CENTRO DE CONTROLE OPERACIONAL"), "Componente deve conter header CCO");
+  assert.ok(compVisionCode.includes("RTSP"), "Componente deve suportar fluxos RTSP");
+  assert.ok(compVisionCode.includes("MOTOR KYTTOIA"), "Componente deve utilizar Motor KyttoIA");
+});
