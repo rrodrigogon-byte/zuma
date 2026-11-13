@@ -613,6 +613,10 @@ export default function PalatarePizzariaSuite() {
       {/* ------------------------------------------------------------- */}
       {/* ABA 1: MONTADOR DE PIZZAS PROFISSIONAL (SURPASSING CONCORRÊNCIA) */}
       {/* ------------------------------------------------------------- */}
+      {tabAtiva === 'hub_delivery' && (
+        <PizzariaHubDeliveryMulticanal />
+      )}
+
       {tabAtiva === 'montador' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 1fr) 360px', gap: 24, alignItems: 'start' }}>
           

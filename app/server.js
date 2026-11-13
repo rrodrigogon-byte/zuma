@@ -1654,6 +1654,17 @@ const sorteiosRouter = criarRotasSorteios({ legacyEmpresaId, audit });
 app.use(['/api/admin/sorteios', '/api/admin/sorteio'], auth, requireStaff, sorteiosRouter);
 app.use(['/api/publico/sorteios', '/api/public/sorteios'], criarRotasPublicasSorteios());
 
+// [kytto-pizzaria-delivery] Hub Oficial de Integração Multicanal (iFood, Keeta, WhatsApp Delivery & Open Delivery)
+const resolverEmpresaDelivery = (req) => {
+  if (isAdminGlobal(req.user)) {
+    return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : (req.user?.empresaId ? String(req.user.empresaId).trim() : null);
+  }
+  return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || null);
+};
+const deliveryMarketplacesRouter = criarRotasDeliveryMarketplaces({ auth, requireStaff, resolverEmpresa: resolverEmpresaDelivery });
+app.use(['/api/admin/pizzaria/delivery', '/api/admin/palatare/delivery'], auth, requireStaff, deliveryMarketplacesRouter);
+app.use('/api/webhooks/delivery', criarRotasWebhooksDelivery());
+
 // Commerce Core PostgreSQL fica opt-in até DATABASE_URL, migrations, tenant e
 // checklist de rollout estarem aprovados. O runtime legado continua intacto.
 if(process.env.COMMERCE_CORE_ENABLED === '1'){
@@ -2861,11 +2872,7 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
     }
   });
 
-  // [kytto-pizzaria-delivery] Hub de Integração Multicanal (iFood, Keeta, WhatsApp Delivery & Open Delivery)
-  const deliveryMarketplacesRouter = criarRotasDeliveryMarketplaces({ auth, requireStaff, resolverEmpresa: resolverEmpresaDaSessao });
-  app.use('/api/admin/pizzaria/delivery', deliveryMarketplacesRouter);
-  app.use('/api/admin/palatare/delivery', deliveryMarketplacesRouter);
-  app.use('/api/webhooks/delivery', criarRotasWebhooksDelivery());
+  // [kytto-pizzaria-delivery] Rotas movidas para escopo global do server (disponíveis com ou sem Commerce Core)
 
   // ── ROTAS PÚBLICAS DO CARDÁPIO & AUTOATENDIMENTO QR DE MESA (PALATARE & KYTTO) ──
   const resolverMesaPublica = async (token) => {
