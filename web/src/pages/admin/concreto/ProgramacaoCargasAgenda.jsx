@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { api } from '../../../lib/api';
 import { useToast } from '../../../hooks/useToast';
 
@@ -26,6 +26,11 @@ export default function ProgramacaoCargasAgenda({
   const [novaDataDuplicacao, setNovaDataDuplicacao] = useState(new Date().toISOString().slice(0, 10));
   const [novoHorarioDuplicacao, setNovoHorarioDuplicacao] = useState('08:30');
   const [abaModal, setAbaModal] = useState('dados'); // 'dados' | 'viagens' | 'financeiro'
+  // Estados da KyttoIA (Otimizador de Escala & Previsão de Gargalos)
+  const [modalKyttoIAAberto, setModalKyttoIAAberto] = useState(false);
+  const [analiseKyttoIA, setAnaliseKyttoIA] = useState(null);
+  const [carregandoKyttoIA, setCarregandoKyttoIA] = useState(false);
+  const [aplicandoKyttoIA, setAplicandoKyttoIA] = useState(false);
 
   // Formulário de edição
   const [formEdicao, setFormEdicao] = useState(null);
@@ -37,6 +42,50 @@ export default function ProgramacaoCargasAgenda({
     tempoViagemMin: 35,
     usoRetardador: true
   });
+
+  // Carregar análise da KyttoIA automaticamente ao trocar data ou ao montar
+  const handleAnalisarKyttoIA = async (abrirModal = false) => {
+    setCarregandoKyttoIA(true);
+    try {
+      const res = await api.post('/api/admin/concreto/programacao/escala-kyttoia/analisar', { data: dataSelecionada });
+      if (res?.ok) {
+        setAnaliseKyttoIA(res);
+        if (abrirModal) {
+          setModalKyttoIAAberto(true);
+        }
+      }
+    } catch (err) {
+      console.warn('Falha ao analisar escala com KyttoIA:', err);
+    } finally {
+      setCarregandoKyttoIA(false);
+    }
+  };
+
+  useEffect(() => {
+    handleAnalisarKyttoIA(false);
+  }, [dataSelecionada]);
+
+  // Aplicar escala sugerida pela KyttoIA
+  const handleAplicarEscalaKyttoIA = async () => {
+    if (!analiseKyttoIA?.sugestoesEscala) return;
+    setAplicandoKyttoIA(true);
+    try {
+      const res = await api.post('/api/admin/concreto/programacao/escala-kyttoia/aplicar', {
+        sugestoes: analiseKyttoIA.sugestoesEscala
+      });
+      if (res?.ok) {
+        toast(`Escala sugerida pela KyttoIA aplicada com sucesso! ${res.viagensAtualizadas || analiseKyttoIA.sugestoesEscala.length} viagens otimizadas.`, 'success');
+        setModalKyttoIAAberto(false);
+        if (onAtualizarDados) onAtualizarDados();
+      } else {
+        toast('Erro ao aplicar escala: ' + (res?.error || 'Falha'), 'error');
+      }
+    } catch (err) {
+      toast('Erro de conexão ao aplicar escala: ' + err.message, 'error');
+    } finally {
+      setAplicandoKyttoIA(false);
+    }
+  };
 
   // Abrir modal de detalhamento e preencher formulário
   const handleAbrirDetalhe = (carga) => {
@@ -280,6 +329,29 @@ export default function ProgramacaoCargasAgenda({
                 Amanhã ▶
               </button>
             </div>
+
+            {/* BOTÃO OTIMIZADOR KYTTOIA */}
+            <button
+              type="button"
+              className="serrano-btn"
+              style={{
+                background: 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)',
+                color: '#fff',
+                fontWeight: 800,
+                padding: '8px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                border: 'none',
+                boxShadow: '0 2px 10px rgba(234, 88, 12, 0.35)',
+                cursor: 'pointer'
+              }}
+              onClick={() => handleAnalisarKyttoIA(true)}
+              title="Acionar inteligência artificial para otimização de escala e prevenção de gargalos"
+            >
+              <span style={{ fontSize: 16 }}>🤖</span>
+              <span>{carregandoKyttoIA ? 'Otimizando com KyttoIA...' : 'Otimizador KyttoIA: Sugerir Escala'}</span>
+            </button>
 
             <button
               type="button"

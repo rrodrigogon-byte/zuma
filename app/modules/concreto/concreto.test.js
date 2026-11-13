@@ -47,6 +47,10 @@ import {
   gerarHtmlLaudoAceitacaoEstatistica,
   otimizarTracoSustentavel,
   calcularCurvaMaturidadeAstmC1074,
+  analisarEscalaProgramacaoKyttoIA,
+  aplicarEscalaSugeridaKyttoIA,
+  obterTelemetriaFrotaTempoReal,
+  atualizarTelemetriaBetoneira,
   INSUMOS_MATERIA_PRIMA,
   TRACOS_NORMATIZADOS
 } from './servico.js';
@@ -584,4 +588,77 @@ test('24. Simulador de Maturidade In-Situ ASTM C1074 (Nurse-Saul & Arrhenius)', 
   assert.ok(maturidade.conclusaoDesforma.diasParaDesforma70 <= 3.5);
   assert.ok(maturidade.conclusaoDesforma.resistenciaNaDesformaMpa >= 21);
   assert.ok(maturidade.curvaMaturidade.length >= 8);
+});
+
+
+test('25. Otimizador KyttoIA de Escala de Betoneiras e Previsão de Gargalos de Entrega', async () => {
+  const analise = await analisarEscalaProgramacaoKyttoIA({}, CONCRETO_EMPRESA_ID);
+  assert.equal(analise.ok, true);
+  assert.ok(analise.scoreEficiencia >= 70 && analise.scoreEficiencia <= 100);
+  assert.ok(analise.totalViagens >= 1);
+  assert.ok(analise.sugestoesEscala.length >= 1);
+  assert.ok(analise.betoneirasUtilizadas.length >= 3);
+  assert.ok(analise.diagnosticoKyttoIA.includes('KyttoIA'));
+  
+  // Verifica integridade da primeira viagem sugerida
+  const v1 = analise.sugestoesEscala[0];
+  assert.ok(v1.betoneira.startsWith('BT-'));
+  assert.ok(v1.motorista.length > 3);
+  assert.ok(v1.horarioSaidaUsina.includes(':'));
+  assert.ok(v1.horarioChegadaObraPrevisto.includes(':'));
+  assert.ok(v1.tempoTotalCuraPegaMinutos > 0);
+  assert.equal(v1.limitePegaNbr7212Minutos, 150);
+});
+
+test('26. Aplicação da Escala Sugerida pela KyttoIA na Programação de Cargas', async () => {
+  const analise = await analisarEscalaProgramacaoKyttoIA({}, CONCRETO_EMPRESA_ID);
+  const resultado = await aplicarEscalaSugeridaKyttoIA(analise.sugestoesEscala, CONCRETO_EMPRESA_ID);
+  assert.equal(resultado.ok, true);
+  assert.ok(resultado.viagensAtualizadas >= 0);
+  assert.ok(resultado.mensagem.includes('KyttoIA'));
+});
+
+test('27. Rastreamento por Telemetria em Tempo Real: Tacômetro do Balão (RPM), Sentido de Giro e NBR 7212', async () => {
+  const telemetria = await obterTelemetriaFrotaTempoReal(CONCRETO_EMPRESA_ID);
+  assert.equal(telemetria.ok, true);
+  assert.equal(telemetria.cidade, 'Tangará da Serra/MT');
+  assert.ok(telemetria.veiculos.length >= 5);
+  assert.ok(telemetria.resumoKpis.totalBetoneirasAtivas >= 5);
+  
+  // Validação de betoneira em trânsito (BT-04: Agitação horária)
+  const bt4 = telemetria.veiculos.find(v => v.codigo === 'BT-04');
+  assert.ok(bt4);
+  assert.equal(bt4.sentidoGiro, 'horario');
+  assert.ok(bt4.rpmTambor >= 2.0 && bt4.rpmTambor <= 6.0); // Agitação em trânsito
+  assert.equal(bt4.sensorAguaTrajetoLitros, 0); // Inviolabilidade
+  assert.equal(bt4.lacreAguaInviolavel, true);
+  assert.ok(bt4.minutosDesdeAgua > 0);
+  assert.ok(bt4.tempoRestantePegaMinutos <= bt4.limitePegaMinutos);
+
+  // Validação de betoneira em descarga ativa (BT-02: Descarga anti-horária em bomba)
+  const bt2 = telemetria.veiculos.find(v => v.codigo === 'BT-02');
+  assert.ok(bt2);
+  assert.equal(bt2.sentidoGiro, 'anti_horario');
+  assert.ok(bt2.rpmTambor >= 10.0); // Alta rotação de descarga
+  assert.equal(bt2.sensorAguaTrajetoLitros, 0);
+  assert.ok(bt2.volumeAtualM3 < bt2.capacidadeM3);
+});
+
+test('28. Atualização Dinâmica de Telemetria de Sensores da Betoneira in-situ', async () => {
+  const res = await atualizarTelemetriaBetoneira('BT-01', {
+    rpmTambor: 15.2,
+    sentidoGiro: 'anti_horario',
+    statusOperacional: 'descarregando_obra',
+    statusTexto: 'Descarga Iniciada na Obra',
+    minutosDesdeAgua: 42,
+    temperaturaMassaC: 33.1,
+    volumeAtualM3: 5.5
+  }, CONCRETO_EMPRESA_ID);
+
+  assert.equal(res.ok, true);
+  assert.equal(res.codigo, 'BT-01');
+  assert.equal(res.veiculoAtualizado.rpmTambor, 15.2);
+  assert.equal(res.veiculoAtualizado.sentidoGiro, 'anti_horario');
+  assert.equal(res.veiculoAtualizado.minutosDesdeAgua, 42);
+  assert.equal(res.veiculoAtualizado.temperaturaMassaC, 33.1);
 });
