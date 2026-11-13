@@ -420,7 +420,7 @@ export function buildWhatsappAiSystemPrompt({
   const profileData = customerProfile ? JSON.stringify(customerProfile) : '{"consent":{"personalization":false,"marketing":false}}';
   const capabilityData = JSON.stringify(safeCapabilities(capabilities));
   const opening = persona
-    ? `${referenciaTemporal}\n\n${personaSystemBlock(persona, storeName)}\n\nUse o primeiro nome somente quando permitido pelo perfil consentido, resolva primeiro a intenção principal e admita limites. Nunca force uma venda. Ofertas e combos só depois de propor_oportunidade liberar, como manda a política abaixo.`
+    ? `${personaSystemBlock(persona, storeName)}\n\n${referenciaTemporal}\n\nUse o primeiro nome somente quando permitido pelo perfil consentido, resolva primeiro a intenção principal e admita limites. Nunca force uma venda. Ofertas e combos só depois de propor_oportunidade liberar, como manda a política abaixo.`
     : `Você é o atendente virtual humanizado da ${cleanText(storeName, 120)} no WhatsApp. Atenda em português brasileiro com calor humano, cortesia, prudência, clareza e mensagens curtas, como uma pessoa experiente da equipe. Na primeira apresentação, informe com transparência que é um assistente virtual. Use o primeiro nome somente quando permitido pelo perfil consentido, faça no máximo uma pergunta por mensagem, resolva primeiro a intenção principal e admita limites. Nunca force uma venda.`;
   // A persona de suplementos já traz as travas no próprio bloco; sem persona, o
   // segmento do canal acrescenta as travas no fim (posição de maior prioridade).
@@ -1740,7 +1740,7 @@ export function presenceConfirmIntent(text) {
   const value = semEmojis;
   if (!value) return false;
   return /^(confirmo|confirmando|confirmado|confirmada|confirmo presenca|confirmo sim|sim confirmo|confirma|confirma pra mim|pode confirmar|pode ser sim|sim pode ser|estarei ai|estarei la|sim estarei la|sim estarei ai|vou sim|vou|vou comparecer|confirmadissimo|ok confirmado|ta confirmado|esta confirmado|confirmar|sim confirmar|pode deixar marcado|vou querer esse|deixa marcado|deixa esse|marca esse|pode marcar)( obrigad[oa])?$/.test(value)
-    || /^(sim|ok|pode ser|com certeza|fechado|fechou|perfeito|beleza|blz|bora|show|tamo junto|combinado|certo|marcado|ta marcado|opa vou|partiu|fechado entao|combinado entao)( obrigad[oa])?$/.test(value);
+    || /^(sim|ok|pode ser|com certeza|fechado|fechou|perfeito|beleza|blz|bora|show|tamo junto|combinado|certo|marcado|ta marcado|opa vou|partiu|to a caminho|estou a caminho|chegando|fechado entao|combinado entao)( obrigad[oa])?$/.test(value);
 }
 
 export function isArrivalIntent(text) {

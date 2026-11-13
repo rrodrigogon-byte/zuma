@@ -11965,8 +11965,17 @@ function staticAssetReadiness() {
 }
 function setStaticCacheHeaders(res, filePath) {
   const normalized = String(filePath || '').replace(/\\/g, '/');
-  if (normalized.endsWith('/index.html') || normalized.endsWith('/sw.js') || normalized.endsWith('/manifest.json')) {
-    res.setHeader('Cache-Control', 'no-store');
+  if (
+    normalized.endsWith('.html') ||
+    normalized.endsWith('/sw.js') ||
+    normalized.endsWith('/service-worker.js') ||
+    normalized.endsWith('/sw-supermercado.js') ||
+    normalized.endsWith('/manifest.json') ||
+    normalized.includes('torre-pesagem')
+  ) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     return;
   }
   if (normalized.includes('/assets/')) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
