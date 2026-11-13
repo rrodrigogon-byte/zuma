@@ -381,12 +381,82 @@ export function obterLinkAgendaDino({ professionalIdOrName = '', date = '', serv
 }
 
 /**
+ * Detecta se a mensagem do cliente pede o app, aplicativo, ou algo/link para agendamento online.
+ */
+export function detectAppOrSelfBookingRequest(userText) {
+  const raw = String(userText || '').trim();
+  if (!raw || raw.length > 160) return null;
+  const norm = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+  // Não intercepta se for cancelamento, confirmação simples, reclamação ou pedido de humano
+  if (/\b(cancelar|desmarcar|remarcar|humano|atendente|pessoa|confirmar|confirmo|sim|nao|não)\b/.test(norm)) {
+    return null;
+  }
+
+  const pedeApp = /\b(app|aplicativo|apk)\b/.test(norm) && !/\b(whatsapp|zap)\b/.test(norm.replace(/\b(app\s+do\s+whatsapp|app\s+whatsapp)\b/g, ''));
+  const pedeLinkOuSite = /\b(link|site|pagina|página|linkzinho)\b/.test(norm) && /\b(agendar|agendamento|agenda|marcar|corte|barba|horario|horário|vaga)\b/.test(norm);
+  const pedeAlgoAgendamento = /\balgo\s+(para|pra|de)\s+agendamento\b/.test(norm) || /\balgo\s+(para|pra)\s+agendar\b/.test(norm);
+  const pedeAgendamentoOnline = /\b(agendar|agendamento|marcar)\b.*\b(online|sozinho|direto|pelo site|pelo app|pelo link)\b/.test(norm)
+    || /\b(tem|passa|manda|qual|onde)\b.*\b(link|site|app|aplicativo)\b/.test(norm)
+    || /\b(como\s+(faco|faço|posso)\s+(pra|para)\s+agendar\s+(online|pelo\s+(app|link|site)))\b/.test(norm);
+
+  if (!pedeApp && !pedeLinkOuSite && !pedeAlgoAgendamento && !pedeAgendamentoOnline) {
+    return null;
+  }
+
+  let professional = null;
+  let slug = '';
+  if (/\b(bruno|mendes)\b/.test(norm)) {
+    professional = 'Bruno';
+    slug = 'bruno';
+  } else if (/\b(nati|natani|naty|dobler)\b/.test(norm)) {
+    professional = 'Nati';
+    slug = 'nati';
+  } else if (/\bdino\b/.test(norm) && !/barbearia dino|t-rex da dino|trex da dino/.test(norm)) {
+    professional = 'Dino';
+    slug = 'dino';
+  }
+
+  const link = slug ? `${AGENDA_PUBLICA_DINO_BASE}/${slug}` : AGENDA_PUBLICA_DINO_BASE;
+  return {
+    isRequest: true,
+    professional,
+    link,
+  };
+}
+
+/**
+ * Gera a resposta padrão educada e direta enviando o link do app e pedindo o profissional.
+ */
+export function buildAppAndBookingPromptReply({ professional = null, link = AGENDA_PUBLICA_DINO_BASE } = {}) {
+  if (professional) {
+    return `Você pode acessar nosso app e agendar direto com o(a) ${professional} pelo link:\n${link} 💈\n\nQual dia e horário você prefere? Se preferir, pode me dizer por aqui mesmo que já consulto a agenda e deixo marcado pra você na hora!`;
+  }
+  return `Você pode acessar nosso app do cliente e agendamento online pelo link:\n${link} 💈\n\nCom qual profissional você gostaria de agendar seu atendimento (Dino, Bruno ou Nati)? Me conta por aqui que também já posso ver os melhores horários e deixar marcado pra você agora mesmo!`;
+}
+
+/**
  * Garante que respostas sobre horários/agendamento tragam a opção do link direto da agenda
  * para o próprio cliente visualizar os horários do profissional e agendar sozinho se preferir.
  */
 export function withSelfBookingAgendaOption(replyText, { userText = '', toolResults = [], isBarbershop = true, hasPendingAction = false } = {}) {
   const base = String(replyText || '').trim()
   if (!base || !isBarbershop || hasPendingAction) return base
+
+  const appReq = detectAppOrSelfBookingRequest(userText)
+  if (appReq?.isRequest) {
+    const link = appReq.link || AGENDA_PUBLICA_DINO_BASE
+    let textoFinal = base
+    if (!/https?:\/\/[^\s]*\/agendar\//i.test(textoFinal)) {
+      textoFinal = `${textoFinal}\n📱 App do cliente e agendamento online: ${link}`
+    }
+    const cleanWithoutUrls = textoFinal.replace(/https?:\/\/\S+/gi, '')
+    if (!appReq.professional && !/\b(dino|bruno|nati)\b/i.test(cleanWithoutUrls)) {
+      textoFinal = `${textoFinal}\n💈 Com qual profissional você prefere agendar seu atendimento (Dino, Bruno ou Nati)?`
+    }
+    return textoFinal
+  }
+
   if (/https?:\/\/[^\s]*\/agendar\//i.test(base)) return base
   if (/c[oó]digo.*confirmad|agendamento confirmado|cancelamento confirmado|remarca[cç][aã]o confirmada|responda\s+\*?sim\*?/i.test(base)) {
     return base
