@@ -57,8 +57,19 @@ import {
   calcularCartasControleEstatisticoNbr12655,
   gerarHtmlLaudoAceitacaoEstatistica,
   otimizarTracoSustentavel,
-  calcularCurvaMaturidadeAstmC1074
-} from './servico.js';
+  calcularCurvaMaturidadeAstmC1074,
+  listarCamerasIpConcreto,
+  obterCameraIpPorId,
+  criarCameraIpConcreto,
+  atualizarCameraIpConcreto,
+  excluirCameraIpConcreto,
+  construirUrlsCamera,
+  testarConexaoCameraIp,
+  capturarSnapshotCameraIp,
+  analisarFrameVisionKyttoIa,
+  listarEventosVisionConcreto,
+  reconhecerEventoVision
+} from "./servico.js";
 import { CONCRETO_EMPRESA_ID } from '../../concreto-usina-seed.js';
 
 export function criarRotasConcreto() {
@@ -718,6 +729,122 @@ router.post('/dosagem/calcular', (req, res) => {
     try {
       const resultado = calcularCurvaMaturidadeAstmC1074(req.body, resolverEmpresa(req));
       return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  
+  // =====================================================================
+  // 50. CÂMERAS IP INDUSTRIAIS & VISION AI DA CONCRETEIRA
+  // =====================================================================
+  router.get("/cameras", (req, res) => {
+    try {
+      const cameras = listarCamerasIpConcreto(resolverEmpresa(req));
+      return res.json({ ok: true, cameras, total: cameras.length });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post("/cameras", (req, res) => {
+    try {
+      const camera = criarCameraIpConcreto(req.body, resolverEmpresa(req));
+      return res.status(201).json({ ok: true, camera });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.get("/cameras/:id", (req, res) => {
+    try {
+      const camera = obterCameraIpPorId(req.params.id, resolverEmpresa(req));
+      if (!camera) return res.status(404).json({ ok: false, error: "Câmera não encontrada" });
+      return res.json({ ok: true, camera });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.put("/cameras/:id", (req, res) => {
+    try {
+      const camera = atualizarCameraIpConcreto(req.params.id, req.body, resolverEmpresa(req));
+      if (!camera) return res.status(404).json({ ok: false, error: "Câmera não encontrada" });
+      return res.json({ ok: true, camera });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.delete("/cameras/:id", (req, res) => {
+    try {
+      const sucesso = excluirCameraIpConcreto(req.params.id, resolverEmpresa(req));
+      return res.json({ ok: sucesso });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post("/cameras/:id/testar", (req, res) => {
+    try {
+      const resultado = testarConexaoCameraIp(req.params.id, resolverEmpresa(req));
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post("/cameras/testar-conexao", (req, res) => {
+    try {
+      const resultado = testarConexaoCameraIp(req.body, resolverEmpresa(req));
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.get("/cameras/:id/snapshot", (req, res) => {
+    try {
+      const snapshot = capturarSnapshotCameraIp(req.params.id, resolverEmpresa(req));
+      return res.json(snapshot);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post("/cameras/:id/analisar", (req, res) => {
+    try {
+      const analise = analisarFrameVisionKyttoIa(req.params.id, resolverEmpresa(req));
+      return res.json(analise);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.get("/cameras-eventos", (req, res) => {
+    try {
+      const eventos = listarEventosVisionConcreto(resolverEmpresa(req));
+      return res.json({ ok: true, eventos, total: eventos.length });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post("/cameras-eventos/:id/reconhecer", (req, res) => {
+    try {
+      const operador = req.body?.operador || "Operador CCO";
+      const sucesso = reconhecerEventoVision(req.params.id, resolverEmpresa(req), operador);
+      return res.json({ ok: sucesso });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post("/cameras/gerar-urls", (req, res) => {
+    try {
+      const { marca, ipHost, portaHttp, portaRtsp, usuario, senha, canal, substream } = req.body;
+      const urls = construirUrlsCamera(marca, ipHost, portaHttp, portaRtsp, usuario, senha, canal, substream);
+      return res.json({ ok: true, ...urls });
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
     }

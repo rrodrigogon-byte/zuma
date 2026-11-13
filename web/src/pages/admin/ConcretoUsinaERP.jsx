@@ -11,6 +11,7 @@ import ConcretoMapaGpsFrota from './concreto/ConcretoMapaGpsFrota';
 import ConcretoChecklistFrota from './concreto/ConcretoChecklistFrota';
 import ConcretoRecicladorSustentabilidade from './concreto/ConcretoRecicladorSustentabilidade';
 import ConcretoAuditoriaMetrologica from './concreto/ConcretoAuditoriaMetrologica';
+import ConcretoCamerasVisionAI from './concreto/ConcretoCamerasVisionAI';
 import ConcretoLaboratorioTecnologico from './concreto/ConcretoLaboratorioTecnologico';
 
 
@@ -78,6 +79,7 @@ export default function ConcretoUsinaERP() {
   const [dragas, setDragas] = useState([]);
   const [patiosMineracao, setPatiosMineracao] = useState([]);
   const [vendasAgregados, setVendasAgregados] = useState([]);
+  const [cameras, setCameras] = useState([]);
   const [medicoesObras, setMedicoesObras] = useState([]);
   const [empresa, setEmpresa] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -424,6 +426,7 @@ export default function ConcretoUsinaERP() {
         setDragas(res.dragas || []);
         setPatiosMineracao(res.patiosMineracao || []);
         setVendasAgregados(res.vendasAgregados || []);
+        setCameras(res.cameras || []);
         setMedicoesObras(res.medicoesObras || []);
       }
     } catch (e) {
@@ -637,6 +640,7 @@ export default function ConcretoUsinaERP() {
             { id: "vendas-faturamento", label: "Vendas & Notas Fiscais", icon: "📑" },
             { id: "comercial-propostas", label: "Orçamentos & Propostas", icon: "💼", count: propostas.length },
             { id: "empresa-holding", label: "Holding & Dados Fiscais", icon: "🏢" },
+            { id: "cameras-cftv", label: "Câmeras IP & Vision AI", icon: "📹", count: cameras.length },
           ].map(tab => (
             <button
               key={tab.id}
@@ -1659,6 +1663,15 @@ export default function ConcretoUsinaERP() {
         )}
 
         {/* ─── ABA 6: HOLDING & DADOS FISCAIS SEFAZ ─── */}
+        
+        {/* ─── ABA 11: CÂMERAS IP INDUSTRIAIS & VISION AI (LPR / BALANÇA / SILOS) ─── */}
+        {secaoAtiva === cameras-cftv && (
+          <ConcretoCamerasVisionAI
+            empresaAtivaId={empresaAtivaId}
+            onVoltar={() => setSecaoAtiva(operacao-despacho)}
+          />
+        )}
+
         {secaoAtiva === 'empresa-holding' && (
           <div className="serrano-grid-2col">
             <div className="serrano-card">

@@ -1276,6 +1276,13 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
                 style={{ background: '#0284C7', color: '#FFF', border: 'none', borderRadius: '4px', padding: '5px 10px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>
                 📸 Capturar Foto da Placa
               </button>
+              <a
+                href="/admin/concreto?secao=cameras-cftv"
+                target="_blank"
+                rel="noreferrer"
+                style={{ background: "#EA580C", color: "#FFF", textDecoration: "none", borderRadius: "4px", padding: "5px 10px", fontSize: "11px", fontWeight: "800", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                ⚙️ Gerenciar Câmeras IP & RTSP
+              </a>
             </div>
           </div>
 
