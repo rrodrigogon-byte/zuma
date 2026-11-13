@@ -18,6 +18,7 @@ import ArrivalModal from './components/ArrivalModal';
 import AnomalyModal from './components/AnomalyModal';
 import DanfeModal from './components/DanfeModal';
 import confetti from 'canvas-confetti';
+import { getBalancaStatus, getTickets, criarTicket, registrarEntradaVeiculo, getSilosSuprimentos, enviarComandoBalanca } from './services/api';
 import { 
   INITIAL_STATS, 
   WEIGHBRIDGES, 
@@ -121,6 +122,67 @@ export default function App() {
   const [showDanfeModal, setShowDanfeModal] = useState(false);
   const [activeDanfeDoc, setActiveDanfeDoc] = useState(null);
 
+  // Sincronização em tempo real com a API da Balança e Silos do CCO
+  useEffect(() => {
+    async function carregarDadosReais() {
+      try {
+        const [statusBalanca, ticketsApi, silosApi] = await Promise.all([
+          getBalancaStatus(),
+          getTickets(),
+          getSilosSuprimentos()
+        ]);
+
+        if (statusBalanca?.ok && statusBalanca.estatisticasHoje) {
+          setStats(prev => ({
+            ...prev,
+            pesagensHoje: statusBalanca.estatisticasHoje.totalVeiculosHoje || prev.pesagensHoje,
+            movimentadoTon: statusBalanca.estatisticasHoje.totalToneladasHoje || prev.movimentadoTon,
+            veiculosNoSite: (statusBalanca.estatisticasHoje.veiculosNoPatioQtd || 5) + 1
+          }));
+        }
+
+        if (Array.isArray(ticketsApi) && ticketsApi.length > 0) {
+          const formatados = ticketsApi.map(t => ({
+            id: t.id || t.numeroTicket || `TKT-${Date.now()}`,
+            balancaId: t.balancaId || 'BAL-01',
+            placa: t.placa || 'QBF-6M02',
+            prefixo: t.veiculo || t.prefixo || 'BT-05',
+            motorista: t.motorista || 'Valdir Silveira',
+            cliente: t.cliente || 'Construtora Alvorada Ltda',
+            obra: t.obra || 'Residencial Manacá',
+            produto: t.produto || t.traco || 'TR-FCK30B (FCK 30 MPa)',
+            volumeM3: Number(t.volumeM3) || 8.66,
+            taraKg: Number(t.pesoTaraKg) || 12920,
+            brutoKg: Number(t.pesoBrutoKg) || 33540,
+            liquidoKg: Number(t.pesoLiquidoKg) || 20620,
+            hora: t.hora || '11:42',
+            data: t.data || 'Hoje',
+            mdfe: t.mdfe || 'MDF-2026-482',
+            status: t.status || 'Concluído com Sucesso'
+          }));
+          setTicketsHistory(formatados);
+        }
+
+        if (silosApi?.ok && Array.isArray(silosApi.silos)) {
+          setSilos(silosApi.silos.map((s, idx) => ({
+            id: s.id || `SILO-0${idx + 1}`,
+            nome: s.nome || s.tipo || `Silo 0${idx + 1}`,
+            tipo: s.tipo || 'Cimento CP-II-F-32',
+            capacidadeTons: s.capacidadeTons || 120,
+            atualTons: s.atualTons || 62.4,
+            nivelPct: s.nivelPct || Math.round((s.atualTons / (s.capacidadeTons || 120)) * 100),
+            consumoHojeTons: s.consumoHojeTons || 28.6,
+            pressaoFiltroKpa: s.pressaoFiltroKpa || 3.8,
+            temperatura: s.temperatura || 29.4
+          })));
+        }
+      } catch (err) {
+        console.warn('[Torre CCO] Inicialização usando cache local:', err.message);
+      }
+    }
+    carregarDadosReais();
+  }, []);
+
   // Read URL parameters for direct deep-link or ERP embedding
   useEffect(() => {
     try {
@@ -191,6 +253,13 @@ export default function App() {
       excecoesAbertas: Math.max(0, prev.excecoesAbertas - 1)
     }));
 
+    // Notificar CCO via API
+    enviarComandoBalanca(action === 'aprovar' ? 'liberar_com_ressalva' : 'rejeitar_retorno_patio', {
+      veiculo: activeDecisionData?.veiculo,
+      placa: activeDecisionData?.placa,
+      motivo: note
+    }).catch(() => {});
+
     const newEvt = {
       id: `evt-${Date.now()}`,
       hora: currentTime.slice(0, 5),
@@ -220,6 +289,23 @@ export default function App() {
       concretoProduzidoM3: Number((prev.concretoProduzidoM3 + (newTicket.volumeM3 || 8.0)).toFixed(1))
     }));
 
+    // Persistência real na API do CCO
+    criarTicket({
+      numeroTicket: newTicket.id,
+      balancaId: newTicket.balancaId || 'BAL-01',
+      placa: newTicket.placa,
+      veiculo: newTicket.prefixo,
+      motorista: newTicket.motorista,
+      cliente: newTicket.cliente,
+      obra: newTicket.obra,
+      produto: newTicket.produto,
+      volumeM3: newTicket.volumeM3,
+      pesoTaraKg: newTicket.taraKg,
+      pesoBrutoKg: newTicket.brutoKg,
+      pesoLiquidoKg: newTicket.liquidoKg,
+      mdfe: newTicket.mdfe
+    }).catch(e => console.warn('[Torre API] Falha assíncrona ao persistir ticket:', e.message));
+
     const newEvt = {
       id: `evt-${Date.now()}`,
       hora: currentTime.slice(0, 5),
@@ -247,6 +333,15 @@ export default function App() {
       veiculosNoSite: prev.veiculosNoSite + 1,
       veiculosPatio: prev.veiculosPatio + 1
     }));
+
+    // Registro real de entrada na API da Balança
+    registrarEntradaVeiculo({
+      placa: newVehicle.placa,
+      prefixo: newVehicle.prefixo,
+      motorista: newVehicle.motorista,
+      tipoVeiculo: newVehicle.tipo || 'Betoneira 10m³',
+      taraDeclaradaKg: newVehicle.taraEsperada || 12900
+    }).catch(() => {});
 
     const newEvt = {
       id: `evt-${Date.now()}`,

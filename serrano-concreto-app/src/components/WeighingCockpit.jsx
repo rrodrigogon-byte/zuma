@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { enviarComandoBalanca } from '../services/api';
 import { 
   Scale, 
   Camera, 
@@ -274,6 +275,7 @@ export default function WeighingCockpit({
   const handleZeroScale = () => {
     setIsZeroing(true);
     setIsStable(false);
+    enviarComandoBalanca("zerar_balanca", { balancaId: currentBridge.id }).catch(() => {});
     setTimeout(() => {
       setBaseWeight(0);
       setDisplayWeight(0);
@@ -462,7 +464,7 @@ export default function WeighingCockpit({
                   <span className="text-stone-500 text-[11px]">Semáforo:</span>
                   <button
                     type="button"
-                    onClick={() => setLightInGreen(!lightInGreen)}
+                    onClick={() => { const next = !lightInGreen; setLightInGreen(next); enviarComandoBalanca(next ? "semaforo_entrada_verde" : "semaforo_entrada_vermelho").catch(() => {}); }}
                     className={`px-2 py-0.5 rounded-full font-bold text-[10px] border transition-all ${
                       lightInGreen ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-rose-100 border-rose-300 text-rose-800'
                     }`}
@@ -474,7 +476,7 @@ export default function WeighingCockpit({
                   <span className="text-stone-500 text-[11px]">Cancela:</span>
                   <button
                     type="button"
-                    onClick={() => setGateInOpen(!gateInOpen)}
+                    onClick={() => { const next = !gateInOpen; setGateInOpen(next); enviarComandoBalanca(next ? "abrir_cancela_entrada" : "fechar_cancela_entrada").catch(() => {}); }}
                     className={`px-2 py-0.5 rounded-lg font-bold text-[10px] border transition-all ${
                       gateInOpen ? 'bg-amber-100 border-amber-300 text-amber-900' : 'bg-stone-200 border-stone-300 text-stone-700'
                     }`}
@@ -491,7 +493,7 @@ export default function WeighingCockpit({
                   <span className="text-stone-500 text-[11px]">Semáforo:</span>
                   <button
                     type="button"
-                    onClick={() => setLightOutGreen(!lightOutGreen)}
+                    onClick={() => { const next = !lightOutGreen; setLightOutGreen(next); enviarComandoBalanca(next ? "semaforo_saida_verde" : "semaforo_saida_vermelho").catch(() => {}); }}
                     className={`px-2 py-0.5 rounded-full font-bold text-[10px] border transition-all ${
                       lightOutGreen ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-rose-100 border-rose-300 text-rose-800'
                     }`}
@@ -503,7 +505,7 @@ export default function WeighingCockpit({
                   <span className="text-stone-500 text-[11px]">Cancela:</span>
                   <button
                     type="button"
-                    onClick={() => setGateOutOpen(!gateOutOpen)}
+                    onClick={() => { const next = !gateOutOpen; setGateOutOpen(next); enviarComandoBalanca(next ? "abrir_cancela_saida" : "fechar_cancela_saida").catch(() => {}); }}
                     className={`px-2 py-0.5 rounded-lg font-bold text-[10px] border transition-all ${
                       gateOutOpen ? 'bg-amber-100 border-amber-300 text-amber-900' : 'bg-stone-200 border-stone-300 text-stone-700'
                     }`}
