@@ -28,6 +28,11 @@ import {
   obterRomaneioCompleto,
   emitirTicketPesagemBalanca,
   gerarHtmlTicketBalanca,
+  obterOrdemProducao,
+  atualizarOrdemProducao,
+  excluirOrdemProducao,
+  apontarPesagemOrdemProducao,
+  gerarHtmlOrdemProducaoOficial,
   listarMedicoesObras,
   criarMedicaoObra,
   atualizarStatusMedicao,
@@ -339,4 +344,76 @@ test('13. Emissão de Ticket de Pesagem da Balança Rodoviária de Mineração (
   assert.ok(resHtml.html.includes('TICKET DE PESAGEM RODOVIÁRIA'));
   assert.ok(resHtml.html.includes('21.000 kg'));
   assert.ok(resHtml.html.includes('Toledo 80t'));
+});
+
+test('14. Gestão Completa de Ordens de Produção (Criar, Obter, Editar/Modificar, Apontar Pesagem, Imprimir e Excluir)', async () => {
+  // 1. Criar Nova OP
+  const resCriar = await criarOrdemProducao({
+    cliente: 'Construtora Tangará Prime',
+    obra: 'Residencial Monte Libano · Lajes',
+    fck: 30,
+    volumeM3: 24,
+    betoneirasEscaladas: ['BT-02', 'BT-04'],
+    operador: 'Marcos Vinicius',
+    slumpPrevistoCm: '12 ± 2 cm'
+  }, CONCRETO_EMPRESA_ID);
+
+  assert.equal(resCriar.ok, true);
+  const opId = resCriar.ordemProducao.id;
+  assert.ok(resCriar.ordemProducao.numero.startsWith('OP-2026-'));
+  assert.equal(resCriar.ordemProducao.fck, 30);
+  assert.equal(resCriar.ordemProducao.volumeM3, 24);
+  assert.equal(resCriar.ordemProducao.totalBateladas, 3);
+  assert.ok(resCriar.ordemProducao.consumoTeorico.cimentoKg > 0);
+
+  // 2. Obter OP por ID
+  const resObter = await obterOrdemProducao(opId, CONCRETO_EMPRESA_ID);
+  assert.equal(resObter.ok, true);
+  assert.equal(resObter.ordemProducao.cliente, 'Construtora Tangará Prime');
+
+  // 3. Atualizar/Modificar OP (modificar volume, FCK e status)
+  const resAtualizar = await atualizarOrdemProducao(opId, {
+    volumeM3: 32,
+    fck: 35,
+    status: 'em_pesagem',
+    motorista: 'Adilson de Oliveira',
+    observacoes: 'Urgência na concretagem da laje 2'
+  }, CONCRETO_EMPRESA_ID);
+
+  assert.equal(resAtualizar.ok, true);
+  assert.equal(resAtualizar.ordemProducao.volumeM3, 32);
+  assert.equal(resAtualizar.ordemProducao.fck, 35);
+  assert.equal(resAtualizar.ordemProducao.totalBateladas, 4);
+  assert.equal(resAtualizar.ordemProducao.status, 'em_pesagem');
+  assert.equal(resAtualizar.ordemProducao.motorista, 'Adilson de Oliveira');
+
+  // 4. Apontar Pesagem Real da Balança dos Silos
+  const resApontamento = await apontarPesagemOrdemProducao(opId, {
+    cimentoKg: 13500,
+    areiaKg: 17600,
+    britaKg: 24900,
+    aguaL: 5280,
+    aditivoL: 108.8,
+    slumpMedidoCm: 14.0,
+    lacreCarga: 'LACRE-MT-4401',
+    status: 'concluida'
+  }, CONCRETO_EMPRESA_ID);
+
+  assert.equal(resApontamento.ok, true);
+  assert.equal(resApontamento.ordemProducao.consumoRealBalança.cimentoKg, 13500);
+  assert.equal(resApontamento.ordemProducao.consumoRealBalança.slumpMedidoCm, 14.0);
+  assert.equal(resApontamento.ordemProducao.status, 'concluida');
+
+  // 5. Gerar HTML de Impressão Oficial NBR 7212
+  const html = gerarHtmlOrdemProducaoOficial(resApontamento.ordemProducao);
+  assert.ok(html.includes('Serrano Concreto Usinado'));
+  assert.ok(html.includes(resCriar.ordemProducao.numero));
+  assert.ok(html.includes('13.500 kg'));
+  assert.ok(html.includes('FCK 35 MPa'));
+  assert.ok(html.includes('NBR 7212'));
+
+  // 6. Excluir OP
+  const resExcluir = await excluirOrdemProducao(opId, CONCRETO_EMPRESA_ID);
+  assert.equal(resExcluir.ok, true);
+  assert.equal(resExcluir.ordemProducao.id, opId);
 });

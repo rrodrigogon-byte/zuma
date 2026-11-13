@@ -17,6 +17,11 @@ import {
   calcularCustoConcretoAvancado,
   listarOrdensProducao,
   criarOrdemProducao,
+  obterOrdemProducao,
+  atualizarOrdemProducao,
+  excluirOrdemProducao,
+  apontarPesagemOrdemProducao,
+  gerarHtmlOrdemProducaoOficial,
   concluirOrdemProducao,
   listarMineracao,
   registrarExtracaoDraga,
@@ -128,6 +133,58 @@ export function criarRotasConcreto() {
       return res.json(resultado);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.get('/ordens-producao/:id', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await obterOrdemProducao(req.params.id, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(404).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.put('/ordens-producao/:id', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await atualizarOrdemProducao(req.params.id, req.body, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.delete('/ordens-producao/:id', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await excluirOrdemProducao(req.params.id, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post('/ordens-producao/:id/apontamento', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await apontarPesagemOrdemProducao(req.params.id, req.body, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.get('/ordens-producao/:id/impressao', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const { ordemProducao } = await obterOrdemProducao(req.params.id, empresaId);
+      const html = gerarHtmlOrdemProducaoOficial(ordemProducao);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    } catch (e) {
+      return res.status(404).send(`<h1>Erro ao gerar ordem de produção: ${e.message}</h1>`);
     }
   });
 

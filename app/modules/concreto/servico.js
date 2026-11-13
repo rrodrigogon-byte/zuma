@@ -1138,6 +1138,266 @@ export async function concluirOrdemProducao(opId, consumoRealBalança = null) {
   return { ok: true, ordemProducao: op, silosAtualizados: [silo1, patioAreia, boxBrita, tanqueAditivo] };
 }
 
+export async function obterOrdemProducao(opId, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const op = (data.concreto_ordens_producao || []).find(o => o.id === opId || o.numero === opId);
+  if (!op) throw new Error(`Ordem de produção ${opId} não encontrada.`);
+  return { ok: true, ordemProducao: op };
+}
+
+export async function atualizarOrdemProducao(opId, novosDados = {}, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const op = (data.concreto_ordens_producao || []).find(o => o.id === opId || o.numero === opId);
+  if (!op) throw new Error(`Ordem de produção ${opId} não encontrada.`);
+
+  if (novosDados.cliente !== undefined) op.cliente = String(novosDados.cliente).trim();
+  if (novosDados.obra !== undefined) op.obra = String(novosDados.obra).trim();
+  if (novosDados.endereco !== undefined) op.endereco = String(novosDados.endereco).trim();
+  if (novosDados.status !== undefined) op.status = String(novosDados.status).trim();
+  if (novosDados.operador !== undefined) op.operador = String(novosDados.operador).trim();
+  if (novosDados.motorista !== undefined) op.motorista = String(novosDados.motorista).trim();
+  if (novosDados.betoneirasEscaladas !== undefined) {
+    op.betoneirasEscaladas = Array.isArray(novosDados.betoneirasEscaladas) ? novosDados.betoneirasEscaladas : [novosDados.betoneirasEscaladas];
+  }
+  if (novosDados.slumpPrevistoCm !== undefined) op.slumpPrevistoCm = novosDados.slumpPrevistoCm;
+  if (novosDados.slumpMedidoCm !== undefined) op.slumpMedidoCm = novosDados.slumpMedidoCm;
+  if (novosDados.observacoes !== undefined) op.observacoes = String(novosDados.observacoes);
+  if (novosDados.dataHora !== undefined) op.dataHora = String(novosDados.dataHora);
+
+  let fckAlterado = false;
+  if (novosDados.fck !== undefined && Number(novosDados.fck) !== op.fck) {
+    op.fck = Number(novosDados.fck);
+    fckAlterado = true;
+  }
+  if (novosDados.volumeM3 !== undefined && Number(novosDados.volumeM3) !== op.volumeM3) {
+    op.volumeM3 = Number(novosDados.volumeM3);
+    op.totalBateladas = Math.ceil(op.volumeM3 / 8);
+    fckAlterado = true;
+  }
+
+  if (fckAlterado) {
+    const listaBOM = gerarListaTecnicaBOM();
+    const bom = listaBOM.find(b => b.fck === op.fck) || listaBOM.find(b => b.fck === 25);
+    op.consumoTeorico = {
+      cimentoKg: Math.round(bom.componentes.find(c => c.insumoId.includes('cim'))?.consumo * op.volumeM3 || 0),
+      areiaKg: Math.round(bom.componentes.find(c => c.insumoId.includes('areia'))?.consumoKg * op.volumeM3 || 0),
+      britaKg: Math.round(bom.componentes.find(c => c.insumoId.includes('brita'))?.consumoKg * op.volumeM3 || 0),
+      aguaL: Math.round(bom.componentes.find(c => c.insumoId.includes('agua'))?.consumo * op.volumeM3 || 0),
+      aditivoL: +(bom.componentes.find(c => c.insumoId.includes('adit'))?.consumo * op.volumeM3 || 0).toFixed(1)
+    };
+  }
+
+  if (novosDados.consumoRealBalança) {
+    op.consumoRealBalança = { ...op.consumoRealBalança, ...novosDados.consumoRealBalança };
+  }
+
+  save();
+  return { ok: true, ordemProducao: op };
+}
+
+export async function excluirOrdemProducao(opId, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const idx = (data.concreto_ordens_producao || []).findIndex(o => o.id === opId || o.numero === opId);
+  if (idx === -1) throw new Error(`Ordem de produção ${opId} não encontrada.`);
+  const removida = data.concreto_ordens_producao.splice(idx, 1)[0];
+  save();
+  return { ok: true, ordemProducao: removida };
+}
+
+export async function apontarPesagemOrdemProducao(opId, apontamento = {}, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const op = (data.concreto_ordens_producao || []).find(o => o.id === opId || o.numero === opId);
+  if (!op) throw new Error(`Ordem de produção ${opId} não encontrada.`);
+
+  const consumoTeorico = op.consumoTeorico || {};
+  op.consumoRealBalança = {
+    cimentoKg: Number(apontamento.cimentoKg) || consumoTeorico.cimentoKg || 0,
+    areiaKg: Number(apontamento.areiaKg) || consumoTeorico.areiaKg || 0,
+    britaKg: Number(apontamento.britaKg) || consumoTeorico.britaKg || 0,
+    aguaL: Number(apontamento.aguaL) || consumoTeorico.aguaL || 0,
+    aditivoL: Number(apontamento.aditivoL) || consumoTeorico.aditivoL || 0,
+    slumpMedidoCm: Number(apontamento.slumpMedidoCm) || op.slumpMedidoCm || 12,
+    lacreCarga: apontamento.lacreCarga || 'LAC-2026-098',
+    horaInicioPesagem: apontamento.horaInicioPesagem || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    horaFimCarregamento: apontamento.horaFimCarregamento || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  };
+
+  if (apontamento.status) {
+    op.status = apontamento.status;
+  } else if (op.status === 'planejada' || op.status === 'programada') {
+    op.status = 'em_pesagem';
+  }
+
+  save();
+  return { ok: true, ordemProducao: op };
+}
+
+export function gerarHtmlOrdemProducaoOficial(op) {
+  if (!op) return '<h1>Ordem de produção não encontrada</h1>';
+  const teo = op.consumoTeorico || {};
+  const real = op.consumoRealBalança || teo;
+
+  const calcDesvio = (t, r) => {
+    if (!t || !r) return '0.0%';
+    const d = ((r - t) / t) * 100;
+    return `${d >= 0 ? '+' : ''}${d.toFixed(1)}%`;
+  };
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Ficha Técnica OP ${op.numero || ''} · Serrano Concreto</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: #f8fafc; color: #0f172a; padding: 24px; font-size: 13px; line-height: 1.4; }
+    .folha-a4 { max-width: 800px; margin: 0 auto; background: #fff; padding: 32px; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #ea580c; padding-bottom: 16px; margin-bottom: 20px; }
+    .header-logo h1 { font-size: 20px; font-weight: 900; color: #ea580c; text-transform: uppercase; letter-spacing: 0.5px; }
+    .header-logo p { font-size: 11px; color: #64748b; margin-top: 2px; }
+    .op-badge { background: #fff7ed; border: 2px solid #ea580c; color: #9a3412; padding: 8px 16px; border-radius: 8px; text-align: right; }
+    .op-badge .num { font-size: 22px; font-weight: 900; font-family: monospace; }
+    .op-badge .status { font-size: 11px; font-weight: 800; text-transform: uppercase; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px; }
+    .box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; }
+    .box h3 { font-size: 11px; font-weight: 800; text-transform: uppercase; color: #475569; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+    .box p { font-size: 12px; margin-bottom: 4px; }
+    .box p strong { color: #0f172a; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 18px; font-size: 12px; }
+    th { background: #f1f5f9; padding: 8px 10px; text-align: left; font-weight: 800; border: 1px solid #cbd5e1; }
+    td { padding: 8px 10px; border: 1px solid #e2e8f0; }
+    .text-right { text-align: right; }
+    .assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 40px; padding-top: 20px; border-top: 1px dashed #cbd5e1; text-align: center; }
+    .linha-ass { border-top: 1px solid #0f172a; margin-top: 40px; padding-top: 6px; font-weight: 700; font-size: 12px; }
+    .no-print { margin-bottom: 20px; text-align: right; }
+    .btn-print { background: #ea580c; color: #fff; border: 0; padding: 10px 20px; border-radius: 6px; font-weight: 700; cursor: pointer; }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .folha-a4 { box-shadow: none; border: 0; padding: 0; max-width: 100%; }
+      .no-print { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <button class="btn-print" onclick="window.print()">🖨️ Imprimir Ordem de Produção (A4)</button>
+  </div>
+  <div class="folha-a4">
+    <div class="header">
+      <div class="header-logo">
+        <h1>Serrano Concreto Usinado &amp; Mineração</h1>
+        <p><strong>CNPJ:</strong> 45.892.110/0001-34 · <strong>IE:</strong> 13.982.114-0 · Rodovia MT-358, Km 12 · Tangará da Serra/MT</p>
+        <p><strong>Responsável Técnica:</strong> Engª Karin Prestes · CREA-MT 027300/D · NBR 7212:2021</p>
+      </div>
+      <div class="op-badge">
+        <div class="num">${op.numero || 'OP-2026-000'}</div>
+        <div class="status">STATUS: ${(op.status || 'PROGRAMADA').toUpperCase()}</div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="box">
+        <h3>Identificação do Cliente e Destino</h3>
+        <p><strong>Cliente:</strong> ${op.cliente || 'Não informado'}</p>
+        <p><strong>Obra:</strong> ${op.obra || 'Não informado'}</p>
+        <p><strong>Endereço:</strong> ${op.endereco || 'Tangará da Serra - MT'}</p>
+        <p><strong>Data/Hora Programada:</strong> ${op.dataHora || '-'}</p>
+      </div>
+      <div class="box">
+        <h3>Especificação Técnica do Traço NBR 7212</h3>
+        <p><strong>Resistência Característica:</strong> FCK ${op.fck || 25} MPa</p>
+        <p><strong>Volume Total:</strong> ${op.volumeM3 || 8} m³ (${op.totalBateladas || 1} batelada(s) de usina)</p>
+        <p><strong>Veículo(s) Escalado(s):</strong> ${(op.betoneirasEscaladas || ['BT-01']).join(', ')}</p>
+        <p><strong>Operador Central:</strong> ${op.operador || 'Carlos Eduardo'}</p>
+        <p><strong>Slump Test:</strong> Previsto: ${op.slumpPrevistoCm || '12 ± 2 cm'} · Medido: ${op.consumoRealBalança?.slumpMedidoCm || op.slumpMedidoCm || '-'} cm</p>
+      </div>
+    </div>
+
+    <div class="box" style="margin-bottom: 18px;">
+      <h3>Quadro Estequiométrico de Dosagem e Pesagem dos Silos (NBR 7212)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Matéria-Prima / Insumo</th>
+            <th>Origem / Silo</th>
+            <th class="text-right">Consumo Teórico</th>
+            <th class="text-right">Pesagem Real Balança</th>
+            <th class="text-right">Desvio (%)</th>
+            <th>Tolerância NBR</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Cimento CP II-F-32 Granel</strong></td>
+            <td>Silo 01 (Cimento)</td>
+            <td class="text-right">${Number(teo.cimentoKg || 0).toLocaleString('pt-BR')} kg</td>
+            <td class="text-right"><strong>${Number(real.cimentoKg || teo.cimentoKg || 0).toLocaleString('pt-BR')} kg</strong></td>
+            <td class="text-right">${calcDesvio(teo.cimentoKg, real.cimentoKg)}</td>
+            <td>± 2.0%</td>
+          </tr>
+          <tr>
+            <td><strong>Areia Média Lavada</strong></td>
+            <td>Pátio Mineração 01</td>
+            <td class="text-right">${Number(teo.areiaKg || 0).toLocaleString('pt-BR')} kg</td>
+            <td class="text-right"><strong>${Number(real.areiaKg || teo.areiaKg || 0).toLocaleString('pt-BR')} kg</strong></td>
+            <td class="text-right">${calcDesvio(teo.areiaKg, real.areiaKg)}</td>
+            <td>± 3.0%</td>
+          </tr>
+          <tr>
+            <td><strong>Brita 1 Granítica 9,5 a 19mm</strong></td>
+            <td>Box Brita 1</td>
+            <td class="text-right">${Number(teo.britaKg || 0).toLocaleString('pt-BR')} kg</td>
+            <td class="text-right"><strong>${Number(real.britaKg || teo.britaKg || 0).toLocaleString('pt-BR')} kg</strong></td>
+            <td class="text-right">${calcDesvio(teo.britaKg, real.britaKg)}</td>
+            <td>± 3.0%</td>
+          </tr>
+          <tr>
+            <td><strong>Água Potável de Dosagem</strong></td>
+            <td>Reservatório Usina</td>
+            <td class="text-right">${Number(teo.aguaL || 0).toLocaleString('pt-BR')} L</td>
+            <td class="text-right"><strong>${Number(real.aguaL || teo.aguaL || 0).toLocaleString('pt-BR')} L</strong></td>
+            <td class="text-right">${calcDesvio(teo.aguaL, real.aguaL)}</td>
+            <td>± 1.0%</td>
+          </tr>
+          <tr>
+            <td><strong>Aditivo Plastificante Polifuncional</strong></td>
+            <td>Tanque Dosador 01</td>
+            <td class="text-right">${Number(teo.aditivoL || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1 })} L</td>
+            <td class="text-right"><strong>${Number(real.aditivoL || teo.aditivoL || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1 })} L</strong></td>
+            <td class="text-right">${calcDesvio(teo.aditivoL, real.aditivoL)}</td>
+            <td>± 3.0%</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="box">
+      <h3>Observações da Produção &amp; Rastreabilidade</h3>
+      <p>${op.observacoes || 'Concreto dosado rigorosamente em conformidade com o traço técnico homologado sob a NBR 7212. Proibida a adição de água no caminhão betoneira sem expressa autorização do fiscal da obra.'}</p>
+      <p style="margin-top: 6px; font-size: 11px; color: #64748b;">
+        Tempo máximo permitido de transporte e aplicação: 150 minutos (2h30min) conforme item 4.3 da NBR 7212.
+      </p>
+    </div>
+
+    <div class="assinaturas">
+      <div>
+        <div class="linha-ass">
+          ${op.operador || 'Carlos Eduardo'}<br>
+          <small style="color: #64748b;">Operador da Central de Dosagem dos Silos</small>
+        </div>
+      </div>
+      <div>
+        <div class="linha-ass">
+          Engª Karin Prestes · CREA-MT 027300/D<br>
+          <small style="color: #64748b;">Responsável Técnica Industrial</small>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
 // =====================================================================
 // 9. FUNÇÕES DE CARGAS, TELEMETRIA, ENSAIOS E PROPOSTAS
 // =====================================================================
