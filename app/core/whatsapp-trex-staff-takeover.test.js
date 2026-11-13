@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { isStaffTyped, latestStaffMessages, pauseForStaff, STAFF_REASON } from './whatsapp-staff-takeover.js';
 import { db } from './database.js';
-import { buildWhatsappAiSystemPrompt, claimWhatsappAiHandoff, sendWhatsappAiStaffMessage } from './whatsapp-ai.js';
+import { buildWhatsappAiSystemPrompt, claimWhatsappAiHandoff, sendWhatsappAiStaffMessage, searchWhatsappAiContacts, startWhatsappAiSession } from './whatsapp-ai.js';
 import { resolvePersona } from './whatsapp-ai-persona.js';
 
 const EMPRESA = '11111111-1111-4111-8111-111111111111';
@@ -154,4 +154,135 @@ test('anti-flood de agenda e escopo de serviços no prompt do sistema', () => {
   assert.match(prompt, /ESCOPO ESTRITO DA BARBEARIA/i);
   assert.match(prompt, /NÃO oferecemos serviços de podologia, manicure, unhas/i);
   assert.match(prompt, /nem procedimentos estéticos invasivos ou limpeza de pele profunda/i);
+});
+
+test('claimWhatsappAiHandoff com reatribuir: permite assumir conversa que já estava com outro atendente', async () => {
+  const originalTransaction = db.transaction;
+  const OUTRO_USUARIO = '66666666-6666-4666-8666-666666666666';
+
+  db.transaction = async (fn) => fn({
+    query: async (sql, p) => {
+      if (/SELECT[\s\S]*FROM whatsapp_ai_sessions/i.test(sql)) {
+        return {
+          rows: [{
+            id: SESSAO,
+            status: 'humano',
+            assigned_to: OUTRO_USUARIO,
+            assigned_at: new Date(),
+            priority: 2,
+            handoff_reason: 'cliente pediu atendente humano',
+          }],
+        };
+      }
+      if (/UPDATE whatsapp_ai_sessions/i.test(sql)) {
+        return {
+          rows: [{
+            id: SESSAO,
+            status: 'humano',
+            assigned_to: USUARIO,
+            assigned_at: new Date(),
+            priority: 2,
+            handoff_reason: 'cliente pediu atendente humano',
+          }],
+        };
+      }
+      return { rows: [] };
+    },
+  });
+
+  try {
+    // Sem reatribuir: deve lançar erro de conflito
+    await assert.rejects(
+      () => claimWhatsappAiHandoff({ empresaId: EMPRESA, lojaId: LOJA, usuarioId: USUARIO }, SESSAO, { reatribuir: false }),
+      (err) => err.code === 'WHATSAPP_AI_SESSION_CONFLICT'
+    );
+
+    // Com reatribuir: deve permitir e atualizar assigned_to
+    const reassigned = await claimWhatsappAiHandoff(
+      { empresaId: EMPRESA, lojaId: LOJA, usuarioId: USUARIO },
+      SESSAO,
+      { reatribuir: true }
+    );
+    assert.equal(reassigned.assigned_to, USUARIO);
+  } finally {
+    db.transaction = originalTransaction;
+  }
+});
+
+test('searchWhatsappAiContacts: retorna contatos por busca de nome ou telefone', async () => {
+  const originalQueryRead = db.queryRead;
+  db.queryRead = async (sql, p) => {
+    return {
+      rows: [
+        { nome: 'Carlos Cliente', telefone: '5565999887766', clean_tel: '5565999887766', origem: 'cliente_base' },
+        { nome: 'Carlos Visitante', telefone: '5565999001122', clean_tel: '5565999001122', origem: 'conversa_anterior' },
+      ],
+    };
+  };
+
+  try {
+    const res = await searchWhatsappAiContacts({ empresaId: EMPRESA }, 'Carlos');
+    assert.equal(res.contacts.length, 2);
+    assert.equal(res.contacts[0].nome, 'Carlos Cliente');
+    assert.equal(res.contacts[0].origem, 'cliente_base');
+    assert.equal(res.contacts[1].origem, 'conversa_anterior');
+  } finally {
+    db.queryRead = originalQueryRead;
+  }
+});
+
+test('startWhatsappAiSession: cria nova sessão já assumida para o atendente', async () => {
+  const originalQuery = db.query;
+  const originalQueryRead = db.queryRead;
+  const calls = [];
+
+  db.queryRead = async (sql, p) => {
+    if (/FROM canais_integracao/i.test(sql)) {
+      return {
+        rows: [{
+          id: CANAL,
+          api_base_url: 'http://localhost:3000',
+          configuracao: {},
+          nome: 'WhatsApp Dino',
+          status: 'ativo',
+        }],
+      };
+    }
+    return { rows: [] };
+  };
+
+  db.query = async (sql, p) => {
+    calls.push({ sql, p });
+    if (/INSERT INTO whatsapp_ai_sessions/i.test(sql)) {
+      return {
+        rows: [{
+          id: SESSAO,
+          telefone: '5565999112233',
+          nome: 'Novo Cliente',
+          status: 'humano',
+          assigned_to: USUARIO,
+          canal_id: CANAL,
+        }],
+      };
+    }
+    return { rows: [] };
+  };
+
+  try {
+    const res = await startWhatsappAiSession(
+      { empresaId: EMPRESA, lojaId: LOJA, usuarioId: USUARIO },
+      {
+        telefone: '65999112233',
+        nome: 'Novo Cliente',
+        assumir: true,
+      }
+    );
+    assert.equal(res.ok, true);
+    assert.equal(res.session.status, 'humano');
+    assert.equal(res.session.assigned_to, USUARIO);
+    assert.equal(res.session.telefone, '5565999112233');
+  } finally {
+    db.query = originalQuery;
+    db.queryRead = originalQueryRead;
+  }
 });

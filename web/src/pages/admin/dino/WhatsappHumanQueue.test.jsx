@@ -241,6 +241,43 @@ describe('quadro de conversas do T-Rex', () => {
     expect(leiturasDoQuadro()).toHaveLength(2)
     expect(textOf(renderer)).toContain('enviada ao histórico')
   })
+
+  it('permite reassumir conversa que estava atribuída a outro atendente', async () => {
+    apiMock.get.mockResolvedValue(response([
+      item(sessionA, { status: 'humano', assigned: true, isMine: false }),
+    ]))
+    apiMock.post.mockResolvedValue({ id: sessionA, status: 'humano' })
+    const renderer = await montar()
+    const btnReassumir = button(renderer, 'Reassumir conversa')
+    expect(btnReassumir).toBeDefined()
+    expect(btnReassumir.props.disabled).toBe(false)
+
+    await act(async () => { btnReassumir.props.onClick() })
+    expect(textOf(renderer)).toContain('Reassumir conversa?')
+    expect(textOf(renderer)).toContain('Esta conversa está atualmente com outro atendente')
+
+    const dialogo = renderer.root.findByProps({ role: 'dialog' })
+    await act(async () => { await dialogo.props.onSubmit({ preventDefault() {} }) })
+    await tick()
+
+    expect(apiMock.post).toHaveBeenCalledWith(
+      `/api/admin/commerce/whatsapp-ai/sessions/${sessionA}/claim`,
+      { reatribuir: true },
+      expect.any(Object)
+    )
+  })
+
+  it('botão Nova Conversa abre diálogo de início de conversa', async () => {
+    const renderer = await montar()
+    const btnNova = button(renderer, '➕ Nova Conversa')
+    expect(btnNova).toBeDefined()
+    expect(btnNova.props.disabled).toBe(false)
+
+    await act(async () => { btnNova.props.onClick() })
+    expect(textOf(renderer)).toContain('Iniciar Nova Conversa no WhatsApp')
+    expect(textOf(renderer)).toContain('Cliente da Base')
+    expect(textOf(renderer)).toContain('Novo Número')
+  })
 })
 
 describe('aviso de WhatsApp desconectado', () => {

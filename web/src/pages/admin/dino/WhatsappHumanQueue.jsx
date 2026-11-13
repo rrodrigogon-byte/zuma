@@ -60,6 +60,19 @@ export default function WhatsappHumanQueue({
   const [claimingId, setClaimingId] = useState('')
   // Conversa aberta no painel lateral (histórico completo + resposta do atendente).
   const [conversaId, setConversaId] = useState('')
+  // Nova conversa (cliente da base ou novo número)
+  const [novaConversaOpen, setNovaConversaOpen] = useState(false)
+  const [novaAba, setNovaAba] = useState('base')
+  const [buscaCliente, setBuscaCliente] = useState('')
+  const [clientesEncontrados, setClientesEncontrados] = useState([])
+  const [buscandoClientes, setBuscandoClientes] = useState(false)
+  const [clienteSelecionado, setClienteSelecionado] = useState(null)
+  const [novoTelefone, setNovoTelefone] = useState('')
+  const [novoNome, setNovoNome] = useState('')
+  const [mensagemInicial, setMensagemInicial] = useState('')
+  const [assumirNovaConversa, setAssumirNovaConversa] = useState(true)
+  const [iniciandoConversa, setIniciandoConversa] = useState(false)
+  const [novaConversaErro, setNovaConversaErro] = useState('')
   // WhatsApp da loja desconectado do Kytto: o T-Rex não recebe nem responde (Stallone, 30/10–01/11).
   const [quedaWhatsapp, setQuedaWhatsapp] = useState(null)
   const mountedRef = useRef(true)
@@ -236,6 +249,72 @@ export default function WhatsappHumanQueue({
     prevUrgentesRef.current = stats.urgentes
   }, [stats.urgentes, somHabilitado])
 
+  useEffect(() => {
+    if (!novaConversaOpen || novaAba !== 'base' || !selection) return
+    const term = buscaCliente.trim()
+    if (term.length < 2) {
+      setClientesEncontrados([])
+      return
+    }
+    const timer = setTimeout(async () => {
+      setBuscandoClientes(true)
+      try {
+        const canalQuery = tipoCanal === 'cliente' ? '' : `&canal=${tipoCanal}`
+        const res = await api.get(`/api/admin/commerce/whatsapp-ai/contacts?q=${encodeURIComponent(term)}${canalQuery}`, {
+          headers: { 'X-Empresa-Id': selection.empresaId, 'X-Loja-Id': selection.canonicalLojaId },
+        })
+        if (Array.isArray(res?.contacts)) {
+          setClientesEncontrados(res.contacts)
+        }
+      } catch (_e) {
+        setClientesEncontrados([])
+      } finally {
+        setBuscandoClientes(false)
+      }
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [buscaCliente, novaConversaOpen, novaAba, selection, tipoCanal])
+
+  async function handleIniciarNovaConversa() {
+    if (!selection || iniciandoConversa) return
+    const rawTel = String(novoTelefone || '').replace(/\D/g, '')
+    if (rawTel.length < 10) {
+      setNovaConversaErro('Informe um número de telefone válido com DDD (mínimo 10 dígitos, ex: 65999998888).')
+      return
+    }
+    setIniciandoConversa(true)
+    setNovaConversaErro('')
+    try {
+      const canalQuery = tipoCanal === 'cliente' ? '' : `?canal=${tipoCanal}`
+      const payload = {
+        telefone: rawTel,
+        nome: String(novoNome || '').trim(),
+        texto: String(mensagemInicial || '').trim(),
+        assumir: assumirNovaConversa,
+      }
+      const res = await api.post(`/api/admin/commerce/whatsapp-ai/sessions/start${canalQuery}`, payload, {
+        headers: { 'X-Empresa-Id': selection.empresaId, 'X-Loja-Id': selection.canonicalLojaId },
+      })
+      setNovaConversaOpen(false)
+      setBuscaCliente('')
+      setClienteSelecionado(null)
+      setNovoTelefone('')
+      setNovoNome('')
+      setMensagemInicial('')
+      setNotice('Nova conversa iniciada com sucesso!')
+      setNoticeContextKey(contextKey)
+      await loadQueue()
+      if (res?.session?.id) {
+        setConversaId(res.session.id)
+      }
+      if (typeof onChanged === 'function') await onChanged()
+    } catch (caught) {
+      setNovaConversaErro(caught?.message || 'Erro ao iniciar conversa. Verifique se o WhatsApp da loja está conectado.')
+    } finally {
+      setIniciandoConversa(false)
+    }
+  }
+
   const displayedRows = useMemo(() => {
     let list = baseRows
     if (subFiltro === 'urgentes') {
@@ -273,12 +352,13 @@ export default function WhatsappHumanQueue({
 
 
   function requestClaim(item) {
-    if (!canClaim || (item.assigned && !item.isMine) || !selection || claimingId) return
+    if (!canClaim || !selection || claimingId) return
     setNotice('')
     setNoticeContextKey('')
     setError('')
     setErrorContextKey('')
-    setClaimDialog({ item, selection, contextKey })
+    const isReatribuir = Boolean(item.assigned && !item.isMine)
+    setClaimDialog({ item, selection, contextKey, reatribuir: isReatribuir })
   }
 
   function requestClose(item) {
@@ -407,7 +487,7 @@ export default function WhatsappHumanQueue({
     const dialog = claimDialog
     if (!dialog || dialog.contextKey !== contextKey || !canClaim || claimLockRef.current || claimingId) return
     const encerrar = dialog.acao === 'encerrar'
-    if (!encerrar && dialog.item.assigned && !dialog.item.isMine) return
+    const reatribuir = dialog.reatribuir === true
     // Ref locka sincronicamente antes do primeiro await: dois cliques não geram dois POSTs.
     const controller = new AbortController()
     claimLockRef.current = controller
@@ -421,7 +501,9 @@ export default function WhatsappHumanQueue({
     setNoticeContextKey('')
     try {
       const canalQuery = tipoCanal === 'cliente' ? '' : `?canal=${tipoCanal}`
-      const response = await api.post(`${HUMAN_QUEUE_PATH}/${encodeURIComponent(sessionId)}/${encerrar ? 'close' : 'claim'}${canalQuery}`, {}, {
+      const endpoint = encerrar ? 'close' : 'claim'
+      const payload = reatribuir ? { reatribuir: true } : {}
+      const response = await api.post(`${HUMAN_QUEUE_PATH}/${encodeURIComponent(sessionId)}/${endpoint}${canalQuery}`, payload, {
         headers: { 'X-Empresa-Id': snapshot.empresaId, 'X-Loja-Id': snapshot.canonicalLojaId },
         signal: controller.signal,
       })
@@ -440,7 +522,9 @@ export default function WhatsappHumanQueue({
       setClaimDialog(null)
       const refreshed = await loadQueue()
       if (refreshed && mountedRef.current && contextKeyRef.current === contextKey) {
-        setNotice('Conversa assumida. O T-Rex parou de responder este contato até você devolver.')
+        setNotice(reatribuir
+          ? 'Conversa reatribuída com sucesso para o seu atendimento.'
+          : 'Conversa assumida. O T-Rex parou de responder este contato até você devolver.')
         setNoticeContextKey(contextKey)
         setConversaId(sessionId)
         if (typeof onChanged === 'function') await onChanged()
@@ -544,6 +628,18 @@ export default function WhatsappHumanQueue({
           {somHabilitado ? '🔔 Som Ativo' : '🔕 Som Desativado'}
         </button>
         <button type="button" className="c360-btn ghost" onClick={loadQueue} disabled={loading || Boolean(claimingId)}>{loading ? 'Atualizando…' : 'Atualizar'}</button>
+        <button
+          type="button"
+          className="c360-btn primary wa-btn-nova"
+          onClick={() => {
+            setNovaConversaOpen(true)
+            setNovaConversaErro('')
+          }}
+          disabled={loading || Boolean(claimingId)}
+          title="Iniciar nova conversa com cliente da base ou novo número no WhatsApp"
+        >
+          ➕ Nova Conversa
+        </button>
       </div>
 
       <div className="wa-trex-stats" role="tablist" aria-label="Filtros rápidos">
@@ -595,7 +691,7 @@ export default function WhatsappHumanQueue({
           {displayedRows.map((item) => {
             const comEquipe = item.status === 'humano'
             const encerrada = item.status === 'encerrado'
-            const precisaColetaUrgente = !encerrada && (item.precisaAtendente || (comEquipe && !item.assigned))
+            const precisaColetaUrgente = !encerrada && (item.precisaAtendente || (comEquipe && !item.isMine) || Boolean(item.handoff_requested_at && !item.isMine))
             const tom = encerrada ? 'encerrada' : precisaColetaUrgente ? 'alerta' : comEquipe ? 'equipe' : 'ia'
             const titulo = item.nome || item.telefone
             const situacao = encerrada ? 'Encerrada' : precisaColetaUrgente
@@ -637,8 +733,8 @@ export default function WhatsappHumanQueue({
                 </p>
                 <button type="button" className="c360-btn ghost wa-trex-card__ver" onClick={() => setConversaId(item.id)}>Ver conversa completa</button>
                 {encerrada ? <p className="wa-trex-card__meta">No histórico. Se o cliente escrever de novo, o T-Rex volta a atender.</p> : <div className="wa-trex-card__acoes">
-                  <button type="button" className="c360-btn primary" disabled={!canClaim || (item.assigned && !item.isMine) || item.isMine || Boolean(claimingId)} onClick={() => requestClaim(item)}>
-                    {item.isMine ? 'Assumida por você' : item.assigned ? 'Já assumida' : 'Assumir conversa'}
+                  <button type="button" className="c360-btn primary" disabled={!canClaim || item.isMine || Boolean(claimingId)} onClick={() => requestClaim(item)}>
+                    {item.isMine ? 'Assumida por você' : item.assigned ? 'Reassumir conversa' : 'Assumir conversa'}
                   </button>
                   <button type="button" className="c360-btn ghost" disabled={!canClaim || !comEquipe || Boolean(claimingId)} onClick={() => requestRelease(item)} title={comEquipe ? 'O T-Rex volta a responder este contato' : 'Esta conversa já está com o T-Rex'}>
                     Devolver ao T-Rex
@@ -664,16 +760,186 @@ export default function WhatsappHumanQueue({
       onChanged={async () => { await loadQueue({ silencioso: true }); if (typeof onChanged === 'function') await onChanged() }}
     />}
 
-    <Dialog open={Boolean(activeClaimDialog)} title={activeClaimDialog?.acao === 'encerrar' ? 'Encerrar conversa?' : 'Assumir conversa?'} labelId="wa-human-queue-claim" onClose={() => { if (!claimingId) setClaimDialog(null) }} onSubmit={confirmClaim}
-      actions={<><button type="button" className="c360-btn ghost" onClick={() => setClaimDialog(null)} disabled={Boolean(claimingId)}>Cancelar</button><button type="submit" className="c360-btn primary" disabled={Boolean(claimingId)}>{activeClaimDialog?.acao === 'encerrar' ? (claimingId ? 'Encerrando…' : 'Encerrar conversa') : (claimingId ? 'Assumindo…' : 'Assumir conversa')}</button></>}>
+    <Dialog open={Boolean(activeClaimDialog)} title={activeClaimDialog?.acao === 'encerrar' ? 'Encerrar conversa?' : activeClaimDialog?.reatribuir ? 'Reassumir conversa?' : 'Assumir conversa?'} labelId="wa-human-queue-claim" onClose={() => { if (!claimingId) setClaimDialog(null) }} onSubmit={confirmClaim}
+      actions={<><button type="button" className="c360-btn ghost" onClick={() => setClaimDialog(null)} disabled={Boolean(claimingId)}>Cancelar</button><button type="submit" className="c360-btn primary" disabled={Boolean(claimingId)}>{activeClaimDialog?.acao === 'encerrar' ? (claimingId ? 'Encerrando…' : 'Encerrar conversa') : activeClaimDialog?.reatribuir ? (claimingId ? 'Reassumindo…' : 'Reassumir conversa') : (claimingId ? 'Assumindo…' : 'Assumir conversa')}</button></>}>
       {activeClaimDialog?.acao === 'encerrar' ? <>
         <p>A conversa sai do quadro e fica no histórico (filtro <strong>Encerradas</strong>). Nenhuma mensagem é enviada ao cliente.</p>
         <p>Se o cliente escrever de novo, o T-Rex volta a atender.</p>
+      </> : activeClaimDialog?.reatribuir ? <>
+        <p>Esta conversa está atualmente com outro atendente. Deseja reatribuir o atendimento para <strong>{operator}</strong>?</p>
+        <p>O T-Rex continuará em pausa para este contato e você responderá diretamente pelo painel.</p>
       </> : <>
         <p>Esta conversa será atribuída ao operador logado: <strong>{operator}</strong>.</p>
         <p>Empresa: <strong>{safeText(empresaNome)}</strong><br />Unidade: <strong>{safeText(lojaNome)}</strong></p>
         <p>O T-Rex para de responder este contato até a conversa ser devolvida a ele. A conversa abre ao lado com todo o histórico, e você responde por ali.</p>
       </>}
+    </Dialog>
+
+    <Dialog
+      open={novaConversaOpen}
+      title="Iniciar Nova Conversa no WhatsApp"
+      labelId="wa-nova-conversa-dialog"
+      onClose={() => { if (!iniciandoConversa) setNovaConversaOpen(false) }}
+      onSubmit={handleIniciarNovaConversa}
+      actions={
+        <>
+          <button
+            type="button"
+            className="c360-btn ghost"
+            onClick={() => setNovaConversaOpen(false)}
+            disabled={iniciandoConversa}
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="c360-btn primary wa-btn-nova"
+            disabled={iniciandoConversa || !novoTelefone.trim()}
+          >
+            {iniciandoConversa ? 'Iniciando…' : 'Iniciar Atendimento'}
+          </button>
+        </>
+      }
+    >
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        <button
+          type="button"
+          className={`c360-btn ${novaAba === 'base' ? 'primary' : 'ghost'}`}
+          onClick={() => { setNovaAba('base'); setNovaConversaErro('') }}
+          style={{ flex: 1 }}
+        >
+          👥 Cliente da Base
+        </button>
+        <button
+          type="button"
+          className={`c360-btn ${novaAba === 'novo' ? 'primary' : 'ghost'}`}
+          onClick={() => { setNovaAba('novo'); setClienteSelecionado(null); setNovaConversaErro('') }}
+          style={{ flex: 1 }}
+        >
+          📱 Novo Número
+        </button>
+      </div>
+
+      {novaAba === 'base' ? (
+        <div style={{ marginBottom: 12 }}>
+          {clienteSelecionado ? (
+            <div style={{ padding: '10px 12px', background: 'rgba(34, 197, 94, 0.12)', border: '1.5px solid #22c55e', borderRadius: 8, marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <strong style={{ display: 'block', fontSize: 14 }}>✅ {clienteSelecionado.nome}</strong>
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>Telefone: {clienteSelecionado.telefone}</span>
+              </div>
+              <button
+                type="button"
+                className="c360-btn ghost"
+                style={{ padding: '4px 10px', fontSize: 12 }}
+                onClick={() => { setClienteSelecionado(null); setNovoTelefone(''); setNovoNome(''); }}
+              >
+                Trocar cliente
+              </button>
+            </div>
+          ) : (
+            <>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
+                Buscar cliente cadastrado ou contatos recentes
+              </label>
+              <input
+                type="search"
+                className="c360-input"
+                placeholder="Digite o nome ou telefone do cliente…"
+                value={buscaCliente}
+                onChange={(e) => setBuscaCliente(e.target.value)}
+                style={{ width: '100%', boxSizing: 'border-box', marginBottom: 8 }}
+                autoFocus
+              />
+              {buscandoClientes && <p style={{ fontSize: 12, color: 'var(--muted)', margin: '4px 0' }}>Buscando clientes na base…</p>}
+              {!buscandoClientes && clientesEncontrados.length > 0 && (
+                <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 8, marginBottom: 8 }}>
+                  {clientesEncontrados.map((c, i) => (
+                    <div
+                      key={`${c.telefone}-${i}`}
+                      className="wa-cliente-item"
+                      onClick={() => {
+                        setClienteSelecionado(c)
+                        setNovoTelefone(c.telefone)
+                        setNovoNome(c.nome)
+                      }}
+                    >
+                      <div>
+                        <strong style={{ fontSize: 13, display: 'block' }}>{c.nome}</strong>
+                        <span style={{ fontSize: 12, color: 'var(--muted)' }}>{c.telefone}</span>
+                      </div>
+                      <span style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: c.origem === 'cliente_base' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(16, 185, 129, 0.12)', color: c.origem === 'cliente_base' ? '#2563eb' : '#059669', fontWeight: 700 }}>
+                        {c.origem === 'cliente_base' ? 'Barbearia' : 'WhatsApp'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!buscandoClientes && buscaCliente.trim().length >= 2 && clientesEncontrados.length === 0 && (
+                <p style={{ fontSize: 12, color: 'var(--muted)', margin: '4px 0 8px' }}>Nenhum cliente encontrado com esse termo. Você pode digitar na aba "Novo Número".</p>
+              )}
+            </>
+          )}
+        </div>
+      ) : (
+        <>
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
+              Telefone com DDD *
+            </label>
+            <input
+              type="tel"
+              className="c360-input"
+              placeholder="(65) 99999-8888"
+              value={novoTelefone}
+              onChange={(e) => setNovoTelefone(e.target.value)}
+              style={{ width: '100%', boxSizing: 'border-box' }}
+              required
+              autoFocus
+            />
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
+              Nome do cliente (opcional)
+            </label>
+            <input
+              type="text"
+              className="c360-input"
+              placeholder="Ex: João da Silva"
+              value={novoNome}
+              onChange={(e) => setNovoNome(e.target.value)}
+              style={{ width: '100%', boxSizing: 'border-box' }}
+            />
+          </div>
+        </>
+      )}
+
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
+          Mensagem inicial para enviar ao cliente (opcional)
+        </label>
+        <textarea
+          className="c360-input"
+          rows={2}
+          placeholder="Ex: Olá! Aqui é da Barbearia Dino. Tudo bem? Como posso te ajudar?"
+          value={mensagemInicial}
+          onChange={(e) => setMensagemInicial(e.target.value)}
+          style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical' }}
+        />
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={assumirNovaConversa}
+            onChange={(e) => setAssumirNovaConversa(e.target.checked)}
+          />
+          <span><strong>Assumir conversa imediatamente para mim</strong> (pausa o T-Rex para este cliente)</span>
+        </label>
+      </div>
+
+      {novaConversaErro && <p className="dadm-note danger" role="alert" style={{ marginBottom: 10 }}>{novaConversaErro}</p>}
     </Dialog>
   </section>
 }

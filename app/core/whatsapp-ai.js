@@ -3163,10 +3163,11 @@ async function auditHandoff(trx, context, sessionId, action, after = {}) {
   );
 }
 
-export async function claimWhatsappAiHandoff(context = {}, sessionId) {
+export async function claimWhatsappAiHandoff(context = {}, sessionId, options = {}) {
   const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
   const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
   const tipoCanal = whatsappChannelType(context.tipoCanal || 'cliente');
+  const reatribuir = options?.reatribuir === true || context.forcarReatribuicao === true;
   if (!UUID_PATTERN.test(String(context.usuarioId || ''))) {
     const error = new Error('usuário autenticado é obrigatório');
     error.code = 'AUTHENTICATED_USER_REQUIRED';
@@ -3197,9 +3198,23 @@ export async function claimWhatsappAiHandoff(context = {}, sessionId) {
     // atendimento anterior não pode bloquear nem tornar o "Assumir" um clique sem efeito.
     const comEquipe = current.status === 'humano';
     if (comEquipe && current.assigned_to && String(current.assigned_to) !== String(context.usuarioId)) {
-      const error = new Error('sessão já foi assumida por outro atendente');
-      error.code = 'WHATSAPP_AI_SESSION_CONFLICT';
-      throw error;
+      if (!reatribuir) {
+        const error = new Error('sessão já foi assumida por outro atendente');
+        error.code = 'WHATSAPP_AI_SESSION_CONFLICT';
+        throw error;
+      }
+      const reatribuido = await trx.query(
+        `UPDATE whatsapp_ai_sessions
+            SET assigned_to = $4, assigned_at = CURRENT_TIMESTAMP, atualizado_em = CURRENT_TIMESTAMP
+          WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status = 'humano'
+            AND canal_id IN (SELECT id FROM canais_integracao WHERE empresa_id = $2 AND loja_id = $3 AND provedor = 'whatsapp' AND tipo_canal = $5)
+          RETURNING id, status, assigned_to, assigned_at, priority, handoff_reason`,
+        [normalizedSessionId, empresaId, lojaId, context.usuarioId, tipoCanal],
+      );
+      if (reatribuido.rows[0]) {
+        await auditHandoff(trx, context, reatribuido.rows[0].id, 'reassigned', { priority: reatribuido.rows[0].priority, previous: current.assigned_to });
+        return reatribuido.rows[0];
+      }
     }
     if (comEquipe && current.assigned_to && String(current.assigned_to) === String(context.usuarioId)) return current;
     if (current.status === 'ativo') {
@@ -4081,4 +4096,134 @@ export async function testWhatsappAiGemini(context = {}, { confirmed = false } =
     ).catch(() => null);
     throw error;
   }
+}
+
+export async function searchWhatsappAiContacts(context = {}, query = '') {
+  const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
+  const q = cleanText(query, 100);
+  const pattern = `%${q}%`;
+
+  let rows = [];
+  try {
+    const res = await db.queryRead(
+      `SELECT DISTINCT ON (clean_tel)
+              nome, telefone, clean_tel, origem
+         FROM (
+           SELECT nome, telefone,
+                  REGEXP_REPLACE(telefone, '\\D', '', 'g') AS clean_tel,
+                  'cliente_base' AS origem
+             FROM clientes_barbearia
+            WHERE empresa_id = $1
+              AND ($2 = '' OR nome ILIKE $3 OR telefone ILIKE $3)
+           UNION ALL
+           SELECT nome, telefone,
+                  REGEXP_REPLACE(telefone, '\\D', '', 'g') AS clean_tel,
+                  'conversa_anterior' AS origem
+             FROM whatsapp_ai_sessions
+            WHERE empresa_id = $1
+              AND ($2 = '' OR nome ILIKE $3 OR telefone ILIKE $3)
+         ) sub
+        WHERE LENGTH(clean_tel) >= 8
+        ORDER BY clean_tel, (CASE WHEN origem = 'cliente_base' THEN 1 ELSE 2 END)
+        LIMIT 25`,
+      [empresaId, q, pattern],
+    );
+    rows = res.rows || [];
+  } catch (_err) {
+    const res = await db.queryRead(
+      `SELECT DISTINCT ON (REGEXP_REPLACE(telefone, '\\D', '', 'g'))
+              nome, telefone, 'conversa_anterior' AS origem
+         FROM whatsapp_ai_sessions
+        WHERE empresa_id = $1
+          AND ($2 = '' OR nome ILIKE $3 OR telefone ILIKE $3)
+          AND LENGTH(REGEXP_REPLACE(telefone, '\\D', '', 'g')) >= 8
+        LIMIT 25`,
+      [empresaId, q, pattern],
+    ).catch(() => ({ rows: [] }));
+    rows = res.rows || [];
+  }
+
+  return {
+    contacts: rows.map(r => ({
+      nome: cleanText(r.nome, 120) || 'Cliente sem nome',
+      telefone: cleanText(r.telefone, 30),
+      origem: r.origem,
+    })),
+  };
+}
+
+export async function startWhatsappAiSession(context = {}, input = {}) {
+  const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
+  const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
+  const tipoCanal = whatsappChannelType(context.tipoCanal || 'cliente');
+  if (!UUID_PATTERN.test(String(context.usuarioId || ''))) {
+    const error = new Error('usuário autenticado é obrigatório');
+    error.code = 'AUTHENTICATED_USER_REQUIRED';
+    throw error;
+  }
+  const rawPhone = String(input.telefone || input.phone || '').replace(/\D/g, '');
+  if (rawPhone.length < 10 || rawPhone.length > 15) {
+    const error = new Error('informe um telefone válido com DDD (ex: 65999998888)');
+    error.code = 'INVALID_PHONE_NUMBER';
+    throw error;
+  }
+  const cleanPhone = (rawPhone.length === 10 || rawPhone.length === 11) ? `55${rawPhone}` : rawPhone;
+  const remoteJid = `${cleanPhone}@s.whatsapp.net`;
+  const customerName = cleanText(input.nome || input.name || '', 100);
+
+  const canalRow = (await db.queryRead(
+    `SELECT id, api_base_url, configuracao, nome, status
+       FROM canais_integracao
+      WHERE empresa_id = $1 AND loja_id = $2 AND provedor = 'whatsapp' AND tipo_canal = $3
+      LIMIT 1`,
+    [empresaId, lojaId, tipoCanal],
+  )).rows[0];
+
+  if (!canalRow) {
+    const error = new Error('nenhum canal de WhatsApp conectado para esta unidade');
+    error.code = 'WHATSAPP_CHANNEL_NOT_FOUND';
+    throw error;
+  }
+
+  const assumir = input.assumir !== false;
+  const session = (await db.query(
+    `INSERT INTO whatsapp_ai_sessions
+      (empresa_id, loja_id, canal_id, remote_jid, telefone, nome, status, assigned_to, assigned_at, handoff_reason, atualizado_em, expira_em)
+     VALUES
+      ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $8 IS NOT NULL THEN CURRENT_TIMESTAMP ELSE NULL END, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '24 hours')
+     ON CONFLICT (canal_id, remote_jid) DO UPDATE SET
+       nome = CASE WHEN EXCLUDED.nome <> '' THEN EXCLUDED.nome ELSE whatsapp_ai_sessions.nome END,
+       status = EXCLUDED.status,
+       assigned_to = EXCLUDED.assigned_to,
+       assigned_at = EXCLUDED.assigned_at,
+       handoff_reason = EXCLUDED.handoff_reason,
+       closed_at = NULL,
+       atualizado_em = CURRENT_TIMESTAMP
+     RETURNING id, telefone, nome, status, assigned_to, canal_id`,
+    [
+      empresaId,
+      lojaId,
+      canalRow.id,
+      remoteJid,
+      cleanPhone,
+      customerName,
+      assumir ? 'humano' : 'ativo',
+      assumir ? context.usuarioId : null,
+      assumir ? STAFF_REASON : null,
+    ],
+  )).rows[0];
+
+  await auditHandoff(db, context, session.id, 'started_by_staff', {
+    telefone: cleanPhone,
+    nome: customerName,
+    assumido: assumir,
+  }).catch(() => null);
+
+  const texto = String(input.texto || input.text || '').trim();
+  let messageResult = null;
+  if (texto) {
+    messageResult = await sendWhatsappAiStaffMessage(context, session.id, { texto });
+  }
+
+  return { ok: true, session, message: messageResult };
 }
