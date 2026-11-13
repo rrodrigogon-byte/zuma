@@ -5472,7 +5472,7 @@ export function testarConexaoCameraIp(idOuDados, empresaId = CONCRETO_EMPRESA_ID
   const data = inicializarDatastoreConcreto();
   let camera = null;
   if (typeof idOuDados === "string") {
-    camera = (data.concreto_cameras_ip || []).find(c => c.id === idOuDados);
+    camera = obterCameraIpPorId(idOuDados, empresaId) || (data.concreto_cameras_ip || []).find(c => c.id === idOuDados || c.aliasId === idOuDados);
   } else if (idOuDados && typeof idOuDados === "object") {
     camera = idOuDados;
   }

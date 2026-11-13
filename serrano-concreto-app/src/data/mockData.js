@@ -530,3 +530,160 @@ export const COPILOT_SUGGESTIONS = [
   'Verificar status da integração com a SEFAZ-MT',
   'Gerar ticket de pesagem da BAL-01'
 ];
+
+
+// Canteiros e Clientes Homologados (Tangará da Serra - MT)
+export const CLIENTS_JOBSITES = [
+  {
+    id: 'CLI-01',
+    cliente: 'Construtora Alvorada Ltda',
+    cnpj: '03.987.456/0001-88',
+    inscricaoEstadual: '13.987.456-1 MT',
+    obrasAtivas: [
+      {
+        id: 'OBRA-01',
+        nome: 'Residencial Manacá - Laje 4º Pav.',
+        endereco: 'Rua Celso Rosa, 450 - Jd. Alvorada',
+        artNumero: 'ART-CREA-MT-2026/88412',
+        engenheiroResponsavel: 'Eng. Marcelo Antunes',
+        crea: '12499/D-MT',
+        fckSolicitado: '30 MPa',
+        volumeTotalContratadoM3: 280.0,
+        volumeConsumidoM3: 142.5
+      }
+    ]
+  },
+  {
+    id: 'CLI-02',
+    cliente: 'Pavimentadora Pantanal Ltda',
+    cnpj: '08.123.654/0001-12',
+    inscricaoEstadual: '13.123.654-0 MT',
+    obrasAtivas: [
+      {
+        id: 'OBRA-02',
+        nome: 'Duplicação Av. Lions Internacional',
+        endereco: 'Av. Lions Internacional, KM 03 ao 07',
+        artNumero: 'ART-CREA-MT-2026/77192',
+        engenheiroResponsavel: 'Eng. Rafael Duarte',
+        crea: '09812/D-MT',
+        fckSolicitado: 'CCR / Brita Graduada',
+        volumeTotalContratadoM3: 1500.0,
+        volumeConsumidoM3: 890.0
+      }
+    ]
+  },
+  {
+    id: 'CLI-03',
+    cliente: 'Engenharia & Obras Tangará ME',
+    cnpj: '19.456.789/0001-34',
+    inscricaoEstadual: '13.456.789-8 MT',
+    obrasAtivas: [
+      {
+        id: 'OBRA-03',
+        nome: 'Galpão Logístico Distrito Industrial',
+        endereco: 'Rua das Indústrias, Lote 14',
+        artNumero: 'ART-CREA-MT-2026/66301',
+        engenheiroResponsavel: 'Eng. Camila Becker',
+        crea: '15402/D-MT',
+        fckSolicitado: '25 MPa',
+        volumeTotalContratadoM3: 120.0,
+        volumeConsumidoM3: 64.0
+      }
+    ]
+  }
+];
+
+// Frota Serrano Concreto & Mineração
+export const FLEET = [
+  {
+    id: 'v1',
+    prefixo: 'BT-05',
+    placa: 'QBF-6M02',
+    tipo: 'Betoneira 10m³ (4 Eixos)',
+    modelo: 'Scania P310 8x4',
+    taraCadastradaKg: 12920,
+    capacidadeM3: 10,
+    status: 'Na Balança (1ª Pesagem)',
+    ultimaTaraAferida: 'Hoje · 11:40'
+  },
+  {
+    id: 'v2',
+    prefixo: 'BT-06',
+    placa: 'RBD-4K89',
+    tipo: 'Betoneira 8m³ (4 Eixos)',
+    modelo: 'Volvo VM 330 8x4',
+    taraCadastradaKg: 13180,
+    capacidadeM3: 8,
+    status: 'No Pátio (Aguardando Carregamento)',
+    ultimaTaraAferida: 'Hoje · 10:15'
+  },
+  {
+    id: 'v3',
+    prefixo: 'CB-01',
+    placa: 'QBM-4J11',
+    tipo: 'Carreta Basculante (3 Eixos)',
+    modelo: 'Mercedes-Benz Actros 2651',
+    taraCadastradaKg: 14850,
+    capacidadeM3: 20,
+    status: 'Em Trânsito (Entrega Brita)',
+    ultimaTaraAferida: 'Hoje · 09:30'
+  },
+  {
+    id: 'v4',
+    prefixo: 'BT-03',
+    placa: 'QBC-8821',
+    tipo: 'Betoneira 8m³ (3 Eixos)',
+    modelo: 'Ford Cargo 2629 6x4',
+    taraCadastradaKg: 12800,
+    capacidadeM3: 8,
+    status: 'Disponível no Pátio',
+    ultimaTaraAferida: 'Hoje · 08:00'
+  },
+  {
+    id: 'v5',
+    prefixo: 'CB-02',
+    placa: 'RMT-1A22',
+    tipo: 'Carreta Basculante (3 Eixos)',
+    modelo: 'Scania R450 6x4',
+    taraCadastradaKg: 15100,
+    capacidadeM3: 22,
+    status: 'Carregando na Mineração',
+    ultimaTaraAferida: 'Hoje · 07:45'
+  }
+];
+
+// Motoristas Credenciados
+export const DRIVERS = [
+  {
+    id: 'mot-01',
+    nome: 'Valdir Silveira',
+    cpf: '450.***.***-89',
+    cnh: '0492819402',
+    categoria: 'E',
+    status: 'Na Balança (BT-05)'
+  },
+  {
+    id: 'mot-02',
+    nome: 'José Roberto Lima',
+    cpf: '312.***.***-45',
+    cnh: '0582910481',
+    categoria: 'E',
+    status: 'Em Trânsito (CB-01)'
+  },
+  {
+    id: 'mot-03',
+    nome: 'Carlos Eduardo Ramos',
+    cpf: '298.***.***-12',
+    cnh: '0371928472',
+    categoria: 'D',
+    status: 'No Pátio (BT-06)'
+  },
+  {
+    id: 'mot-04',
+    nome: 'Marcos Vinicius Souza',
+    cpf: '581.***.***-63',
+    cnh: '0681928491',
+    categoria: 'E',
+    status: 'Disponível no Pátio'
+  }
+];
