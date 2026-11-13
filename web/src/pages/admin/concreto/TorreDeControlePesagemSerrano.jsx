@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 /**
@@ -11,12 +11,30 @@ import { useNavigate } from 'react-router-dom';
 export default function TorreDeControlePesagemSerrano({ onVoltar }) {
   const [modoTelaCheia, setModoTelaCheia] = useState(false);
   const [iframeLoaded, setIframeLoaded] = useState(false);
+  const containerRef = useRef(null);
   const navigate = useNavigate();
+
+  const alternarTelaCheia = () => {
+    const doc = document;
+    const isFs = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement;
+    if (!isFs) {
+      const el = containerRef.current || doc.documentElement;
+      if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      else if (el.mozRequestFullScreen) el.mozRequestFullScreen();
+      setModoTelaCheia(true);
+    } else {
+      if (doc.exitFullscreen) doc.exitFullscreen().catch(() => {});
+      else if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
+      else if (doc.mozCancelFullScreen) doc.mozCancelFullScreen();
+      setModoTelaCheia(false);
+    }
+  };
 
   useEffect(() => {
     const handleMessage = (e) => {
       if (e.data?.type === 'TOGGLE_FULLSCREEN') {
-        setModoTelaCheia(prev => !prev);
+        alternarTelaCheia();
       } else if (e.data?.type === 'NAVIGATE_SECTION') {
         if (e.data.secao === 'cameras-cftv') {
           navigate('/admin/concreto?secao=cameras-cftv');
@@ -26,12 +44,25 @@ export default function TorreDeControlePesagemSerrano({ onVoltar }) {
         }
       }
     };
+
+    const handleFsChange = () => {
+      setModoTelaCheia(Boolean(document.fullscreenElement || document.webkitFullscreenElement));
+    };
+
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    document.addEventListener('fullscreenchange', handleFsChange);
+    document.addEventListener('webkitfullscreenchange', handleFsChange);
+
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      document.removeEventListener('fullscreenchange', handleFsChange);
+      document.removeEventListener('webkitfullscreenchange', handleFsChange);
+    };
   }, [navigate, onVoltar]);
 
   return (
     <div
+      ref={containerRef}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -54,7 +85,7 @@ export default function TorreDeControlePesagemSerrano({ onVoltar }) {
       {modoTelaCheia && (
         <button
           type="button"
-          onClick={() => setModoTelaCheia(false)}
+          onClick={alternarTelaCheia}
           style={{
             position: 'absolute',
             top: 10,
@@ -113,6 +144,8 @@ export default function TorreDeControlePesagemSerrano({ onVoltar }) {
         <iframe
           src="/torre-pesagem.html"
           title="Torre de Pesagem Serrano CCO"
+          allow="fullscreen"
+          allowFullScreen
           onLoad={() => setIframeLoaded(true)}
           style={{
             width: '100%',
