@@ -1665,10 +1665,10 @@ export default function ConcretoUsinaERP() {
         {/* ─── ABA 6: HOLDING & DADOS FISCAIS SEFAZ ─── */}
         
         {/* ─── ABA 11: CÂMERAS IP INDUSTRIAIS & VISION AI (LPR / BALANÇA / SILOS) ─── */}
-        {secaoAtiva === cameras-cftv && (
+        {secaoAtiva === 'cameras-cftv' && (
           <ConcretoCamerasVisionAI
-            empresaAtivaId={empresaAtivaId}
-            onVoltar={() => setSecaoAtiva(operacao-despacho)}
+            empresaAtivaId={empresaAtiva || empresa?.id}
+            onVoltar={() => setSecaoAtiva('operacao-despacho')}
           />
         )}
 
