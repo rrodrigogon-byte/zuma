@@ -201,7 +201,29 @@ export default function ConcretoGraficosResistenciaNBR5739() {
       const res = await api.get('/api/admin/concreto/laboratorio/resistencia-por-traco');
       const data = res?.data || res;
       if (data?.ok && Array.isArray(data.tracos)) {
-        setDados(data);
+        const cores = ["#38bdf8", "#3b82f6", "#f59e0b", "#ea580c", "#8b5cf6", "#10b981"];
+        const normalizados = data.tracos.map((t, i) => {
+          const curva = t.curvaEvolucao || (t.curvaGanhoResistencia || []).map(p => ({
+            idadeDias: p.idadeDias,
+            idadeRotulo: p.idadeRotulo,
+            resistenciaMpa: p.resistenciaMpa,
+            percentual: p.percFc28d || Math.round((p.resistenciaMpa / (t.fc28d || 1)) * 100)
+          })) || [
+            { idadeDias: 3, idadeRotulo: "3d", resistenciaMpa: t.fc3d || 12, percentual: 42 },
+            { idadeDias: 7, idadeRotulo: "7d", resistenciaMpa: t.fc7d || 18, percentual: 64 },
+            { idadeDias: 14, idadeRotulo: "14d", resistenciaMpa: t.fc14d || 23, percentual: 80 },
+            { idadeDias: 28, idadeRotulo: "28d", resistenciaMpa: t.fc28d || 30, percentual: 100 },
+            { idadeDias: 63, idadeRotulo: "63d", resistenciaMpa: t.fc63d || 33, percentual: 110 }
+          ];
+          return {
+            ...t,
+            corHex: t.corHex || cores[i % cores.length],
+            curvaEvolucao: curva,
+            eficienciaCimento: t.eficienciaCimento || t.eficienciaCimentoMpaPor100Kg || +(((t.fc28d || 30) / ((t.consumoCimentoKgM3 || 300) / 100))).toFixed(2),
+            esg: t.esg || !!t.seloEsg
+          };
+        });
+        setDados({ ...data, tracos: normalizados });
       } else {
         setDados({ tracos: DADOS_PADRAO_TRACOS, resumoGeral: { totalTracos: 6, totalCpsRompidos: 164, mediaSobreresistenciaMpa: 4.6, mediaEficienciaCimentoMpa100Kg: 9.8, conformidadePercentual: 100 } });
       }
@@ -635,7 +657,7 @@ export default function ConcretoGraficosResistenciaNBR5739() {
                   <td style={{ padding: '10px 12px', fontFamily: 'var(--font-data)' }}>{t.consumoCimentoKgM3} kg/m³</td>
                   <td style={{ padding: '10px 12px', fontFamily: 'var(--font-data)', fontWeight: 700 }}>{t.fckProjeto} MPa</td>
                   <td style={{ padding: '10px 12px', fontFamily: 'var(--font-data)', color: '#f59e0b', fontWeight: 700 }}>
-                    {t.fc7d} MPa ({t.curvaEvolucao[1].percentual}%)
+                    {t.fc7d} MPa ({t.curvaEvolucao?.[1]?.percentual ?? Math.round(((t.fc7d || 0) / (t.fc28d || 1)) * 100)}%)
                   </td>
                   <td style={{ padding: '10px 12px', fontFamily: 'var(--font-data)', color: '#10b981', fontWeight: 900, fontSize: 13 }}>
                     {t.fc28d} MPa
