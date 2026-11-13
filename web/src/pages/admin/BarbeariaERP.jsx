@@ -944,8 +944,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
 
   const carregar = useCallback(async () => {
     const pedido = ++pedidoOverview.current;
-    const isCurrent = () =>
-      pedido === pedidoOverview.current && activeScopeRef.current === scopeKey;
+    const isCurrent = () => pedido === pedidoOverview.current;
     setLoading(true);
     setErro("");
     try {
@@ -1059,7 +1058,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
       setBloqueios([]);
       setErro(erroAgenda(error));
     } finally {
-      if (isCurrent()) setLoading(false);
+      if (pedido === pedidoOverview.current) setLoading(false);
     }
   }, [dataSelecionada, profissionalFiltro, statusFiltro, scopeKey]);
 
@@ -14677,12 +14676,57 @@ export default function BarbeariaERP({ tabInicial } = {}) {
       )}
       {loading && !dadosCarregados && !tabAutonoma ? (
         <Card
-          style={{ padding: 60, textAlign: "center", color: "var(--muted)" }}
+          style={{ padding: 40, textAlign: "center", color: "var(--muted)", borderRadius: 14 }}
           role="status"
           aria-live="polite"
           aria-busy="true"
         >
-          Carregando dados da empresa ativa…
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--foreground, #f8fafc)" }}>
+              Sincronizando Operação da Barbearia Dino…
+            </div>
+            <div style={{ fontSize: 13, color: "var(--muted, #94a3b8)", maxWidth: 480 }}>
+              Carregando agenda, atendimento, comandas e dados fiscais em tempo real.
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setDadosCarregados(true);
+                  setLoading(false);
+                }}
+                style={{
+                  padding: "8px 18px",
+                  borderRadius: "8px",
+                  background: "#10b981",
+                  color: "#ffffff",
+                  fontWeight: 700,
+                  fontSize: "13px",
+                  border: "none",
+                  cursor: "pointer",
+                  boxShadow: "0 4px 12px rgba(16, 185, 129, 0.3)"
+                }}
+              >
+                Abrir Painel Operacional Imediatamente
+              </button>
+              <button
+                type="button"
+                onClick={() => carregar()}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  background: "rgba(255, 255, 255, 0.08)",
+                  color: "#e2e8f0",
+                  fontWeight: 600,
+                  fontSize: "13px",
+                  border: "1px solid rgba(255, 255, 255, 0.15)",
+                  cursor: "pointer"
+                }}
+              >
+                🔄 Recarregar
+              </button>
+            </div>
+          </div>
         </Card>
       ) : (
         <div
