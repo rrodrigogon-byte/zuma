@@ -1134,6 +1134,44 @@ export default function AgendamentoOnline() {
                 R$ {((parseFloat(servicoSel?.preco || 0) + produtosUpsellSel.reduce((acc, p) => acc + p.preco, 0))).toFixed(2).replace('.', ',')}
               </span>
             </div>
+            {/* Box Promocional de Bilhetes da Sorte Integrado ao Sorteio Oficial */}
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(224, 178, 75, 0.12) 0%, rgba(20, 184, 122, 0.12) 100%)',
+              border: '1px dashed rgba(224, 178, 75, 0.6)',
+              borderRadius: 12,
+              padding: '10px 14px',
+              marginTop: 10,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 24 }}>🎟️</span>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: '#E0B24B', textTransform: 'uppercase', letterSpacing: '.4px' }}>
+                    Campanha Premiada Barbearia Dino
+                  </div>
+                  <div style={{ fontSize: 11, color: theme.cream, opacity: 0.85, marginTop: 2 }}>
+                    Este atendimento gera bilhetes para o sorteio oficial (perfumaria conta 2x)!
+                  </div>
+                </div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <span style={{
+                  background: '#E0B24B',
+                  color: '#0e1117',
+                  fontWeight: 900,
+                  fontSize: 12,
+                  padding: '4px 10px',
+                  borderRadius: 20,
+                  display: 'inline-block',
+                  boxShadow: '0 2px 6px rgba(224, 178, 75, 0.3)'
+                }}>
+                  +{Math.max(1, Math.floor(((parseFloat(servicoSel?.preco || 0)) + (produtosUpsellSel.reduce((acc, p) => acc + p.preco, 0) * 2)) / 50))} Bilhete(s)
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 

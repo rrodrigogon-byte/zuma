@@ -12631,7 +12631,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                     }}
                   >
                     {whatsappAi.gemini?.configured
-                      ? whatsappAi.gemini.model
+                      ? (String(whatsappAi.gemini.model || "KyttoIA 2.5 Flash").replace(/gemini[-_]?/gi, "KyttoIA "))
                       : "Pendente"}
                   </span>
                   <small style={styles.sub}>
