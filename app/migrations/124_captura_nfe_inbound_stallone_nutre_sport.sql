@@ -19,7 +19,11 @@ SELECT
   cp.descricao_curta,
   COALESCE((SELECT cvp.custo FROM commerce_variant_prices cvp JOIN commerce_product_variants cpv ON cpv.id = cvp.variant_id WHERE cpv.product_id = cp.id LIMIT 1), 50.00) AS preco_custo,
   COALESCE((SELECT cvp.preco FROM commerce_variant_prices cvp JOIN commerce_product_variants cpv ON cpv.id = cvp.variant_id WHERE cpv.product_id = cp.id LIMIT 1), 89.90) AS preco_venda,
-  COALESCE(cp.slug, 'STAL-' || substring(cp.id::text, 1, 8)) AS codigo_interno,
+  CASE 
+    WHEN length(COALESCE(cp.slug, '')) > 50 THEN substring(cp.slug, 1, 41) || '-' || substring(cp.id::text, 1, 8)
+    WHEN cp.slug IS NOT NULL AND cp.slug <> '' THEN cp.slug
+    ELSE 'STAL-' || substring(cp.id::text, 1, 8)
+  END AS codigo_interno,
   (cp.status = 'active') AS ativo,
   cp.criado_em,
   cp.atualizado_em
