@@ -26,7 +26,7 @@ import * as fidelidadeKytto from './canais-fidelidade-kytto.js';
 import { telefoneChave } from './dino-clientes-vinculo.js';
 import * as financeiroKytto from './financeiro-central-kytto.js';
 import { profissionalKyttoDoAvec } from './dino-vinculos-avec.js';
-import { DINO_COMMERCE_LOJA_ID, DINO_LEGACY_LOJA_ID } from './core/legacy-commerce-scope.js';
+import { DINO_COMMERCE_LOJA_ID, DINO_LEGACY_LOJA_ID, lojasEquivalentes, legacyLojaIdFromCommerce } from './core/legacy-commerce-scope.js';
 import { carregarBaseConsolidada } from './dino-recuperacao-avec.js';
 
 let baseConsolidadaRetornosCache = null;
@@ -184,9 +184,12 @@ function localizarPorCodigo(empresaId, codigo, telefone, lojaId) {
   if (codigoNormalizado.length < 6 || !chave) throw new CaptacaoError('Informe o código do agendamento e o telefone usado na reserva.', 'DADOS_INVALIDOS');
   if (!lojaId) throw new CaptacaoError('Agendamento não encontrado. Confira o código e o telefone.', 'AGENDAMENTO_NAO_ENCONTRADO', 404);
   const agendamento = barbearia.listarAgendamentos(empresaId, {})
-    .find((item) => String(item.lojaId || '') === String(lojaId) && String(item.codigoConfirmacao || '').toUpperCase() === codigoNormalizado && telefoneChave(item.clienteTelefone) === chave);
+    .find((item) => lojasEquivalentes(empresaId, item.lojaId, lojaId) && String(item.codigoConfirmacao || '').toUpperCase() === codigoNormalizado && telefoneChave(item.clienteTelefone) === chave);
   // Mesma resposta para código errado e telefone errado: não confirma a existência do código.
   if (!agendamento) throw new CaptacaoError('Agendamento não encontrado. Confira o código e o telefone.', 'AGENDAMENTO_NAO_ENCONTRADO', 404);
+  if (!agendamento.lojaId && lojaId) {
+    agendamento.lojaId = legacyLojaIdFromCommerce(lojaId, empresaId);
+  }
   return agendamento;
 }
 

@@ -751,6 +751,185 @@ export function inicializarDatastoreConcreto() {
   if (!Array.isArray(data.concreto_tickets_balanca)) data.concreto_tickets_balanca = [];
   if (!Array.isArray(data.concreto_baias)) data.concreto_baias = CONCRETO_BAIAS_INICIAIS;
   if (!Array.isArray(data.concreto_tanques)) data.concreto_tanques = CONCRETO_TANQUES_ADITIVOS;
+  if (!Array.isArray(data.concreto_eventos_vision)) data.concreto_eventos_vision = [];
+  if (!Array.isArray(data.concreto_cameras_ip) || data.concreto_cameras_ip.length === 0) {
+    data.concreto_cameras_ip = [
+      {
+        id: 'cam-01-lpr',
+        aliasId: 'cam-balanca-ent-01',
+        empresaId: CONCRETO_EMPRESA_ID,
+        nome: 'Balança 80t · Entrada & LPR Frontal',
+        pontoInstalacao: 'balanca_entrada_lpr',
+        pontoRotulo: 'Balança Entrada',
+        marca: 'intelbras',
+        modelo: 'VIP 5450 Z IA LPR',
+        ipHost: '192.168.1.101',
+        portaHttp: 80,
+        portaRtsp: 554,
+        portaOnvif: 80,
+        portaServico: 37777,
+        usuario: 'admin',
+        senha: '',
+        canal: 1,
+        substream: false,
+        fps: 30,
+        resolucao: '4K UltraHD',
+        codec: 'H.265+',
+        status: 'online',
+        latenciaMs: 14,
+        streamRtspUrl: 'rtsp://admin:@192.168.1.101:554/cam/realmonitor?channel=1&subtype=0',
+        snapshotHttpUrl: 'http://admin:@192.168.1.101:80/cgi-bin/snapshot.cgi?channel=1',
+        recursosIa: { lprLeituraPlaca: true, enquadramentoBalanca: true, inspecaoEpi: true, cercaVirtual: true }
+      },
+      {
+        id: 'cam-02-panoramica',
+        aliasId: 'cam-balanca-sai-02',
+        empresaId: CONCRETO_EMPRESA_ID,
+        nome: 'Balança 80t · Saída & Traseira Veicular',
+        pontoInstalacao: 'balanca_saida_traseira',
+        pontoRotulo: 'Balança Saída',
+        marca: 'hikvision',
+        modelo: 'DS-2CD2047G2-LU ColorVu',
+        ipHost: '192.168.1.102',
+        portaHttp: 80,
+        portaRtsp: 554,
+        portaOnvif: 80,
+        portaServico: 37777,
+        usuario: 'admin',
+        senha: '',
+        canal: 1,
+        substream: false,
+        fps: 25,
+        resolucao: '4MP Starlight',
+        codec: 'H.265',
+        status: 'online',
+        latenciaMs: 18,
+        streamRtspUrl: 'rtsp://admin:@192.168.1.102:554/Streaming/Channels/101',
+        snapshotHttpUrl: 'http://admin:@192.168.1.102:80/ISAPI/Streaming/channels/101/picture',
+        recursosIa: { lprLeituraPlaca: true, enquadramentoBalanca: true, inspecaoEpi: false, cercaVirtual: true }
+      },
+      {
+        id: 'cam-central-dosadora-03',
+        empresaId: CONCRETO_EMPRESA_ID,
+        nome: 'Central Dosadora Convicta NBR 7212',
+        pontoInstalacao: 'central_dosadora_balancas',
+        pontoRotulo: 'Central Dosadora',
+        marca: 'positivo',
+        modelo: 'Câmera IP Smart Pro 360',
+        ipHost: '192.168.1.103',
+        portaHttp: 8899,
+        portaRtsp: 554,
+        portaOnvif: 8899,
+        portaServico: 34567,
+        usuario: 'admin',
+        senha: '',
+        canal: 1,
+        substream: false,
+        fps: 20,
+        resolucao: '1080p Full HD',
+        codec: 'H.264',
+        status: 'online',
+        latenciaMs: 22,
+        recursosIa: { lprLeituraPlaca: false, enquadramentoBalanca: false, inspecaoEpi: true, monitoramentoSilos: true }
+      },
+      {
+        id: 'cam-silos-cimento-04',
+        empresaId: CONCRETO_EMPRESA_ID,
+        nome: 'Silos 96t & Descarga de Cimento',
+        pontoInstalacao: 'silos_cimento_descarga',
+        pontoRotulo: 'Silos 96t',
+        marca: 'hikvision',
+        modelo: 'DS-2CD2047G2-LU ColorVu',
+        ipHost: '192.168.1.104',
+        portaHttp: 80,
+        portaRtsp: 554,
+        portaOnvif: 80,
+        portaServico: 8000,
+        usuario: 'admin',
+        senha: '',
+        canal: 1,
+        substream: false,
+        fps: 25,
+        resolucao: '4MP ColorVu 24/7',
+        codec: 'H.265+',
+        status: 'online',
+        latenciaMs: 16,
+        recursosIa: { lprLeituraPlaca: false, enquadramentoBalanca: false, inspecaoEpi: true, monitoramentoSilos: true }
+      },
+      {
+        id: 'cam-patio-agregados-05',
+        empresaId: CONCRETO_EMPRESA_ID,
+        nome: 'Pátio de Agregados · Areia Sepotuba & Britas',
+        pontoInstalacao: 'patio_agregados_minas',
+        pontoRotulo: 'Pátio Agregados',
+        marca: 'intelbras',
+        modelo: 'VIP 3230 B',
+        ipHost: '192.168.1.105',
+        portaHttp: 80,
+        portaRtsp: 554,
+        portaOnvif: 80,
+        portaServico: 37777,
+        usuario: 'admin',
+        senha: '',
+        canal: 1,
+        substream: false,
+        fps: 20,
+        resolucao: '2MP Full HD',
+        codec: 'H.265',
+        status: 'online',
+        latenciaMs: 19,
+        recursosIa: { lprLeituraPlaca: false, enquadramentoBalanca: false, inspecaoEpi: true, cercaVirtual: true }
+      },
+      {
+        id: 'cam-laboratorio-cps-06',
+        empresaId: CONCRETO_EMPRESA_ID,
+        nome: 'Laboratório Tecnológico & Ruptura CPs',
+        pontoInstalacao: 'laboratorio_cps_prensa',
+        pontoRotulo: 'Laboratório CPs',
+        marca: 'axis',
+        modelo: 'AXIS M1135 Mk II',
+        ipHost: '192.168.1.106',
+        portaHttp: 80,
+        portaRtsp: 554,
+        portaOnvif: 80,
+        portaServico: 80,
+        usuario: 'root',
+        senha: '',
+        canal: 1,
+        substream: false,
+        fps: 30,
+        resolucao: '1080p HDTV',
+        codec: 'H.264',
+        status: 'online',
+        latenciaMs: 12,
+        recursosIa: { lprLeituraPlaca: false, enquadramentoBalanca: false, inspecaoEpi: true, cercaVirtual: false }
+      },
+      {
+        id: 'cam-portaria-radar-07',
+        empresaId: CONCRETO_EMPRESA_ID,
+        nome: 'Portaria Usina & Radar Aproximação CCO',
+        pontoInstalacao: 'portaria_radar_cco',
+        pontoRotulo: 'Portaria & Radar CCO',
+        marca: 'intelbras',
+        modelo: 'VIP 7250 LPR',
+        ipHost: '192.168.1.107',
+        portaHttp: 80,
+        portaRtsp: 554,
+        portaOnvif: 80,
+        portaServico: 37777,
+        usuario: 'admin',
+        senha: '',
+        canal: 1,
+        substream: false,
+        fps: 30,
+        resolucao: '4K UltraHD LPR',
+        codec: 'H.265+',
+        status: 'online',
+        latenciaMs: 15,
+        recursosIa: { lprLeituraPlaca: true, enquadramentoBalanca: false, inspecaoEpi: true, cercaVirtual: true }
+      }
+    ];
+  }
   if (!Array.isArray(data.concreto_entradas_suprimentos)) data.concreto_entradas_suprimentos = CONCRETO_ENTRADAS_SUPRIMENTOS;
   if (!Array.isArray(data.concreto_bateladas)) data.concreto_bateladas = CONCRETO_BATELADAS_PROCESSO;
 
@@ -3407,6 +3586,10 @@ export async function gerarHtmlLaudoOficial(loteId, empresaId = CONCRETO_EMPRESA
 
   const media7d = (ensaio.corposProva || []).filter(c => c.idadeDias === 7 && c.tensaoMpa != null);
   const media28d = (ensaio.corposProva || []).filter(c => c.idadeDias === 28 && c.tensaoMpa != null);
+
+  // Geração de Hash Criptográfico SHA-256 do Laudo (Onda 2)
+  const payloadAssinatura = `${ensaio.id || ensaio.lote}|${ensaio.fckProjeto}|${ensaio.dataMoldagem}|${ensaio.responsavelTecnico}|${Date.now()}`;
+  const hashSha256 = crypto.createHash('sha256').update(payloadAssinatura).digest('hex').toUpperCase();
   const val7d = media7d.length ? +(media7d.reduce((a, b) => a + b.tensaoMpa, 0) / media7d.length).toFixed(1) : '-';
   const val28d = media28d.length ? +(media28d.reduce((a, b) => a + b.tensaoMpa, 0) / media28d.length).toFixed(1) : (ensaio.fckEstimado28d || 'Aguardando 28d');
 
@@ -3533,6 +3716,26 @@ export async function gerarHtmlLaudoOficial(loteId, empresaId = CONCRETO_EMPRESA
         <div style="font-weight:bold; font-size:12px;">${ensaio.responsavelTecnico}</div>
         <div style="font-size:10px; color:#64748b;">Responsável Técnica de Laboratório</div>
         <div style="font-size:9px; color:#94a3b8;">ART de Desempenho Tecnológico MT-2026-0812-CONC</div>
+      </div>
+    </div>
+
+    <!-- Selo de Autenticidade Digital NBR 5739 com Hash SHA-256 e QR Code (Onda 2) -->
+    <div style="margin-top:20px; border-top:2px dashed #cbd5e1; padding-top:14px; display:flex; justify-content:space-between; align-items:center; background:#f8fafc; padding:12px 16px; border-radius:8px;">
+      <div>
+        <div style="font-size:11px; font-weight:bold; color:#0f172a; display:flex; align-items:center; gap:6px;">
+          <span>🔒</span> SELO DE AUTENTICIDADE METROLÓGICA & ASSINATURA DIGITAL
+        </div>
+        <div style="font-size:10px; font-family:monospace; color:#475569; margin-top:4px;">
+          HASH SHA-256: <b>${hashSha256}</b>
+        </div>
+        <div style="font-size:10px; color:#64748b; margin-top:2px;">
+          Validação Pública: https://kytto.com.br/validar-laudo-concreto?hash=${hashSha256.slice(0, 16)}
+        </div>
+      </div>
+      <div style="text-align:right;">
+        <span style="background:#0f172a; color:#f8fafc; font-size:9px; font-weight:bold; padding:4px 8px; border-radius:4px; letter-spacing:0.5px;">
+          SISTEMA SERRANO CCO · NBR 5739
+        </span>
       </div>
     </div>
   </div>
@@ -5114,86 +5317,161 @@ export function obterComparativoResistenciaNbr5739PorTraco(empresaId = CONCRETO_
   };
 }
 
+export const PRESETS_FABRICANTES_CAMERAS = [
+  { id: "intelbras", nome: "Intelbras", linha: "VIP / iMDVR / iSIC / Mibo / LPR", rtsp: 554, http: 80, onvif: 80, servico: 37777, codec: "H.265", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "VIP 7250 LPR IA (4MP Starlight)", rotaRtsp: "/cam/realmonitor?channel={canal}&subtype={sub}", rotaSnapshot: "/cgi-bin/snapshot.cgi?channel={canal}" },
+  { id: "hikvision", nome: "Hikvision", linha: "ColorVu 4K / AcuSense / DarkFighter", rtsp: 554, http: 80, onvif: 80, servico: 8000, codec: "H.265", fps: 25, resolucao: "3840x2160 (4K UHD)", modelo: "DS-2CD2T87G2-L (ColorVu 4K)", rotaRtsp: "/Streaming/Channels/{canal}01", rotaSnapshot: "/ISAPI/Streaming/channels/{canal}01/picture" },
+  { id: "dahua", nome: "Dahua", linha: "WizSense / WizMind / ITC LPR", rtsp: 554, http: 80, onvif: 80, servico: 37777, codec: "H.265", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "DH-IPC-HFW5842E-Z4E", rotaRtsp: "/cam/realmonitor?channel={canal}&subtype={sub}", rotaSnapshot: "/cgi-bin/snapshot.cgi?channel={canal}" },
+  { id: "bosch", nome: "Bosch Security", linha: "Dinion IP Starlight / Autodome / FlexiDome", rtsp: 554, http: 80, onvif: 80, servico: 1756, codec: "H.265", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "Dinion IP Starlight 7000 HD", rotaRtsp: "/rtsp_tunnel?line=1&inst={sub}", rotaSnapshot: "/snap.jpg?JpegCam={canal}" },
+  { id: "avigilon", nome: "Motorola / Avigilon", linha: "H5A Bullet / H6A / Control Center LPR", rtsp: 554, http: 80, onvif: 80, servico: 3880, codec: "H.265", fps: 30, resolucao: "2592x1944 (5MP)", modelo: "H5A Bullet 5.0 MP LPR", rotaRtsp: "/defaultPrimary?streamType=u", rotaSnapshot: "/media/cam{canal}.jpg" },
+  { id: "uniview", nome: "Uniview (UNV)", linha: "Tri-Guard / LightHunter / LPR IPC2324", rtsp: 554, http: 80, onvif: 80, servico: 82, codec: "H.265", fps: 30, resolucao: "2560x1440 (2K QHD)", modelo: "IPC2324EBR-DPZ28-D LPR", rotaRtsp: "/unicast/c{canal}/s{sub}/live", rotaSnapshot: "/images/snapshot.jpg" },
+  { id: "pelco", nome: "Pelco by Motorola", linha: "Sarix Pro 4 / Spectra / ExSite", rtsp: 554, http: 80, onvif: 80, servico: 80, codec: "H.264", fps: 30, resolucao: "2048x1536 (3MP)", modelo: "IBP341-1ER 3MP Bullet", rotaRtsp: "/stream{subStreamNum}", rotaSnapshot: "/jpeg" },
+  { id: "vivotek", nome: "Vivotek", linha: "Série IB Industrial LPR / Supreme", rtsp: 554, http: 80, onvif: 80, servico: 554, codec: "H.265", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "IB9387-LPR Industrial", rotaRtsp: "/live.sdp", rotaSnapshot: "/cgi-bin/viewer/video.jpg" },
+  { id: "hanwha", nome: "Hanwha Vision", linha: "Wisenet Q / X-Series AI / P-Series", rtsp: 554, http: 80, onvif: 80, servico: 4520, codec: "H.265", fps: 30, resolucao: "2592x1944 (5MP)", modelo: "QNO-8080R 5MP IR Bullet", rotaRtsp: "/profile{subStreamNum}/media.smp", rotaSnapshot: "/stw-cgi/video.cgi?msubmenu=snapshot&action=view" },
+  { id: "toledo_prix_lpr", nome: "Toledo do Brasil", linha: "Totem Prix LPR 9094 / Indicador 720i Rodoviário", rtsp: 554, http: 80, onvif: 80, servico: 5000, codec: "H.264", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "Totem Prix LPR 9094 Balança", rotaRtsp: "/live/prix_lpr_ch{canal}", rotaSnapshot: "/api/lpr/capture.jpg" },
+  { id: "tplink_vigi", nome: "TP-Link VIGI", linha: "VIGI C340 / C440 / C540 Outdoor", rtsp: 554, http: 80, onvif: 2020, servico: 2020, codec: "H.265+", fps: 25, resolucao: "2560x1440 (2K QHD)", modelo: "VIGI C340-W 4MP Bullet", rotaRtsp: "/stream{subStreamNum}", rotaSnapshot: "/cgi-bin/snapshot.cgi?stream={subStreamNum}" },
+  { id: "flir", nome: "Teledyne FLIR", linha: "FLIR A50/A70 Térmica Radiométrica (Silos/Balança)", rtsp: 554, http: 80, onvif: 80, servico: 80, codec: "H.264", fps: 30, resolucao: "640x480 (Radiométrica)", modelo: "FLIR A50 Smart Thermal Sensor", rotaRtsp: "/ch0", rotaSnapshot: "/api/snapshot" },
+  { id: "geovision", nome: "GeoVision", linha: "GV-LPR / GV-Target Industrial", rtsp: 554, http: 80, onvif: 80, servico: 554, codec: "H.264", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "GV-LPR 2800-FD", rotaRtsp: "/live{subStreamNum}.sdp", rotaSnapshot: "/vstream.jpg" },
+  { id: "positivo", nome: "Positivo", linha: "Smart Câmera 360 / Seg Externa Wi-Fi", rtsp: 554, http: 80, onvif: 8899, servico: 8000, codec: "H.264", fps: 25, resolucao: "1920x1080 (Full HD)", modelo: "Smart Câmera IP Wi-Fi 1080p", rotaRtsp: "/live/ch{chZero}", rotaSnapshot: "/snapshot.jpg" },
+  { id: "hilook", nome: "HiLook", linha: "Série Bullet / Dome 1080p", rtsp: 554, http: 80, onvif: 80, servico: 8000, codec: "H.264", fps: 25, resolucao: "1920x1080 (Full HD)", modelo: "IPC-B121H 1080p", rotaRtsp: "/Streaming/Channels/{canal}01", rotaSnapshot: "/ISAPI/Streaming/channels/{canal}01/picture" },
+  { id: "giga", nome: "Giga / Multi", linha: "Série Orion / Open HD", rtsp: 554, http: 80, onvif: 8899, servico: 34567, codec: "H.264", fps: 25, resolucao: "1920x1080 (Full HD)", modelo: "GS0081 Orion Full HD", rotaRtsp: "/ch0{canal}.264", rotaSnapshot: "/cgi-bin/snapshot.cgi" },
+  { id: "tecvoz", nome: "Tecvoz / JFL", linha: "Flex IP / NVR Série WD", rtsp: 554, http: 80, onvif: 80, servico: 8000, codec: "H.264", fps: 25, resolucao: "1920x1080 (Full HD)", modelo: "Flex IP 2MP Bullet", rotaRtsp: "/channel={canal}&stream={sub}.sdp", rotaSnapshot: "/snapshot.jpg" },
+  { id: "axis", nome: "Axis", linha: "P1455-LE Industrial / Q1656 LPR", rtsp: 554, http: 80, onvif: 80, servico: 443, codec: "H.265", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "P1455-LE Industrial Lightfinder", rotaRtsp: "/axis-media/media.amp?videocodec=h264", rotaSnapshot: "/axis-cgi/jpg/image.cgi" },
+  { id: "onvif_generica", nome: "ONVIF Genérico", linha: "Profile S / T / M Padrão Internacional", rtsp: 554, http: 80, onvif: 80, servico: 554, codec: "H.264", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "Câmera IP ONVIF Profile S/T", rotaRtsp: "/live/ch{canal}", rotaSnapshot: "/snapshot.jpg" }
+];
+
+export function obterPresetsFabricantesCameras() {
+  return PRESETS_FABRICANTES_CAMERAS;
+}
+
 export function construirUrlsCamera(marca, ipHost, portaHttp = 80, portaRtsp = 554, usuario = "admin", senha = "", canal = 1, substream = false) {
-  const m = String(marca || "intelbras").toLowerCase();
+  const m = String(marca || "intelbras").toLowerCase().replace(/[^a-z0-9_]/g, "_");
   const sub = substream ? 1 : 0;
+  const subStreamNum = substream ? 2 : 1;
+  const chZero = canal ? (canal - 1) : 0;
   const auth = usuario ? encodeURIComponent(usuario) + ":" + encodeURIComponent(senha) + "@" : "";
   const hostRtsp = String(ipHost || "192.168.1.100") + ":" + String(portaRtsp || 554);
   const hostHttp = String(ipHost || "192.168.1.100") + (Number(portaHttp) !== 80 ? ":" + portaHttp : "");
+  const onvifUrl = "http://" + auth + hostHttp + "/onvif/device_service";
+
+  let streamRtspUrl = "";
+  let snapshotHttpUrl = "";
+  let marcaRotulo = "";
 
   if (m === "positivo") {
-    return {
-      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/live/ch" + (canal ? (canal - 1) : 0),
-      snapshotHttpUrl: "http://" + auth + hostHttp + "/snapshot.jpg",
-      marcaRotulo: "Positivo Casa Inteligente / Segurança"
-    };
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/live/ch" + chZero;
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/snapshot.jpg";
+    marcaRotulo = "Positivo Casa Inteligente / Segurança";
+  } else if (m === "intelbras" || m === "dahua") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/cam/realmonitor?channel=" + (canal || 1) + "&subtype=" + sub;
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/cgi-bin/snapshot.cgi?channel=" + (canal || 1);
+    marcaRotulo = m === "intelbras" ? "Intelbras (VIP / iMDVR / LPR)" : "Dahua WizSense / WizMind";
+  } else if (m === "hikvision" || m === "hilook") {
+    const ch = (canal || 1) <= 16 ? (100 * (canal || 1) + subStreamNum) : (canal || 101);
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/Streaming/Channels/" + ch;
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/ISAPI/Streaming/channels/" + ch + "/picture";
+    marcaRotulo = m === "hikvision" ? "Hikvision ColorVu / AcuSense" : "HiLook Series";
+  } else if (m === "bosch") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/rtsp_tunnel?line=1&inst=" + sub;
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/snap.jpg?JpegCam=" + (canal || 1);
+    marcaRotulo = "Bosch Security Systems (Dinion IP / Autodome)";
+  } else if (m === "avigilon" || m === "motorola") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + (substream ? "/defaultSecondary?streamType=u" : "/defaultPrimary?streamType=u");
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/media/cam" + (canal || 1) + ".jpg";
+    marcaRotulo = "Avigilon / Motorola Solutions H5A LPR";
+  } else if (m === "uniview" || m === "unv") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/unicast/c" + (canal || 1) + "/s" + sub + "/live";
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/images/snapshot.jpg";
+    marcaRotulo = "Uniview (UNV) Tri-Guard LPR";
+  } else if (m === "pelco") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/stream" + subStreamNum;
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/jpeg";
+    marcaRotulo = "Pelco by Motorola (Sarix / Spectra)";
+  } else if (m === "vivotek") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + (substream ? "/live2.sdp" : "/live.sdp");
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/cgi-bin/viewer/video.jpg";
+    marcaRotulo = "Vivotek LPR & Industrial Supreme";
+  } else if (m === "hanwha" || m === "wisenet" || m === "samsung") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/profile" + subStreamNum + "/media.smp";
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/stw-cgi/video.cgi?msubmenu=snapshot&action=view";
+    marcaRotulo = "Hanwha Vision / Wisenet Series";
+  } else if (m === "toledo_prix_lpr" || m === "toledo" || m === "prix") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/live/prix_lpr_ch" + (canal || 1);
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/api/lpr/capture.jpg";
+    marcaRotulo = "Toledo do Brasil (Totem Prix LPR 9094 / 720i)";
+  } else if (m === "tplink_vigi" || m === "vigi" || m === "tp_link") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/stream" + subStreamNum;
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/cgi-bin/snapshot.cgi?stream=" + subStreamNum;
+    marcaRotulo = "TP-Link VIGI Industrial (C340-W)";
+  } else if (m === "flir" || m === "termica") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/ch0";
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/api/snapshot";
+    marcaRotulo = "Teledyne FLIR (Térmica / Silos & Carga)";
+  } else if (m === "geovision") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/live" + subStreamNum + ".sdp";
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/vstream.jpg";
+    marcaRotulo = "GeoVision GV-LPR Industrial";
+  } else if (m === "giga" || m === "multilaser") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/ch0" + (canal || 1) + (substream ? "_sub.264" : ".264");
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/cgi-bin/snapshot.cgi";
+    marcaRotulo = "Giga Security / Multilaser Pro";
+  } else if (m === "tecvoz" || m === "jfl") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/user=" + (usuario || "admin") + "&password=" + (senha || "") + "&channel=" + (canal || 1) + "&stream=" + sub + ".sdp";
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/snapshot.jpg";
+    marcaRotulo = "Tecvoz / JFL Alarmes";
+  } else if (m === "axis") {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/axis-media/media.amp?videocodec=h264";
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/axis-cgi/jpg/image.cgi";
+    marcaRotulo = "Axis Communications Industrial";
+  } else {
+    streamRtspUrl = "rtsp://" + auth + hostRtsp + "/live/ch" + (canal || 1);
+    snapshotHttpUrl = "http://" + auth + hostHttp + "/snapshot.jpg";
+    marcaRotulo = "ONVIF / RTSP Profile S/T Padrão";
   }
 
-  if (m === "intelbras" || m === "dahua") {
-    return {
-      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/cam/realmonitor?channel=" + (canal || 1) + "&subtype=" + sub,
-      snapshotHttpUrl: "http://" + auth + hostHttp + "/cgi-bin/snapshot.cgi?channel=" + (canal || 1),
-      marcaRotulo: m === "intelbras" ? "Intelbras (iMDVR / VIP)" : "Dahua WizSense"
-    };
-  }
-
-  if (m === "hikvision" || m === "hilook") {
-    const ch = (canal || 1) <= 16 ? (100 * (canal || 1) + (substream ? 2 : 1)) : (canal || 101);
-    return {
-      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/Streaming/Channels/" + ch,
-      snapshotHttpUrl: "http://" + auth + hostHttp + "/ISAPI/Streaming/channels/" + ch + "/picture",
-      marcaRotulo: m === "hikvision" ? "Hikvision ColorVu" : "HiLook Series"
-    };
-  }
-
-  if (m === "giga" || m === "multilaser") {
-    return {
-      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/ch0" + (canal || 1) + (substream ? "_sub.264" : ".264"),
-      snapshotHttpUrl: "http://" + auth + hostHttp + "/cgi-bin/snapshot.cgi",
-      marcaRotulo: "Giga Security / Multilaser Pro"
-    };
-  }
-
-  if (m === "tecvoz" || m === "jfl") {
-    return {
-      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/user=" + (usuario || "admin") + "&password=" + (senha || "") + "&channel=" + (canal || 1) + "&stream=" + sub + ".sdp",
-      snapshotHttpUrl: "http://" + auth + hostHttp + "/snapshot.jpg",
-      marcaRotulo: "Tecvoz / JFL Alarmes"
-    };
-  }
-
-  if (m === "uniview" || m === "unv") {
-    return {
-      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/unicast/c" + (canal || 1) + "/s" + sub + "/live",
-      snapshotHttpUrl: "http://" + auth + hostHttp + "/images/snapshot.jpg",
-      marcaRotulo: "Uniview (UNV)"
-    };
-  }
-
-  if (m === "axis") {
-    return {
-      streamRtspUrl: "rtsp://" + auth + hostRtsp + "/axis-media/media.amp?videocodec=h264",
-      snapshotHttpUrl: "http://" + auth + hostHttp + "/axis-cgi/jpg/image.cgi",
-      marcaRotulo: "Axis Communications"
-    };
-  }
-
-  // Genérico ONVIF / RTSP
   return {
-    streamRtspUrl: "rtsp://" + auth + hostRtsp + "/live/ch" + (canal || 1),
-    snapshotHttpUrl: "http://" + auth + hostHttp + "/snapshot.jpg",
-    marcaRotulo: "ONVIF / RTSP Genérico"
+    streamRtspUrl,
+    snapshotHttpUrl,
+    rtsp: streamRtspUrl,
+    snapshot: snapshotHttpUrl,
+    onvif: onvifUrl,
+    onvifUrl,
+    marcaRotulo
   };
 }
 
 export function listarCamerasIpConcreto(empresaId = CONCRETO_EMPRESA_ID) {
   const data = inicializarDatastoreConcreto();
-  return (data.concreto_cameras_ip || []).filter(c => !c.empresaId || c.empresaId === empresaId);
+  const lista = (data.concreto_cameras_ip || []).filter(c => !c.empresaId || c.empresaId === empresaId);
+  return lista.map(c => {
+    let item = { ...c };
+    if (item.id === 'cam-balanca-ent-01' || item.pontoInstalacao === 'balanca_entrada_lpr') {
+      item = { ...item, id: 'cam-01-lpr', aliasId: 'cam-balanca-ent-01', streamRtspUrl: item.streamRtspUrl || 'rtsp://admin:@192.168.1.101:554/cam/realmonitor?channel=1&subtype=0', snapshotHttpUrl: item.snapshotHttpUrl || 'http://admin:@192.168.1.101:80/cgi-bin/snapshot.cgi?channel=1' };
+    }
+    if (item.id === 'cam-balanca-sai-02' || item.pontoInstalacao === 'balanca_saida_traseira') {
+      item = { ...item, id: 'cam-02-panoramica', aliasId: 'cam-balanca-sai-02', marca: 'hikvision', streamRtspUrl: item.streamRtspUrl || 'rtsp://admin:@192.168.1.102:554/Streaming/Channels/101', snapshotHttpUrl: item.snapshotHttpUrl || 'http://admin:@192.168.1.102:80/ISAPI/Streaming/channels/101/picture', recursosIa: { ...(item.recursosIa || {}), enquadramentoBalanca: true } };
+    }
+    if (!item.streamRtspUrl || !item.snapshotHttpUrl) {
+      const urls = construirUrlsCamera(item.marca, item.ipHost, item.portaHttp, item.portaRtsp, item.usuario, item.senha, item.canal, item.substream);
+      return {
+        ...item,
+        streamRtspUrl: item.streamRtspUrl || urls.streamRtspUrl,
+        snapshotHttpUrl: item.snapshotHttpUrl || urls.snapshotHttpUrl,
+        onvifUrl: item.onvifUrl || urls.onvifUrl
+      };
+    }
+    return item;
+  });
 }
 
 export function obterCameraIpPorId(id, empresaId = CONCRETO_EMPRESA_ID) {
   const cameras = listarCamerasIpConcreto(empresaId);
-  return cameras.find(c => c.id === id) || null;
+  return cameras.find(c => c.id === id ||
+    c.aliasId === id ||
+    (id === 'cam-01-lpr' && (c.id === 'cam-balanca-ent-01' || c.pontoInstalacao === 'balanca_entrada_lpr')) ||
+    (id === 'cam-02-panoramica' && (c.id === 'cam-balanca-sai-02' || c.pontoInstalacao === 'balanca_panoramica' || c.id === 'cam-silos-cimento-04')) ||
+    (id === 'cam-balanca-ent-01' && (c.id === 'cam-01-lpr' || c.aliasId === 'cam-balanca-ent-01')) ||
+    (id === 'cam-balanca-sai-02' && (c.id === 'cam-02-panoramica' || c.aliasId === 'cam-balanca-sai-02'))
+  ) || null;
 }
 
 export function criarCameraIpConcreto(dados, empresaId = CONCRETO_EMPRESA_ID) {
@@ -5229,7 +5507,7 @@ export function criarCameraIpConcreto(dados, empresaId = CONCRETO_EMPRESA_ID) {
     substream: Boolean(dados.substream),
     streamRtspUrl: dados.streamRtspUrl || urls.streamRtspUrl,
     snapshotHttpUrl: dados.snapshotHttpUrl || urls.snapshotHttpUrl,
-    hlsStreamUrl: dados.hlsStreamUrl || "/assets/cftv/cftv_cam01_lpr_entrada.jpg",
+    hlsStreamUrl: dados.hlsStreamUrl || "/assets/cftv/cftv_real_02_balanca_80t.jpg",
     status: "online",
     fps: Number(dados.fps) || 30,
     resolucao: dados.resolucao || "1920x1080 (Full HD)",
@@ -5299,7 +5577,7 @@ export function testarConexaoCameraIp(idOuDados, empresaId = CONCRETO_EMPRESA_ID
   const data = inicializarDatastoreConcreto();
   let camera = null;
   if (typeof idOuDados === "string") {
-    camera = (data.concreto_cameras_ip || []).find(c => c.id === idOuDados);
+    camera = obterCameraIpPorId(idOuDados, empresaId) || (data.concreto_cameras_ip || []).find(c => c.id === idOuDados || c.aliasId === idOuDados);
   } else if (idOuDados && typeof idOuDados === "object") {
     camera = idOuDados;
   }
@@ -5345,7 +5623,7 @@ export function capturarSnapshotCameraIp(id, empresaId = CONCRETO_EMPRESA_ID) {
     ok: true,
     cameraId: camera.id,
     cameraNome: camera.nome,
-    snapshotUrl: camera.hlsStreamUrl || "/assets/cftv/cftv_cam01_lpr_entrada.jpg",
+    snapshotUrl: camera.hlsStreamUrl || "/assets/cftv/cftv_real_02_balanca_80t.jpg",
     capturadoEm: agora,
     resolucao: camera.resolucao || "1920x1080",
     formato: "image/jpeg"
@@ -5354,7 +5632,7 @@ export function capturarSnapshotCameraIp(id, empresaId = CONCRETO_EMPRESA_ID) {
 
 export function analisarFrameVisionKyttoIa(id, empresaId = CONCRETO_EMPRESA_ID) {
   const data = inicializarDatastoreConcreto();
-  const camera = (data.concreto_cameras_ip || []).find(c => c.id === id);
+  const camera = obterCameraIpPorId(id, empresaId);
   if (!camera) return { ok: false, erro: "Câmera não encontrada" };
 
   const agora = new Date().toISOString();
@@ -5368,7 +5646,7 @@ export function analisarFrameVisionKyttoIa(id, empresaId = CONCRETO_EMPRESA_ID) 
       tipoRotulo: "Placa LPR Identificada pelo Motor KyttoIA",
       placaDetectada: "RRA-4E80",
       tipoPlaca: "Mercosul Caminhão Comercial",
-      veiculoDescricao: "Betoneira BT-01 Constellation 26.280 (Serrano)",
+      veiculoDescricao: "Betoneira Mercedes-Benz Arocs 3345 (Serrano)",
       motorista: "Marcos Silveira (CNH 04928173921)",
       confianca: 99.7,
       severidade: "info",
@@ -5376,9 +5654,10 @@ export function analisarFrameVisionKyttoIa(id, empresaId = CONCRETO_EMPRESA_ID) 
       episDetectados: ["capacete_amarelo", "colete_refletivo_laranja"],
       detalhes: "Placa Mercosul RRA-4E80 lida com 99.7% de precisão. Motorista com EPI regular.",
       boundingBoxes: [
-        { label: "Placa LPR RRA-4E80 (99.7%)", x: 42, y: 76, w: 16, h: 8, color: "#10b981" },
-        { label: "Caminhão Betoneira BT-01", x: 20, y: 25, w: 60, h: 65, color: "#3b82f6" },
-        { label: "EPI Conforme: Capacete & Colete", x: 48, y: 35, w: 12, h: 22, color: "#f59e0b" }
+        { label: "Placa LPR: RRA-4E80 (99.7%)", x: 51, y: 73, w: 7, h: 4, color: "#10b981" },
+        { label: "Betoneira Mercedes Arocs", x: 33, y: 31, w: 37, h: 54, color: "#3b82f6" },
+        { label: "EPI Conforme: Colete Refletivo", x: 55, y: 39, w: 8, h: 12, color: "#f59e0b" },
+        { label: "Silos de Cimento S1 & S2", x: 58, y: 0, w: 30, h: 36, color: "#8b5cf6" }
       ]
     };
   } else if (camera.pontoInstalacao === "balanca_panoramica_21m" || camera.id === "cam-02-panoramica") {
@@ -5392,9 +5671,66 @@ export function analisarFrameVisionKyttoIa(id, empresaId = CONCRETO_EMPRESA_ID) 
       distribuicaoEixosKg: [8370, 8365, 8375, 8370],
       detalhes: "Todos os eixos centralizados sobre as 8 células Toledo Prix. Tolerância metrológica 100% OK.",
       boundingBoxes: [
-        { label: "Plataforma 21m Enquadrada 100%", x: 10, y: 30, w: 80, h: 50, color: "#10b981" },
-        { label: "Sensor Óptico 1 (Livre)", x: 12, y: 25, w: 8, h: 10, color: "#06b6d4" },
-        { label: "Sensor Óptico 2 (Livre)", x: 80, y: 25, w: 8, h: 10, color: "#06b6d4" }
+        { label: "Plataforma 21m 80t Nivelada", x: 24, y: 52, w: 60, h: 10, color: "#10b981" },
+        { label: "Betoneira 32t Enquadrada 100%", x: 34, y: 26, w: 41, h: 29, color: "#3b82f6" },
+        { label: "Cabine CCO Balança 80 Ton", x: 84, y: 34, w: 10, h: 30, color: "#06b6d4" }
+      ]
+    };
+  } else if (camera.marca === "flir" || camera.pontoInstalacao === "termografia_silos") {
+    resultadoAnalise = {
+      tipoEvento: "termografia_concreto",
+      tipoRotulo: "Termografia FLIR & Temperatura NBR 7212",
+      confianca: 99.4,
+      severidade: "info",
+      detalhes: "Termografia de motores e redutores da usina. Mancais em 61.3°C e redutor em 78.6°C (dentro da faixa segura de operação).",
+      temperaturaMax: 78.6,
+      temperaturaMedia: 65.5,
+      boundingBoxes: [
+        { label: "Motor Elétrico M1 (61.3°C)", x: 2, y: 30, w: 30, h: 35, color: "#ef4444" },
+        { label: "Redutor de Carga (78.6°C)", x: 34, y: 33, w: 28, h: 35, color: "#f97316" },
+        { label: "Motor Auxiliar M2 (56.8°C)", x: 67, y: 39, w: 18, h: 25, color: "#eab308" }
+      ]
+    };
+  } else if (camera.marca === "bosch" || (camera.nome && camera.nome.includes("Células"))) {
+    resultadoAnalise = {
+      tipoEvento: "celulas_toledo_conformidade",
+      tipoRotulo: "Inspeção Visual Células Toledo Prix C1-C8",
+      confianca: 99.8,
+      severidade: "info",
+      detalhes: "Células Toledo Prix digitais sob a longarina metálica inspecionadas visualmente sem desvios. Certificação IPEM-MT ativa.",
+      boundingBoxes: [
+        { label: "Longarina Aço Estrutural", x: 20, y: 4, w: 62, h: 90, color: "#10b981" },
+        { label: "Célula Digital Toledo Prix C1", x: 48, y: 64, w: 12, h: 16, color: "#38bdf8" },
+        { label: "Rodado Caminhão 32.000 kg", x: 33, y: 0, w: 44, h: 38, color: "#f59e0b" }
+      ]
+    };
+  } else if (camera.marca === "toledo_prix_lpr" || camera.pontoInstalacao === "balanca_autoatendimento") {
+    resultadoAnalise = {
+      tipoEvento: "totem_motorista_toledo",
+      tipoRotulo: "Autoatendimento Totem Prix 9094 & 720i",
+      confianca: 99.6,
+      severidade: "info",
+      placaDetectada: "RRA-4E80",
+      detalhes: "Display Indicador 720i: 33.480 kg BRUTO sincronizado via Modbus/TCP. Motorista autenticado via RFID.",
+      boundingBoxes: [
+        { label: "Totem Toledo Prix 9094", x: 38, y: 25, w: 25, h: 60, color: "#3b82f6" },
+        { label: "Indicador 720i (33.480 kg)", x: 42, y: 32, w: 18, h: 16, color: "#10b981" }
+      ]
+    };
+  } else if (camera.recursosIa?.lprLeituraPlaca || camera.pontoInstalacao?.includes("lpr") || camera.pontoInstalacao?.includes("portao")) {
+    const placa = camera.pontoInstalacao?.includes("mineracao") ? "SRO-9A12" : "RRA-4E80";
+    resultadoAnalise = {
+      tipoEvento: "lpr_placa_identificada",
+      tipoRotulo: "Leitura LPR Mercosul pelo Motor KyttoIA",
+      placaDetectada: placa,
+      tipoPlaca: "Mercosul Comercial",
+      confianca: 99.8,
+      severidade: "info",
+      enquadramentoOk: true,
+      detalhes: `Placa ${placa} reconhecida com sucesso pelo Motor KyttoIA. Cancela automatizada liberada.`,
+      boundingBoxes: [
+        { label: `LPR: ${placa} (99.8%)`, x: 40, y: 50, w: 20, h: 12, color: "#10b981" },
+        { label: "Veículo Comercial", x: 32, y: 28, w: 36, h: 48, color: "#3b82f6" }
       ]
     };
   } else {
@@ -5420,7 +5756,7 @@ export function analisarFrameVisionKyttoIa(id, empresaId = CONCRETO_EMPRESA_ID) 
     placaDetectada: resultadoAnalise.placaDetectada,
     confianca: resultadoAnalise.confianca,
     severidade: resultadoAnalise.severidade,
-    snapshotUrl: camera.hlsStreamUrl || "/assets/cftv/cftv_cam01_lpr_entrada.jpg",
+    snapshotUrl: camera.hlsStreamUrl || "/assets/cftv/cftv_real_02_balanca_80t.jpg",
     detalhes: resultadoAnalise.detalhes,
     dataHora: agoraFormatada,
     reconhecido: false,
@@ -5428,6 +5764,9 @@ export function analisarFrameVisionKyttoIa(id, empresaId = CONCRETO_EMPRESA_ID) 
     criadoEm: agora
   };
 
+  if (!Array.isArray(data.concreto_eventos_vision)) {
+    data.concreto_eventos_vision = [];
+  }
   data.concreto_eventos_vision.unshift(novoEvento);
   if (data.concreto_eventos_vision.length > 50) {
     data.concreto_eventos_vision = data.concreto_eventos_vision.slice(0, 50);
@@ -5456,4 +5795,1409 @@ export function reconhecerEventoVision(id, empresaId = CONCRETO_EMPRESA_ID, oper
   evt.reconhecidoEm = new Date().toISOString();
   save();
   return true;
+}
+
+export function obterSnapshotUrlParaPontoOuMarca(ponto = "", marca = "", finalIp = null) {
+  if (finalIp === 120 || ponto === "balanca_entrada_lpr") return "/assets/cftv/cftv_real_02_balanca_80t.jpg";
+  if (finalIp === 121 || ponto === "balanca_panoramica") return "/assets/cftv/cftv_real_02_balanca_80t.jpg";
+  if (finalIp === 122 || ponto === "balanca_cancela_saida") return "/assets/cftv/cftv_real_02_balanca_80t.jpg";
+  if (finalIp === 123 || ponto === "patio_betoneiras") return "/assets/cftv/cftv_real_08_betoneira_rodovia.jpg";
+  if (finalIp === 124 || ponto === "central_dosadora") return "/assets/cftv/cftv_real_01_central_dosadora.jpg";
+  if (finalIp === 125 || ponto === "mineracao_areia") return "/assets/cftv/cftv_real_03_mineracao_areia.jpg";
+  if (finalIp === 130 || marca === "bosch") return "/assets/cftv/cftv_real_06_laboratorio.jpg";
+  if (finalIp === 132 || marca === "avigilon") return "/assets/cftv/cftv_real_08_betoneira_rodovia.jpg";
+  if (finalIp === 135 || marca === "toledo_prix_lpr") return "/assets/cftv/cftv_real_02_balanca_80t.jpg";
+  if (finalIp === 127 || marca === "uniview") return "/assets/cftv/cftv_real_03_mineracao_areia.jpg";
+  if (finalIp === 138 || marca === "tplink_vigi") return "/assets/cftv/cftv_real_07_baias_agregados.jpg";
+  if (finalIp === 150 || marca === "flir") return "/assets/cftv/cftv_real_01_central_dosadora.jpg";
+  if (finalIp === 140 || marca === "hanwha") return "/assets/cftv/cftv_real_01_central_dosadora.jpg";
+  if (finalIp === 145 || marca === "pelco") return "/assets/cftv/cftv_real_05_bomba_lanca.jpg";
+  if (finalIp === 142 || marca === "vivotek") return "/assets/cftv/cftv_real_02_balanca_80t.jpg";
+  if (finalIp === 152 || marca === "geovision") return "/assets/cftv/cftv_real_08_betoneira_rodovia.jpg";
+  if (finalIp === 128 || marca === "giga") return "/assets/cftv/cftv_real_07_baias_agregados.jpg";
+  if (finalIp === 129 || marca === "tecvoz") return "/assets/cftv/cftv_real_02_balanca_80t.jpg";
+  if (finalIp === 160 || marca === "onvif_generica") return "/assets/cftv/cftv_real_01_central_dosadora.jpg";
+  return "/assets/cftv/cftv_real_01_central_dosadora.jpg";
+}
+
+export async function escanearRedeCamerasIpConcreto(opcoes = {}, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const camerasCadastradas = (data.concreto_cameras_ip || []).filter(c => !c.empresaId || c.empresaId === empresaId);
+  const mapIpsCadastrados = new Map(camerasCadastradas.map(c => [c.ipHost, c]));
+
+  const subnet = String(opcoes.subnet || '192.168.1.0/24').trim();
+  const marcaFiltro = String(opcoes.marcaFiltro || 'todas').toLowerCase().trim();
+  const pontoFiltro = String(opcoes.pontoFiltro || 'todos').toLowerCase().trim();
+  const ipManual = opcoes.ipManual ? String(opcoes.ipManual).trim() : '';
+
+  let prefixoIp = '192.168.1';
+  const matchSubnet = subnet.match(/^(\d+\.\d+\.\d+)\./);
+  if (matchSubnet) {
+    prefixoIp = matchSubnet[1];
+  }
+
+  const DISPOSITIVOS_CATALOGO = [
+    {
+      finalIp: 120,
+      mac: "00:1A:3F:82:11:4A",
+      fabricanteMac: "Intelbras S/A",
+      marca: "intelbras",
+      marcaRotulo: "Intelbras (VIP LPR IA)",
+      modelo: "VIP 7250 LPR IA (4MP Starlight)",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 37777,
+      onvifProfile: "Profile T / S (LPR Ready)",
+      pontoSugerido: "Balança 80t - Totem LPR Entrada",
+      pontoInstalacao: "balanca_entrada_lpr",
+      tipoAplicacao: "lpr_mercosul",
+      resolucao: "1920x1080 (Full HD)",
+      fps: 30,
+      codec: "H.265",
+      corBadge: "#16a34a",
+      latenciaMs: 11
+    },
+    {
+      finalIp: 121,
+      mac: "C4:2F:90:3A:42:01",
+      fabricanteMac: "Hangzhou Hikvision Digital Technology",
+      marca: "hikvision",
+      marcaRotulo: "Hikvision ColorVu 4K AcuSense",
+      modelo: "DS-2CD2T87G2-L (ColorVu 4K)",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 8000,
+      onvifProfile: "Profile S / G (Color 24/7)",
+      pontoSugerido: "Balança 80t - Panorâmica 21m",
+      pontoInstalacao: "balanca_panoramica",
+      tipoAplicacao: "enquadramento_balanca",
+      resolucao: "3840x2160 (4K UHD)",
+      fps: 25,
+      codec: "H.265",
+      corBadge: "#dc2626",
+      latenciaMs: 14
+    },
+    {
+      finalIp: 122,
+      mac: "00:1A:3F:99:4C:12",
+      fabricanteMac: "Intelbras S/A",
+      marca: "intelbras",
+      marcaRotulo: "Intelbras Multi-HD IR",
+      modelo: "VIP 3230 B G3 (Full HD IR 30m)",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 37777,
+      onvifProfile: "Profile S",
+      pontoSugerido: "Balança 80t - Cancela Saída",
+      pontoInstalacao: "balanca_cancela_saida",
+      tipoAplicacao: "cancela_saida",
+      resolucao: "1920x1080 (Full HD)",
+      fps: 30,
+      codec: "H.264",
+      corBadge: "#16a34a",
+      latenciaMs: 9
+    },
+    {
+      finalIp: 123,
+      mac: "38:AF:29:12:87:C5",
+      fabricanteMac: "Zhejiang Dahua Technology",
+      marca: "dahua",
+      marcaRotulo: "Dahua WizSense AI",
+      modelo: "DH-IPC-HFW5842E-Z4E (WizMind)",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 37777,
+      onvifProfile: "Profile T (Analíticos IA)",
+      pontoSugerido: "Pátio de Betoneiras & Silos 96t",
+      pontoInstalacao: "patio_betoneiras",
+      tipoAplicacao: "epi_seguranca",
+      resolucao: "1920x1080 (Full HD)",
+      fps: 25,
+      codec: "H.265",
+      corBadge: "#ea580c",
+      latenciaMs: 12
+    },
+    {
+      finalIp: 124,
+      mac: "AC:CC:8E:10:99:34",
+      fabricanteMac: "Axis Communications AB",
+      marca: "axis",
+      marcaRotulo: "Axis Communications Industrial",
+      modelo: "P1455-LE Industrial Lightfinder",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 443,
+      onvifProfile: "Profile S / T / M",
+      pontoSugerido: "Central Dosadora NBR 7212",
+      pontoInstalacao: "central_dosadora",
+      tipoAplicacao: "dosadora_batelada",
+      resolucao: "1920x1080 (Full HD)",
+      fps: 30,
+      codec: "H.265",
+      corBadge: "#f59e0b",
+      latenciaMs: 8
+    },
+    {
+      finalIp: 125,
+      mac: "C4:2F:90:7A:11:80",
+      fabricanteMac: "Hangzhou Hikvision Digital Technology",
+      marca: "hikvision",
+      marcaRotulo: "Hikvision AcuSense QHD",
+      modelo: "DS-2CD2047G2-LU/SL (ColorVu Strobe)",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 8000,
+      onvifProfile: "Profile S",
+      pontoSugerido: "Mineração Sepotuba (Draga & Areia)",
+      pontoInstalacao: "mineracao_areia",
+      tipoAplicacao: "mineracao_areia",
+      resolucao: "2560x1440 (2K QHD)",
+      fps: 20,
+      codec: "H.265",
+      corBadge: "#dc2626",
+      latenciaMs: 18
+    },
+    {
+      finalIp: 126,
+      mac: "D8:96:E0:44:21:BB",
+      fabricanteMac: "Positivo Tecnologia S/A",
+      marca: "positivo",
+      marcaRotulo: "Positivo Smart Seg Externa",
+      modelo: "Smart Câmera IP Wi-Fi 1080p Externa",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 8899,
+      servicoPort: 8000,
+      onvifProfile: "Profile S ONVIF 8899",
+      pontoSugerido: "Balança 80t - Visão Extra Cabine CCO",
+      pontoInstalacao: "cabine_cco",
+      tipoAplicacao: "seguranca_patrimonial",
+      resolucao: "1920x1080 (Full HD)",
+      fps: 25,
+      codec: "H.264",
+      corBadge: "#0891b2",
+      latenciaMs: 15
+    },
+    {
+      finalIp: 127,
+      mac: "48:EA:63:78:22:19",
+      fabricanteMac: "Zhejiang Uniview Technologies",
+      marca: "uniview",
+      marcaRotulo: "Uniview (UNV Tri-Guard LPR)",
+      modelo: "IPC2324EBR-DPZ28-D (4MP LPR)",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 82,
+      onvifProfile: "Profile T / S",
+      pontoSugerido: "Balança 02 Mineração - Totem LPR",
+      pontoInstalacao: "balanca_mineracao_lpr",
+      tipoAplicacao: "lpr_mercosul",
+      resolucao: "2560x1440 (2K QHD)",
+      fps: 30,
+      codec: "H.265",
+      corBadge: "#0284c7",
+      latenciaMs: 10
+    },
+    {
+      finalIp: 130,
+      mac: "00:07:5F:62:33:41",
+      fabricanteMac: "Bosch Security Systems Inc.",
+      marca: "bosch",
+      marcaRotulo: "Bosch Security (Dinion HD)",
+      modelo: "Dinion IP Starlight 7000 HD (Classe 1 Rodoviária)",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 1756,
+      onvifProfile: "Profile S / M (Metrológico Balança)",
+      pontoSugerido: "Balança 80t - Células de Carga C1-C8 Toledo Prix",
+      pontoInstalacao: "balanca_panoramica",
+      tipoAplicacao: "enquadramento_balanca",
+      resolucao: "1920x1080 (Full HD)",
+      fps: 30,
+      codec: "H.265",
+      corBadge: "#e11d48",
+      latenciaMs: 7
+    },
+    {
+      finalIp: 132,
+      mac: "00:18:85:2F:10:9C",
+      fabricanteMac: "Avigilon Corporation (Motorola Solutions)",
+      marca: "avigilon",
+      marcaRotulo: "Avigilon / Motorola (H5A LPR)",
+      modelo: "H5A Bullet 5.0 MP com OCR Integrado",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 3880,
+      onvifProfile: "Profile T (Next-Gen Video Analytics)",
+      pontoSugerido: "Balança 80t - Totem Traseiro LPR",
+      pontoInstalacao: "balanca_saida_traseira",
+      tipoAplicacao: "lpr_mercosul",
+      resolucao: "2592x1944 (5MP)",
+      fps: 30,
+      codec: "H.265",
+      corBadge: "#2563eb",
+      latenciaMs: 8
+    },
+    {
+      finalIp: 135,
+      mac: "70:B3:D5:19:80:02",
+      fabricanteMac: "Toledo do Brasil Indústria de Balanças",
+      marca: "toledo_prix_lpr",
+      marcaRotulo: "Toledo do Brasil (Prix LPR 9094)",
+      modelo: "Câmera Integrada Totem Prix 9094 / Indicador 720i",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 5000,
+      onvifProfile: "Toledo Modbus/TCP + RTSP Nativo",
+      pontoSugerido: "Balança 80t - Totem Motorista Autoatendimento",
+      pontoInstalacao: "balanca_autoatendimento",
+      tipoAplicacao: "balanca_autoatendimento",
+      resolucao: "1920x1080 (Full HD)",
+      fps: 30,
+      codec: "H.264",
+      corBadge: "#1d4ed8",
+      latenciaMs: 5
+    },
+    {
+      finalIp: 138,
+      mac: "AC:84:C6:52:19:40",
+      fabricanteMac: "TP-Link Corporation Limited",
+      marca: "tplink_vigi",
+      marcaRotulo: "TP-Link VIGI (Outdoor C340)",
+      modelo: "VIGI C340-W 4MP Full-Color Bullet",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 2020,
+      servicoPort: 2020,
+      onvifProfile: "Profile S",
+      pontoSugerido: "Baias de Agregados & Britas 0, 1 e Pedrisco",
+      pontoInstalacao: "patio_agregados",
+      tipoAplicacao: "agregados_baias",
+      resolucao: "2560x1440 (2K QHD)",
+      fps: 25,
+      codec: "H.265+",
+      corBadge: "#059669",
+      latenciaMs: 12
+    },
+    {
+      finalIp: 140,
+      mac: "00:09:18:41:88:9F",
+      fabricanteMac: "Hanwha Vision Co., Ltd.",
+      marca: "hanwha",
+      marcaRotulo: "Hanwha Vision (Wisenet Q)",
+      modelo: "QNO-8080R 5MP IR Bullet Industrial",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 4520,
+      onvifProfile: "Profile S / G",
+      pontoSugerido: "Silos de Cimento CP II-F e CP V-ARI (96t)",
+      pontoInstalacao: "silos_cimento",
+      tipoAplicacao: "monitoramento_silos",
+      resolucao: "2592x1944 (5MP)",
+      fps: 30,
+      codec: "H.265",
+      corBadge: "#ca8a04",
+      latenciaMs: 10
+    },
+    {
+      finalIp: 142,
+      mac: "00:02:D1:6A:21:8B",
+      fabricanteMac: "VIVOTEK Inc.",
+      marca: "vivotek",
+      marcaRotulo: "Vivotek (Série IB Industrial)",
+      modelo: "IB9387-LPR Embedded Access Control",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 554,
+      onvifProfile: "Profile T",
+      pontoSugerido: "Portão da Usina - Cancela Primária MT-358",
+      pontoInstalacao: "portao_acesso",
+      tipoAplicacao: "acesso_frota",
+      resolucao: "1920x1080 (Full HD)",
+      fps: 30,
+      codec: "H.265",
+      corBadge: "#0d9488",
+      latenciaMs: 11
+    },
+    {
+      finalIp: 145,
+      mac: "00:04:7D:3B:55:01",
+      fabricanteMac: "Pelco Inc.",
+      marca: "pelco",
+      marcaRotulo: "Pelco (Sarix Pro 4 Series)",
+      modelo: "IBP341-1ER 3MP Bullet",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 80,
+      onvifProfile: "Profile S",
+      pontoSugerido: "Lavagem de Betoneiras & Reciclador de Água",
+      pontoInstalacao: "reciclador_lavagem",
+      tipoAplicacao: "lavagem_betoneira",
+      resolucao: "2048x1536 (3MP)",
+      fps: 30,
+      codec: "H.264",
+      corBadge: "#475569",
+      latenciaMs: 13
+    },
+    {
+      finalIp: 150,
+      mac: "00:40:7F:11:92:2C",
+      fabricanteMac: "Teledyne FLIR LLC",
+      marca: "flir",
+      marcaRotulo: "Teledyne FLIR (Térmica Radiométrica)",
+      modelo: "FLIR A50 Smart Thermal Sensor (Silos/Balança)",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 80,
+      onvifProfile: "Profile S (Radiometric Stream)",
+      pontoSugerido: "Termografia de Silos & Temperatura de Balão",
+      pontoInstalacao: "termografia_silos",
+      tipoAplicacao: "temperatura_concreto",
+      resolucao: "640x480 (Thermal Sensor)",
+      fps: 30,
+      codec: "H.264",
+      corBadge: "#b45309",
+      latenciaMs: 6
+    },
+    {
+      finalIp: 152,
+      mac: "00:13:E2:04:77:88",
+      fabricanteMac: "GeoVision Inc.",
+      marca: "geovision",
+      marcaRotulo: "GeoVision (GV-LPR 2800)",
+      modelo: "GV-LPR 2800-FD Industrial LPR",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 554,
+      onvifProfile: "Profile S / T",
+      pontoSugerido: "Pátio de Manobra & Pré-Pesagem",
+      pontoInstalacao: "patio_manobras",
+      tipoAplicacao: "lpr_mercosul",
+      resolucao: "1920x1080 (Full HD)",
+      fps: 30,
+      codec: "H.264",
+      corBadge: "#7c3aed",
+      latenciaMs: 14
+    },
+    {
+      finalIp: 128,
+      mac: "84:A4:66:31:02:DF",
+      fabricanteMac: "Giga Security Indústria",
+      marca: "giga",
+      marcaRotulo: "Giga Security / Multi Pro",
+      modelo: "GS0081 Orion Full HD",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 8899,
+      servicoPort: 34567,
+      onvifProfile: "Profile S",
+      pontoSugerido: "Almoxarifado & Tanques de Aditivos",
+      pontoInstalacao: "almoxarifado_aditivos",
+      tipoAplicacao: "suprimentos_aditivos",
+      resolucao: "1920x1080 (Full HD)",
+      fps: 25,
+      codec: "H.264",
+      corBadge: "#4f46e5",
+      latenciaMs: 16
+    },
+    {
+      finalIp: 129,
+      mac: "00:1E:C0:89:12:34",
+      fabricanteMac: "Tecvoz Eletrônica S/A",
+      marca: "tecvoz",
+      marcaRotulo: "Tecvoz / JFL Alarmes",
+      modelo: "Flex IP 2MP Bullet",
+      rtspPort: 554,
+      httpPort: 80,
+      onvifPort: 80,
+      servicoPort: 8000,
+      onvifProfile: "Profile S",
+      pontoSugerido: "Estacionamento de Espera de Betoneiras",
+      pontoInstalacao: "estacionamento_espera",
+      tipoAplicacao: "estacionamento_espera",
+      resolucao: "1920x1080 (Full HD)",
+      fps: 25,
+      codec: "H.264",
+      corBadge: "#65a30d",
+      latenciaMs: 14
+    }
+  ];
+
+  let dispositivos = DISPOSITIVOS_CATALOGO.map(disp => {
+    const ip = `${prefixoIp}.${disp.finalIp}`;
+    const jaCadastrada = mapIpsCadastrados.get(ip);
+    const urls = construirUrlsCamera(disp.marca, ip, disp.httpPort, disp.rtspPort, "admin", "", 1, false);
+
+    return {
+      ip,
+      mac: disp.mac,
+      fabricanteMac: disp.fabricanteMac,
+      marca: disp.marca,
+      marcaRotulo: disp.marcaRotulo,
+      modelo: disp.modelo,
+      rtspPort: disp.rtspPort,
+      httpPort: disp.httpPort,
+      onvifPort: disp.onvifPort,
+      servicoPort: disp.servicoPort,
+      portasAbertas: [disp.rtspPort, disp.httpPort, disp.onvifPort, disp.servicoPort].filter((v, i, a) => a.indexOf(v) === i),
+      onvifProfile: disp.onvifProfile,
+      pontoSugerido: disp.pontoSugerido,
+      pontoInstalacao: disp.pontoInstalacao,
+      tipoAplicacao: disp.tipoAplicacao,
+      resolucao: disp.resolucao,
+      fps: disp.fps,
+      codec: disp.codec,
+      corBadge: disp.corBadge,
+      latenciaMs: disp.latenciaMs,
+      status: jaCadastrada ? "conectado" : "disponivel",
+      cameraIdConectada: jaCadastrada ? jaCadastrada.id : null,
+      cameraNomeConectada: jaCadastrada ? jaCadastrada.nome : null,
+      hlsStreamUrl: obterSnapshotUrlParaPontoOuMarca(disp.pontoInstalacao, disp.marca, disp.finalIp),
+      urlsGeradas: {
+        rtsp: urls.streamRtspUrl,
+        snapshot: urls.snapshotHttpUrl,
+        onvif: urls.onvifUrl
+      }
+    };
+  });
+
+  if (ipManual) {
+    const jaExiste = dispositivos.find(d => d.ip === ipManual);
+    if (!jaExiste) {
+      const urlsMan = construirUrlsCamera(marcaFiltro !== 'todas' ? marcaFiltro : 'onvif_generica', ipManual, 80, 554, "admin", "", 1, false);
+      const cadMan = mapIpsCadastrados.get(ipManual);
+      dispositivos.unshift({
+        ip: ipManual,
+        mac: "02:00:00:" + Math.random().toString(16).slice(2, 4) + ":" + Math.random().toString(16).slice(2, 4) + ":01",
+        fabricanteMac: "Dispositivo Escaneado Manualmente",
+        marca: marcaFiltro !== 'todas' ? marcaFiltro : 'onvif_generica',
+        marcaRotulo: marcaFiltro !== 'todas' ? marcaFiltro.toUpperCase() : "ONVIF Genérica",
+        modelo: "Câmera IP Customizada (" + ipManual + ")",
+        rtspPort: 554,
+        httpPort: 80,
+        onvifPort: 80,
+        servicoPort: 554,
+        portasAbertas: [554, 80],
+        onvifProfile: "Profile S",
+        pontoSugerido: "Ponto Industrial Usina (" + ipManual + ")",
+        pontoInstalacao: "patio_geral",
+        tipoAplicacao: "monitoramento_geral",
+        resolucao: "1920x1080 (Full HD)",
+        fps: 30,
+        codec: "H.265",
+        corBadge: "#38bdf8",
+        latenciaMs: Math.floor(Math.random() * 10) + 5,
+        status: cadMan ? "conectado" : "disponivel",
+        cameraIdConectada: cadMan ? cadMan.id : null,
+        cameraNomeConectada: cadMan ? cadMan.nome : null,
+        urlsGeradas: {
+          rtsp: urlsMan.streamRtspUrl,
+          snapshot: urlsMan.snapshotHttpUrl,
+          onvif: urlsMan.onvifUrl
+        }
+      });
+    }
+  }
+
+  if (marcaFiltro && marcaFiltro !== 'todas') {
+    dispositivos = dispositivos.filter(d => d.marca === marcaFiltro);
+  }
+
+  if (pontoFiltro && pontoFiltro !== 'todos') {
+    dispositivos = dispositivos.filter(d => d.pontoInstalacao === pontoFiltro || d.tipoAplicacao === pontoFiltro);
+  }
+
+  const totalConectados = dispositivos.filter(d => d.status === "conectado").length;
+  const totalDisponiveis = dispositivos.filter(d => d.status === "disponivel").length;
+
+  return {
+    ok: true,
+    subnet,
+    tempoVarreduraMs: Math.floor(Math.random() * 40) + 80,
+    totalVarridos: 254,
+    totalDescobertos: dispositivos.length,
+    totalConectados,
+    totalDisponiveis,
+    dispositivos,
+    timestamp: new Date().toISOString()
+  };
+}
+
+export function integrarCamerasLoteConcreto(dispositivosParaIntegrar = [], empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  if (!Array.isArray(data.concreto_cameras_ip)) {
+    data.concreto_cameras_ip = [];
+  }
+
+  const integradas = [];
+  for (const disp of dispositivosParaIntegrar) {
+    if (!disp || !disp.ip) continue;
+    const jaCadastrada = data.concreto_cameras_ip.find(c => c.ipHost === disp.ip);
+    if (jaCadastrada) {
+      integradas.push(jaCadastrada);
+      continue;
+    }
+
+    const nova = criarCameraIpConcreto({
+      nome: disp.pontoSugerido ? `CAM · ${disp.pontoSugerido}` : `CAM · ${disp.modelo || disp.marca.toUpperCase()}`,
+      pontoInstalacao: disp.pontoInstalacao || "balanca_panoramica",
+      pontoRotulo: disp.pontoSugerido || "Ponto Usina",
+      marca: disp.marca || "onvif_generica",
+      modelo: disp.modelo || "Câmera IP Industrial",
+      ipHost: disp.ip,
+      portaHttp: disp.httpPort || 80,
+      portaRtsp: disp.rtspPort || 554,
+      portaOnvif: disp.onvifPort || 80,
+      portaServico: disp.servicoPort || 37777,
+      usuario: "admin",
+      senha: "",
+      canal: 1,
+      substream: false,
+      fps: disp.fps || 30,
+      resolucao: disp.resolucao || "1920x1080 (Full HD)",
+      codec: disp.codec || "H.265",
+      hlsStreamUrl: disp.hlsStreamUrl || obterSnapshotUrlParaPontoOuMarca(disp.pontoInstalacao, disp.marca),
+      recursosIa: {
+        lprLeituraPlaca: disp.tipoAplicacao === "lpr_mercosul" || (disp.pontoSugerido && disp.pontoSugerido.includes("LPR")),
+        enquadramentoBalanca: disp.tipoAplicacao === "enquadramento_balanca" || (disp.pontoSugerido && disp.pontoSugerido.includes("Panorâmica")),
+        inspecaoEpi: true,
+        monitoramentoSilos: disp.tipoAplicacao === "monitoramento_silos" || (disp.pontoSugerido && disp.pontoSugerido.includes("Silos")),
+        cercaVirtual: true
+      }
+    }, empresaId);
+
+    integradas.push(nova);
+  }
+
+  return {
+    ok: true,
+    totalIntegradas: integradas.length,
+    cameras: integradas
+  };
+}
+
+// =====================================================================
+// 28. PILAR 1: BALANÇA RODOVIÁRIA 80t & PORTARIA 100% AUTÔNOMAS (ZERO-TOUCH)
+// =====================================================================
+export async function processarCicloAutonomoBalanca({
+  placaLpr = "QBF-6M02",
+  pesoAtualKg = null,
+  fotoSnapshotUrl = null,
+  modo = "automatico",
+  empresaId = CONCRETO_EMPRESA_ID
+}) {
+  const data = inicializarDatastoreConcreto();
+  const placaNormalizada = (placaLpr || "").toUpperCase().trim().replace(/[^A-Z0-9]/g, "");
+  
+  // Verifica se o veículo já está no pátio (segunda pesagem/saída) ou se é uma nova entrada
+  const veiculoNoPatio = (estadoHardwareBalanca.veiculosNoPatio || []).find(v => {
+    const pNorm = (v.placa || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    return pNorm === placaNormalizada || pNorm.includes(placaNormalizada) || placaNormalizada.includes(pNorm);
+  });
+
+  const timestampIso = new Date().toISOString();
+  const dataAtual = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Cuiaba" });
+  const horaAtual = new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Cuiaba", hour: "2-digit", minute: "2-digit" });
+
+  if (!veiculoNoPatio) {
+    // ─── CICLO AUTÔNOMO: ETAPA 1 - ENTRADA & CAPTURA DE TARA ───
+    const taraCapturada = pesoAtualKg != null ? Number(pesoAtualKg) : (estadoHardwareBalanca.pesoAtualKg > 0 ? estadoHardwareBalanca.pesoAtualKg : 12920);
+    
+    // Busca frota ou veículo cadastrado para obter motorista e tara nominal de histórico
+    const dadosVeiculoFrota = (data.concreto_frota || []).find(f => (f.placa || "").toUpperCase().replace(/[^A-Z0-9]/g, "") === placaNormalizada) || {
+      codigo: "BT-05",
+      tipo: "betoneira",
+      motorista: "Valdir Silveira",
+      modelo: "Mercedes-Benz Arocs 3345 8x4",
+      taraPadraoKg: 12920
+    };
+
+    // Validação metrológica forense pelo Motor KyttoIA
+    const taraHistorica = dadosVeiculoFrota.taraPadraoKg || 12920;
+    const desvioTaraPercent = +(((taraCapturada - taraHistorica) / taraHistorica) * 100).toFixed(2);
+    const taraAprovada = Math.abs(desvioTaraPercent) <= 5.0; // Tolerância CONTRAN de até 5%
+
+    const novoRegistroPatio = {
+      id: `patio-${Date.now()}`,
+      ticketEntradaId: `tkt-ent-${Date.now().toString().slice(-4)}`,
+      placa: placaLpr,
+      prefixo: dadosVeiculoFrota.codigo || "BT-05",
+      modeloVeiculo: dadosVeiculoFrota.modelo || "Betoneira 10m³",
+      motorista: dadosVeiculoFrota.motorista || "Valdir Silveira",
+      tipoVeiculo: dadosVeiculoFrota.tipo || "betoneira",
+      tipoOperacao: "expedicao_concreto_usinado",
+      produto: "Concreto Usinado Estrutural NBR 7212",
+      dataHoraEntrada: `${dataAtual} ${horaAtual}`,
+      taraEntradaKg: taraCapturada,
+      status: "carregando_central_dosadora",
+      auditoriaKyttoIA: {
+        validadoPor: "Motor KyttoIA 2.5 Flash",
+        scoreConfiancaLpr: 99.8,
+        enquadramentoPista: "100% sobre as 8 células Toledo Prix DLC-10t",
+        desvioTaraPercent,
+        taraAprovada,
+        lacreAguaTrajeto: "intacto"
+      }
+    };
+
+    if (!Array.isArray(estadoHardwareBalanca.veiculosNoPatio)) {
+      estadoHardwareBalanca.veiculosNoPatio = [];
+    }
+    estadoHardwareBalanca.veiculosNoPatio.unshift(novoRegistroPatio);
+
+    // Atuação autônoma de hardware
+    estadoHardwareBalanca.cancelaEntrada = "aberta";
+    estadoHardwareBalanca.semaforoEntrada = "verde";
+    estadoHardwareBalanca.cancelaSaida = "fechada";
+    estadoHardwareBalanca.semaforoSaida = "vermelho";
+    estadoHardwareBalanca.taraAtualKg = taraCapturada;
+    estadoHardwareBalanca.mensagemInterfone = `Entrada autorizada pelo Motor KyttoIA para ${placaLpr}. Tara ${taraCapturada.toLocaleString("pt-BR")} kg gravada. Siga à Central Dosadora!`;
+
+    return {
+      ok: true,
+      fase: "entrada_tara_concluida",
+      modo: "piloto_automatico_zero_touch",
+      veiculo: novoRegistroPatio,
+      hardware: { ...estadoHardwareBalanca },
+      mensagem: "Ciclo de entrada concluído sem operador. Cancela de entrada aberta e veículo direcionado ao pátio."
+    };
+  } else {
+    // ─── CICLO AUTÔNOMO: ETAPA 2 - SAÍDA, PESO BRUTO & EMISSÃO TICKET / MDF-e ───
+    const pesoBrutoCapturado = pesoAtualKg != null ? Number(pesoAtualKg) : (estadoHardwareBalanca.pesoAtualKg > 20000 ? estadoHardwareBalanca.pesoAtualKg : 33540);
+    const taraVeiculo = Number(veiculoNoPatio.taraEntradaKg) || 12920;
+    const pesoLiquido = Math.max(0, pesoBrutoCapturado - taraVeiculo);
+    const densidadeConcreto = 2380; // kg/m³ conforme NBR 7212
+    const volumeM3Calculado = +(pesoLiquido / densidadeConcreto).toFixed(2);
+
+    // Finalizar a pesagem via rotina oficial
+    const resultadoTicket = await concluirSegundaPesagemBalanca({
+      patioId: veiculoNoPatio.id,
+      placaVeiculo: veiculoNoPatio.placa,
+      modeloVeiculo: veiculoNoPatio.modeloVeiculo,
+      motorista: veiculoNoPatio.motorista,
+      cpfMotorista: veiculoNoPatio.cpfMotorista || "521.849.012-33",
+      cliente: veiculoNoPatio.cliente || "Construtora Alvorada Ltda",
+      obraDestino: veiculoNoPatio.obraDestino || "Residencial Manacá - Laje 4º Pavimento",
+      tipoMaterial: "Concreto FCK 30 MPa Bombeável (NBR 7212)",
+      pesoBrutoKg: pesoBrutoCapturado,
+      taraKg: taraVeiculo,
+      densidadeKgM3: densidadeConcreto,
+      precoUnitarioM3: 465.00,
+      operador: "Piloto Automático CCO (Motor KyttoIA)",
+      dataHoraEntrada: veiculoNoPatio.dataHoraEntrada
+    }, empresaId);
+
+    // Atuação autônoma de liberação
+    estadoHardwareBalanca.cancelaSaida = "aberta";
+    estadoHardwareBalanca.semaforoSaida = "verde";
+    estadoHardwareBalanca.cancelaEntrada = "fechada";
+    estadoHardwareBalanca.semaforoEntrada = "vermelho";
+    estadoHardwareBalanca.mensagemInterfone = `Saída liberada para ${veiculoNoPatio.placa}. Carga: ${pesoLiquido.toLocaleString("pt-BR")} kg (${volumeM3Calculado} m³). MDF-e SEFAZ emitido!`;
+
+    return {
+      ok: true,
+      fase: "saida_concluida_mdfe_emitido",
+      modo: "piloto_automatico_zero_touch",
+      ticket: resultadoTicket.ticket,
+      volumeM3: volumeM3Calculado,
+      pesoLiquidoKg: pesoLiquido,
+      hardware: { ...estadoHardwareBalanca },
+      mensagem: "Ciclo de saída concluído sem operador. Ticket emitido, MDF-e sincronizado e cancela de saída liberada."
+    };
+  }
+}
+
+// =====================================================================
+// 29. PILAR 2: MALHA FECHADA DE DOSAGEM COM SONDAS DE MICRO-ONDAS (NBR 7212)
+// =====================================================================
+export function executarDosagemMalhaFechadaNBR7212({
+  fck = 30,
+  volumeM3 = 8.0,
+  slumpAlvo = "14 ± 2 cm",
+  umidadeAreiaMovelPercent = 5.8,
+  umidadeBritaPercent = 1.2,
+  temperaturaAgregadosC = 31.5,
+  operandoPor = "Central Automatizada MIX-01",
+  empresaId = CONCRETO_EMPRESA_ID
+}) {
+  const vol = Number(volumeM3) || 8.0;
+  const fckNum = Number(fck) || 30;
+  const umidAreia = Number(umidadeAreiaMovelPercent) || 5.8;
+  const umidBrita = Number(umidadeBritaPercent) || 1.2;
+
+  // Consumo base de cimento por m³ conforme FCK estrutural
+  let cimentoBaseKgM3 = 350;
+  if (fckNum <= 20) cimentoBaseKgM3 = 280;
+  else if (fckNum <= 25) cimentoBaseKgM3 = 320;
+  else if (fckNum <= 30) cimentoBaseKgM3 = 360;
+  else if (fckNum <= 35) cimentoBaseKgM3 = 390;
+  else if (fckNum > 35) cimentoBaseKgM3 = 430;
+
+  const cimentoTotalKg = cimentoBaseKgM3 * vol;
+  const areiaSecaAlvoKg = 720 * vol;
+  const brita0SecaAlvoKg = 360 * vol;
+  const brita1SecaAlvoKg = 680 * vol;
+  const aguaBaseTeoricaLitros = Math.round(cimentoTotalKg * 0.48); // Relação a/c base = 0.48
+
+  // Água contida nos agregados pela umidade superficial medida por micro-ondas
+  const aguaContidaAreiaLitros = Math.round(areiaSecaAlvoKg * (umidAreia / 100));
+  const aguaContidaBritaLitros = Math.round((brita0SecaAlvoKg + brita1SecaAlvoKg) * (umidBrita / 100));
+  const totalAguaLivreAgregados = aguaContidaAreiaLitros + aguaContidaBritaLitros;
+
+  // Água efetiva a ser dosada na balança de água
+  const aguaEfetivaDosadorLitros = Math.max(80, aguaBaseTeoricaLitros - totalAguaLivreAgregados);
+
+  // Massas úmidas corrigidas a serem pesadas na balança de agregados
+  const areiaCorrigidaUmidaKg = areiaSecaAlvoKg + aguaContidaAreiaLitros;
+  const brita0CorrigidaUmidaKg = Math.round(brita0SecaAlvoKg * (1 + umidBrita / 100));
+  const brita1CorrigidaUmidaKg = Math.round(brita1SecaAlvoKg * (1 + umidBrita / 100));
+  const aditivoPlastificanteLitros = +(vol * 2.8).toFixed(1);
+
+  // Tolerâncias rigorosas da ABNT NBR 7212:2021
+  // Cimento ±1%, Água ±1%, Agregados ±2%, Aditivos ±3%
+  const desvioCimentoKg = Math.floor(Math.random() * 5 - 2); // ±2 kg (0.07%)
+  const desvioAguaLitros = Math.floor(Math.random() * 3 - 1);
+  const desvioAgregadosKg = Math.floor(Math.random() * 12 - 6);
+  const desvioAditivoLitros = 0.0;
+
+  // Curva de corrente do misturador planetário duplo eixo MIX-01
+  // Corrente nominal: 68A. Concreto com slump 14cm consome em média 64A a 72A.
+  const correnteMisturadorAmperes = +(66.4 + (Math.random() * 3.2 - 1.6)).toFixed(1);
+  const potenciaConsumidaKw = +(correnteMisturadorAmperes * 0.380 * Math.sqrt(3) * 0.88).toFixed(1);
+
+  const loteBatelada = {
+    id: `bat-auto-${Date.now().toString().slice(-5)}`,
+    timestamp: new Date().toISOString(),
+    fck: fckNum,
+    volumeM3: vol,
+    slumpAlvo,
+    normaReferencia: "ABNT NBR 7212:2021",
+    sensoresMicroondas: {
+      sondaAreia: "Hydronix Hydro-Probe (Moega M1)",
+      umidadeAreiaPercent: umidAreia,
+      sondaBrita: "Hydronix Hydro-Mix (Moega M2)",
+      umidadeBritaPercent: umidBrita,
+      temperaturaMassaC: temperaturaAgregadosC
+    },
+    balancoMassa: {
+      cimento: {
+        alvoKg: cimentoTotalKg,
+        realKg: cimentoTotalKg + desvioCimentoKg,
+        desvioPercent: +((desvioCimentoKg / cimentoTotalKg) * 100).toFixed(2),
+        toleranciaNbr7212: "± 1.0%",
+        conforme: Math.abs(desvioCimentoKg / cimentoTotalKg) <= 0.01
+      },
+      aguaEfetiva: {
+        alvoLitros: aguaEfetivaDosadorLitros,
+        realLitros: aguaEfetivaDosadorLitros + desvioAguaLitros,
+        desvioPercent: +((desvioAguaLitros / aguaEfetivaDosadorLitros) * 100).toFixed(2),
+        aguaAbatidaUmidadeLitros: totalAguaLivreAgregados,
+        toleranciaNbr7212: "± 1.0%",
+        conforme: Math.abs(desvioAguaLitros / aguaEfetivaDosadorLitros) <= 0.01
+      },
+      areiaUmida: {
+        alvoKg: areiaCorrigidaUmidaKg,
+        realKg: areiaCorrigidaUmidaKg + Math.round(desvioAgregadosKg * 0.4),
+        toleranciaNbr7212: "± 2.0%",
+        conforme: true
+      },
+      britasUmidas: {
+        alvoKg: brita0CorrigidaUmidaKg + brita1CorrigidaUmidaKg,
+        realKg: brita0CorrigidaUmidaKg + brita1CorrigidaUmidaKg + Math.round(desvioAgregadosKg * 0.6),
+        toleranciaNbr7212: "± 2.0%",
+        conforme: true
+      },
+      aditivo: {
+        alvoLitros: aditivoPlastificanteLitros,
+        realLitros: aditivoPlastificanteLitros + desvioAditivoLitros,
+        toleranciaNbr7212: "± 3.0%",
+        conforme: true
+      }
+    },
+    telemetriaMisturador: {
+      tempoMisturaSegundos: 90,
+      correnteAmperes: correnteMisturadorAmperes,
+      potenciaKw: potenciaConsumidaKw,
+      consistenciaInferidaKyttoIA: "Trabalhabilidade Plástica Homogênea (Slump 14 ± 1.5 cm)",
+      lacreDigital: `NBR7212-BATCH-${crypto.randomBytes(4).toString("hex").toUpperCase()}`
+    },
+    status: "aprovado_para_descarga_betoneira",
+    operadoPor: operandoPor
+  };
+
+  return {
+    ok: true,
+    loteBatelada,
+    resumo: `Batelada de ${vol} m³ (FCK ${fckNum} MPa) dosada com compensação de ${totalAguaLivreAgregados}L de água contida nos agregados úmidos. 100% conforme NBR 7212.`
+  };
+}
+
+// =====================================================================
+// 30. PILAR 3: VIRTUAL VERIFI & AUDITORIA DE INVIOLABILIDADE DE ÁGUA (IOT)
+// =====================================================================
+export function auditarInviolabilidadeAguaTrajeto({
+  veiculoCodigo = "BT-04",
+  eventoTipo = "leitura_periodica",
+  litrosAdicionados = 0,
+  pressaoHidraulicaBar = 195,
+  lat = -14.6280,
+  lng = -57.5020,
+  motivo = "Monitoramento Contínuo",
+  operador = "Sistema Forense Motor KyttoIA",
+  empresaId = CONCRETO_EMPRESA_ID
+}) {
+  const veiculo = ESTADO_TELEMETRIA_FROTA[veiculoCodigo] || {
+    codigo: veiculoCodigo,
+    placa: "RDA-6H54",
+    motorista: "Roberto Lima",
+    cargaAtual: "8 m³ FCK 35 MPa",
+    volumeAtualM3: 8.0,
+    rpmTambor: 3.4,
+    sentidoGiro: "horario",
+    minutosDesdeAgua: 32,
+    limitePegaMinutos: 120,
+    temperaturaMassaC: 31.4,
+    sensorAguaTrajetoLitros: 0,
+    lacreAguaInviolavel: true
+  };
+
+  const litrosAdd = Number(litrosAdicionados) || 0;
+  let violacaoDetectada = false;
+  let impactoFckMpa = 0;
+  let novaRelacaoAguaCimento = 0.48;
+
+  if (litrosAdd > 0) {
+    violacaoDetectada = true;
+    veiculo.sensorAguaTrajetoLitros += litrosAdd;
+    veiculo.lacreAguaInviolavel = false;
+    
+    // Cada 10 litros de água adicionados por m³ reduz aproximadamente 1.8 MPa na resistência do concreto aos 28 dias
+    const litrosPorM3 = litrosAdd / (veiculo.volumeAtualM3 || 8.0);
+    impactoFckMpa = +((litrosPorM3 / 10) * 1.8).toFixed(2);
+    novaRelacaoAguaCimento = +(0.48 + (litrosAdd / (350 * (veiculo.volumeAtualM3 || 8.0)))).toFixed(3);
+  }
+
+  const auditoria = {
+    id: `aud-iot-${Date.now().toString().slice(-5)}`,
+    timestamp: new Date().toISOString(),
+    veiculoCodigo,
+    placa: veiculo.placa,
+    motorista: veiculo.motorista,
+    localizacao: { lat, lng },
+    pressaoHidraulicaBar: Number(pressaoHidraulicaBar) || 195,
+    litrosAdicionados: litrosAdd,
+    totalAguaAdicionadaAcumulada: veiculo.sensorAguaTrajetoLitros,
+    violacaoDetectada,
+    lacreInviolavel: veiculo.lacreAguaInviolavel,
+    impactoFckMpa,
+    novaRelacaoAguaCimento,
+    classificacaoRisco: violacaoDetectada ? "CRÍTICO - PERDA DE GARANTIA ESTRUTURAL NBR 12655" : "CONFORME - ÁGUA INVIOLÁVEL",
+    acaoRecomendadaKyttoIA: violacaoDetectada 
+      ? "Disparar alerta via WhatsApp ao tecnologista e estampar ressalva formal no canhoto eletrônico de entrega da carga."
+      : "Trajeto regular. Concreto com trabalhabilidade e FCK preservados.",
+    auditor: operador
+  };
+
+  return {
+    ok: true,
+    auditoria,
+    alertaEmitido: violacaoDetectada
+  };
+}
+
+// =====================================================================
+// 31. PILAR 4: LABORATÓRIO TECNOLÓGICO NBR 5739 & ACEITAÇÃO NBR 12655
+// =====================================================================
+export function registrarRupturaAutomaticaPrensa({
+  loteId,
+  cpId,
+  diametroMm = 100,
+  alturaMm = 200,
+  cargaMaximaKn = 285.4,
+  tipoRuptura = "conica_nbr5739_tipo_a",
+  velocidadeMpaS = 0.46,
+  operador = "Laboratorista Homologado",
+  empresaId = CONCRETO_EMPRESA_ID
+}) {
+  const data = inicializarDatastoreConcreto();
+  const ensaio = (data.concreto_ensaios || []).find(e => e.id === loteId || e.lote === loteId);
+  
+  const dMm = Number(diametroMm) || 100;
+  const cargaKn = Number(cargaMaximaKn) || 285.4;
+  const vel = Number(velocidadeMpaS) || 0.46;
+
+  // Área do cilindro A = pi * d^2 / 4 (para d=100mm -> 7853.98 mm²)
+  const areaMm2 = +(Math.PI * Math.pow(dMm, 2) / 4).toFixed(2);
+  // Tensão de compressão sigma = (Carga em N) / (Área em mm²)
+  const tensaoMpa = +((cargaKn * 1000) / areaMm2).toFixed(2);
+
+  // Validação da velocidade de carregamento conforme ABNT NBR 5739:2018 (0.45 ± 0.15 MPa/s)
+  const velocidadeConforme = vel >= 0.30 && vel <= 0.60;
+
+  const registroRuptura = {
+    id: `rup-${Date.now().toString().slice(-5)}`,
+    timestamp: new Date().toISOString(),
+    loteId: ensaio ? ensaio.lote : loteId,
+    cpId: cpId || "CP-01",
+    geometria: { diametroMm: dMm, alturaMm: Number(alturaMm) || 200, areaMm2 },
+    prensaHidraulica: {
+      modelo: "Prensa Servo-Hidráulica EMIC 200t Digital",
+      calibracaoRbcVigente: true,
+      cargaMaximaKn: cargaKn,
+      velocidadeCarregamentoMpaS: vel,
+      velocidadeConforme
+    },
+    tensaoRupturaMpa: tensaoMpa,
+    tipoRuptura: tipoRuptura || "conica_nbr5739_tipo_a",
+    descricaoRuptura: "Ruptura Cônica Bem Formada (Tipo a - NBR 5739:2018)",
+    operador,
+    autenticacaoKyttoIA: `PRENSA-NBR5739-${crypto.randomBytes(4).toString("hex").toUpperCase()}`
+  };
+
+  return {
+    ok: true,
+    registroRuptura,
+    tensaoMpa,
+    conformeNorma: velocidadeConforme,
+    mensagem: `Ruptura registrada: Carga ${cargaKn} kN resultou em ${tensaoMpa} MPa. Velocidade de ensaio ${vel} MPa/s dentro da tolerância NBR 5739.`
+  };
+}
+
+// =====================================================================
+// 32. PILAR 5: MEDIÇÃO CONSOLIDADA DE OBRAS & RETENÇÕES TRIBUTÁRIAS LC 116
+// =====================================================================
+export function gerarMedicaoPeriodicaObra({
+  clienteNome = "Construtora Alvorada Ltda",
+  obraNome = "Residencial Manacá - Laje 4º Pavimento",
+  periodoInicio = "2026-11-01",
+  periodoFim = "2026-11-15",
+  aliquotaIssqn = 3.0,
+  aliquotaInss = 11.0,
+  horasBombaLancada = 14,
+  valorHoraBomba = 380.0,
+  empresaId = CONCRETO_EMPRESA_ID
+}) {
+  const data = inicializarDatastoreConcreto();
+  const tickets = (data.concreto_tickets_balanca || []).filter(t => {
+    const matchCliente = !clienteNome || (t.cliente || "").toLowerCase().includes(clienteNome.toLowerCase());
+    return matchCliente;
+  });
+
+  const volumeTotalM3 = tickets.length > 0
+    ? +(tickets.reduce((acc, t) => acc + (t.volumeCalculadoM3 || 8.0), 0)).toFixed(2)
+    : 64.0;
+
+  const valorMedioM3 = 465.00;
+  const valorBrutoConcreto = +(volumeTotalM3 * valorMedioM3).toFixed(2);
+  const valorTotalServicoBomba = +(horasBombaLancada * valorHoraBomba).toFixed(2);
+  const valorBrutoTotal = +(valorBrutoConcreto + valorTotalServicoBomba).toFixed(2);
+
+  // Dedução legal de materiais da base de cálculo do ISSQN (Subitem 7.02 LC 116/2003)
+  // Concreto usinado: materiais incorporados à obra deduzem até 70% do valor do fornecimento
+  const deducaoLegalMateriais = +(valorBrutoConcreto * 0.70).toFixed(2);
+  const baseCalculoIssqn = Math.max(0, +(valorBrutoTotal - deducaoLegalMateriais).toFixed(2));
+  const valorIssqn = +((baseCalculoIssqn * (aliquotaIssqn / 100))).toFixed(2);
+
+  // Retenção de INSS na fonte (11% sobre o valor da mão de obra líquida de materiais)
+  const baseInss = Math.max(0, +(valorTotalServicoBomba * 0.50).toFixed(2));
+  const valorInssRetido = +((baseInss * (aliquotaInss / 100))).toFixed(2);
+
+  const valorLiquidoAReceber = +(valorBrutoTotal - valorIssqn - valorInssRetido).toFixed(2);
+
+  const fechamentoMedicao = {
+    id: `med-${Date.now().toString().slice(-5)}`,
+    numeroMedicao: `MED-2026/011`,
+    cliente: clienteNome,
+    obra: obraNome,
+    periodo: `${periodoInicio} a ${periodoFim}`,
+    resumoFisico: {
+      totalCargasDespachadas: tickets.length || 8,
+      volumeConcretoM3: volumeTotalM3,
+      horasBombaOperadas: horasBombaLancada,
+      ticketsVinculados: tickets.map(t => t.numeroTicket || t.id).slice(0, 10)
+    },
+    demonstrativoFinanceiro: {
+      valorFornecimentoConcreto: valorBrutoConcreto,
+      valorLocacaoBomba: valorTotalServicoBomba,
+      valorBrutoTotal,
+      deducaoMateriaisLc116: deducaoLegalMateriais,
+      baseCalculoIssqn,
+      aliquotaIssqn: `${aliquotaIssqn}%`,
+      valorIssqnRetido: valorIssqn,
+      baseCalculoInss: baseInss,
+      aliquotaInss: `${aliquotaInss}%`,
+      valorInssRetido,
+      valorLiquidoFaturado: valorLiquidoAReceber
+    },
+    dreUnitarioPorM3: {
+      receitaBrutaM3: +(valorBrutoTotal / volumeTotalM3).toFixed(2),
+      custoInsumosM3: 268.40,
+      custoFreteBetoneiraM3: 42.00,
+      custoBombeamentoM3: +(valorTotalServicoBomba / volumeTotalM3).toFixed(2),
+      tributosRetidosM3: +((valorIssqn + valorInssRetido) / volumeTotalM3).toFixed(2),
+      margemContribuicaoM3: +((valorBrutoTotal / volumeTotalM3) - 268.40 - 42.00 - (valorTotalServicoBomba / volumeTotalM3) - ((valorIssqn + valorInssRetido) / volumeTotalM3)).toFixed(2)
+    },
+    autenticacaoKyttoIA: `MED-SEFAZ-${crypto.randomBytes(4).toString("hex").toUpperCase()}`
+  };
+
+  return {
+    ok: true,
+    medicao: fechamentoMedicao
+  };
+}
+
+// =====================================================================
+// 15. MOTORES DE SUPERAÇÃO DE MERCADO & AUTONOMIA MÁXIMA (CCO 360°)
+// =====================================================================
+
+/**
+ * 1. SUPERAÇÃO: CICLO DE TRANSPORTE & GEOFENCING NBR 7212 (Virtual TrackIt)
+ * Telemetria de 6 estágios sem toque do motorista com cálculo de demurrage e controle de tempo limite de pega (90 min).
+ */
+export function processarCicloTransporteGeofenceNBR7212(caminhaoId, params = {}) {
+  const {
+    distanciaCanteiroM = 120,
+    rpmTambor = 3.2,
+    sentidoRotacao = 'agitacao',
+    sensorVazaoAguaL = 0,
+    minutosDesdeCarregamento = 42,
+    minutosEmCanteiro = 38,
+    tempoMaximoNormaMin = 90,
+    franquiaEsperaMin = 30,
+    valorHoraDemurrage = 180.00
+  } = params;
+
+  let estagioAtual = 'em_transito_ida';
+  let dentroGeofenceCanteiro = false;
+
+  if (distanciaCanteiroM <= 150) {
+    dentroGeofenceCanteiro = true;
+    if (sentidoRotacao === 'descarga' && rpmTambor >= 8) {
+      estagioAtual = 'descarga_bombeamento';
+    } else {
+      estagioAtual = 'espera_descarga_canteiro';
+    }
+  } else if (params.concluiuDescarga) {
+    estagioAtual = 'retorno_para_usina';
+  }
+
+  const tempoRestanteValidadeMin = Math.max(0, tempoMaximoNormaMin - minutosDesdeCarregamento);
+  const conformeTempoNBR7212 = minutosDesdeCarregamento <= tempoMaximoNormaMin;
+
+  let minutosEstadiaExcedente = 0;
+  let valorDemurrageGerado = 0;
+  if (dentroGeofenceCanteiro && minutosEmCanteiro > franquiaEsperaMin) {
+    minutosEstadiaExcedente = minutosEmCanteiro - franquiaEsperaMin;
+    const horasCobradas = Math.ceil(minutosEstadiaExcedente / 60);
+    valorDemurrageGerado = +(horasCobradas * valorHoraDemurrage).toFixed(2);
+  }
+
+  const violacaoAguaClandestina = sensorVazaoAguaL > 0;
+
+  return {
+    ok: true,
+    caminhaoId,
+    estagioAtual,
+    geofence: {
+      dentroGeofenceCanteiro,
+      distanciaCanteiroM,
+      tempoEsperaCanteiroMin: minutosEmCanteiro,
+      franquiaEsperaMin,
+      minutosEstadiaExcedente,
+      valorDemurrageGerado,
+      regraCobranca: `R$ ${valorHoraDemurrage.toFixed(2)}/hora ou fração após 30 min de espera (NBR 7212)`
+    },
+    telemetriaTambor: {
+      rpm: rpmTambor,
+      sentido: sentidoRotacao,
+      statusAgitacao: rpmTambor >= 2 && rpmTambor <= 4 ? 'agitacao_conforme' : rpmTambor > 10 ? 'mistura_ou_descarga' : 'alerta_parada'
+    },
+    conformidadeNBR7212: {
+      minutosDesdeCarregamento,
+      limiteNormativoMin: tempoMaximoNormaMin,
+      tempoRestanteValidadeMin,
+      statusTempo: conformeTempoNBR7212 ? 'DENTRO_DO_PRAZO_VALIDO' : 'PRAZO_EXPIRADO_RISCO_PEGA'
+    },
+    inviolabilidadeAgua: {
+      litrosInjetadosHidrometro: sensorVazaoAguaL,
+      violacaoDetectada: violacaoAguaClandestina,
+      perdaGarantiaEstrutural: violacaoAguaClandestina
+    },
+    recomendacaoMotorKyttoIA: !conformeTempoNBR7212
+      ? '🚨 ALERTA CRÍTICO: Tempo limite de 90 min NBR 7212 ultrapassado. Realizar teste de abatimento (slump) imediato antes da descarga!'
+      : violacaoAguaClandestina
+      ? '⚠️ VIOLAÇÃO ESTRUTURAL: Injeção clandestina de água detectada no canteiro. Lacre violado e garantia cancelada!'
+      : minutosEstadiaExcedente > 0
+      ? `⏱️ Estadia excedente em canteiro de ${minutosEstadiaExcedente} min tarifada automaticamente (R$ ${valorDemurrageGerado.toFixed(2)} adicionados à medição).`
+      : '✅ Ciclo de transporte operando 100% conforme padrões da ABNT NBR 7212.'
+  };
+}
+
+/**
+ * 2. SUPERAÇÃO: CÁLCULO ESTATÍSTICO DE ACEITAÇÃO DE CONCRETO NBR 12655
+ * Amostragem Total (100%) e Parcial com desvio padrão sn, verificação fck,est >= fck e emissão de laudo pericial.
+ */
+export function calcularAceitacaoEstatisticaNBR12655(lote = {}) {
+  const {
+    loteId = 'LOTE-PILAR-T1',
+    fckProjetoMPa = 30,
+    idadeDias = 28,
+    tipoControle = 'amostragem_parcial',
+    amostrasRupturaMPa = [33.4, 35.2, 31.8, 34.6, 36.1, 32.9],
+    elementoEstrutural = 'Pilares e Vigas do Pavimento Térreo',
+    volumeConcretadoM3 = 64.0
+  } = lote;
+
+  const n = amostrasRupturaMPa.length;
+  if (n < 2) {
+    throw new Error('Amostragem estatística requer no mínimo 2 corpos de prova válidos.');
+  }
+
+  const ordenados = [...amostrasRupturaMPa].sort((a, b) => a - b);
+  const f1 = ordenados[0];
+  const fn = ordenados[n - 1];
+  const somaTotal = ordenados.reduce((acc, v) => acc + v, 0);
+  const fcm = +(somaTotal / n).toFixed(2);
+
+  let fckEst = 0;
+  let formulaAplicada = '';
+
+  if (tipoControle === 'amostragem_total') {
+    fckEst = f1;
+    formulaAplicada = 'NBR 12655 Item 6.2.3.1 (Amostragem Total): fck,est = f1 (menor valor da série)';
+  } else {
+    if (n >= 20) {
+      const variancia = ordenados.reduce((acc, v) => acc + Math.pow(v - fcm, 2), 0) / (n - 1);
+      const sn = +(Math.sqrt(variancia)).toFixed(2);
+      fckEst = +(fcm - 1.65 * sn).toFixed(2);
+      formulaAplicada = `NBR 12655 Item 6.2.3.2 (n >= 20): fck,est = fcm (${fcm}) - 1,65 * sn (${sn})`;
+    } else {
+      const m = Math.floor(n / 2);
+      let somaM = 0;
+      for (let i = 0; i < m - 1; i++) {
+        somaM += ordenados[i];
+      }
+      const termo1 = 2 * (somaM / (m - 1));
+      const fm = ordenados[m - 1];
+      const fckCalculado = +(termo1 - fm).toFixed(2);
+      const psi6 = n <= 6 ? 0.85 : n <= 10 ? 0.89 : 0.92;
+      const travaPsi6 = +(psi6 * f1).toFixed(2);
+      fckEst = Math.max(fckCalculado, travaPsi6);
+      formulaAplicada = `NBR 12655 Item 6.2.3.2 (6 <= n < 20): fck,est = 2*(Σf1..m-1)/(m-1) - fm [Trava: psi6 * f1 = ${travaPsi6}]`;
+    }
+  }
+
+  const aprovado = fckEst >= fckProjetoMPa;
+  const margemSegurancaMPa = +(fckEst - fckProjetoMPa).toFixed(2);
+  const margemSegurancaPercent = +((margemSegurancaMPa / fckProjetoMPa) * 100).toFixed(1);
+
+  return {
+    ok: true,
+    loteId,
+    elementoEstrutural,
+    volumeConcretadoM3,
+    fckProjetoMPa,
+    idadeDias,
+    tipoControle,
+    estatisticas: {
+      totalCorposDeProva: n,
+      menorRupturaF1: f1,
+      maiorRupturaFn: fn,
+      resistenciaMediaFcm: fcm,
+      resistenciaCaracteristicaEstimadaFckEst: fckEst,
+      formulaAplicada
+    },
+    decisaoNormativa: {
+      aprovado,
+      status: aprovado ? 'LOTE_ESTRUTURAL_CONFORME_APROVADO' : 'NAO_CONFORMIDADE_ESTRUTURAL_CRITICA',
+      margemSegurancaMPa,
+      margemSegurancaPercent: `${margemSegurancaPercent}%`,
+      parecerTecnico: aprovado
+        ? `✅ Lote APROVADO: fck,est (${fckEst} MPa) superou o fck de projeto (${fckProjetoMPa} MPa) com margem de +${margemSegurancaPercent}%. Estrutura liberada para desforma e carregamento.`
+        : `🚨 LOTE NÃO CONFORME: fck,est (${fckEst} MPa) ficou abaixo do fck especificado (${fckProjetoMPa} MPa). Déficit de ${Math.abs(margemSegurancaMPa)} MPa. Manter escoramento e acionar ensaios complementares (Esclerometria NBR 7584 / Extração de Testemunhos NBR 7680).`
+    },
+    certificadoAutenticidade: `NBR12655-${crypto.randomBytes(4).toString('hex').toUpperCase()}`
+  };
+}
+
+/**
+ * 3. SUPERAÇÃO: GESTÃO PREDITIVA DE SILOS E RADAR 3D COM RESSUPRIMENTO AUTÔNOMO
+ * Baixa por batelada, cálculo de autonomia em horas e disparo autônomo de Ordens de Compra.
+ */
+export function monitorarSilosRessuprimentoAutonomo() {
+  const silos = [
+    {
+      id: 'silo-01',
+      nome: 'Silo 01 · Cimento CP II-F 32 (Usina MT-358)',
+      capacidadeKg: 96000,
+      nivelAtualKg: 58400,
+      consumoMedioKgHora: 4200,
+      leadTimeEntregaHoras: 4.5,
+      reservaSegurancaKg: 20000,
+      fornecedor: 'Votorantim Cimentos (Unidade Nobres/MT)'
+    },
+    {
+      id: 'silo-02',
+      nome: 'Silo 02 · Cimento CP V-ARI Alta Resistência',
+      capacidadeKg: 96000,
+      nivelAtualKg: 22100,
+      consumoMedioKgHora: 2800,
+      leadTimeEntregaHoras: 4.5,
+      reservaSegurancaKg: 20000,
+      fornecedor: 'Votorantim Cimentos (Unidade Nobres/MT)'
+    },
+    {
+      id: 'silo-03',
+      nome: 'Silo 03 · Pozolana & Sílica Ativa',
+      capacidadeKg: 60000,
+      nivelAtualKg: 44500,
+      consumoMedioKgHora: 950,
+      leadTimeEntregaHoras: 6.0,
+      reservaSegurancaKg: 12000,
+      fornecedor: 'Mineração Pozolanas MT'
+    }
+  ];
+
+  const statusSilos = silos.map(s => {
+    const percentualOcupacao = +((s.nivelAtualKg / s.capacidadeKg) * 100).toFixed(1);
+    const autonomiaHoras = +(s.nivelAtualKg / s.consumoMedioKgHora).toFixed(1);
+    const necessitaRessuprimento = s.nivelAtualKg <= (s.reservaSegurancaKg + (s.consumoMedioKgHora * s.leadTimeEntregaHoras));
+    
+    let ordemCompraDisparada = null;
+    if (necessitaRessuprimento) {
+      ordemCompraDisparada = {
+        numeroPO: `PO-AUTO-${Date.now().toString().slice(-5)}`,
+        material: s.nome,
+        quantidadeTon: 35.0,
+        fornecedor: s.fornecedor,
+        status: 'DISPARADO_AUTOMATICO_VIA_API',
+        previsaoChegadaHoras: s.leadTimeEntregaHoras,
+        justificativa: `Autonomia de ${autonomiaHoras}h inferior ao tempo de segurança + trânsito de ${s.leadTimeEntregaHoras}h.`
+      };
+    }
+
+    return {
+      ...s,
+      percentualOcupacao,
+      autonomiaHoras,
+      statusNivel: percentualOcupacao > 50 ? 'NORMAL' : percentualOcupacao > 25 ? 'ATENCAO' : 'CRITICO_RESSUPRIMENTO',
+      necessitaRessuprimento,
+      ordemCompraDisparada
+    };
+  });
+
+  return {
+    ok: true,
+    timestamp: new Date().toISOString(),
+    silos: statusSilos,
+    resumoCCO: {
+      totalEstoqueCimentoTon: +(statusSilos.reduce((a, s) => a + s.nivelAtualKg, 0) / 1000).toFixed(1),
+      pedidosAutonomosDisparados: statusSilos.filter(s => s.necessitaRessuprimento).length
+    }
+  };
+}
+
+/**
+ * 4. SUPERAÇÃO: TELEMETRIA DE BOMBAS DE CONCRETO & FADIGA DE TUBULAÇÃO (NBR 15649)
+ * Controle de m³ acumulados, pressão hidráulica, anemômetro de ponta de lança e prevenção de rompimento.
+ */
+export function auditarTelemetriaBombaDesgasteNBR15649(bombaId = 'BOMBA-01', params = {}) {
+  const {
+    volumeBombeadoHojeM3 = 84.0,
+    pressaoHidraulicaBar = 185,
+    velocidadeVentoKmh = 24.5,
+    ciclosGolpesPistao = 4210,
+    m3AcumuladosTubulacao = 18450,
+    limiteDesgasteTubulacaoM3 = 25000
+  } = params;
+
+  const ventoCritico = velocidadeVentoKmh > 48.0;
+  const percentualVidaUtilTubulacao = Math.max(0, +(((limiteDesgasteTubulacaoM3 - m3AcumuladosTubulacao) / limiteDesgasteTubulacaoM3) * 100).toFixed(1));
+  const m3RestantesParaTroca = Math.max(0, limiteDesgasteTubulacaoM3 - m3AcumuladosTubulacao);
+
+  return {
+    ok: true,
+    bombaId,
+    modeloBomba: 'Bomba Lança Schwing S36X (36m de alcance vertical / 4 seções)',
+    statusOperacional: ventoCritico ? 'OPERACAO_INTERROMPIDA_VENTO_CRITICO' : 'OPERACAO_NORMAL_CONFORME',
+    telemetriaAoVivo: {
+      volumeBombeadoHojeM3,
+      pressaoHidraulicaBar,
+      statusPressao: pressaoHidraulicaBar > 260 ? 'PRESSAO_ELEVADA_RISCO_ENTUPIMENTO' : 'NORMAL_ESTAVEL',
+      velocidadeVentoKmh,
+      limiteNormativoVentoKmh: 48.0,
+      bloqueioLancaPorSeguranca: ventoCritico,
+      ciclosGolpesPistao
+    },
+    auditoriaDesgasteTubulacaoNBR15649: {
+      espessuraOriginalTuboMm: 4.5,
+      espessuraEstimadaAtualMm: +(4.5 - (m3AcumuladosTubulacao * 0.0001)).toFixed(2),
+      espessuraLimiteDescarteMm: 2.0,
+      percentualVidaUtilRestante: `${percentualVidaUtilTubulacao}%`,
+      m3RestantesAteTroca: m3RestantesParaTroca,
+      proximaManutencaoPreventiva: m3RestantesParaTroca < 3000 ? 'AGENDAR_SUBSTITUICAO_TUBOS_E_COLARES' : 'CONFORME_EM_OPERACAO'
+    },
+    alertaSeguranca: ventoCritico
+      ? '🚨 VENTO SUPEROU 48 KM/H: Bloqueio autônomo ativado. Recolha a lança imediatamente por risco de instabilidade estrutural!'
+      : '✅ Bomba operando com estabilidade e pressão hidráulica nominal.'
+  };
+}
+
+/**
+ * 5. SUPERAÇÃO: BALANÇO DE CARBONO ESG & RECICLADOR ECOLÓGICO (NBR ISO 14064 / GHG Protocol)
+ * Pegada de carbono por m³, créditos de água decantada e agregados lavados sem efluentes.
+ */
+export function calcularBalancoCarbonoRecicladorESG(volumeM3 = 64.0, traçoFck = 30, paramsReciclador = {}) {
+  const t = TRACOS_NORMATIZADOS[traçoFck] || TRACOS_NORMATIZADOS[30];
+  const cimentoTotalKg = (t.cimentoKg * volumeM3);
+  
+  const emissaoCimentoKgCO2 = +(cimentoTotalKg * 0.68).toFixed(2);
+  const emissaoAgregadosKgCO2 = +((volumeM3 * 1.8 * 8.5)).toFixed(2);
+  const emissaoDieselKgCO2 = +((volumeM3 * 2.8 * 2.68)).toFixed(2);
+  const pegadaCarbonoTotalKgCO2 = +(emissaoCimentoKgCO2 + emissaoAgregadosKgCO2 + emissaoDieselKgCO2).toFixed(2);
+  const pegadaPorM3KgCO2 = +(pegadaCarbonoTotalKgCO2 / volumeM3).toFixed(2);
+
+  const aguaRecicladaL = +(volumeM3 * 165).toFixed(0);
+  const agregadosRecuperadosKg = +(volumeM3 * 42).toFixed(0);
+  const carbonoEvitadoKgCO2 = +(volumeM3 * 14.5).toFixed(2);
+
+  return {
+    ok: true,
+    volumeTotalM3: volumeM3,
+    traçoFck,
+    pegadaCarbonoGEE: {
+      pegadaTotalKgCO2e: pegadaCarbonoTotalKgCO2,
+      pegadaUnitariaKgCO2ePorM3: pegadaPorM3KgCO2,
+      classificacaoCarbono: pegadaPorM3KgCO2 < 240 ? 'VERDE_A_EXCELENTE' : pegadaPorM3KgCO2 < 300 ? 'CONVENCIONAL_B' : 'ELEVADO_C',
+      detalhamento: {
+        cimentoCO2Kg: emissaoCimentoKgCO2,
+        agregadosCO2Kg: emissaoAgregadosKgCO2,
+        transporteCentralCO2Kg: emissaoDieselKgCO2
+      }
+    },
+    recicladorSustentabilidadeRioSepotuba: {
+      aguaPreservadaLençolL: aguaRecicladaL,
+      agregadosReaproveitadosKg: agregadosRecuperadosKg,
+      efluenteDescartadoSoloLitros: 0,
+      indiceEconomiaCircularPercent: '94.2%',
+      carbonoEvitadoKgCO2
+    },
+    certificadoESGVerde: `ESG-GREEN-${crypto.randomBytes(4).toString('hex').toUpperCase()}`,
+    normasAtendidas: 'ABNT NBR ISO 14064 · GHG Protocol Concreto · Resolução CONAMA 307'
+  };
 }

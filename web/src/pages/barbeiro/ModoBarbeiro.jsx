@@ -718,6 +718,12 @@ export default function ModoBarbeiro() {
     if (pergunta && !window.confirm(pergunta)) return
     setAcaoEmCurso(agendamento.id); setErro('')
     try {
+      if (status === 'cancelado') {
+        window.dispatchEvent(new CustomEvent('kytto:agenda_cancelada', { detail: { id: agendamento.id, agendamento } }))
+        try {
+          localStorage.setItem('kytto:sync_agenda', JSON.stringify({ tipo: 'cancelado', id: agendamento.id, ts: Date.now() }))
+        } catch (_) {}
+      }
       await api.patch(`/api/admin/barbearia/agenda/${agendamento.id}/status`, {
         status,
         registrarFinanceiro: false,

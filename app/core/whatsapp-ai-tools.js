@@ -95,7 +95,7 @@ function tokensNome(value) {
   return nomeComparavel(value).split(' ').filter((item) => item && !PALAVRAS_VAZIAS.has(item));
 }
 // Apelidos e termos populares para correspondencia resiliente de barbeiros
-const APELIDOS_PROFISSIONAIS = {
+export const APELIDOS_PROFISSIONAIS = {
   'dino': ['guilherme cunha martins', 'dino'],
   'mestre dino': ['guilherme cunha martins', 'dino'],
   'patrao': ['guilherme cunha martins', 'dino'],
@@ -111,9 +111,14 @@ const APELIDOS_PROFISSIONAIS = {
   'nat': ['natani minanis dobler', 'natani', 'naty', 'nati'],
   'nato': ['natani minanis dobler', 'natani', 'naty', 'nati'],
   'nathy': ['natani minanis dobler', 'natani', 'naty', 'nati'],
+  'natalia': ['natani minanis dobler', 'natani', 'naty', 'nati'],
+  'natália': ['natani minanis dobler', 'natani', 'naty', 'nati'],
+  'natali': ['natani minanis dobler', 'natani', 'naty', 'nati'],
+  'nathalia': ['natani minanis dobler', 'natani', 'naty', 'nati'],
+  'nathália': ['natani minanis dobler', 'natani', 'naty', 'nati'],
 };
 
-const APELIDOS_SERVICOS = {
+export const APELIDOS_SERVICOS = {
   // Corte de cabelo / Corte masculino (Bruno, Nati, Dino)
   'corte': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino', 'corte premium (bruno ou nati)', 'corte premium', 'corte tradicional', 'corte masculino'],
   'corte premium': ['corte premium', 'corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
@@ -135,6 +140,9 @@ const APELIDOS_SERVICOS = {
   'fazer barba': ['barba premium', 'barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
   'fazer a barba': ['barba premium', 'barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
   'aparar barba': ['barba premium', 'barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
+  'desenhar barba': ['barba premium', 'barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
+  'desenhar a barba': ['barba premium', 'barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
+  'alinhar barba': ['barba premium', 'barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
 
   // Corte e Barba / Combo
   'corte e barba': ['corte e barba agendamento online', 'corte e barba', 'corte e barba com dino agendamento online', 'corte e barba com dino', 'corte e barba premium', 'combo corte e barba', 'combo'],
@@ -168,6 +176,16 @@ const APELIDOS_SERVICOS = {
   'detox barba': ['detox de barba'],
   'limpeza de pele': ['limpeza de pele'],
   'limpeza pele': ['limpeza de pele'],
+  'cravos': ['limpeza de pele'],
+  'espinhas': ['limpeza de pele'],
+  'cravos e espinhas': ['limpeza de pele'],
+  'tirar cravos': ['limpeza de pele'],
+  'tirar espinhas': ['limpeza de pele'],
+  'black mask': ['limpeza de pele'],
+  'mascara negra': ['limpeza de pele'],
+  'máscara negra': ['limpeza de pele'],
+  'mascara preta': ['limpeza de pele'],
+  'máscara preta': ['limpeza de pele'],
   'dermaplaning': ['dermaplaning'],
   'banho de gelo': ['banho de gelo'],
   'coloracao': ['coloracao tonalizacao', 'coloracao'],
@@ -212,7 +230,7 @@ export function matchAgendaName(value, items = [], { isDino = null } = {}) {
     const correspondencias = APELIDOS_SERVICOS[chaveServico];
     const achados = items.filter((item) => {
       const n = nomeComparavel(item?.nome);
-      if (!/\b(corte|cabelo)\b/i.test(semPreposicao) && /\b(corte|cabelo)\b/i.test(n) && !/\b(corte|cabelo)\b/i.test(chaveServico)) return false;
+      if (!/\b(combo|completo)\b/i.test(chaveServico) && !/\b(corte|cabelo)\b/i.test(semPreposicao) && /\b(corte|cabelo)\b/i.test(n) && !/\b(corte|cabelo)\b/i.test(chaveServico)) return false;
       return correspondencias.some((c) => n === c || n.includes(c));
     });
     if (achados.length === 1) {
@@ -318,16 +336,29 @@ async function resolveAgendaId(scope, value, field, { allowAny = false, professi
   // Fallback inteligente para serviços padrão da barbearia (evita erro "não encontrei o serviço" para termos comuns)
   if (!profissional && lista.length) {
     const pVal = nomeComparavel(normalized);
-    const ehCombo = /corte.*barba|barba.*corte|combo/i.test(pVal);
-    const ehCorte = /corte|cabelo/i.test(pVal) && !ehCombo;
-    const ehBarba = /barba/i.test(pVal) && !ehCombo;
+    const ehCombo = /corte.*barba|barba.*corte|cabelo.*barba|barba.*cabelo|combo|completo|ambos|os dois/i.test(pVal)
+      || ((pVal.includes('corte') || pVal.includes('cabelo')) && pVal.includes('barba'));
+    const ehCorte = (/corte|cabelo|cortar|aparar/i.test(pVal)) && !ehCombo;
+    const ehBarba = (/barba|barboterapia/i.test(pVal)) && !ehCombo;
+    const ehSobrancelha = /sobrancelha/i.test(pVal);
+    const ehPezinho = /pezinho|pesinho|acabamento/i.test(pVal);
     if (ehCombo) {
-      const combo = lista.find((it) => /corte.*barba|barba.*corte/i.test(it.nome));
+      const combo = lista.find((it) => /corte.*barba|barba.*corte|cabelo.*barba|combo/i.test(it.nome) || (/corte|cabelo/i.test(it.nome) && /barba/i.test(it.nome)));
       if (combo?.id) return combo.id;
     }
     if (ehCorte) {
       const corte = lista.find((it) => /corte/i.test(it.nome) && !/barba/i.test(it.nome));
       if (corte?.id) return corte.id;
+      const cabelo = lista.find((it) => /cabelo/i.test(it.nome) && !/barba/i.test(it.nome));
+      if (cabelo?.id) return cabelo.id;
+    }
+    if (ehSobrancelha) {
+      const sob = lista.find((it) => /sobrancelha/i.test(it.nome));
+      if (sob?.id) return sob.id;
+    }
+    if (ehPezinho) {
+      const pez = lista.find((it) => /pezinho|pesinho|acabamento/i.test(it.nome));
+      if (pez?.id) return pez.id;
     }
     if (ehBarba) {
       const barba = lista.find((it) => /barba/i.test(it.nome) && !/corte/i.test(it.nome));

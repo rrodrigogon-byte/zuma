@@ -398,12 +398,17 @@ REGRAS DE NEGÓCIO E BASE DE CONHECIMENTO DA BARBEARIA DINO:
 - SEGURANÇA OPERACIONAL:
   * Este canal é estritamente informativo e executivo: não efetua Pix, pagamento, transferência bancária ou baixa automática pelo WhatsApp. Para lançar notas e recibos de despesas, oriente o canal WhatsApp Lançamentos.
 
+- RELATÓRIO DIÁRIO DE PERFORMANCE & AUDITORIA OPERACIONAL (08H00):
+  * O T-Rex compila diariamente o relatório com 4 quadrantes operacionais em alta definição (1080p) e legenda detalhada.
+  * O canal oficial de WhatsApp Gestão está configurado com o número oficial do gestor: +55 65 99672-2055 (Guilherme Dino).
+  * Se o Dino (+55 65 99672-2055) ou Rodrigo (+55 14 99746-2929) pedir para enviar, disparar ou atualizar o relatório no grupo de gestão (ex: "envia o report no grupo", "disparar relatório", "!report", "manda o relatório de performance"), verifique a autorização. Se ele já pediu explicitamente, execute imediatamente a ferramenta "disparar_report_gestao_grupo" e confirme a transmissão para o grupo Gestão Dino com o link do infográfico 1080p.
+
 SNAPSHOT OPERACIONAL CONSOLIDADO DA BARBEARIA DINO EM TEMPO REAL:
 ${snapJson}`;
 }
 
 // ============================================================================
-// DECLARAÇÃO DE FERRAMENTAS EXECUTIVAS PARA GEMINI NO WHATSAPP GESTÃO
+// DECLARAÇÃO DE FERRAMENTAS EXECUTIVAS PARA MOTOR KYTTOIA NO WHATSAPP GESTÃO
 // ============================================================================
 export const DINO_GESTAO_TOOLS = [
   {
@@ -512,6 +517,36 @@ export const DINO_GESTAO_TOOLS = [
         insight: { type: 'STRING', description: 'A regra de negócio, preferência de relatório ou conhecimento ensinado pelo empresário' },
       },
       required: ['insight'],
+    },
+  },
+  {
+    name: 'disparar_report_gestao_grupo',
+    description: 'Dispara o Relatório Diário de Performance Operacional do T-Rex (com 4 infográficos em alta definição 1080p e diagnóstico do Motor KyttoIA) para o canal oficial e grupo Gestão Dino no WhatsApp. Requer solicitação expressa ou autorização prévia do gestor Guilherme Dino (+55 65 99672-2055) ou Rodrigo.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        motivo: { type: 'STRING', description: 'Motivo da invocação (ex: solicitacao_gestor_whatsapp, autorizacao_08h, sob_demanda)' },
+        destinatario: { type: 'STRING', description: 'Número do gestor autorizador (padrão: 5565996722055)' },
+      },
+    },
+  },
+  {
+    name: 'consultar_fechamento_diario',
+    description: 'Consulta ou dispara o fechamento diário consolidado da Barbearia Dino (receita total, serviços, produtos, comandas pagas, ticket médio, produção por barbeiro, pagamentos e alertas de estoque). Pode enviar diretamente para o grupo Gestão Dino e Guilherme Dino (+55 65 99672-2055).',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        enviarNoGrupo: { type: 'BOOLEAN', description: 'Se verdadeiro, além de responder no chat envia o fechamento para o grupo Gestão Dino' },
+        data: { type: 'STRING', description: 'Data YYYY-MM-DD (vazio = hoje)' },
+      },
+    },
+  },
+  {
+    name: 'consultar_satisfacao_nps',
+    description: 'Consulta o ranking de satisfação dos clientes e notas de avaliação pós-atendimento (NPS de 1 a 5) da equipe de barbeiros (Dino, Bruno, Natani, João Victor) da Barbearia Dino.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {},
     },
   },
 ];
@@ -739,6 +774,59 @@ export async function executarFerramentaGestao(name, args = {}, context = {}) {
         'Vendas de perfumes no PDV e comissões',
       ],
       linkPainelGeral: 'https://kytto.com.br/admin/barbearia-erp',
+    };
+  }
+
+  if (name === 'disparar_report_gestao_grupo') {
+    const { enviarReportGraficosDino } = await import('./core/dino-daily-report-graph.js');
+    const gestorNum = args.destinatario || '5565996722055';
+    const resDisparo = await enviarReportGraficosDino({
+      forcar: true,
+      empresaId: empId,
+      destinatario: gestorNum,
+    });
+    return {
+      ok: resDisparo.ok,
+      canal: 'WhatsApp Gestão Dino',
+      numeroGestor: '+55 65 99672-2055 (Guilherme Dino)',
+      graficosUrl: 'https://kytto.com.br/reports/dino-performance-diario.png',
+      diaChave: resDisparo.diaChave,
+      mensagem: resDisparo.ok
+        ? 'Relatório de Performance com gráficos 1080p compilado e disparado com sucesso para o canal oficial e grupo Gestão Dino!'
+        : 'Relatório compilado, mas o envio encontrou instabilidade no canal de WhatsApp. A imagem 1080p está disponível no link direto.',
+    };
+  }
+
+  if (name === 'consultar_fechamento_diario') {
+    const { consolidarResumoDiario, formatarMensagemBriefingGestao } = await import('./core/automacao-resumo-gestao.js');
+    const resumo = consolidarResumoDiario(empId, args.data || null);
+    const mensagemTexto = formatarMensagemBriefingGestao(resumo);
+    if (args.enviarNoGrupo) {
+      const { dispararFechamentoGestaoDino } = await import('./core/dino-whats-gestao-hub.js');
+      await dispararFechamentoGestaoDino({ empresaId: empId, dataStr: args.data || null });
+    }
+    return {
+      data: resumo.dataBr,
+      totalFaturado: resumo.totalFaturadoFormatado,
+      totalServicos: resumo.totalServicosFormatado,
+      totalProdutos: resumo.totalProdutosFormatado,
+      clientesAtendidos: resumo.clientesAtendidos,
+      ticketMedio: resumo.ticketMedioFormatado,
+      formasPagamento: resumo.formasPagamento,
+      producaoBarbeiros: resumo.producaoBarbeiros,
+      itensAlertaEstoque: resumo.itensAlertaEstoque,
+      textoFormatado: mensagemTexto
+    };
+  }
+
+  if (name === 'consultar_satisfacao_nps') {
+    const { listarEstatisticasNps, formatarMensagemRankingNps } = await import('./core/dino-whats-gestao-hub.js');
+    const stats = listarEstatisticasNps();
+    return {
+      notaMediaGeral: stats.notaMediaGeral,
+      totalAvaliacoes: stats.totalAvaliacoes,
+      desempenhoPorBarbeiro: stats.desempenhoPorBarbeiro,
+      textoFormatado: formatarMensagemRankingNps()
     };
   }
 

@@ -98,9 +98,33 @@ export default function DinoDashboardKytto({ onOpenTab }) {
   return (
     <div style={{ padding: '0 0 40px', maxWidth: 1480, margin: '0 auto' }}>
       <style>{CSS}</style>
-      <div style={{ display: 'flex', gap: 22, marginBottom: 18, borderBottom: '1px solid var(--line, #e5e7eb)' }}>
-        {aba('painel', 'Painel de gestão')}
-        {aba('comparativo', 'Comparativo de períodos')}
+      <div style={{ display: 'flex', gap: 22, marginBottom: 18, borderBottom: '1px solid var(--line, #e5e7eb)', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 22 }}>
+          {aba('painel', 'Painel de gestão')}
+          {aba('comparativo', 'Comparativo de períodos')}
+        </div>
+        {typeof onOpenTab === 'function' && (
+          <button
+            type="button"
+            onClick={() => onOpenTab('Dino Influencer & Perfumaria 360°')}
+            style={{
+              background: 'linear-gradient(135deg, #d97706, #b45309)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              padding: '6px 14px',
+              fontSize: 12,
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              boxShadow: '0 2px 8px rgba(217, 119, 6, 0.3)'
+            }}
+          >
+            🦖 Dino Influencer & Perfumaria 360° (Insights KyttoIA) ↗
+          </button>
+        )}
       </div>
       {abaAtiva === 'painel' ? <VisaoPainelGestao onOpenTab={onOpenTab} /> : <VisaoComparativo />}
     </div>

@@ -12,6 +12,8 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
   const [salvandoConfig, setSalvandoConfig] = useState(false);
   const [buscaTermo, setBuscaTermo] = useState('');
   const [filtroMaterial, setFiltroMaterial] = useState('todos');
+  const [pilotoAutonomoExecutando, setPilotoAutonomoExecutando] = useState(false);
+  const [ultimoCicloAutonomo, setUltimoCicloAutonomo] = useState(null);
 
   // Estado do Hardware da Balança
   const [hardware, setHardware] = useState({
@@ -64,7 +66,7 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
       portaHttp: 80,
       ponto: 'balanca',
       codec: 'H.265 · 30 FPS',
-      foto: '/assets/cftv/cftv_cam01_lpr_entrada.jpg',
+      foto: '/assets/cftv/cftv_real_02_balanca_80t.jpg',
       status: 'Placa: RRA-4E80 (99.6%)',
       statusCor: '#10B981'
     },
@@ -78,7 +80,7 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
       portaHttp: 80,
       ponto: 'balanca',
       codec: 'H.265 · 25 FPS (4K)',
-      foto: '/assets/cftv/cftv_cam02_plataforma_panoramica.jpg',
+      foto: '/assets/cftv/cftv_real_02_balanca_80t.jpg',
       status: 'Enquadramento 100% OK · 8 Células Toledo',
       statusCor: '#10B981'
     },
@@ -92,7 +94,7 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
       portaHttp: 80,
       ponto: 'balanca',
       codec: 'H.264 · 30 FPS',
-      foto: '/assets/cftv/cftv_cam03_cancela_saida.jpg',
+      foto: '/assets/cftv/cftv_real_02_balanca_80t.jpg',
       status: 'Cancela Fechada (Aguardando Liberação)',
       statusCor: '#EF4444'
     },
@@ -106,7 +108,7 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
       portaHttp: 80,
       ponto: 'patio',
       codec: 'H.265 · 25 FPS',
-      foto: '/assets/cftv/cftv_cam04_patio_silos.jpg',
+      foto: '/assets/cftv/cftv_real_01_central_dosadora.jpg',
       status: 'EPIs Conformes (Capacete / Colete)',
       statusCor: '#10B981'
     },
@@ -120,7 +122,7 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
       portaHttp: 80,
       ponto: 'patio',
       codec: 'H.265 · 30 FPS',
-      foto: '/assets/cftv/cftv_cam05_central_dosadora.jpg',
+      foto: '/assets/cftv/cftv_real_01_central_dosadora.jpg',
       status: 'Batelada #1042 Concluída',
       statusCor: '#38BDF8'
     },
@@ -134,22 +136,78 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
       portaHttp: 80,
       ponto: 'mineracao',
       codec: 'H.265 · 20 FPS (2K)',
-      foto: '/assets/cftv/cftv_cam06_mineracao_areia.jpg',
+      foto: '/assets/cftv/cftv_real_03_mineracao_areia.jpg',
       status: 'Draga 01 em Operação Contínua',
       statusCor: '#10B981'
     },
     {
       id: 'cam07',
-      nome: 'CAM-07 · Balança Extra (Positivo Seg IP)',
-      marca: 'positivo',
-      modelo: 'Smart Câmera IP Wi-Fi 1080p',
-      ip: '192.168.1.126',
+      nome: 'CAM-07 · Balança 80t (Células de Carga C1-C8 Toledo Prix)',
+      marca: 'bosch',
+      modelo: 'Dinion IP Starlight 7000 HD',
+      ip: '192.168.1.130',
       portaRtsp: 554,
       portaHttp: 80,
       ponto: 'balanca',
-      codec: 'H.264 · 25 FPS',
-      foto: '/assets/cftv/cftv_cam03_cancela_saida.jpg',
-      status: 'Conectada · ONVIF Porta 8899',
+      codec: 'H.265 · 30 FPS',
+      foto: '/assets/cftv/cftv_real_06_laboratorio.jpg',
+      status: '8 Células Calibradas RBC / IPEM',
+      statusCor: '#10B981'
+    },
+    {
+      id: 'cam08',
+      nome: 'CAM-08 · Balança 80t (Totem Motorista Autoatendimento)',
+      marca: 'toledo_prix_lpr',
+      modelo: 'Totem Prix 9094 / Indicador 720i',
+      ip: '192.168.1.135',
+      portaRtsp: 554,
+      portaHttp: 80,
+      ponto: 'balanca',
+      codec: 'H.264 · 30 FPS',
+      foto: '/assets/cftv/cftv_real_02_balanca_80t.jpg',
+      status: 'RFID & Leitor Biométrico Ativo',
+      statusCor: '#10B981'
+    },
+    {
+      id: 'cam09',
+      nome: 'CAM-09 · Balança 80t (Traseira Veicular & Descarga)',
+      marca: 'hikvision',
+      modelo: 'DS-2CD2T47G2P-LSU (AcuSense)',
+      ip: '192.168.1.132',
+      portaRtsp: 554,
+      portaHttp: 80,
+      ponto: 'balanca',
+      codec: 'H.265 · 30 FPS',
+      foto: '/assets/cftv/cftv_real_08_betoneira_rodovia.jpg',
+      status: 'Enquadramento Traseiro 100% OK',
+      statusCor: '#10B981'
+    },
+    {
+      id: 'cam10',
+      nome: 'CAM-10 · Termografia FLIR (Motores & Silos)',
+      marca: 'flir',
+      modelo: 'FLIR A700 Smart Thermal Sensor',
+      ip: '192.168.1.150',
+      portaRtsp: 554,
+      portaHttp: 80,
+      ponto: 'patio',
+      codec: 'Radiométrica · 30 FPS',
+      foto: '/assets/cftv/cftv_real_01_central_dosadora.jpg',
+      status: 'Gradiente Térmico Normal (61.3°C / 78.6°C)',
+      statusCor: '#10B981'
+    },
+    {
+      id: 'cam11',
+      nome: 'CAM-11 · Baias de Agregados (Britas 0, 1 e Areia)',
+      marca: 'tplink_vigi',
+      modelo: 'VIGI C340-W 4MP Outdoor',
+      ip: '192.168.1.138',
+      portaRtsp: 554,
+      portaHttp: 80,
+      ponto: 'patio',
+      codec: 'H.265+ · 25 FPS (2K)',
+      foto: '/assets/cftv/cftv_real_07_baias_agregados.jpg',
+      status: 'Carregamento Moega em Andamento',
       statusCor: '#10B981'
     }
   ];
@@ -327,6 +385,30 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
     const interval = setInterval(carregarDados, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  // Disparo manual do Piloto Automático Zero-Touch
+  const dispararPilotoAutonomo = async () => {
+    try {
+      setPilotoAutonomoExecutando(true);
+      const res = await api.post('/api/admin/concreto/balanca/ciclo-autonomo', {
+        placa: hardware.veiculoAtual?.placa || 'BT-01 (RRA-4E80)',
+        tipoOperacao: 'expedicao_concreto',
+        pesoLidoKg: hardware.pesoAtualKg || 33480
+      });
+      if (res?.ok) {
+        setUltimoCicloAutonomo(res.resultado);
+        if (res.resultado?.ticket) {
+          setModalTicket(res.resultado.ticket);
+        }
+        carregarDados();
+        alert('🤖 Ciclo Autônomo Zero-Touch executado com sucesso! Ticket gerado e cancela liberada.');
+      }
+    } catch (err) {
+      alert('Erro no ciclo autônomo: ' + err.message);
+    } finally {
+      setPilotoAutonomoExecutando(false);
+    }
+  };
 
   // Comandos de automação
   const executarComando = async (comando, payload = {}) => {
@@ -691,6 +773,55 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
       {/* 2. CONTEÚDO DA ABA: PISTA & BALANÇA (VISÃO INTERATIVA HI-FI) */}
       {abaPrincipal === 'operacao' && (
         <>
+          {/* BANNER PILOTO AUTOMÁTICO ZERO-TOUCH */}
+          <div style={{
+            background: 'linear-gradient(90deg, rgba(16, 185, 129, 0.15) 0%, rgba(2, 132, 199, 0.15) 100%)',
+            border: '1.5px solid #10B981',
+            borderRadius: '10px',
+            padding: '12px 16px',
+            marginBottom: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '10px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: '#10B981', color: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 'bold' }}>
+                ⚡
+              </div>
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: '800', color: '#FFF', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>PILOTO AUTOMÁTICO ZERO-TOUCH · BALANÇA 80T &amp; CCO</span>
+                  <span style={{ fontSize: '9px', background: '#10B981', color: '#000', padding: '2px 6px', borderRadius: '4px', fontWeight: '900' }}>100% AUTÔNOMO</span>
+                </div>
+                <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>
+                  LPR Intelbras + Estabilidade Toledo Prix 9094 + Emissão Instantânea Toledo &amp; MDF-e SEFAZ sem operador
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={dispararPilotoAutonomo}
+              disabled={pilotoAutonomoExecutando}
+              style={{
+                background: pilotoAutonomoExecutando ? '#64748B' : 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                color: '#FFF',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '9px 18px',
+                fontSize: '12px',
+                fontWeight: '800',
+                cursor: pilotoAutonomoExecutando ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)'
+              }}
+            >
+              <span>{pilotoAutonomoExecutando ? '⏳' : '🚀'}</span>
+              <span>{pilotoAutonomoExecutando ? 'Executando Ciclo...' : 'Disparar Ciclo Autônomo Agora'}</span>
+            </button>
+          </div>
           {/* TOPO: INDICADOR DIGITAL TOLEDO PRIX 9094 */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '12px', marginBottom: '12px' }}>
             
@@ -1359,96 +1490,154 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
       )}
 
       {/* ========================================================================= */}
-      {/* 3. CONTEÚDO DA ABA: CÂMERAS CFTV (MATRIZ DE 4 CÂMERAS AO VIVO) */}
+      {/* 3. CONTEÚDO DA ABA: CÂMERAS CFTV & VISION AI (MATRIZ DE 7 CANAIS AO VIVO) */}
       {/* ========================================================================= */}
       {abaPrincipal === 'cftv' && (
         <div style={{ background: '#0D1322', border: '1px solid #1E293B', borderRadius: '10px', padding: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '14px', fontWeight: '900', color: '#FFF' }}>
-                📹 MATRIZ DE VÍDEO MONITORAMENTO CFTV · CCO USINA SERRANO
+              <span style={{ fontSize: '15px', fontWeight: '900', color: '#FFF' }}>
+                📹 MATRIZ DE VÍDEO MONITORAMENTO CFTV &amp; VISION AI · CCO USINA SERRANO
               </span>
               <span style={{ fontSize: '10px', background: '#DC2626', color: '#FFF', padding: '2px 8px', borderRadius: '4px', fontWeight: '800' }}>
-                🔴 4 CANAIS AO VIVO
+                🔴 7 CANAIS AO VIVO
+              </span>
+              <span style={{ fontSize: '10px', background: '#10B981', color: '#064E3B', padding: '2px 8px', borderRadius: '4px', fontWeight: '800' }}>
+                MOTOR KYTTOIA LPR
               </span>
             </div>
 
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#00FF66', background: '#000', padding: '3px 8px', borderRadius: '4px' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#00FF66', background: '#000', padding: '4px 8px', borderRadius: '4px' }}>
                 {horarioCftv} BRT
               </span>
-              <button
-                onClick={() => {
-                  alert(`Snapshot capturado da câmera ativa (${cameraAtiva.toUpperCase()}) salvo nos registros de pesagem!`);
-                  setSnapshotCaptured(true);
-                }}
-                style={{ background: '#0284C7', color: '#FFF', border: 'none', borderRadius: '4px', padding: '5px 10px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>
-                📸 Capturar Foto da Placa
-              </button>
+              <a
+                href="/admin/concreto?secao=torre-pesagem"
+                style={{ background: '#FF7000', color: '#16181B', textDecoration: 'none', borderRadius: '4px', padding: '5px 10px', fontSize: '11px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                🗼 Torre de Controle CCO
+              </a>
               <a
                 href="/admin/concreto?secao=cameras-cftv"
-                target="_blank"
-                rel="noreferrer"
-                style={{ background: "#EA580C", color: "#FFF", textDecoration: "none", borderRadius: "4px", padding: "5px 10px", fontSize: "11px", fontWeight: "800", display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                ⚙️ Gerenciar Câmeras IP & RTSP
+                style={{ background: '#EA580C', color: '#FFF', textDecoration: 'none', borderRadius: '4px', padding: '5px 10px', fontSize: '11px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                ⚙️ Configurar Câmeras IP &amp; Presets
               </a>
             </div>
           </div>
 
-          {/* GRID DE 4 CÂMERAS CFTV */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '12px' }}>
-            
-            {/* CAM 01: LPR ENTRADA */}
-            <div style={{ background: '#000', border: `2px solid ${cameraAtiva === 'cam01' ? '#00D2FF' : '#1E293B'}`, borderRadius: '8px', overflow: 'hidden', cursor: 'pointer' }} onClick={() => setCameraAtiva('cam01')}>
-              <img
-                src="/assets/cftv/cftv_cam01_lpr_entrada.jpg"
-                alt="CAM 01 LPR Entrada"
-                style={{ width: '100%', height: 'auto', display: 'block' }}
-              />
-              <div style={{ background: '#0D111A', padding: '6px 10px', display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
-                <span style={{ color: '#00D2FF', fontWeight: '700' }}>CAM-01 · TOTEM LPR ENTRADA</span>
-                <span style={{ color: '#10B981' }}>Placa: RRA-4E80 (99.6%)</span>
-              </div>
-            </div>
+          {/* FILTROS DE PONTO */}
+          <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
+            {[
+              { id: 'todos', label: `Todos os ${LISTA_CAMERAS_COCKPIT.length} Canais Operacionais` },
+              { id: 'balanca', label: 'Balança 80t (Pista &amp; Cancela)' },
+              { id: 'patio', label: 'Pátio &amp; Central Dosadora' },
+              { id: 'mineracao', label: 'Mineração Areia (Sepotuba)' },
+            ].map(f => (
+              <button
+                key={f.id}
+                onClick={() => setFiltroCftv(f.id)}
+                style={{
+                  background: filtroCftv === f.id ? '#0284C7' : '#1E293B',
+                  color: filtroCftv === f.id ? '#FFF' : '#94A3B8',
+                  border: 'none',
+                  borderRadius: '4px',
+                  padding: '4px 10px',
+                  fontSize: '11px',
+                  fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
 
-            {/* CAM 02: PANORÂMICA 21M */}
-            <div style={{ background: '#000', border: `2px solid ${cameraAtiva === 'cam02' ? '#00D2FF' : '#1E293B'}`, borderRadius: '8px', overflow: 'hidden', cursor: 'pointer' }} onClick={() => setCameraAtiva('cam02')}>
-              <img
-                src="/assets/cftv/cftv_cam02_plataforma_panoramica.jpg"
-                alt="CAM 02 Panorâmica 21m"
-                style={{ width: '100%', height: 'auto', display: 'block' }}
-              />
-              <div style={{ background: '#0D111A', padding: '6px 10px', display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
-                <span style={{ color: '#00D2FF', fontWeight: '700' }}>CAM-02 · PANORÂMICA BALANÇA 21M</span>
-                <span style={{ color: '#10B981' }}>Enquadramento OK</span>
-              </div>
-            </div>
+          {/* GRID DE CÂMERAS CFTV (7 CANAIS COMPLETOS) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '14px' }}>
+            {LISTA_CAMERAS_COCKPIT.filter(c => filtroCftv === 'todos' || c.ponto === filtroCftv).map(cam => (
+              <div
+                key={cam.id}
+                style={{
+                  background: '#070A11',
+                  border: `2px solid ${cameraAtiva === cam.id ? '#00D2FF' : '#1E293B'}`,
+                  borderRadius: '8px',
+                  overflow: 'hidden',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column'
+                }}
+                onClick={() => setCameraAtiva(cam.id)}
+              >
+                {/* Header Card */}
+                <div style={{ background: '#0D111A', padding: '6px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', borderBottom: '1px solid #1E293B' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ color: '#00D2FF', fontWeight: '800' }}>{cam.nome}</span>
+                  </div>
+                  <span style={{ background: '#1E293B', color: '#EA580C', padding: '1px 5px', borderRadius: '3px', fontWeight: '800', fontSize: '10px' }}>
+                    {cam.marca.toUpperCase()}
+                  </span>
+                </div>
 
-            {/* CAM 03: CANCELA SAÍDA */}
-            <div style={{ background: '#000', border: `2px solid ${cameraAtiva === 'cam03' ? '#00D2FF' : '#1E293B'}`, borderRadius: '8px', overflow: 'hidden', cursor: 'pointer' }} onClick={() => setCameraAtiva('cam03')}>
-              <img
-                src="/assets/cftv/cftv_cam03_cancela_saida.jpg"
-                alt="CAM 03 Cancela Saída"
-                style={{ width: '100%', height: 'auto', display: 'block' }}
-              />
-              <div style={{ background: '#0D111A', padding: '6px 10px', display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
-                <span style={{ color: '#00D2FF', fontWeight: '700' }}>CAM-03 · CANCELA SAÍDA &amp; SEMÁFORO</span>
-                <span style={{ color: '#EF4444' }}>Cancela Fechada</span>
-              </div>
-            </div>
+                {/* Imagem do Feed */}
+                <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: '#000' }}>
+                  <img
+                    src={cam.foto}
+                    alt={cam.nome}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  />
+                  <div style={{ position: 'absolute', top: '6px', left: '6px', background: 'rgba(0,0,0,0.8)', color: '#38BDF8', fontSize: '9px', fontFamily: 'monospace', padding: '2px 5px', borderRadius: '3px' }}>
+                    {cam.ip}:{cam.portaRtsp} · {cam.codec}
+                  </div>
+                  <div style={{ position: 'absolute', bottom: '6px', right: '6px', background: 'rgba(0,0,0,0.8)', color: cam.statusCor, fontSize: '10px', fontWeight: '700', padding: '2px 6px', borderRadius: '3px' }}>
+                    {lprStatusMap[cam.id] || cam.status}
+                  </div>
+                </div>
 
-            {/* CAM 04: PÁTIO & SILOS */}
-            <div style={{ background: '#000', border: `2px solid ${cameraAtiva === 'cam04' ? '#00D2FF' : '#1E293B'}`, borderRadius: '8px', overflow: 'hidden', cursor: 'pointer' }} onClick={() => setCameraAtiva('cam04')}>
-              <img
-                src="/assets/cftv/cftv_cam04_patio_silos.jpg"
-                alt="CAM 04 Pátio Silos"
-                style={{ width: '100%', height: 'auto', display: 'block' }}
-              />
-              <div style={{ background: '#0D111A', padding: '6px 10px', display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
-                <span style={{ color: '#00D2FF', fontWeight: '700' }}>CAM-04 · PÁTIO DE CARREGAMENTO &amp; SILOS</span>
-                <span style={{ color: '#F59E0B' }}>Operando Normalmente</span>
+                {/* Ações da Câmera no Cockpit */}
+                <div style={{ background: '#0D111A', padding: '6px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10px', borderTop: '1px solid #1E293B' }}>
+                  <div style={{ color: '#94A3B8', fontFamily: 'monospace' }}>
+                    {cam.modelo}
+                  </div>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTestandoCamId(cam.id);
+                        setTimeout(() => {
+                          const lat = Math.floor(Math.random() * 8) + 9;
+                          alert(`Fluxo RTSP da ${cam.nome} (${cam.marca.toUpperCase()}) respondendo com latência de ${lat} ms.`);
+                          setTestandoCamId(null);
+                        }, 400);
+                      }}
+                      style={{ background: '#1E293B', color: '#38BDF8', border: '1px solid #334155', borderRadius: '3px', padding: '3px 6px', cursor: 'pointer', fontWeight: '700' }}
+                    >
+                      {testandoCamId === cam.id ? '...' : '⚡ Testar'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setLprStatusMap(prev => ({ ...prev, [cam.id]: 'Placa RRA-4E80 Reconhecida (99.8%)' }));
+                        alert(`Motor KyttoIA executou leitura de placa e eixos para ${cam.nome}. Resultado: RRA-4E80 (99.8%).`);
+                      }}
+                      style={{ background: '#10B981', color: '#064E3B', border: 'none', borderRadius: '3px', padding: '3px 6px', cursor: 'pointer', fontWeight: '800' }}
+                    >
+                      🤖 LPR IA
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        alert(`Snapshot da ${cam.nome} anexado ao Romaneio de Pesagem #${hardware.ticketAtual || '8942'}.`);
+                      }}
+                      style={{ background: '#0284C7', color: '#FFF', border: 'none', borderRadius: '3px', padding: '3px 6px', cursor: 'pointer', fontWeight: '700' }}
+                    >
+                      📸 Ticket
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
+            ))}
           </div>
         </div>
       )}

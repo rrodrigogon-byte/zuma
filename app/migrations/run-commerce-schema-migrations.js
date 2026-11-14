@@ -109,6 +109,10 @@ const migrationFiles = [
   '120_corrigir_emitentes_fiscais_todas_empresas.sql',
   '121_saneamento_varejo_sem_dados_ficticios.sql',
   '122_sorteios_campanhas_bilhetes_ganhadores.sql',
+  '123_carga_casanova_clientes_saneados.sql',
+  '124_captura_nfe_inbound_stallone_nutre_sport.sql',
+  '125_reclassificar_casanova_potenciais_clientes.sql',
+  '126_tef_solucoes_terminais_stallone_nutre_sport.sql',
 ];
 const advisoryLockKey = 825410732;
 

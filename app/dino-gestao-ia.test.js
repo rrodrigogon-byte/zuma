@@ -192,3 +192,32 @@ test('managementSnapshot e managementSystemPrompt funcionam integrados em whatsa
   assert.ok(prompt.includes('Copiloto Executivo'));
   assert.ok(prompt.includes('Barbearia Dino'));
 });
+test('executarFerramentaGestao - disparar_report_gestao_grupo compila e dispara report para o canal gestao', async () => {
+  const res = await executarFerramentaGestao('disparar_report_gestao_grupo', {
+    motivo: 'teste_autorizacao_gestor',
+    destinatario: '5565996722055',
+  }, { empresaId: EMPRESA_DINO, lojaId: LOJA_MATRIZ });
+
+  assert.ok(res);
+  assert.equal(res.canal, 'WhatsApp Gestão Dino');
+  assert.ok(res.numeroGestor.includes('+55 65 99672-2055'));
+  assert.ok(res.graficosUrl.includes('/reports/dino-performance-diario.png'));
+});
+
+test("executarFerramentaGestao - consultar_fechamento_diario retorna resumo executivo consolidado", async () => {
+  const res = await executarFerramentaGestao("consultar_fechamento_diario", {
+    enviarNoGrupo: false,
+  }, { empresaId: EMPRESA_DINO, lojaId: LOJA_MATRIZ });
+
+  assert.ok(res);
+  assert.ok(res.totalFaturado);
+  assert.ok(res.textoFormatado.includes("FECHAMENTO EXECUTIVO DO DIA"));
+});
+
+test("executarFerramentaGestao - consultar_satisfacao_nps retorna dados e ranking", async () => {
+  const res = await executarFerramentaGestao("consultar_satisfacao_nps", {}, { empresaId: EMPRESA_DINO, lojaId: LOJA_MATRIZ });
+
+  assert.ok(res);
+  assert.ok(res.notaMediaGeral >= 1 && res.notaMediaGeral <= 5);
+  assert.ok(res.textoFormatado.includes("PAINEL DE SATISFAÇÃO & NPS"));
+});

@@ -33,6 +33,12 @@ import { estadoEmpresa } from '../barbearia-erp-kytto.js';
 import { enviarMensagem } from './whatsapp.js';
 
 export const TELEFONE_DINO_PADRAO = '5565993360000';
+export const TELEFONE_RODRIGO_GESTAO = '5514997462929';
+export const TELEFONES_GESTAO_DINO_OFICIAIS = [
+  '5514997462929', // Rodrigo Gonçalves (Kytto / Gestão)
+  '5565996722055', // Guilherme Dino (~Guilherme Dino)
+  '556596722055',  // Guilherme Dino (8D)
+];
 export const EMPRESA_DINO_ID = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
 
 // Cache em memória para evitar múltiplos disparos no mesmo dia
@@ -279,23 +285,40 @@ export async function enviarBriefingDiarioDino({
   let enviado = false;
   let resposta = null;
 
-  // 1. Envio Direto via Chatbot Backend (Proxy Oficial da Dino no Cloud Run)
+  // 1. Envio primário via provedor WhatsApp oficial da empresa (Meta Cloud API / Waha)
   try {
-    const resChatbot = await sendTextViaChatbotBackend({
-      instance: process.env.CHATBOT_BACKEND_INSTANCE || 'dino',
-      number: numFormatado,
-      text: briefing.mensagem,
-      simulateTyping: false,
-    });
-    if (resChatbot?.ok) {
+    const resPrimario = await enviarMensagem(
+      { empresa_id: empresaId, whatsapp_instance: process.env.CHATBOT_BACKEND_INSTANCE || 'dino' },
+      numFormatado,
+      briefing.mensagem
+    );
+    if (resPrimario?.ok || resPrimario?.data?.success === true) {
       enviado = true;
-      resposta = { ok: true, via: 'chatbot_backend', data: resChatbot };
-    } else {
-      console.warn('[Dino Briefing] Chatbot Backend retorno:', resChatbot);
-      resposta = resChatbot;
+      resposta = { ok: true, via: 'whatsapp_provider', data: resPrimario };
     }
-  } catch (err) {
-    console.warn('[Dino Briefing] Falha Chatbot Backend:', err.message);
+  } catch (errPrimario) {
+    console.warn('[Dino Briefing] Tentativa primária falhou, acionando fallback:', errPrimario.message);
+  }
+
+  // 2. Fallback direto via Chatbot Backend (Proxy Oficial da Dino)
+  if (!enviado) {
+    try {
+      const resChatbot = await sendTextViaChatbotBackend({
+        instance: process.env.CHATBOT_BACKEND_INSTANCE || 'dino',
+        number: numFormatado,
+        text: briefing.mensagem,
+        simulateTyping: false,
+      });
+      if (resChatbot?.ok || resChatbot?.data?.success === true) {
+        enviado = true;
+        resposta = { ok: true, via: 'chatbot_backend', data: resChatbot };
+      } else {
+        console.warn('[Dino Briefing] Chatbot Backend retorno:', resChatbot);
+        resposta = resChatbot;
+      }
+    } catch (err) {
+      console.warn('[Dino Briefing] Falha Chatbot Backend:', err.message);
+    }
   }
 
   // 2. Fallback via Evolution API direta se o Chatbot Backend falhar
@@ -342,6 +365,55 @@ export async function enviarBriefingDiarioDino({
   };
 }
 
+
+/**
+ * Envia o briefing matinal executivo para os administradores do Whats de Gestão Dino
+ * (com foco no telefone cadastrado do Rodrigo e de Guilherme Dino).
+ */
+export async function enviarBriefingParaGestaoDino({
+  dataStr = null,
+  empresaId = EMPRESA_DINO_ID,
+  forcar = false,
+  telefonesAdicionais = [],
+} = {}) {
+  const briefing = compilarBriefingDiarioDino({ dataStr, empresaId });
+  const diaChave = briefing.dataAlvo;
+
+  if (!forcar && ultimoDiaEnviado === diaChave) {
+    return { ok: false, motivo: 'ja_enviado_hoje', diaChave };
+  }
+
+  const destinatarios = Array.from(new Set([
+    ...TELEFONES_GESTAO_DINO_OFICIAIS,
+    ...telefonesAdicionais.map(t => String(t).replace(/\D/g, ''))
+  ])).filter(t => t.length >= 10);
+
+  const envios = [];
+  for (const tel of destinatarios) {
+    const res = await enviarBriefingDiarioDino({
+      dataStr,
+      telefone: tel,
+      empresaId,
+      forcar: true
+    });
+    envios.push({ telefone: tel, ok: res.ok, resposta: res.resposta });
+  }
+
+  const sucesso = envios.some(e => e.ok);
+  if (sucesso) {
+    ultimoDiaEnviado = diaChave;
+    salvarUltimoDiaEnviado(diaChave);
+  }
+
+  return {
+    ok: sucesso,
+    diaChave,
+    totalDestinatarios: destinatarios.length,
+    envios,
+    briefing
+  };
+}
+
 export async function verificarEEnviarBriefingDiario() {
   if (process.env.DINO_DAILY_BRIEFING_ENABLED === '0') return { ok: false, motivo: 'desativado' };
   const agora = dataHoraCuiaba();
@@ -353,10 +425,10 @@ export async function verificarEEnviarBriefingDiario() {
   if (horaMinuto >= hora8e30 && horaMinuto <= hora21e00) {
     const ultimo = ultimoDiaEnviado || carregarUltimoDiaEnviado();
     if (ultimo !== agora.dataISO) {
-      console.log(`[Dino Daily Briefing] Disparando briefing matinal para ${TELEFONE_DINO_PADRAO} (${agora.dataISO})...`);
+      console.log(`[Dino Daily Briefing] Disparando briefing matinal para a Gestão Dino (${TELEFONE_RODRIGO_GESTAO} e administradores - ${agora.dataISO})...`);
       try {
-        const res = await enviarBriefingDiarioDino({ dataStr: agora.dataISO, telefone: TELEFONE_DINO_PADRAO });
-        console.log(`[Dino Daily Briefing] Envio concluído:`, res.ok ? 'SUCESSO' : res.motivo || 'FALHA');
+        const res = await enviarBriefingParaGestaoDino({ dataStr: agora.dataISO });
+        console.log(`[Dino Daily Briefing] Envio para Gestão Dino concluído:`, res.ok ? 'SUCESSO' : res.motivo || 'FALHA');
         return res;
       } catch (err) {
         console.error(`[Dino Daily Briefing] Erro ao enviar briefing:`, err.message);

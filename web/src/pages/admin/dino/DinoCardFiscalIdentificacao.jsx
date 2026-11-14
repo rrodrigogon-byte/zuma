@@ -6,7 +6,9 @@ export default function DinoCardFiscalIdentificacao({ empresaAtiva, configuracao
 
   const razaoSocial = empresaAtiva?.razaoSocial || "DINO BARBEARIA LTDA";
   const nomeFantasia = empresaAtiva?.nome || empresaAtiva?.nomeFantasia || "BARBEARIA DINO";
-  const cnpj = empresaAtiva?.cnpj || "50.073.355/0001-89";
+  // Para a Barbearia Dino, o CNPJ canônico da Matriz perante a Receita e SEFAZ-MT é 50.073.355/0001-89
+  const cnpjRaw = String(empresaAtiva?.cnpj || "");
+  const cnpj = cnpjRaw.includes("50.073.355") ? "50.073.355/0001-89" : (cnpjRaw || "50.073.355/0001-89");
   const ie = empresaAtiva?.inscricaoEstadual || "14.229.191-9";
   const im = empresaAtiva?.inscricaoMunicipal || "30297";
   const endereco = empresaAtiva?.endereco || "Rua Avelina Jaci Bohn, nº 80, Sala 01 (Setor W), Centro, Tangará da Serra/MT - CEP 78300-060";

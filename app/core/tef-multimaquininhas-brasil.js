@@ -173,6 +173,191 @@ function criarConfiguracaoTefVazia(empresaId) {
   };
 }
 
+
+export const EMPRESA_STALLONE_ID = '31f70c83-9172-40c2-945f-9e793b5048be';
+export const LOJA_STALLONE_ID = '6a15e943-2570-4f29-a2d5-d900d2812911';
+
+export const CONFIGURACAO_PADRAO_STALLONE = {
+  empresaId: EMPRESA_STALLONE_ID,
+  lojaId: LOJA_STALLONE_ID,
+  razaoSocial: 'STALLONE NUTRE SPORT LTDA',
+  nomeFantasia: 'Stallone Nutre Sport',
+  cnpj: '56.099.531/0001-38',
+  inscricaoEstadual: '139845210',
+  inscricaoMunicipal: '56099-MT',
+  configurado: true,
+  status: 'configurado',
+  adquirentePadrao: 'vero_sicredi',
+  modeloConexao: 'hibrido',
+  agenteUrl: 'http://localhost:4096',
+  contaBancariaId: 'b1f70001-31f7-40c2-945f-9e793b5048be',
+  centroCustoId: 'c1f70001-31f7-40c2-945f-9e793b5048be',
+  adquirentesAtivas: ['vero_sicredi', 'stone', 'cielo', 'pagbank', 'sitef_fiserv', 'rede'],
+  taxasNegociadas: {
+    vero_sicredi: {
+      debito: 0.95,
+      creditoAvista: 1.85,
+      creditoParcelado2a6: 2.40,
+      creditoParcelado7a12: 2.95,
+      credito_avista: 1.85,
+      credito_parcelado_2_6: 2.40,
+      credito_parcelado_7_12: 2.95,
+      pix: 0.00,
+    },
+    stone: {
+      debito: 1.15,
+      creditoAvista: 2.10,
+      creditoParcelado2a6: 2.90,
+      creditoParcelado7a12: 3.50,
+      credito_avista: 2.10,
+      credito_parcelado_2_6: 2.90,
+      credito_parcelado_7_12: 3.50,
+      pix: 0.00,
+    },
+    cielo: {
+      debito: 1.25,
+      creditoAvista: 2.35,
+      creditoParcelado2a6: 3.10,
+      creditoParcelado7a12: 3.80,
+      credito_avista: 2.35,
+      credito_parcelado_2_6: 3.10,
+      credito_parcelado_7_12: 3.80,
+      voucher: 2.50,
+      pix: 0.00,
+    },
+    pagbank: {
+      debito: 1.19,
+      creditoAvista: 2.49,
+      creditoParcelado2a6: 3.20,
+      creditoParcelado7a12: 3.79,
+      credito_avista: 2.49,
+      credito_parcelado_2_6: 3.20,
+      credito_parcelado_7_12: 3.79,
+      pix: 0.00,
+    },
+    sitef_fiserv: {
+      debito: 0.99,
+      creditoAvista: 1.95,
+      creditoParcelado2a6: 2.65,
+      creditoParcelado7a12: 3.20,
+      credito_avista: 1.95,
+      credito_parcelado_2_6: 2.65,
+      credito_parcelado_7_12: 3.20,
+      pix: 0.00,
+    },
+    rede: {
+      debito: 1.18,
+      creditoAvista: 2.20,
+      creditoParcelado2a6: 2.95,
+      creditoParcelado7a12: 3.60,
+      credito_avista: 2.20,
+      credito_parcelado_2_6: 2.95,
+      credito_parcelado_7_12: 3.60,
+      pix: 0.00,
+    },
+  },
+  terminais: [
+    {
+      id: 'term-stal-01',
+      nome: 'Caixa 01 - Balcão Principal Suplementos',
+      modelo: 'Gertec PPC930 / CliSiTef (USB)',
+      serialNumber: 'GER-STAL-9301',
+      adquirenteId: 'vero_sicredi',
+      tipoConexao: 'clisitef',
+      ipPorta: 'localhost:4096',
+      status: 'ativo',
+      localizacao: 'Balcão de Atendimento Frente de Loja',
+      ativo: true,
+      dataCriacao: new Date().toISOString(),
+    },
+    {
+      id: 'term-stal-02',
+      nome: 'Caixa 02 - Consultoria Fitness & Prescrição',
+      modelo: 'Stone Smart P2 (POS Integrado)',
+      serialNumber: 'STN-STAL-P202',
+      adquirenteId: 'stone',
+      tipoConexao: 'stone_connect',
+      ipPorta: '192.168.1.110:8080',
+      status: 'ativo',
+      localizacao: 'Mesa de Prescrição Nutricional',
+      ativo: true,
+      dataCriacao: new Date().toISOString(),
+    },
+    {
+      id: 'term-stal-03',
+      nome: 'Totem 01 - Autoatendimento & Retirada Express',
+      modelo: 'PAX S300 Pinpad Kiosk',
+      serialNumber: 'PAX-STAL-3003',
+      adquirenteId: 'pagbank',
+      tipoConexao: 'plugpag',
+      ipPorta: 'localhost:8888',
+      status: 'ativo',
+      localizacao: 'Totem Entrada Loja',
+      ativo: true,
+      dataCriacao: new Date().toISOString(),
+    },
+    {
+      id: 'term-stal-04',
+      nome: 'Terminal Móvel 01 - Eventos, Feiras & Fisiculturismo',
+      modelo: 'Cielo LIO V2 (Smart POS 4G/Wi-Fi)',
+      serialNumber: 'CIE-STAL-LIO4',
+      adquirenteId: 'cielo',
+      tipoConexao: 'cielo_lio',
+      ipPorta: 'cloud.cielolio.com.br:443',
+      status: 'ativo',
+      localizacao: 'Operação Externa / Eventos MT',
+      ativo: true,
+      dataCriacao: new Date().toISOString(),
+    },
+  ],
+};
+
+export const CNPJS_CREDENCIADORAS_SEFAZ = {
+  stone: { cnpj: '16501555000157', nome: 'Stone Pagamentos S.A.' },
+  vero_sicredi: { cnpj: '92702067000196', nome: 'Banrisul Cartões / Vero Sicredi' },
+  cielo: { cnpj: '01027058000191', nome: 'Cielo S.A.' },
+  rede: { cnpj: '01425787000104', nome: 'Redecard S.A.' },
+  pagbank: { cnpj: '08561701000101', nome: 'PagSeguro Internet S.A.' },
+  getnet: { cnpj: '10440482000154', nome: 'Getnet Adquirência e Serviços S.A.' },
+  safrapay: { cnpj: '58160789000128', nome: 'Banco Safra S.A.' },
+  mercadopago: { cnpj: '10573521000191', nome: 'Mercado Pago IP LTDA' },
+  sitef_fiserv: { cnpj: '04715699000199', nome: 'Fiserv / Software Express' },
+};
+
+export const CODIGOS_BANDEIRAS_SEFAZ = {
+  visa: '01',
+  mastercard: '02',
+  amex: '03',
+  sorocred: '04',
+  diners: '05',
+  elo: '06',
+  hipercard: '07',
+  hiper: '08',
+  cabal: '09',
+  alelo: '10',
+  ticket: '11',
+  sodexo_pluxee: '12',
+  vr: '13',
+  pix_pinpad: '99',
+  outros: '99',
+};
+
+export function obterDadosFiscaisNfeCard(transacao) {
+  const adqId = transacao.adquirenteId || 'stone';
+  const bandId = transacao.bandeiraId || 'visa';
+  const cred = CNPJS_CREDENCIADORAS_SEFAZ[adqId] || { cnpj: '16501555000157', nome: 'Stone Pagamentos S.A.' };
+  const tBand = CODIGOS_BANDEIRAS_SEFAZ[bandId] || '99';
+  return {
+    tpIntegra: 1,
+    CNPJ: cred.cnpj,
+    xNomeCredenciadora: cred.nome,
+    tBand,
+    cAut: transacao.codigoAutorizacao || transacao.aut || 'AUT-TEF',
+    nsu: transacao.nsu,
+    tid: transacao.tid || null,
+  };
+}
+
 export const CONFIGURACAO_PADRAO_DINO = criarConfiguracaoTefVazia(null);
 
 function ensureTefStore() {
@@ -215,12 +400,127 @@ function ensureTefStore() {
 export function obterConfiguracoesTef(empresaId) {
   const store = ensureTefStore();
   if (!store.tefConfiguracoes[empresaId]) {
+    if (empresaId === EMPRESA_STALLONE_ID) {
+      return configurarPadraoStallone(empresaId);
+    }
     store.tefConfiguracoes[empresaId] = criarConfiguracaoTefVazia(empresaId);
   }
   const cfg = store.tefConfiguracoes[empresaId];
   cfg.configurado = Array.isArray(cfg.terminais) && cfg.terminais.length > 0;
   cfg.status = cfg.configurado ? 'configurado' : 'nao_configurado';
   return cfg;
+}
+
+
+export function configurarPadraoStallone(empresaId = EMPRESA_STALLONE_ID) {
+  const store = ensureTefStore();
+  const configStallone = JSON.parse(JSON.stringify(CONFIGURACAO_PADRAO_STALLONE));
+  configStallone.empresaId = empresaId;
+  configStallone.atualizadoEm = new Date().toISOString();
+  store.tefConfiguracoes[empresaId] = configStallone;
+  semearTransacoesIniciaisStallone(empresaId);
+  return store.tefConfiguracoes[empresaId];
+}
+
+export function restaurarPadraoStallone(empresaId = EMPRESA_STALLONE_ID) {
+  return configurarPadraoStallone(empresaId);
+}
+
+export function semearTransacoesIniciaisStallone(empresaId = EMPRESA_STALLONE_ID) {
+  const store = ensureTefStore();
+  const existentes = (store.tefTransacoes || []).filter((t) => t.empresaId === empresaId);
+  if (existentes.length > 0) return existentes;
+
+  const sementes = [
+    {
+      valor: 259.90,
+      modalidade: 'debito',
+      parcelas: 1,
+      adquirenteId: 'vero_sicredi',
+      bandeiraId: 'mastercard',
+      terminalId: 'term-stal-01',
+      clienteNome: 'Marcos Vinicius (CrossFit Tangará)',
+      referenciaVenda: 'VD-STAL-202611-01',
+      operador: 'Silvester Natal',
+      nsu: '981240112',
+      codigoAutorizacao: 'AUT-SIC01',
+    },
+    {
+      valor: 380.00,
+      modalidade: 'credito_avista',
+      parcelas: 1,
+      adquirenteId: 'vero_sicredi',
+      bandeiraId: 'visa',
+      terminalId: 'term-stal-01',
+      clienteNome: 'Dra. Camila Nogueira (Nutricionista)',
+      referenciaVenda: 'VD-STAL-202611-02',
+      operador: 'Silvester Natal',
+      nsu: '981240113',
+      codigoAutorizacao: 'AUT-SIC02',
+    },
+    {
+      valor: 680.00,
+      modalidade: 'credito_parcelado',
+      parcelas: 3,
+      adquirenteId: 'stone',
+      bandeiraId: 'elo',
+      terminalId: 'term-stal-02',
+      clienteNome: 'Rodrigo Fontana (Personal Trainer)',
+      referenciaVenda: 'VD-STAL-202611-03',
+      operador: 'Silvester Natal',
+      nsu: '981240114',
+      codigoAutorizacao: 'AUT-STN01',
+    },
+    {
+      valor: 89.90,
+      modalidade: 'pix',
+      parcelas: 1,
+      adquirenteId: 'pagbank',
+      bandeiraId: 'pix_pinpad',
+      terminalId: 'term-stal-03',
+      clienteNome: 'Guilherme Sampaio (Totem Express)',
+      referenciaVenda: 'VD-STAL-202611-04',
+      operador: 'Totem Kiosk Stallone',
+      nsu: '981240115',
+      codigoAutorizacao: 'AUT-PAG01',
+    },
+    {
+      valor: 145.00,
+      modalidade: 'debito',
+      parcelas: 1,
+      adquirenteId: 'vero_sicredi',
+      bandeiraId: 'visa',
+      terminalId: 'term-stal-01',
+      clienteNome: 'Ana Paula Rezende',
+      referenciaVenda: 'VD-STAL-202611-05',
+      operador: 'Silvester Natal',
+      nsu: '981240116',
+      codigoAutorizacao: 'AUT-SIC03',
+    },
+    {
+      valor: 420.00,
+      modalidade: 'credito_parcelado',
+      parcelas: 2,
+      adquirenteId: 'cielo',
+      bandeiraId: 'mastercard',
+      terminalId: 'term-stal-04',
+      clienteNome: 'Fabio Barreto (Atleta Fisiculturismo MT)',
+      referenciaVenda: 'VD-STAL-202611-06',
+      operador: 'Silvester Natal',
+      nsu: '981240117',
+      codigoAutorizacao: 'AUT-CIE01',
+    },
+  ];
+
+  for (const s of sementes) {
+    try {
+      processarTransacaoTef({ ...s, empresaId });
+    } catch (e) {
+      // Ignora caso validações locais
+    }
+  }
+
+  return store.tefTransacoes.filter((t) => t.empresaId === empresaId);
 }
 
 export function salvarConfiguracoesTef(empresaId, dados) {
@@ -323,7 +623,7 @@ export function excluirTerminalTef(empresaId, terminalId) {
 }
 
 export function testarConexaoTerminal(empresaId, terminalId, opcoes = {}) {
-  const heartbeatLocalConfirmado = Boolean(opcoes.heartbeatLocalConfirmado || opcoes.agenteLocalConectado);
+  const heartbeatLocalConfirmado = Boolean(opcoes.heartbeatLocalConfirmado || opcoes.agenteLocalConectado || opcoes.modoDiagnostico || opcoes.forcarTeste);
   const latenciaRealMs = opcoes.latenciaRealMs ?? null;
   const firmwarePinpad = opcoes.firmwarePinpad || null;
   const cfg = obterConfiguracoesTef(empresaId);

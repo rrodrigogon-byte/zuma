@@ -58,6 +58,12 @@ const MetasComissoesPanel = lazy(() => import("./dino/MetasComissoesPanel"));
 const DinoCarteiraClientesPanel = lazy(
   () => import("./dino/DinoCarteiraClientesPanel"),
 );
+const DinoRecuperacaoAtivaCockpit = lazy(
+  () => import("./dino/DinoRecuperacaoAtivaCockpit"),
+);
+const DinoInfluencerCockpit = lazy(
+  () => import("./dino/DinoInfluencerCockpit"),
+);
 const DinoRecuperacaoAvecPanel = lazy(
   () => import("./dino/DinoRecuperacaoAvecPanel"),
 );
@@ -106,6 +112,8 @@ import {
 } from "./dino/CaptacaoPanels";
 
 const TABS = [
+  ["Dino Influencer & Perfumaria 360°", "Cockpit diário de seguidores ganhos/perdidos, desintoxicação de following, insights diários da KyttoIA, matriz de Reels e perfumaria de luxo"],
+  ["Recuperação Ativa & Pacotes (T-Rex)", "Cockpit diário de reativação de clientes > 60d e simulador comercial de pacotes"],
   ["Como Vender Mais com IA", "Indicadores de vendas, combate ao churn, upsell e motor preditivo da IA"],
   ["Gestão do Salão (IA)", "Metas, entregas por profissional, blend e IA T-Rex"],
   ["Visão geral", "Resumo da operação"],
@@ -188,6 +196,8 @@ const AREAS = [
     label: "Relacionamento",
     short: "Clientes, retorno e indicação",
     tabs: [
+      "Dino Influencer & Perfumaria 360°",
+      "Recuperação Ativa & Pacotes (T-Rex)",
       "Como Vender Mais com IA",
       "Gestão do Salão (IA)",
       "Carteira por barbeiro",
@@ -226,6 +236,7 @@ const AREAS = [
     label: "Gestão",
     short: "Comissões, metas e regras",
     tabs: [
+      "Dino Influencer & Perfumaria 360°",
       "Como Vender Mais com IA",
       "Recuperação de clientes (Avec)",
       "Metas & Roleta",
@@ -685,6 +696,37 @@ export default function BarbeariaERP({ tabInicial } = {}) {
   const [dashboard, setDashboard] = useState(null);
   const [agendamentos, setAgendamentos] = useState([]);
   const [agendaRevisao, setAgendaRevisao] = useState(0);
+
+  // Sincronização em tempo real da agenda e expurgo de cancelados
+  useEffect(() => {
+    function expurgarCancelado(id) {
+      if (!id) return;
+      setAgendamentos((prev) => prev.filter((it) => it && String(it.id) !== String(id)));
+      setAgendaRevisao((n) => n + 1);
+    }
+    function handleEventoCancelado(e) {
+      const id = e?.detail?.agendamentoId || e?.detail?.id;
+      expurgarCancelado(id);
+    }
+    function handleStorage(e) {
+      if (e.key === "kytto:sync_agenda" && e.newValue) {
+        try {
+          const dados = JSON.parse(e.newValue);
+          if (dados?.tipo === "cancelado" && dados?.id) {
+            expurgarCancelado(dados.id);
+          }
+        } catch (_) {}
+      }
+    }
+    window.addEventListener("kytto:agenda_cancelada", handleEventoCancelado);
+    window.addEventListener("kytto:agenda_atualizada", handleEventoCancelado);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("kytto:agenda_cancelada", handleEventoCancelado);
+      window.removeEventListener("kytto:agenda_atualizada", handleEventoCancelado);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
   const [dadosCarregados, setDadosCarregados] = useState(false);
   const pedidoOverview = useRef(0);
   const [profissionais, setProfissionais] = useState([]);
@@ -944,8 +986,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
 
   const carregar = useCallback(async () => {
     const pedido = ++pedidoOverview.current;
-    const isCurrent = () =>
-      pedido === pedidoOverview.current && activeScopeRef.current === scopeKey;
+    const isCurrent = () => pedido === pedidoOverview.current;
     setLoading(true);
     setErro("");
     try {
@@ -1059,7 +1100,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
       setBloqueios([]);
       setErro(erroAgenda(error));
     } finally {
-      if (isCurrent()) setLoading(false);
+      if (pedido === pedidoOverview.current) setLoading(false);
     }
   }, [dataSelecionada, profissionalFiltro, statusFiltro, scopeKey]);
 
@@ -2033,6 +2074,17 @@ export default function BarbeariaERP({ tabInicial } = {}) {
       )
     )
       return;
+
+    if (novoStatus === "cancelado") {
+      setAgendamentos((prev) => prev.filter((item) => item.id !== agendamento.id));
+      setAgendaRevisao((n) => n + 1);
+      window.dispatchEvent(new CustomEvent("kytto:agenda_cancelada", { detail: { id: agendamento.id, agendamento } }));
+      window.dispatchEvent(new CustomEvent("kytto:agenda_atualizada", { detail: { id: agendamento.id, status: "cancelado" } }));
+      try {
+        localStorage.setItem("kytto:sync_agenda", JSON.stringify({ tipo: "cancelado", id: agendamento.id, ts: Date.now() }));
+      } catch (_) {}
+    }
+
     await executar(
       () =>
         api.patch(`/api/admin/barbearia/agenda/${agendamento.id}/status`, {
@@ -2058,11 +2110,22 @@ export default function BarbeariaERP({ tabInicial } = {}) {
     const statusAnterior = agendamento.status;
 
     // Atualização otimista imediata para resposta instantânea ao arrastar
-    setAgendamentos((prev) =>
-      prev.map((item) =>
-        item.id === agendamento.id ? { ...item, status: novoStatus } : item,
-      ),
-    );
+    if (novoStatus === "cancelado") {
+      setAgendamentos((prev) =>
+        prev.filter((item) => item.id !== agendamento.id),
+      );
+      setAgendaRevisao((n) => n + 1);
+      window.dispatchEvent(new CustomEvent("kytto:agenda_cancelada", { detail: { id: agendamento.id, agendamento } }));
+      try {
+        localStorage.setItem("kytto:sync_agenda", JSON.stringify({ tipo: "cancelado", id: agendamento.id, ts: Date.now() }));
+      } catch (_) {}
+    } else {
+      setAgendamentos((prev) =>
+        prev.map((item) =>
+          item.id === agendamento.id ? { ...item, status: novoStatus } : item,
+        ),
+      );
+    }
 
     // Se for transição direta de agendado para concluído, passa por em_atendimento
     if (statusAnterior === "agendado" && novoStatus === "concluido") {
@@ -10950,6 +11013,53 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                 />
               </div>
             </Field>
+            {/* Upsell Presencial de Balcão (Onda 1) */}
+            <div style={{
+              background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+              border: '1px solid #86efac',
+              borderRadius: 8,
+              padding: '12px 14px',
+              marginBottom: 14,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 10
+            }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: '#166534', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span>💈</span> Sugestão de Upsell de Perfumaria
+                </div>
+                <div style={{ fontSize: 12, color: '#15803d' }}>
+                  Pomada Matte Dino (150g) por <strong>R$ 45,00</strong> (+R$ 4,50 de comissão para o profissional)
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (modal?.agendamento) {
+                    modal.agendamento.valor = Number(modal.agendamento.valor || 0) + 45.0;
+                    toast("Pomada Matte Dino (R$ 45,00) adicionada com sucesso ao atendimento!", "success");
+                    setFormRecebimento((prev) => ({ ...prev }));
+                  }
+                }}
+                style={{
+                  background: '#16a34a',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '8px 14px',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  boxShadow: '0 2px 4px rgba(22, 163, 74, 0.2)'
+                }}
+              >
+                + Incluir Pomada (R$ 45)
+              </button>
+            </div>
+
             <Field
               label="Valor a receber agora (R$)"
               hint="Valor do serviço menos sinal pago, cashback e vale usados. Para desconto ou ajuste, use a comanda com aprovação e auditoria."
@@ -14116,6 +14226,44 @@ export default function BarbeariaERP({ tabInicial } = {}) {
         </Suspense>
       );
     }
+    if (tab === "Recuperação Ativa & Pacotes (T-Rex)") {
+      return (
+        <Suspense
+          fallback={
+            <Card
+              style={{
+                padding: 40,
+                textAlign: "center",
+                color: "var(--muted)",
+              }}
+            >
+              Carregando Cockpit T-Rex de Recuperação & Pacotes...
+            </Card>
+          }
+        >
+          <DinoRecuperacaoAtivaCockpit />
+        </Suspense>
+      );
+    }
+    if (tab === "Dino Influencer & Perfumaria 360°") {
+      return (
+        <Suspense
+          fallback={
+            <Card
+              style={{
+                padding: 40,
+                textAlign: "center",
+                color: "var(--muted)",
+              }}
+            >
+              Carregando Cockpit Dino Influencer & Perfumaria 360°...
+            </Card>
+          }
+        >
+          <DinoInfluencerCockpit />
+        </Suspense>
+      );
+    }
     if (tab === "Recuperação de clientes (Avec)") {
       return (
         <Suspense
@@ -14677,12 +14825,57 @@ export default function BarbeariaERP({ tabInicial } = {}) {
       )}
       {loading && !dadosCarregados && !tabAutonoma ? (
         <Card
-          style={{ padding: 60, textAlign: "center", color: "var(--muted)" }}
+          style={{ padding: 40, textAlign: "center", color: "var(--muted)", borderRadius: 14 }}
           role="status"
           aria-live="polite"
           aria-busy="true"
         >
-          Carregando dados da empresa ativa…
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--foreground, #f8fafc)" }}>
+              Sincronizando Operação da Barbearia Dino…
+            </div>
+            <div style={{ fontSize: 13, color: "var(--muted, #94a3b8)", maxWidth: 480 }}>
+              Carregando agenda, atendimento, comandas e dados fiscais em tempo real.
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setDadosCarregados(true);
+                  setLoading(false);
+                }}
+                style={{
+                  padding: "8px 18px",
+                  borderRadius: "8px",
+                  background: "#10b981",
+                  color: "#ffffff",
+                  fontWeight: 700,
+                  fontSize: "13px",
+                  border: "none",
+                  cursor: "pointer",
+                  boxShadow: "0 4px 12px rgba(16, 185, 129, 0.3)"
+                }}
+              >
+                Abrir Painel Operacional Imediatamente
+              </button>
+              <button
+                type="button"
+                onClick={() => carregar()}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  background: "rgba(255, 255, 255, 0.08)",
+                  color: "#e2e8f0",
+                  fontWeight: 600,
+                  fontSize: "13px",
+                  border: "1px solid rgba(255, 255, 255, 0.15)",
+                  cursor: "pointer"
+                }}
+              >
+                🔄 Recarregar
+              </button>
+            </div>
+          </div>
         </Card>
       ) : (
         <div

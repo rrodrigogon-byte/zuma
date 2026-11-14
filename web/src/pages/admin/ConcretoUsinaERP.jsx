@@ -12,6 +12,7 @@ import ConcretoMapaGpsFrota from './concreto/ConcretoMapaGpsFrota';
 import ConcretoChecklistFrota from './concreto/ConcretoChecklistFrota';
 import ConcretoRecicladorSustentabilidade from './concreto/ConcretoRecicladorSustentabilidade';
 import ConcretoAuditoriaMetrologica from './concreto/ConcretoAuditoriaMetrologica';
+import ConcretoConectoresIndustriais from './concreto/ConcretoConectoresIndustriais';
 import ConcretoCamerasVisionAI from './concreto/ConcretoCamerasVisionAI';
 import ConcretoLaboratorioTecnologico from './concreto/ConcretoLaboratorioTecnologico';
 import ConcretoAppCampoPainel from './concreto/ConcretoAppCampoPainel';
@@ -29,6 +30,17 @@ const CARGAS_PADRAO = [
     viagens: [{ veiculo: "BT-03", saidaUsina: "—", chegadaObra: "—", fimDescarga: "—", pegaMinutos: null }, { veiculo: "BT-04", saidaUsina: "—", chegadaObra: "—", fimDescarga: "—", pegaMinutos: null }] }
 ];
 
+export const SUBMODULOS_TORRE = [
+  { id: 'torre', label: 'Torre', icon: '🏢', badge: null, desc: 'Torre de Controle & Gêmeo Digital' },
+  { id: 'pesagem', label: 'Pesagem', icon: '⚖️', badge: 'LIVE', badgeClass: 'serrano-badge-live', desc: 'Cockpit de Balança Operacional 80t' },
+  { id: 'fila', label: 'Fila & agenda', icon: '📅', badge: null, desc: 'Fila de Caminhões & Concretagens' },
+  { id: 'antifraude', label: 'Antifraude', icon: '🛡️', badge: '1', badgeClass: 'serrano-badge-alert', desc: 'Auditoria Inteligente Motor KyttoIA' },
+  { id: 'clientes', label: 'Clientes', icon: '👥', badge: null, desc: 'Canteiros de Obras & Pedidos' },
+  { id: 'fiscal', label: 'Fiscal & integrações', icon: '🧾', badge: 'SEFAZ', badgeClass: 'serrano-badge-sefaz', desc: 'MDF-e, NF-e e CT-e' },
+  { id: 'relatorios', label: 'Relatórios', icon: '📊', badge: null, desc: 'Indicadores & Consumo de Insumos' },
+  { id: 'cadastros', label: 'Cadastros & regras', icon: '🗄️', badge: null, desc: 'Traços NBR, Frotas e Balanças' },
+];
+
 export default function ConcretoUsinaERP() {
   const { empresaAtiva, trocarEmpresa } = useAuth();
   const { toast } = useToast();
@@ -38,9 +50,40 @@ export default function ConcretoUsinaERP() {
   const [searchParams, setSearchParams] = useSearchParams();
   const secaoParam = searchParams.get('secao') || searchParams.get('tab') || 'operacao-despacho';
   const secaoAtiva = (secaoParam === 'app-campo' || secaoParam === 'app-campo-assinatura') ? 'app-campo-assinatura' : (secaoParam === 'torre' || secaoParam === 'torre-controle' || secaoParam === 'torre-pesagem') ? 'torre-pesagem' : secaoParam;
+  
+  // Submenu integrado da Torre de Controle & Pesagem
+  const subsecaoParam = searchParams.get('subsecao') || searchParams.get('subtab') || searchParams.get('view') || 'torre';
+  const [subsecaoTorre, setSubsecaoTorre] = useState(subsecaoParam);
+
+  useEffect(() => {
+    const s = searchParams.get('subsecao') || searchParams.get('subtab') || searchParams.get('view');
+    if (s && s !== subsecaoTorre) {
+      setSubsecaoTorre(s);
+    }
+  }, [searchParams]);
+
+  const setSubsecaoAtivaTorre = (subId) => {
+    setSubsecaoTorre(subId);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('secao', 'torre-pesagem');
+      next.set('subsecao', subId);
+      return next;
+    });
+  };
+
   const setSecaoAtiva = (s) => {
     const sNorm = (s === 'app-campo' || s === 'app-campo-assinatura') ? 'app-campo-assinatura' : s;
-    setSearchParams({ secao: sNorm });
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('secao', sNorm);
+      if (sNorm === 'torre-pesagem' || sNorm === 'torre-controle' || sNorm === 'torre') {
+        next.set('subsecao', subsecaoTorre || 'torre');
+      } else {
+        next.delete('subsecao');
+      }
+      return next;
+    });
     if (trocarEmpresa) {
       if (sNorm === 'empresa-holding') {
         trocarEmpresa(HOLDING_PALATARE_EMPRESA_ID);
@@ -612,24 +655,39 @@ export default function ConcretoUsinaERP() {
       
 
       {/* ─── ÁREA PRINCIPAL ─── */}
-      <main className="serrano-main">
+      <main className={`serrano-main ${secaoAtiva === "torre-pesagem" ? "serrano-main-torre-full" : ""}`}>
+
         
         {/* Topbar Limpa */}
         <header className="serrano-topbar">
           <span className="serrano-crumb">
-            Operação / <b>{secaoAtiva.split('-')[1]?.toUpperCase() || 'DESPACHO AO VIVO'}</b>
+            Operação / <b>{secaoAtiva === 'torre-pesagem' ? 'TORRE DE CONTROLE' : (secaoAtiva.split('-')[1]?.toUpperCase() || 'DESPACHO AO VIVO')}</b>
+            {secaoAtiva === 'torre-pesagem' && (
+              <> / <span style={{ color: 'var(--serrano-orange)', fontWeight: 700 }}>
+                {(SUBMODULOS_TORRE.find(m => m.id === subsecaoTorre)?.label || 'Torre').toUpperCase()}
+              </span></>
+            )}
           </span>
 
-          <div className="serrano-search-box">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-            <input 
-              type="text" 
-              placeholder="Buscar carga, cliente, obra, placa..." 
-              value={busca}
-              onChange={e => setBusca(e.target.value)}
-            />
-            <kbd>Ctrl K</kbd>
-          </div>
+          {secaoAtiva !== 'torre-pesagem' ? (
+            <div className="serrano-search-box">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+              <input 
+                type="text" 
+                placeholder="Buscar carga, cliente, obra, placa..." 
+                value={busca}
+                onChange={e => setBusca(e.target.value)}
+              />
+              <kbd>Ctrl K</kbd>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: 'var(--ser-dim, #64748B)' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', padding: '2px 8px', borderRadius: 4, color: '#10B981', fontWeight: 600 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981' }}></span>
+                Telemetria CCO Ativa
+              </span>
+            </div>
+          )}
 
           <span className="serrano-sync">
             <span className="serrano-dot-sync"></span>
@@ -690,6 +748,30 @@ export default function ConcretoUsinaERP() {
             </button>
           ))}
         </nav>
+
+        {/* ─── SUBMENU INTEGRADO DA TORRE DE CONTROLE (SUB-ABAS NATIVAS) ─── */}
+        {(secaoAtiva === 'torre-pesagem' || secaoAtiva === 'torre-controle') && (
+          <nav className="serrano-subnav-tabs" aria-label="Submenu Torre de Controle e Pesagem">
+            {SUBMODULOS_TORRE.map(sub => (
+              <button
+                key={sub.id}
+                type="button"
+                className={`serrano-subtab-pill ${subsecaoTorre === sub.id ? "ativo" : ""}`}
+                onClick={() => setSubsecaoAtivaTorre(sub.id)}
+                title={sub.desc}
+              >
+                <span>{sub.icon}</span>
+                <span>{sub.label}</span>
+                {sub.badge && (
+                  <span className={`serrano-subtab-badge ${sub.badgeClass || ""}`}>
+                    {sub.badge}
+                  </span>
+                )}
+              </button>
+            ))}
+          </nav>
+        )}
+
         {secaoAtiva === "operacao-despacho" && (
           <>
 
@@ -1013,9 +1095,25 @@ export default function ConcretoUsinaERP() {
               >
                 📊 Auditoria Metrológica das 4 Balanças (NBR 7212)
               </button>
+              <button
+                type="button"
+                className="btn-serrano"
+                style={{
+                  background: subAbaCentral === 'conectores' ? 'var(--serrano-orange)' : 'transparent',
+                  color: subAbaCentral === 'conectores' ? '#fff' : 'var(--text)',
+                  borderColor: subAbaCentral === 'conectores' ? 'var(--serrano-orange)' : 'var(--joint)',
+                  fontWeight: 600,
+                  fontSize: 12
+                }}
+                onClick={() => setSubAbaCentral('conectores')}
+              >
+                🔌 Conectores Industriais Modbus TCP &amp; Balanças
+              </button>
             </div>
 
-            {subAbaCentral === 'auditoria' ? (
+            {subAbaCentral === 'conectores' ? (
+              <ConcretoConectoresIndustriais onVoltar={() => setSubAbaCentral('dosadora')} />
+            ) : subAbaCentral === 'auditoria' ? (
               <ConcretoAuditoriaMetrologica />
             ) : (
           <div className="serrano-grid-2col">
@@ -1193,6 +1291,9 @@ export default function ConcretoUsinaERP() {
                 <div style={{ background: 'var(--surface-2)', padding: 14, borderRadius: 8, border: '1px solid var(--joint)' }}>
                   <small style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Cimento em Silos 96t</small>
                   <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 800, color: 'var(--serrano-orange-text)' }}>
+                    {((silos.length > 0 ? silos : [
+                      { estoqueAtualKg: 58400 }, { estoqueAtualKg: 22100 }, { estoqueAtualKg: 44500 }
+                    ]).reduce((acc, s) => acc + (Number(s.nivelAtualKg || s.estoqueAtualKg || (s.estoqueAtualToneladas ? s.estoqueAtualToneladas * 1000 : 0)) / 1000), 0)).toFixed(1)} <span style={{ fontSize: 16 }}>ton</span>
                   </div>
                   <small style={{ color: 'var(--status-ok)', fontSize: 11 }}>● Pressão despoeiramento: 0.35 bar (Normal)</small>
                 </div>
@@ -1701,6 +1802,8 @@ export default function ConcretoUsinaERP() {
         {/* ─── ABA: TORRE DE CONTROLE DE PESAGEM & GÊMEO DIGITAL ─── */}
         {(secaoAtiva === 'torre-pesagem' || secaoAtiva === 'torre-controle') && (
           <TorreDeControlePesagemSerrano
+            subsecao={subsecaoTorre}
+            onSubsecaoChange={setSubsecaoAtivaTorre}
             onVoltar={() => setSecaoAtiva('operacao-despacho')}
           />
         )}
@@ -1746,7 +1849,8 @@ export default function ConcretoUsinaERP() {
               {[
                 { id: 'telemetria', label: 'Telemetria de Sensores (RPM)', icon: '🚛' },
                 { id: 'gps', label: 'Rastreamento GPS Tangará da Serra', icon: '🗺️' },
-                { id: 'checklist', label: 'Checklist Pré-Operacional NR-11/12', icon: '📋' }
+                { id: 'checklist', label: 'Checklist Pré-Operacional NR-11/12', icon: '📋' },
+                { id: 'bombas-nbr15649', label: 'Bombas Lança & Vento NBR 15649', icon: '⚡' }
               ].map(sub => (
                 <button
                   key={sub.id}
@@ -1768,6 +1872,99 @@ export default function ConcretoUsinaERP() {
 
             {subAbaFrota === 'gps' && <ConcretoMapaGpsFrota />}
             {subAbaFrota === 'checklist' && <ConcretoChecklistFrota />}
+            {subAbaFrota === 'bombas-nbr15649' && (
+              <div className="serrano-card" style={{ padding: 20 }}>
+                <div className="serrano-card-h" style={{ padding: '0 0 14px', borderBottom: '1px solid var(--joint)', marginBottom: 16 }}>
+                  <div>
+                    <h3 style={{ margin: 0 }}>Telemetria de Bombas Lança 36m/42m & Segurança Operacional (ABNT NBR 15649)</h3>
+                    <small style={{ color: 'var(--text-muted)' }}>
+                      Anemômetro ultrassônico com trava por vento crítico (&gt; 48 km/h), pressão hidráulica e cálculo contínuo de vida útil da tubulação 5'.
+                    </small>
+                  </div>
+                  <span className="serrano-pill serrano-p-ok" style={{ fontWeight: 800 }}>
+                    Motor KyttoIA 2.5 Flash
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
+                  {/* Card 1: Vento e Anemômetro */}
+                  <div style={{ background: 'var(--surface-2)', padding: 16, borderRadius: 8, border: '1px solid var(--joint)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Velocidade do Vento na Lança</span>
+                      <span className="serrano-pill serrano-p-ok" style={{ fontSize: 10, fontWeight: 800 }}>ESTÁVEL</span>
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 900, color: '#0284c7', margin: '8px 0 4px' }}>
+                      32 <span style={{ fontSize: 16 }}>km/h</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      Limite Normativo NBR 15649: <b>48 km/h</b> (Corte Elétrico Automático)
+                    </div>
+                    <div style={{ marginTop: 10, background: '#e2e8f0', borderRadius: 4, height: 6, overflow: 'hidden' }}>
+                      <div style={{ width: '66%', height: '100%', background: '#0284c7' }}></div>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Pressão Hidráulica */}
+                  <div style={{ background: 'var(--surface-2)', padding: 16, borderRadius: 8, border: '1px solid var(--joint)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Circuito Hidráulico Principal</span>
+                      <span className="serrano-pill serrano-p-ok" style={{ fontSize: 10, fontWeight: 800 }}>NOMINAL</span>
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 900, color: 'var(--status-ok)', margin: '8px 0 4px' }}>
+                      220 <span style={{ fontSize: 16 }}>bar</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      Pressão nominal de bombeamento (Alívio aos 280 bar)
+                    </div>
+                    <div style={{ marginTop: 10, background: '#e2e8f0', borderRadius: 4, height: 6, overflow: 'hidden' }}>
+                      <div style={{ width: '78%', height: '100%', background: '#10b981' }}></div>
+                    </div>
+                  </div>
+
+                  {/* Card 3: Tubulação 5'' e Desgaste */}
+                  <div style={{ background: 'var(--surface-2)', padding: 16, borderRadius: 8, border: '1px solid var(--joint)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Tubulação Aço Especial 5'</span>
+                      <span className="serrano-pill serrano-p-load" style={{ fontSize: 10, fontWeight: 800 }}>26.2% VIDA ÚTIL</span>
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 900, color: 'var(--serrano-orange-text)', margin: '8px 0 4px' }}>
+                      2.65 <span style={{ fontSize: 16 }}>mm</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      Original: 4.5 mm · Limite de Descarte: <b>2.0 mm</b> (~6.550 m³ restantes)
+                    </div>
+                    <div style={{ marginTop: 10, background: '#e2e8f0', borderRadius: 4, height: 6, overflow: 'hidden' }}>
+                      <div style={{ width: '26%', height: '100%', background: 'var(--serrano-orange)' }}></div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Caixa de Ação Autônoma da Bomba */}
+                <div style={{ marginTop: 16, background: '#f8fafc', border: '1px solid var(--joint)', borderRadius: 8, padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                  <div>
+                    <b style={{ fontSize: 13, color: '#0f172a' }}>Equipamento Escalado: Bomba Lança Schwing S36X (36m / 4 seções)</b>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                      Telemetria via sensor CAN bus J1939 e anemômetro Gill WindSonic integrado ao CCO da Usina MT-358.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-serrano pri"
+                    onClick={async () => {
+                      try {
+                        const res = await api.post('/api/concreto-torre/bombas/auditar-desgaste', { velocidadeVentoKmh: 34, pressaoHidraulicaBar: 225, volumeBombeadoM3: 88 });
+                        if (res?.data?.ok) {
+                        }
+                      } catch (e) {
+                        alert('Erro ao auditar bomba: ' + e.message);
+                      }
+                    }}
+                  >
+                    ⚡ Auditar Desgaste & Segurança NBR 15649
+                  </button>
+                </div>
+              </div>
+            )}
             {subAbaFrota === 'telemetria' && (
           <div className="serrano-card">
             <div className="serrano-card-h">

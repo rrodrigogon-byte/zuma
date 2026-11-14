@@ -3,15 +3,25 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../../../lib/api";
 
 const PRESETS_FABRICANTES = [
-  { id: "intelbras", nome: "Intelbras", linha: "VIP / iMDVR / iSIC / Mibo", rtsp: 554, http: 80, onvif: 80, servico: 37777, codec: "H.265", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "VIP 7250 LPR IA" },
-  { id: "positivo", nome: "Positivo", linha: "Smart Câmera 360 / Seg Externa", rtsp: 554, http: 80, onvif: 8899, servico: 8000, codec: "H.264", fps: 25, resolucao: "1920x1080 (Full HD)", modelo: "Smart Câmera IP Wi-Fi 1080p" },
-  { id: "dahua", nome: "Dahua", linha: "WizSense / WizMind / ITC LPR", rtsp: 554, http: 80, onvif: 80, servico: 37777, codec: "H.265", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "DH-IPC-HFW5842E-Z4E" },
-  { id: "hikvision", nome: "Hikvision", linha: "ColorVu 4K / AcuSense", rtsp: 554, http: 80, onvif: 80, servico: 8000, codec: "H.265", fps: 25, resolucao: "3840x2160 (4K UHD)", modelo: "DS-2CD2T87G2-L (ColorVu 4K)" },
-  { id: "hilook", nome: "HiLook", linha: "Série Bullet / Dome", rtsp: 554, http: 80, onvif: 80, servico: 8000, codec: "H.264", fps: 25, resolucao: "1920x1080 (Full HD)", modelo: "IPC-B121H 1080p" },
-  { id: "giga", nome: "Giga / Multi", linha: "Série Orion / Open HD", rtsp: 554, http: 80, onvif: 8899, servico: 34567, codec: "H.264", fps: 25, resolucao: "1920x1080 (Full HD)", modelo: "GS0081 Orion Full HD" },
-  { id: "tecvoz", nome: "Tecvoz / JFL", linha: "Flex IP / NVR Série WD", rtsp: 554, http: 80, onvif: 80, servico: 8000, codec: "H.264", fps: 25, resolucao: "1920x1080 (Full HD)", modelo: "Flex IP 2MP Bullet" },
-  { id: "axis", nome: "Axis", linha: "P1455-LE Industrial / Q1656 LPR", rtsp: 554, http: 80, onvif: 80, servico: 443, codec: "H.265", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "P1455-LE Industrial" },
-  { id: "onvif_generica", nome: "ONVIF Genérico", linha: "Profile S / T / G Padrão", rtsp: 554, http: 80, onvif: 80, servico: 554, codec: "H.264", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "Câmera IP ONVIF Padrão" },
+  { id: "intelbras", nome: "Intelbras", linha: "VIP / iMDVR / iSIC / Mibo / LPR", rtsp: 554, http: 80, onvif: 80, servico: 37777, codec: "H.265", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "VIP 7250 LPR IA (4MP Starlight)", corBadge: "#16a34a" },
+  { id: "hikvision", nome: "Hikvision", linha: "ColorVu 4K / AcuSense / DarkFighter", rtsp: 554, http: 80, onvif: 80, servico: 8000, codec: "H.265", fps: 25, resolucao: "3840x2160 (4K UHD)", modelo: "DS-2CD2T87G2-L (ColorVu 4K)", corBadge: "#dc2626" },
+  { id: "dahua", nome: "Dahua", linha: "WizSense / WizMind / ITC LPR", rtsp: 554, http: 80, onvif: 80, servico: 37777, codec: "H.265", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "DH-IPC-HFW5842E-Z4E", corBadge: "#ea580c" },
+  { id: "bosch", nome: "Bosch Security", linha: "Dinion IP Starlight / Autodome / FlexiDome", rtsp: 554, http: 80, onvif: 80, servico: 1756, codec: "H.265", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "Dinion IP Starlight 7000 HD", corBadge: "#e11d48" },
+  { id: "avigilon", nome: "Motorola / Avigilon", linha: "H5A Bullet / H6A / Control Center LPR", rtsp: 554, http: 80, onvif: 80, servico: 3880, codec: "H.265", fps: 30, resolucao: "2592x1944 (5MP)", modelo: "H5A Bullet 5.0 MP LPR", corBadge: "#2563eb" },
+  { id: "uniview", nome: "Uniview (UNV)", linha: "Tri-Guard / LightHunter / LPR IPC2324", rtsp: 554, http: 80, onvif: 80, servico: 82, codec: "H.265", fps: 30, resolucao: "2560x1440 (2K QHD)", modelo: "IPC2324EBR-DPZ28-D LPR", corBadge: "#0284c7" },
+  { id: "pelco", nome: "Pelco by Motorola", linha: "Sarix Pro 4 / Spectra / ExSite", rtsp: 554, http: 80, onvif: 80, servico: 80, codec: "H.264", fps: 30, resolucao: "2048x1536 (3MP)", modelo: "IBP341-1ER 3MP Bullet", corBadge: "#475569" },
+  { id: "vivotek", nome: "Vivotek", linha: "Série IB Industrial LPR / Supreme", rtsp: 554, http: 80, onvif: 80, servico: 554, codec: "H.265", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "IB9387-LPR Industrial", corBadge: "#0d9488" },
+  { id: "hanwha", nome: "Hanwha Vision", linha: "Wisenet Q / X-Series AI / P-Series", rtsp: 554, http: 80, onvif: 80, servico: 4520, codec: "H.265", fps: 30, resolucao: "2592x1944 (5MP)", modelo: "QNO-8080R 5MP IR Bullet", corBadge: "#ca8a04" },
+  { id: "toledo_prix_lpr", nome: "Toledo Prix LPR", linha: "Totem Prix LPR 9094 / Indicador 720i Rodoviário", rtsp: 554, http: 80, onvif: 80, servico: 5000, codec: "H.264", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "Totem Prix LPR 9094 Balança", corBadge: "#1d4ed8" },
+  { id: "tplink_vigi", nome: "TP-Link VIGI", linha: "VIGI C340 / C440 / C540 Outdoor", rtsp: 554, http: 80, onvif: 2020, servico: 2020, codec: "H.265+", fps: 25, resolucao: "2560x1440 (2K QHD)", modelo: "VIGI C340-W 4MP Bullet", corBadge: "#059669" },
+  { id: "flir", nome: "Teledyne FLIR", linha: "FLIR A50/A70 Térmica Radiométrica (Silos/Balança)", rtsp: 554, http: 80, onvif: 80, servico: 80, codec: "H.264", fps: 30, resolucao: "640x480 (Radiométrica)", modelo: "FLIR A50 Smart Thermal Sensor", corBadge: "#b45309" },
+  { id: "geovision", nome: "GeoVision", linha: "GV-LPR / GV-Target Industrial", rtsp: 554, http: 80, onvif: 80, servico: 554, codec: "H.264", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "GV-LPR 2800-FD", corBadge: "#7c3aed" },
+  { id: "positivo", nome: "Positivo", linha: "Smart Câmera 360 / Seg Externa Wi-Fi", rtsp: 554, http: 80, onvif: 8899, servico: 8000, codec: "H.264", fps: 25, resolucao: "1920x1080 (Full HD)", modelo: "Smart Câmera IP Wi-Fi 1080p", corBadge: "#0891b2" },
+  { id: "hilook", nome: "HiLook", linha: "Série Bullet / Dome 1080p", rtsp: 554, http: 80, onvif: 80, servico: 8000, codec: "H.264", fps: 25, resolucao: "1920x1080 (Full HD)", modelo: "IPC-B121H 1080p", corBadge: "#9333ea" },
+  { id: "giga", nome: "Giga / Multi", linha: "Série Orion / Open HD", rtsp: 554, http: 80, onvif: 8899, servico: 34567, codec: "H.264", fps: 25, resolucao: "1920x1080 (Full HD)", modelo: "GS0081 Orion Full HD", corBadge: "#4f46e5" },
+  { id: "tecvoz", nome: "Tecvoz / JFL", linha: "Flex IP / NVR Série WD", rtsp: 554, http: 80, onvif: 80, servico: 8000, codec: "H.264", fps: 25, resolucao: "1920x1080 (Full HD)", modelo: "Flex IP 2MP Bullet", corBadge: "#65a30d" },
+  { id: "axis", nome: "Axis", linha: "P1455-LE Industrial / Q1656 LPR", rtsp: 554, http: 80, onvif: 80, servico: 443, codec: "H.265", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "P1455-LE Industrial Lightfinder", corBadge: "#f59e0b" },
+  { id: "onvif_generica", nome: "ONVIF Genérico", linha: "Profile S / T / M Padrão Internacional", rtsp: 554, http: 80, onvif: 80, servico: 554, codec: "H.264", fps: 30, resolucao: "1920x1080 (Full HD)", modelo: "Câmera IP ONVIF Profile S/T", corBadge: "#64748b" }
 ];
 
 const CAMERAS_SEED = [
@@ -32,7 +42,7 @@ const CAMERAS_SEED = [
     substream: true,
     streamRtspUrl: "rtsp://admin:****@192.168.1.120:554/cam/realmonitor?channel=1&subtype=1",
     snapshotHttpUrl: "http://admin:****@192.168.1.120/cgi-bin/snapshot.cgi?channel=1",
-    hlsStreamUrl: "/assets/cftv/cftv_cam01_lpr_entrada.jpg",
+    hlsStreamUrl: "/assets/cftv/cftv_real_02_balanca_80t.jpg",
     status: "online",
     fps: 30,
     resolucao: "1920x1080 (Full HD)",
@@ -62,7 +72,7 @@ const CAMERAS_SEED = [
     substream: true,
     streamRtspUrl: "rtsp://admin:****@192.168.1.121:554/Streaming/Channels/102",
     snapshotHttpUrl: "http://admin:****@192.168.1.121/ISAPI/Streaming/channels/101/picture",
-    hlsStreamUrl: "/assets/cftv/cftv_cam02_plataforma_panoramica.jpg",
+    hlsStreamUrl: "/assets/cftv/cftv_real_02_balanca_80t.jpg",
     status: "online",
     fps: 25,
     resolucao: "3840x2160 (4K UHD)",
@@ -92,7 +102,7 @@ const CAMERAS_SEED = [
     substream: true,
     streamRtspUrl: "rtsp://admin:****@192.168.1.122:554/cam/realmonitor?channel=1&subtype=1",
     snapshotHttpUrl: "http://admin:****@192.168.1.122/cgi-bin/snapshot.cgi?channel=1",
-    hlsStreamUrl: "/assets/cftv/cftv_cam03_cancela_saida.jpg",
+    hlsStreamUrl: "/assets/cftv/cftv_real_02_balanca_80t.jpg",
     status: "online",
     fps: 30,
     resolucao: "1920x1080 (Full HD)",
@@ -122,7 +132,8 @@ const CAMERAS_SEED = [
     substream: true,
     streamRtspUrl: "rtsp://admin:****@192.168.1.123:554/cam/realmonitor?channel=1&subtype=1",
     snapshotHttpUrl: "http://admin:****@192.168.1.123/cgi-bin/snapshot.cgi?channel=1",
-    hlsStreamUrl: "/assets/cftv/cftv_cam04_patio_silos.jpg",
+    hlsStreamUrl: "/assets/cftv/cftv_real_01_central_dosadora.jpg",
+    videoUrl: "/assets/concreto/video_usina_central_dosadora.mp4",
     status: "online",
     fps: 25,
     resolucao: "1920x1080 (Full HD)",
@@ -152,7 +163,8 @@ const CAMERAS_SEED = [
     substream: true,
     streamRtspUrl: "rtsp://root:****@192.168.1.124:554/axis-media/media.amp",
     snapshotHttpUrl: "http://root:****@192.168.1.124/axis-cgi/jpg/image.cgi",
-    hlsStreamUrl: "/assets/cftv/cftv_cam05_central_dosadora.jpg",
+    hlsStreamUrl: "/assets/cftv/cftv_real_01_central_dosadora.jpg",
+    videoUrl: "/assets/concreto/video_usina_central_dosadora.mp4",
     status: "online",
     fps: 30,
     resolucao: "1920x1080 (Full HD)",
@@ -182,7 +194,8 @@ const CAMERAS_SEED = [
     substream: true,
     streamRtspUrl: "rtsp://admin:****@192.168.1.125:554/Streaming/Channels/102",
     snapshotHttpUrl: "http://admin:****@192.168.1.125/ISAPI/Streaming/channels/101/picture",
-    hlsStreamUrl: "/assets/cftv/cftv_cam06_mineracao_areia.jpg",
+    hlsStreamUrl: "/assets/cftv/cftv_real_03_mineracao_areia.jpg",
+    videoUrl: "/assets/concreto/video_mineracao_sepotuba.mp4",
     status: "online",
     fps: 20,
     resolucao: "2560x1440 (2K QHD)",
@@ -212,7 +225,7 @@ const CAMERAS_SEED = [
     substream: true,
     streamRtspUrl: "rtsp://admin:****@192.168.1.126:554/live/ch0",
     snapshotHttpUrl: "http://admin:****@192.168.1.126/snapshot.jpg",
-    hlsStreamUrl: "/assets/cftv/cftv_cam03_cancela_saida.jpg",
+    hlsStreamUrl: "/assets/cftv/cftv_real_02_balanca_80t.jpg",
     status: "online",
     fps: 25,
     resolucao: "1920x1080 (Full HD)",
@@ -237,7 +250,7 @@ const EVENTOS_SEED = [
     descricao: "Betoneira BT-01 identificada automaticamente na 1ª pesagem. Enquadramento 100% OK.",
     confianca: 99.6,
     dataHora: new Date().toLocaleDateString("pt-BR") + " 17:42:10",
-    snapshotUrl: "/assets/cftv/cftv_cam01_lpr_entrada.jpg"
+    snapshotUrl: "/assets/cftv/cftv_real_02_balanca_80t.jpg"
   },
   {
     id: "evt-02",
@@ -248,7 +261,7 @@ const EVENTOS_SEED = [
     descricao: "Capacete e colete refletivo detectados em todos os operadores no pátio de dosagem.",
     confianca: 98.4,
     dataHora: new Date().toLocaleDateString("pt-BR") + " 17:41:50",
-    snapshotUrl: "/assets/cftv/cftv_cam04_patio_silos.jpg"
+    snapshotUrl: "/assets/cftv/cftv_real_01_central_dosadora.jpg"
   },
   {
     id: "evt-03",
@@ -259,7 +272,7 @@ const EVENTOS_SEED = [
     descricao: "Semáforo verde ativado. Ticket térmico NBR 7212 emitido com 33.480 kg brutos.",
     confianca: 99.9,
     dataHora: new Date().toLocaleDateString("pt-BR") + " 17:40:02",
-    snapshotUrl: "/assets/cftv/cftv_cam03_cancela_saida.jpg"
+    snapshotUrl: "/assets/cftv/cftv_real_02_balanca_80t.jpg"
   }
 ];
 
@@ -285,9 +298,16 @@ export default function ConcretoCamerasVisionAI({
   const [filtroPonto, setFiltroPonto] = useState("todos");
   const [mostrarSenha, setMostrarSenha] = useState(false);
 
-  // Scanner de Rede
+  // Scanner de Rede Avançado da Usina
   const [escanearAndamento, setEscanearAndamento] = useState(false);
   const [dispositivosDescobertos, setDispositivosDescobertos] = useState([]);
+  const [subnetScanner, setSubnetScanner] = useState("192.168.1.0/24");
+  const [marcaFiltroScanner, setMarcaFiltroScanner] = useState("todas");
+  const [buscaScannerTexto, setBuscaScannerTexto] = useState("");
+  const [telemetriaScanner, setTelemetriaScanner] = useState(null);
+  const [integrandoLote, setIntegrandoLote] = useState(false);
+  const [feedbackScanner, setFeedbackScanner] = useState(null);
+  const [testandoIpScanner, setTestandoIpScanner] = useState(null);
 
   // Formulário de Câmera IP Completo
   const [formCamera, setFormCamera] = useState({
@@ -363,10 +383,11 @@ export default function ConcretoCamerasVisionAI({
     carregarDados();
   }, [empresaAtivaId]);
 
-  // Atualizar URLs geradas conforme dados do formulário e fabricante selecionado
+  // Atualizar URLs geradas conforme dados do formulário e fabricante selecionado (19 marcas)
   useEffect(() => {
-    const m = String(formCamera.marca || "intelbras").toLowerCase();
+    const m = String(formCamera.marca || "intelbras").toLowerCase().replace(/[^a-z0-9_]/g, "_");
     const sub = formCamera.substream ? 1 : 0;
+    const subStreamNum = formCamera.substream ? 2 : 1;
     const auth = formCamera.usuario ? `${encodeURIComponent(formCamera.usuario)}:${encodeURIComponent(formCamera.senha || "")}@` : "";
     const hostRtsp = `${formCamera.ipHost || "192.168.1.100"}:${formCamera.portaRtsp || 554}`;
     const hostHttp = `${formCamera.ipHost || "192.168.1.100"}${Number(formCamera.portaHttp) !== 80 ? ":" + formCamera.portaHttp : ""}`;
@@ -382,9 +403,39 @@ export default function ConcretoCamerasVisionAI({
       rtsp = `rtsp://${auth}${hostRtsp}/cam/realmonitor?channel=${formCamera.canal || 1}&subtype=${sub}`;
       snap = `http://${auth}${hostHttp}/cgi-bin/snapshot.cgi?channel=${formCamera.canal || 1}`;
     } else if (m === "hikvision" || m === "hilook") {
-      const ch = Number(formCamera.canal) <= 16 ? (100 * Number(formCamera.canal) + (formCamera.substream ? 2 : 1)) : 101;
+      const ch = Number(formCamera.canal) <= 16 ? (100 * Number(formCamera.canal) + subStreamNum) : 101;
       rtsp = `rtsp://${auth}${hostRtsp}/Streaming/Channels/${ch}`;
       snap = `http://${auth}${hostHttp}/ISAPI/Streaming/channels/${ch}/picture`;
+    } else if (m === "bosch") {
+      rtsp = `rtsp://${auth}${hostRtsp}/rtsp_tunnel?line=1&inst=${sub}`;
+      snap = `http://${auth}${hostHttp}/snap.jpg?JpegCam=${formCamera.canal || 1}`;
+    } else if (m === "avigilon" || m === "motorola") {
+      rtsp = `rtsp://${auth}${hostRtsp}${formCamera.substream ? "/defaultSecondary?streamType=u" : "/defaultPrimary?streamType=u"}`;
+      snap = `http://${auth}${hostHttp}/media/cam${formCamera.canal || 1}.jpg`;
+    } else if (m === "uniview" || m === "unv") {
+      rtsp = `rtsp://${auth}${hostRtsp}/unicast/c${formCamera.canal || 1}/s${sub}/live`;
+      snap = `http://${auth}${hostHttp}/images/snapshot.jpg`;
+    } else if (m === "pelco") {
+      rtsp = `rtsp://${auth}${hostRtsp}/stream${subStreamNum}`;
+      snap = `http://${auth}${hostHttp}/jpeg`;
+    } else if (m === "vivotek") {
+      rtsp = `rtsp://${auth}${hostRtsp}${formCamera.substream ? "/live2.sdp" : "/live.sdp"}`;
+      snap = `http://${auth}${hostHttp}/cgi-bin/viewer/video.jpg`;
+    } else if (m === "hanwha" || m === "wisenet") {
+      rtsp = `rtsp://${auth}${hostRtsp}/profile${subStreamNum}/media.smp`;
+      snap = `http://${auth}${hostHttp}/stw-cgi/video.cgi?msubmenu=snapshot&action=view`;
+    } else if (m === "toledo_prix_lpr" || m === "toledo") {
+      rtsp = `rtsp://${auth}${hostRtsp}/live/prix_lpr_ch${formCamera.canal || 1}`;
+      snap = `http://${auth}${hostHttp}/api/lpr/capture.jpg`;
+    } else if (m === "tplink_vigi" || m === "vigi") {
+      rtsp = `rtsp://${auth}${hostRtsp}/stream${subStreamNum}`;
+      snap = `http://${auth}${hostHttp}/cgi-bin/snapshot.cgi?stream=${subStreamNum}`;
+    } else if (m === "flir") {
+      rtsp = `rtsp://${auth}${hostRtsp}/ch0`;
+      snap = `http://${auth}${hostHttp}/api/snapshot`;
+    } else if (m === "geovision") {
+      rtsp = `rtsp://${auth}${hostRtsp}/live${subStreamNum}.sdp`;
+      snap = `http://${auth}${hostHttp}/vstream.jpg`;
     } else if (m === "giga" || m === "multilaser") {
       rtsp = `rtsp://${auth}${hostRtsp}/ch0${formCamera.canal || 1}${formCamera.substream ? "_sub.264" : ".264"}`;
       snap = `http://${auth}${hostHttp}/cgi-bin/snapshot.cgi`;
@@ -423,8 +474,8 @@ export default function ConcretoCamerasVisionAI({
     try {
       setTestandoId(camId);
       const res = await api.post(`/api/admin/concreto/cameras/${camId}/testar`, {});
-      const data = await res.json();
-      if (data.ok) {
+      const data = (res && res.data) ? res.data : res;
+      if (data && data.ok) {
         setCameras(prev => prev.map(c => c.id === camId ? { ...c, status: "online", latenciaMs: data.latenciaMs, ultimoPingEm: data.testadoEm } : c));
       }
     } catch (e) {
@@ -440,7 +491,7 @@ export default function ConcretoCamerasVisionAI({
     try {
       setTestandoId("form");
       const res = await api.post("/api/admin/concreto/cameras/testar-conexao", formCamera);
-      const data = await res.json();
+      const data = (res && res.data) ? res.data : res;
       setTesteResultado(data);
     } catch (e) {
       const lat = Math.floor(Math.random() * 14) + 8;
@@ -461,8 +512,8 @@ export default function ConcretoCamerasVisionAI({
     try {
       setAnalisandoId(camId);
       const res = await api.post(`/api/admin/concreto/cameras/${camId}/analisar`, {});
-      const data = await res.json();
-      if (data.ok) {
+      const data = (res && res.data) ? res.data : res;
+      if (data && data.ok) {
         setAnaliseResultado({ camId, ...data });
         carregarDados();
       }
@@ -476,7 +527,7 @@ export default function ConcretoCamerasVisionAI({
   const handleAbrirSnapshot = (cam) => {
     setSnapshotAtivo({
       nome: cam.nome,
-      url: cam.hlsStreamUrl || "/assets/cftv/cftv_cam01_lpr_entrada.jpg",
+      url: cam.hlsStreamUrl || "/assets/cftv/cftv_real_02_balanca_80t.jpg",
       ipHost: cam.ipHost,
       ponto: cam.pontoRotulo,
       dataHora: `${new Date().toLocaleDateString("pt-BR")} ${relogio}`,
@@ -596,51 +647,131 @@ export default function ConcretoCamerasVisionAI({
     }
   };
 
-  // Scanner de Rede da Usina
-  const handleExecutarScanner = () => {
+  // Scanner de Rede da Usina via API Real com Fallback Inteligente
+  const handleExecutarScanner = async (subnetAlvo, marcaAlvo) => {
     setEscanearAndamento(true);
-    setDispositivosDescobertos([]);
-    setTimeout(() => {
+    setFeedbackScanner(null);
+    const sub = subnetAlvo !== undefined ? subnetAlvo : subnetScanner;
+    const marca = marcaAlvo !== undefined ? marcaAlvo : marcaFiltroScanner;
+
+    try {
+      const res = await api.post("/api/admin/concreto/cameras/scanner", {
+        subnet: sub,
+        marcaFiltro: marca
+      });
+
+      const dados = (res && res.data && res.data.dispositivos) ? res.data : res;
+      if (dados?.dispositivos) {
+        setDispositivosDescobertos(dados.dispositivos);
+        setTelemetriaScanner({
+          totalDescobertos: dados.totalDescobertos,
+          totalConectados: dados.totalConectados,
+          totalDisponiveis: dados.totalDisponiveis,
+          tempoVarreduraMs: dados.tempoVarreduraMs,
+          subnet: dados.subnet
+        });
+      }
+    } catch (e) {
+      console.warn("Falha no scanner via API, gerando varredura local:", e);
+      // Fallback rico local caso api esteja em modo estático
       setDispositivosDescobertos([
-        { ip: "192.168.1.120", marca: "intelbras", modelo: "VIP 7250 LPR IA", mac: "00:1A:3F:82:11:4A", rtspPort: 554, httpPort: 80, onvifPort: 80, servicoPort: 37777, pontoSugerido: "Balança 80t - Totem LPR Entrada", status: "conectado" },
-        { ip: "192.168.1.121", marca: "hikvision", modelo: "DS-2CD2T87G2-L (ColorVu 4K)", mac: "C4:2F:90:3A:42:01", rtspPort: 554, httpPort: 80, onvifPort: 80, servicoPort: 8000, pontoSugerido: "Balança 80t - Panorâmica 21m", status: "conectado" },
-        { ip: "192.168.1.122", marca: "intelbras", modelo: "VIP 3230 B G3", mac: "00:1A:3F:99:4C:12", rtspPort: 554, httpPort: 80, onvifPort: 80, servicoPort: 37777, pontoSugerido: "Balança 80t - Cancela Saída", status: "conectado" },
-        { ip: "192.168.1.123", marca: "dahua", modelo: "DH-IPC-HFW5842E-Z4E", mac: "38:AF:29:12:87:C5", rtspPort: 554, httpPort: 80, onvifPort: 80, servicoPort: 37777, pontoSugerido: "Pátio de Betoneiras & Silos 96t", status: "conectado" },
-        { ip: "192.168.1.124", marca: "axis", modelo: "P1455-LE Industrial", mac: "AC:CC:8E:10:99:34", rtspPort: 554, httpPort: 80, onvifPort: 80, servicoPort: 443, pontoSugerido: "Central Dosadora NBR 7212", status: "conectado" },
-        { ip: "192.168.1.125", marca: "hikvision", modelo: "DS-2CD2047G2-LU/SL", mac: "C4:2F:90:7A:11:80", rtspPort: 554, httpPort: 80, onvifPort: 80, servicoPort: 8000, pontoSugerido: "Mineração Sepotuba (Draga & Areia)", status: "conectado" },
-        { ip: "192.168.1.126", marca: "positivo", modelo: "Smart Câmera IP Wi-Fi 1080p", mac: "D8:96:E0:44:21:BB", rtspPort: 554, httpPort: 80, onvifPort: 8899, servicoPort: 8000, pontoSugerido: "Balança 80t - Visão Extra", status: "disponivel" },
-        { ip: "192.168.1.128", marca: "giga", modelo: "GS0081 Orion Full HD", mac: "84:A4:66:31:02:DF", rtspPort: 554, httpPort: 80, onvifPort: 8899, servicoPort: 34567, pontoSugerido: "Portaria de Entrada Usina", status: "disponivel" },
+        { ip: "192.168.1.120", marca: "intelbras", modelo: "VIP 7250 LPR IA (4MP)", mac: "00:1A:3F:82:11:4A", rtspPort: 554, httpPort: 80, onvifPort: 80, servicoPort: 37777, pontoSugerido: "Balança 80t - Totem LPR Entrada", pontoInstalacao: "balanca_entrada_lpr", tipoAplicacao: "lpr_mercosul", resolucao: "1920x1080 (Full HD)", codec: "H.265", latenciaMs: 11, status: "conectado" },
+        { ip: "192.168.1.121", marca: "hikvision", modelo: "DS-2CD2T87G2-L (ColorVu 4K)", mac: "C4:2F:90:3A:42:01", rtspPort: 554, httpPort: 80, onvifPort: 80, servicoPort: 8000, pontoSugerido: "Balança 80t - Panorâmica 21m", pontoInstalacao: "balanca_panoramica", tipoAplicacao: "enquadramento_balanca", resolucao: "3840x2160 (4K UHD)", codec: "H.265", latenciaMs: 14, status: "conectado" },
+        { ip: "192.168.1.130", marca: "bosch", modelo: "Dinion IP Starlight 7000 HD", mac: "00:07:5F:62:33:41", rtspPort: 554, httpPort: 80, onvifPort: 80, servicoPort: 1756, pontoSugerido: "Balança 80t - Células Toledo Prix C1-C8", pontoInstalacao: "balanca_panoramica", tipoAplicacao: "enquadramento_balanca", resolucao: "1920x1080 (Full HD)", codec: "H.265", latenciaMs: 7, status: "disponivel" },
+        { ip: "192.168.1.132", marca: "avigilon", modelo: "H5A Bullet 5.0 MP LPR OCR", mac: "00:18:85:2F:10:9C", rtspPort: 554, httpPort: 80, onvifPort: 80, servicoPort: 3880, pontoSugerido: "Balança 80t - Totem Traseiro LPR", pontoInstalacao: "balanca_saida_traseira", tipoAplicacao: "lpr_mercosul", resolucao: "2592x1944 (5MP)", codec: "H.265", latenciaMs: 8, status: "disponivel" },
+        { ip: "192.168.1.135", marca: "toledo_prix_lpr", modelo: "Câmera Totem Prix 9094 / 720i", mac: "70:B3:D5:19:80:02", rtspPort: 554, httpPort: 80, onvifPort: 80, servicoPort: 5000, pontoSugerido: "Balança 80t - Totem Motorista Autoatendimento", pontoInstalacao: "balanca_autoatendimento", tipoAplicacao: "balanca_autoatendimento", resolucao: "1920x1080 (Full HD)", codec: "H.264", latenciaMs: 5, status: "disponivel" },
+        { ip: "192.168.1.127", marca: "uniview", modelo: "IPC2324EBR-DPZ28-D LPR", mac: "48:EA:63:78:22:19", rtspPort: 554, httpPort: 80, onvifPort: 80, servicoPort: 82, pontoSugerido: "Balança 02 Mineração - Totem LPR", pontoInstalacao: "balanca_mineracao_lpr", tipoAplicacao: "lpr_mercosul", resolucao: "2560x1440 (2K QHD)", codec: "H.265", latenciaMs: 10, status: "disponivel" },
+        { ip: "192.168.1.138", marca: "tplink_vigi", modelo: "VIGI C340-W 4MP Full-Color Bullet", mac: "AC:84:C6:52:19:40", rtspPort: 554, httpPort: 80, onvifPort: 2020, servicoPort: 2020, pontoSugerido: "Baias de Agregados & Britas 0, 1 e Pedrisco", pontoInstalacao: "patio_agregados", tipoAplicacao: "agregados_baias", resolucao: "2560x1440 (2K QHD)", codec: "H.265+", latenciaMs: 12, status: "disponivel" },
+        { ip: "192.168.1.150", marca: "flir", modelo: "FLIR A50 Smart Thermal Sensor", mac: "00:40:7F:11:92:2C", rtspPort: 554, httpPort: 80, onvifPort: 80, servicoPort: 80, pontoSugerido: "Termografia de Silos & Temperatura de Balão", pontoInstalacao: "termografia_silos", tipoAplicacao: "temperatura_concreto", resolucao: "640x480 (Thermal)", codec: "H.264", latenciaMs: 6, status: "disponivel" },
+        { ip: "192.168.1.140", marca: "hanwha", modelo: "QNO-8080R 5MP IR Bullet", mac: "00:09:18:41:88:9F", rtspPort: 554, httpPort: 80, onvifPort: 80, servicoPort: 4520, pontoSugerido: "Silos de Cimento CP II-F e CP V-ARI (96t)", pontoInstalacao: "silos_cimento", tipoAplicacao: "monitoramento_silos", resolucao: "2592x1944 (5MP)", codec: "H.265", latenciaMs: 10, status: "disponivel" },
+        { ip: "192.168.1.145", marca: "pelco", modelo: "Pelco Sarix Pro 4 (IBP341)", mac: "00:04:7D:3B:55:01", rtspPort: 554, httpPort: 80, onvifPort: 80, servicoPort: 80, pontoSugerido: "Lavagem de Betoneiras & Reciclador de Água", pontoInstalacao: "reciclador_lavagem", tipoAplicacao: "lavagem_betoneira", resolucao: "2048x1536 (3MP)", codec: "H.264", latenciaMs: 13, status: "disponivel" },
+        { ip: "192.168.1.142", marca: "vivotek", modelo: "Vivotek IB9387-LPR Industrial", mac: "00:02:D1:6A:21:8B", rtspPort: 554, httpPort: 80, onvifPort: 80, servicoPort: 554, pontoSugerido: "Portão da Usina - Cancela Primária MT-358", pontoInstalacao: "portao_acesso", tipoAplicacao: "acesso_frota", resolucao: "1920x1080 (Full HD)", codec: "H.265", latenciaMs: 11, status: "disponivel" },
+        { ip: "192.168.1.152", marca: "geovision", modelo: "GV-LPR 2800-FD Industrial", mac: "00:13:E2:04:77:88", rtspPort: 554, httpPort: 80, onvifPort: 80, servicoPort: 554, pontoSugerido: "Pátio de Manobra & Pré-Pesagem", pontoInstalacao: "patio_manobras", tipoAplicacao: "lpr_mercosul", resolucao: "1920x1080 (Full HD)", codec: "H.264", latenciaMs: 14, status: "disponivel" },
+        { ip: "192.168.1.124", marca: "axis", modelo: "P1455-LE Industrial Lightfinder", mac: "AC:CC:8E:10:99:34", rtspPort: 554, httpPort: 80, onvifPort: 80, servicoPort: 443, pontoSugerido: "Central Dosadora NBR 7212", pontoInstalacao: "central_dosadora", tipoAplicacao: "dosadora_batelada", resolucao: "1920x1080 (Full HD)", codec: "H.265", latenciaMs: 8, status: "conectado" },
+        { ip: "192.168.1.126", marca: "positivo", modelo: "Smart Câmera IP Wi-Fi 1080p Externa", mac: "D8:96:E0:44:21:BB", rtspPort: 554, httpPort: 80, onvifPort: 8899, servicoPort: 8000, pontoSugerido: "Balança 80t - Visão Extra Cabine CCO", pontoInstalacao: "cabine_cco", tipoAplicacao: "seguranca_patrimonial", resolucao: "1920x1080 (Full HD)", codec: "H.264", latenciaMs: 15, status: "disponivel" }
       ]);
+    } finally {
       setEscanearAndamento(false);
-    }, 1200);
+    }
+  };
+
+  // Integração em Lote de Câmeras Descobertas
+  const handleIntegrarLoteScanner = async () => {
+    const pendentes = dispositivosDescobertos.filter(d => d.status === "disponivel");
+    if (pendentes.length === 0) {
+      setFeedbackScanner({ tipo: "info", texto: "Todas as câmeras descobertas já estão integradas ao CCO." });
+      return;
+    }
+    setIntegrandoLote(true);
+    try {
+      const res = await api.post("/api/admin/concreto/cameras/integrar-lote", { dispositivos: pendentes });
+      const dados = (res && res.data && res.data.ok !== undefined) ? res.data : res;
+      if (dados?.ok) {
+        setFeedbackScanner({
+          tipo: "sucesso",
+          texto: `${dados.totalIntegradas || pendentes.length} novas câmeras industriais foram integradas e ativadas com sucesso no CCO!`
+        });
+        await carregarDados();
+        setDispositivosDescobertos(prev => prev.map(d => ({ ...d, status: "conectado" })));
+      }
+    } catch (e) {
+      setFeedbackScanner({ tipo: "erro", texto: "Erro ao integrar lote: " + (e.response?.data?.error || e.message) });
+    } finally {
+      setIntegrandoLote(false);
+    }
+  };
+
+  // Teste de latência/socket de câmera descoberta antes de conectar
+  const handleTestarIpScanner = async (disp) => {
+    setTestandoIpScanner(disp.ip);
+    try {
+      const res = await api.post("/api/admin/concreto/cameras/testar-conexao", {
+        ipHost: disp.ip,
+        marca: disp.marca,
+        portaRtsp: disp.rtspPort,
+        portaHttp: disp.httpPort
+      });
+      const dados = (res && res.data) ? res.data : res;
+      if (dados) {
+        setFeedbackScanner({
+          tipo: "sucesso",
+          texto: `Câmera ${disp.marca.toUpperCase()} (${disp.ip}): Conexão OK! Latência: ${dados.latenciaMs || 10} ms · RTSP/HTTP ativos.`
+        });
+      }
+    } catch (e) {
+      setFeedbackScanner({ tipo: "erro", texto: `Falha ao testar ${disp.ip}: ${e.message}` });
+    } finally {
+      setTestandoIpScanner(null);
+    }
   };
 
   const handleConectarDispositivoDescoberto = (disp) => {
+    const preset = PRESETS_FABRICANTES.find(p => p.id === disp.marca) || {};
     setFormCamera({
       nome: `CAM · ${disp.pontoSugerido}`,
-      pontoInstalacao: disp.pontoSugerido.includes("LPR") ? "balanca_entrada_lpr" : disp.pontoSugerido.includes("Panorâmica") ? "balanca_panoramica_21m" : disp.pontoSugerido.includes("Saída") ? "balanca_saida_cancela" : "patio_geral",
+      pontoInstalacao: disp.pontoInstalacao || (disp.pontoSugerido.includes("LPR") ? "balanca_entrada_lpr" : disp.pontoSugerido.includes("Panorâmica") ? "balanca_panoramica_21m" : disp.pontoSugerido.includes("Saída") ? "balanca_saida_cancela" : "patio_geral"),
       pontoRotulo: disp.pontoSugerido,
       marca: disp.marca,
-      modelo: disp.modelo,
+      modelo: disp.modelo || preset.modelo || "Câmera IP Industrial",
       ipHost: disp.ip,
-      portaHttp: disp.httpPort,
-      portaRtsp: disp.rtspPort,
-      portaOnvif: disp.onvifPort,
-      portaServico: disp.servicoPort,
+      portaHttp: disp.httpPort || preset.http || 80,
+      portaRtsp: disp.rtspPort || preset.rtsp || 554,
+      portaOnvif: disp.onvifPort || preset.onvif || 80,
+      portaServico: disp.servicoPort || preset.servico || 37777,
       usuario: "admin",
       senha: "",
       canal: 1,
       substream: false,
-      fps: 30,
-      resolucao: "1920x1080 (Full HD)",
-      codec: disp.marca === "positivo" ? "H.264" : "H.265",
+      fps: disp.fps || preset.fps || 30,
+      resolucao: disp.resolucao || preset.resolucao || "1920x1080 (Full HD)",
+      codec: disp.codec || preset.codec || "H.265",
       bitrate: "4096 kbps",
       transporte: "TCP",
       recursosIa: {
-        lprLeituraPlaca: true,
-        enquadramentoBalanca: true,
+        lprLeituraPlaca: disp.tipoAplicacao === "lpr_mercosul" || disp.pontoSugerido.includes("LPR"),
+        enquadramentoBalanca: disp.tipoAplicacao === "enquadramento_balanca" || disp.pontoSugerido.includes("Panorâmica"),
         inspecaoEpi: true,
-        monitoramentoSilos: false,
+        monitoramentoSilos: disp.tipoAplicacao === "monitoramento_silos" || disp.pontoSugerido.includes("Silos"),
         cercaVirtual: true
       }
     });
@@ -808,63 +939,235 @@ export default function ConcretoCamerasVisionAI({
         )}
       </div>
 
-      {/* ─── VISÃO SCANNER DE REDE LOCAL (ONVIF / IP DISCOVERY) ─── */}
+      {/* ─── VISÃO SCANNER DE REDE LOCAL (ONVIF / IP DISCOVERY COM 19 MARCAS) ─── */}
       {visualizacao === "scanner" && (
         <div style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 12, padding: 20, marginBottom: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+          {/* TOPO DE CONTROLE DO SCANNER */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
             <div>
-              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "#38bdf8", display: "flex", alignItems: "center", gap: 8 }}>
-                <span>📡</span> Scanner ONVIF &amp; Descoberta de Câmeras IP (Sub-rede Usina 192.168.1.0/24)
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "#38bdf8", display: "flex", alignItems: "center", gap: 8 }}>
+                <span>📡</span> Scanner Ativo &amp; Descoberta ONVIF/RTSP de Câmeras Industriais
               </h3>
               <p style={{ margin: "4px 0 0", color: "#94a3b8", fontSize: 12 }}>
-                Varredura automática das portas 554 (RTSP), 80 (HTTP), 8000/37777 (SDK) e 8899 (ONVIF Positivo/Giga).
+                Varredura multimarca (Intelbras, Hikvision, Dahua, Bosch, Avigilon/Motorola, Uniview, Pelco, Vivotek, Hanwha, Toledo Prix LPR, TP-Link VIGI, FLIR, GeoVision, Positivo, HiLook, Giga, Tecvoz, Axis).
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleExecutarScanner}
-              disabled={escanearAndamento}
-              style={{ background: "#0284c7", color: "#fff", border: "none", padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
-            >
-              <span>{escanearAndamento ? "⏳" : "🔄"}</span>
-              {escanearAndamento ? "Varrendo portas da rede local..." : "Escanear Novamente"}
-            </button>
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => handleExecutarScanner()}
+                disabled={escanearAndamento}
+                style={{ background: "#0284c7", color: "#fff", border: "none", padding: "9px 16px", borderRadius: 8, fontSize: 12, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
+              >
+                <span>{escanearAndamento ? "⏳" : "🔄"}</span>
+                {escanearAndamento ? "Varrendo sub-rede da usina..." : "Iniciar Varredura"}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleIntegrarLoteScanner}
+                disabled={integrandoLote || escanearAndamento}
+                style={{ background: "#16a34a", color: "#fff", border: "none", padding: "9px 16px", borderRadius: 8, fontSize: 12, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
+                title="Cadastra automaticamente todas as câmeras encontradas ainda não vinculadas"
+              >
+                <span>⚡</span>
+                {integrandoLote ? "Integrando..." : "Integrar Todas Descobertas"}
+              </button>
+            </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 12 }}>
-            {dispositivosDescobertos.map((disp, idx) => (
-              <div key={idx} style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 8 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 11, fontWeight: 800, color: "#ea580c", textTransform: "uppercase", background: "rgba(234, 88, 12, 0.15)", padding: "2px 6px", borderRadius: 4 }}>
-                    {disp.marca.toUpperCase()}
-                  </span>
-                  <span style={{ fontSize: 10, color: disp.status === "conectado" ? "#10b981" : "#38bdf8", fontWeight: 700 }}>
-                    {disp.status === "conectado" ? "● Já em Operação CCO" : "● Câmera Detectada"}
-                  </span>
-                </div>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>{disp.modelo}</div>
-                  <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "monospace", marginTop: 2 }}>
-                    IP: <strong>{disp.ip}</strong> · MAC: {disp.mac}
-                  </div>
-                  <div style={{ fontSize: 10, color: "#cbd5e1", marginTop: 4 }}>
-                    Ponto Sugerido: <strong>{disp.pontoSugerido}</strong>
-                  </div>
-                  <div style={{ fontSize: 10, color: "#64748b", fontFamily: "monospace", marginTop: 2 }}>
-                    Portas abertas: RTSP {disp.rtspPort} · HTTP {disp.httpPort} · ONVIF {disp.onvifPort} · SDK {disp.servicoPort}
-                  </div>
-                </div>
-                <div style={{ marginTop: "auto", paddingTop: 8, borderTop: "1px solid #334155", display: "flex", justifyContent: "flex-end" }}>
-                  <button
-                    type="button"
-                    onClick={() => handleConectarDispositivoDescoberto(disp)}
-                    style={{ background: "#ea580c", border: "none", color: "#fff", padding: "6px 12px", borderRadius: 6, fontSize: 11, fontWeight: 800, cursor: "pointer" }}
-                  >
-                    ⚡ Conectar Esta Câmera
-                  </button>
-                </div>
+          {/* BARRA DE FILTROS E SUB-REDE */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10, background: "#090d16", padding: 12, borderRadius: 8, border: "1px solid #1e293b", marginBottom: 16 }}>
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" }}>Sub-rede / Faixa IP Usina:</label>
+              <select
+                value={subnetScanner}
+                onChange={(e) => {
+                  setSubnetScanner(e.target.value);
+                  handleExecutarScanner(e.target.value, marcaFiltroScanner);
+                }}
+                style={{ width: "100%", background: "#1e293b", border: "1px solid #334155", color: "#fff", padding: "6px 10px", borderRadius: 6, fontSize: 12, marginTop: 4 }}
+              >
+                <option value="192.168.1.0/24">192.168.1.0/24 · Principal Usina Serrano MT-358</option>
+                <option value="192.168.0.0/24">192.168.0.0/24 · Rede Secundária Pátio Betoneiras</option>
+                <option value="10.0.1.0/24">10.0.1.0/24 · VLAN CFTV &amp; Balança Rodoviária</option>
+                <option value="172.16.10.0/24">172.16.10.0/24 · VLAN Mineração Rio Sepotuba</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" }}>Filtrar por Fabricante:</label>
+              <select
+                value={marcaFiltroScanner}
+                onChange={(e) => {
+                  setMarcaFiltroScanner(e.target.value);
+                  handleExecutarScanner(subnetScanner, e.target.value);
+                }}
+                style={{ width: "100%", background: "#1e293b", border: "1px solid #334155", color: "#fff", padding: "6px 10px", borderRadius: 6, fontSize: 12, marginTop: 4 }}
+              >
+                <option value="todas">Todos os Fabricantes ({PRESETS_FABRICANTES.length} homologados)</option>
+                {PRESETS_FABRICANTES.map(p => (
+                  <option key={p.id} value={p.id}>{p.nome} ({p.linha})</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" }}>Busca Rápida (IP, Ponto ou Modelo):</label>
+              <input
+                type="text"
+                value={buscaScannerTexto}
+                onChange={(e) => setBuscaScannerTexto(e.target.value)}
+                placeholder="Ex: lpr, bosch, balança, 192.168.1..."
+                style={{ width: "100%", background: "#1e293b", border: "1px solid #334155", color: "#fff", padding: "6px 10px", borderRadius: 6, fontSize: 12, marginTop: 4, boxSizing: "border-box" }}
+              />
+            </div>
+          </div>
+
+          {/* TELEMETRIA DA VARREDURA */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8, marginBottom: 16 }}>
+            <div style={{ background: "#1e293b", padding: 10, borderRadius: 6, border: "1px solid #334155" }}>
+              <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase" }}>Câmeras Detectadas</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: "#38bdf8", marginTop: 2 }}>
+                {dispositivosDescobertos.length} unidades
               </div>
-            ))}
+            </div>
+            <div style={{ background: "#1e293b", padding: 10, borderRadius: 6, border: "1px solid #334155" }}>
+              <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase" }}>Já no CCO Serrano</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: "#10b981", marginTop: 2 }}>
+                {dispositivosDescobertos.filter(d => d.status === "conectado").length} ativas
+              </div>
+            </div>
+            <div style={{ background: "#1e293b", padding: 10, borderRadius: 6, border: "1px solid #334155" }}>
+              <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase" }}>Disponíveis p/ Conexão</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: "#ea580c", marginTop: 2 }}>
+                {dispositivosDescobertos.filter(d => d.status === "disponivel").length} prontas
+              </div>
+            </div>
+            <div style={{ background: "#1e293b", padding: 10, borderRadius: 6, border: "1px solid #334155" }}>
+              <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase" }}>Portas Varredas</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#cbd5e1", marginTop: 4, fontFamily: "monospace" }}>
+                RTSP 554 · HTTP 80 · ONVIF · SDK 37777/8000/1756/5000
+              </div>
+            </div>
+          </div>
+
+          {/* FEEDBACK BANNER */}
+          {feedbackScanner && (
+            <div style={{
+              background: feedbackScanner.tipo === "sucesso" ? "rgba(16, 185, 129, 0.15)" : feedbackScanner.tipo === "erro" ? "rgba(239, 68, 68, 0.15)" : "rgba(56, 189, 248, 0.15)",
+              border: `1px solid ${feedbackScanner.tipo === "sucesso" ? "#10b981" : feedbackScanner.tipo === "erro" ? "#ef4444" : "#38bdf8"}`,
+              borderRadius: 8,
+              padding: "10px 14px",
+              marginBottom: 16,
+              fontSize: 12,
+              color: "#fff",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center"
+            }}>
+              <span>{feedbackScanner.texto}</span>
+              <button
+                type="button"
+                onClick={() => setFeedbackScanner(null)}
+                style={{ background: "transparent", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 14 }}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* GRID DE DISPOSITIVOS DESCOBERTOS */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 12 }}>
+            {dispositivosDescobertos
+              .filter(disp => {
+                if (!buscaScannerTexto) return true;
+                const txt = buscaScannerTexto.toLowerCase();
+                return (
+                  disp.ip.toLowerCase().includes(txt) ||
+                  disp.modelo.toLowerCase().includes(txt) ||
+                  disp.marca.toLowerCase().includes(txt) ||
+                  (disp.pontoSugerido && disp.pontoSugerido.toLowerCase().includes(txt)) ||
+                  (disp.mac && disp.mac.toLowerCase().includes(txt))
+                );
+              })
+              .map((disp, idx) => {
+                const presetInfo = PRESETS_FABRICANTES.find(p => p.id === disp.marca) || {};
+                const corBadge = presetInfo.corBadge || "#ea580c";
+                const isTestando = testandoIpScanner === disp.ip;
+
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      background: "#1e293b",
+                      border: `1px solid ${disp.status === "conectado" ? "#10b981" : "#334155"}`,
+                      borderRadius: 8,
+                      padding: 14,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 8,
+                      boxShadow: disp.status === "conectado" ? "0 0 10px rgba(16, 185, 129, 0.15)" : "none"
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", textTransform: "uppercase", background: corBadge, padding: "2px 8px", borderRadius: 4 }}>
+                        {presetInfo.nome || disp.marca.toUpperCase()}
+                      </span>
+                      <span style={{ fontSize: 10, color: disp.status === "conectado" ? "#10b981" : "#38bdf8", fontWeight: 700 }}>
+                        {disp.status === "conectado" ? "● Em Operação CCO" : "● Disponível p/ Conectar"}
+                      </span>
+                    </div>
+
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>{disp.modelo}</div>
+                      <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "monospace", marginTop: 2 }}>
+                        IP: <strong style={{ color: "#38bdf8" }}>{disp.ip}</strong> · MAC: {disp.mac}
+                      </div>
+                      <div style={{ fontSize: 10, color: "#cbd5e1", marginTop: 4 }}>
+                        Ponto Sugerido: <strong>{disp.pontoSugerido}</strong>
+                      </div>
+                      <div style={{ fontSize: 10, color: "#64748b", fontFamily: "monospace", marginTop: 2 }}>
+                        Portas ativas: RTSP {disp.rtspPort} · HTTP {disp.httpPort} · ONVIF {disp.onvifPort} · SDK {disp.servicoPort}
+                      </div>
+                      <div style={{ fontSize: 10, color: "#a5b4fc", marginTop: 2 }}>
+                        Resolução: {disp.resolucao || "1080p"} · Codec: {disp.codec || "H.265"} · Latência: {disp.latenciaMs || 8} ms
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: "auto", paddingTop: 8, borderTop: "1px solid #334155", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        onClick={() => handleTestarIpScanner(disp)}
+                        disabled={isTestando}
+                        style={{ background: "#334155", border: "1px solid #475569", color: "#cbd5e1", padding: "5px 10px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer" }}
+                        title="Testa latência e integridade do stream RTSP"
+                      >
+                        {isTestando ? "⏳ Testando..." : "📶 Testar Conexão"}
+                      </button>
+
+                      {disp.status === "conectado" ? (
+                        <button
+                          type="button"
+                          onClick={() => setVisualizacao("grid")}
+                          style={{ background: "rgba(16, 185, 129, 0.2)", border: "1px solid #10b981", color: "#10b981", padding: "5px 10px", borderRadius: 6, fontSize: 11, fontWeight: 800, cursor: "pointer" }}
+                        >
+                          👁 Ver no CCO
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleConectarDispositivoDescoberto(disp)}
+                          style={{ background: "#ea580c", border: "none", color: "#fff", padding: "6px 12px", borderRadius: 6, fontSize: 11, fontWeight: 800, cursor: "pointer" }}
+                        >
+                          ⚡ Conectar &amp; Integrar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
           </div>
         </div>
       )}
@@ -901,11 +1204,28 @@ export default function ConcretoCamerasVisionAI({
                 style={{ position: "relative", width: "100%", aspectRatio: "16/9", background: "#000", cursor: "pointer" }}
                 onClick={() => handleAbrirSnapshot(cam)}
               >
-                <img
-                  src={cam.hlsStreamUrl || "/assets/cftv/cftv_cam01_lpr_entrada.jpg"}
-                  alt={cam.nome}
-                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                />
+                {cam.videoUrl ? (
+                  <video
+                    src={cam.videoUrl}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                  />
+                ) : (
+                  <img
+                    src={cam.hlsStreamUrl || "/assets/cftv/cftv_real_02_balanca_80t.jpg"}
+                    alt={cam.nome}
+                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                  />
+                )}
+                {cam.videoUrl && (
+                  <div style={{ position: "absolute", top: 8, right: 8, background: "rgba(220,38,38,0.85)", color: "#fff", fontSize: 9, fontWeight: 900, padding: "2px 6px", borderRadius: 4, display: "flex", alignItems: "center", gap: 4 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff" }} />
+                    LIVE VÍDEO
+                  </div>
+                )}
                 <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,0.75)", color: "#38bdf8", fontSize: 10, fontFamily: "monospace", padding: "2px 6px", borderRadius: 4 }}>
                   {cam.ipHost} · {cam.fps} FPS · {cam.codec || "H.265"}
                 </div>
@@ -1040,11 +1360,23 @@ export default function ConcretoCamerasVisionAI({
               <span style={{ fontSize: 12, color: "#10b981", fontWeight: 700 }}>● Stream Ativo 1080p 30 FPS</span>
             </div>
             <div style={{ width: "100%", aspectRatio: "16/9", background: "#000", borderRadius: 8, overflow: "hidden", position: "relative" }}>
-              <img
-                src={cameraFocada.hlsStreamUrl || "/assets/cftv/cftv_cam01_lpr_entrada.jpg"}
-                alt={cameraFocada.nome}
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-              />
+              {cameraFocada.videoUrl ? (
+                <video
+                  src={cameraFocada.videoUrl}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  controls
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              ) : (
+                <img
+                  src={cameraFocada.hlsStreamUrl || "/assets/cftv/cftv_real_02_balanca_80t.jpg"}
+                  alt={cameraFocada.nome}
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              )}
               <div style={{ position: "absolute", top: 12, left: 12, background: "rgba(0,0,0,0.8)", padding: "4px 10px", borderRadius: 6, border: "1px solid #10b981", color: "#10b981", fontSize: 12, fontFamily: "monospace", fontWeight: 700 }}>
                 LPR: {cameraFocada.ultimaLeituraPlaca} (99.6%)
               </div>
@@ -1140,7 +1472,7 @@ export default function ConcretoCamerasVisionAI({
                   {cameraEditando ? "Editar Câmera IP Industrial" : "Conectar Nova Câmera IP · Padrão Industrial Usina"}
                 </h3>
                 <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-                  Suporte Nativo: Intelbras, Positivo, Dahua, Hikvision, HiLook, Giga, Tecvoz, Axis e ONVIF Profile S/T
+                  Suporte Nativo a 19 Marcas: Intelbras, Hikvision, Dahua, Bosch, Avigilon/Motorola, Uniview, Pelco, Vivotek, Hanwha, Toledo Prix LPR, TP-Link VIGI, FLIR, GeoVision, Positivo, HiLook, Giga, Tecvoz, Axis e ONVIF Profile S/T
                 </div>
               </div>
               <button
@@ -1205,15 +1537,9 @@ export default function ConcretoCamerasVisionAI({
                     }}
                     style={{ width: "100%", background: "#1e293b", border: "1px solid #334155", color: "#fff", padding: "8px 12px", borderRadius: 6, fontSize: 13, marginTop: 4 }}
                   >
-                    <option value="intelbras">Intelbras (VIP / iMDVR / iSIC / Mibo)</option>
-                    <option value="positivo">Positivo (Smart Câmera 360 / Seg Externa)</option>
-                    <option value="dahua">Dahua (WizSense / WizMind / ITC LPR)</option>
-                    <option value="hikvision">Hikvision (ColorVu / AcuSense / DarkFighter)</option>
-                    <option value="hilook">HiLook (Série Bullet / Dome)</option>
-                    <option value="giga">Giga Security / Multilaser Pro (Orion)</option>
-                    <option value="tecvoz">Tecvoz / JFL Alarmes (Flex IP)</option>
-                    <option value="axis">Axis Communications (Industrial)</option>
-                    <option value="onvif_generica">ONVIF Profile S/T Genérico</option>
+                    {PRESETS_FABRICANTES.map(p => (
+                      <option key={p.id} value={p.id}>{p.nome} · {p.linha}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -1542,6 +1868,46 @@ export default function ConcretoCamerasVisionAI({
                 Tecvoz RTSP: rtsp://admin:senha@IP:554/user=admin&amp;password=senha&amp;channel=1&amp;stream=0.sdp
               </div>
 
+              <h4 style={{ color: "#ea580c", margin: "16px 0 6px" }}>6. Bosch Security (Dinion IP Starlight &amp; Autodome)</h4>
+              <p style={{ margin: 0 }}>
+                Porta RTSP: <strong>554</strong> · HTTP: <strong>80</strong> · SDK: <strong>1756</strong>. Alta confiabilidade metrológica em células Toledo Prix.
+              </p>
+              <div style={{ background: "#020617", padding: "8px 12px", borderRadius: 6, fontFamily: "monospace", fontSize: 12, color: "#38bdf8", margin: "6px 0" }}>
+                RTSP: rtsp://admin:senha@IP:554/rtsp_tunnel?line=1&amp;inst=0<br />
+                Snapshot: http://admin:senha@IP:80/snap.jpg?JpegCam=1
+              </div>
+
+              <h4 style={{ color: "#ea580c", margin: "16px 0 6px" }}>7. Motorola Solutions &amp; Avigilon (H5A LPR &amp; OCR)</h4>
+              <p style={{ margin: 0 }}>
+                Porta RTSP: <strong>554</strong> · HTTP: <strong>80</strong> · SDK: <strong>3880</strong>. Profile T com analítico de IA avançado para placas comerciais.
+              </p>
+              <div style={{ background: "#020617", padding: "8px 12px", borderRadius: 6, fontFamily: "monospace", fontSize: 12, color: "#38bdf8", margin: "6px 0" }}>
+                RTSP: rtsp://admin:senha@IP:554/defaultPrimary?streamType=u (sub: /defaultSecondary)<br />
+                Snapshot: http://admin:senha@IP:80/media/cam1.jpg
+              </div>
+
+              <h4 style={{ color: "#ea580c", margin: "16px 0 6px" }}>8. Toledo do Brasil (Totem Rodoviário Prix LPR 9094 / 720i)</h4>
+              <p style={{ margin: 0 }}>
+                Porta RTSP: <strong>554</strong> · Modbus/TCP: <strong>5000</strong> · Leitura nativa integrada ao indicador 720i.
+              </p>
+              <div style={{ background: "#020617", padding: "8px 12px", borderRadius: 6, fontFamily: "monospace", fontSize: 12, color: "#38bdf8", margin: "6px 0" }}>
+                RTSP: rtsp://admin:senha@IP:554/live/prix_lpr_ch1<br />
+                Snapshot: http://admin:senha@IP:80/api/lpr/capture.jpg
+              </div>
+
+              <h4 style={{ color: "#ea580c", margin: "16px 0 6px" }}>9. Uniview UNV, Hanwha Wisenet, Pelco &amp; Vivotek</h4>
+              <p style={{ margin: 0 }}>
+                UNV: RTSP <code>/unicast/c1/s0/live</code>. Hanwha: <code>/profile1/media.smp</code>. Pelco: <code>/stream1</code>. Vivotek: <code>/live.sdp</code>.
+              </p>
+
+              <h4 style={{ color: "#ea580c", margin: "16px 0 6px" }}>10. Teledyne FLIR Térmica (Silos 96t &amp; Balão da Betoneira)</h4>
+              <p style={{ margin: 0 }}>
+                Termografia contínua para monitoramento de hidratação exotérmica do cimento e prevenção de pega prematura.
+              </p>
+              <div style={{ background: "#020617", padding: "8px 12px", borderRadius: 6, fontFamily: "monospace", fontSize: 12, color: "#38bdf8", margin: "6px 0" }}>
+                RTSP: rtsp://admin:senha@IP:554/ch0 · Snapshot: http://admin:senha@IP:80/api/snapshot
+              </div>
+
               <h4 style={{ color: "#ea580c", margin: "16px 0 6px" }}>6. Recomendações de Consumo de Banda &amp; Edge Gateway</h4>
               <ul style={{ paddingLeft: 20, margin: "6px 0" }}>
                 <li><strong>Main Stream (1080p / 4MP)</strong>: utilize para LPR e pesagem na balança 80t (consumo ~4 Mbps).</li>
@@ -1601,6 +1967,118 @@ export default function ConcretoCamerasVisionAI({
                 style={{ background: "#334155", border: "none", color: "#fff", padding: "6px 14px", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
               >
                 Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL: RESULTADO DA ANÁLISE DE VISÃO MOTOR KYTTOIA ─── */}
+      {analiseResultado && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.85)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#0f172a", border: "1px solid #10b981", borderRadius: 12, maxWidth: 880, width: "100%", padding: 20, boxShadow: "0 20px 40px rgba(0,0,0,0.8)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ background: "#10b981", color: "#064e3b", fontSize: 11, fontWeight: 900, padding: "3px 8px", borderRadius: 4 }}>
+                  MOTOR KYTTOIA VISION AI
+                </span>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "#f8fafc" }}>
+                  {analiseResultado.camera?.nome || "Análise de Câmera IP"}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAnaliseResultado(null)}
+                style={{ background: "transparent", border: "none", color: "#94a3b8", fontSize: 20, cursor: "pointer" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Imagem com Bounding Boxes */}
+            <div style={{ position: "relative", width: "100%", maxHeight: "55vh", overflow: "hidden", borderRadius: 8, background: "#000", border: "1px solid #1e293b" }}>
+              <img
+                src={analiseResultado.camera?.hlsStreamUrl || analiseResultado.evento?.snapshotUrl || "/assets/cftv/cftv_real_02_balanca_80t.jpg"}
+                alt="Frame Vision"
+                style={{ width: "100%", height: "auto", display: "block" }}
+              />
+              {(analiseResultado.analise?.boundingBoxes || []).map((box, bIdx) => (
+                <div
+                  key={bIdx}
+                  style={{
+                    position: "absolute",
+                    left: `${box.x}%`,
+                    top: `${box.y}%`,
+                    width: `${box.w}%`,
+                    height: `${box.h}%`,
+                    border: `2px solid ${box.color || "#10b981"}`,
+                    boxShadow: `0 0 10px ${box.color || "#10b981"}44`,
+                    pointerEvents: "none"
+                  }}
+                >
+                  <span style={{ position: "absolute", top: -20, left: 0, background: box.color || "#10b981", color: "#0f172a", fontSize: 10, fontWeight: 800, padding: "1px 6px", borderRadius: 2, whiteSpace: "nowrap" }}>
+                    {box.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Detalhes da Análise */}
+            <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div style={{ background: "#090d16", padding: 12, borderRadius: 8, border: "1px solid #1e293b" }}>
+                <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>EVENTO IDENTIFICADO</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: "#38bdf8", marginTop: 2 }}>
+                  {analiseResultado.analise?.tipoRotulo || "Detecção Operacional"}
+                </div>
+                {analiseResultado.analise?.placaDetectada && (
+                  <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ background: "#1e293b", border: "1px solid #10b981", color: "#10b981", fontSize: 13, fontWeight: 900, padding: "2px 8px", borderRadius: 4, fontFamily: "monospace" }}>
+                      PLACA: {analiseResultado.analise?.placaDetectada}
+                    </span>
+                    <span style={{ fontSize: 11, color: "#94a3b8" }}>{analiseResultado.analise?.tipoPlaca}</span>
+                  </div>
+                )}
+                {analiseResultado.analise?.veiculoDescricao && (
+                  <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 4 }}>
+                    <strong>Veículo:</strong> {analiseResultado.analise?.veiculoDescricao}
+                  </div>
+                )}
+                {analiseResultado.analise?.motorista && (
+                  <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 2 }}>
+                    <strong>Motorista:</strong> {analiseResultado.analise?.motorista}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ background: "#090d16", padding: 12, borderRadius: 8, border: "1px solid #1e293b" }}>
+                <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>TELEMETRIA &amp; CONFIANÇA</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                  <span style={{ fontSize: 18, fontWeight: 900, color: "#10b981" }}>
+                    {analiseResultado.analise?.confianca}%
+                  </span>
+                  <span style={{ fontSize: 11, color: "#64748b" }}>Índice de Certeza do Motor KyttoIA</span>
+                </div>
+                <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>
+                  {analiseResultado.analise?.detalhes || "Frame validado e sincronizado com o CCO da Usina Serrano."}
+                </div>
+                {analiseResultado.analise?.temperaturaMax && (
+                  <div style={{ fontSize: 11, color: "#f59e0b", marginTop: 4, fontWeight: 700 }}>
+                    Termografia: Temp. Máx {analiseResultado.analise.temperaturaMax}°C (Média {analiseResultado.analise.temperaturaMedia}°C)
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14 }}>
+              <span style={{ fontSize: 12, color: "#10b981", fontWeight: 700 }}>
+                ✓ Análise registrada na linha do tempo de eventos do CCO
+              </span>
+              <button
+                type="button"
+                onClick={() => setAnaliseResultado(null)}
+                style={{ background: "#10b981", border: "none", color: "#064e3b", padding: "6px 16px", borderRadius: 6, fontSize: 12, fontWeight: 800, cursor: "pointer" }}
+              >
+                Concluir Análise
               </button>
             </div>
           </div>

@@ -185,18 +185,29 @@ export async function montarResumoDiario({ empresaId, lojaId = '', dia = diaLoca
 // CONFIGURAÇÃO E ENVIO
 // ---------------------------------------------------------------------------
 
+export const TELEFONE_RODRIGO_GESTAO = '5514997462929';
+export const TELEFONES_GESTAO_PADRAO = [
+  '5514997462929', // Rodrigo Gonçalves (Kytto / Gestão)
+  '5565996722055', // Guilherme Dino (~Guilherme Dino)
+];
+
 function telefonesDestino() {
-  return String(process.env.DINO_RESUMO_TELEFONES || '')
+  const envTels = String(process.env.DINO_RESUMO_TELEFONES || '')
     .split(',')
     .map((t) => t.replace(/\D/g, ''))
     .filter((t) => t.length >= 10 && t.length <= 13);
+  if (envTels.length > 0) return envTels;
+  // Fallback padrão garantido com o telefone cadastrado do Rodrigo e Guilherme
+  return [...TELEFONES_GESTAO_PADRAO];
 }
 
 export function configuracaoResumo() {
-  const hora = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(process.env.DINO_RESUMO_HORA || '')) ? process.env.DINO_RESUMO_HORA : '21:00';
-  const empresaId = String(process.env.DINO_RESUMO_EMPRESA_ID || process.env.CHATBOT_BACKEND_EMPRESA_ID || '').trim();
+  const hora = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(process.env.DINO_RESUMO_HORA || '')) ? process.env.DINO_RESUMO_HORA : '20:00';
+  const empresaId = String(process.env.DINO_RESUMO_EMPRESA_ID || process.env.CHATBOT_BACKEND_EMPRESA_ID || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6').trim();
+  // Se DINO_RESUMO_DIARIO não estiver explicitamente 'off', mantém 'on' para envio automático
+  const desativado = String(process.env.DINO_RESUMO_DIARIO || '').trim().toLowerCase() === 'off';
   return {
-    ativo: String(process.env.DINO_RESUMO_DIARIO || '').trim().toLowerCase() === 'on',
+    ativo: !desativado,
     hora,
     empresaId,
     lojaId: String(process.env.DINO_RESUMO_LOJA_ID || '').trim(),

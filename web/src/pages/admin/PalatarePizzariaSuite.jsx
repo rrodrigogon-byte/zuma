@@ -371,8 +371,31 @@ export default function PalatarePizzariaSuite() {
     setClienteModalWhats(null);
   };
 
+  // Síntese de Alerta Sonoro Nativo para KDS (Web Audio API - Onda 2)
+  const tocarAlertaSonoroKds = () => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(659.25, ctx.currentTime);
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.45);
+    } catch (e) {
+      // Ignorar restrições de autoplay
+    }
+  };
+
   // Avançar status no KDS
   const handleAvancarKds = async (pedidoId, statusAtual) => {
+    tocarAlertaSonoroKds();
     let proximoStatus = 'no_forno';
     let proximaPraca = 'Forno a Lenha (400°C)';
     if (statusAtual === 'na_bancada') {
@@ -1363,7 +1386,18 @@ export default function PalatarePizzariaSuite() {
               </a>
               <button
                 type="button"
-                onClick={carregarDados}
+                onClick={tocarAlertaSonoroKds}
+                style={{ background: 'rgba(245, 158, 11, 0.2)', color: '#FBBF24', border: '1px solid rgba(245, 158, 11, 0.4)', padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                title="Emitir sinal acústico de comanda no forno"
+              >
+                🔔 Testar Sinal Acústico KDS
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  carregarDados();
+                  tocarAlertaSonoroKds();
+                }}
                 style={{ background: 'rgba(255,255,255,0.08)', color: '#FFF', border: 'none', padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
               >
                 <RefreshCw size={14} /> Atualizar Fila

@@ -7,6 +7,10 @@ import {
   ADQUIRENTES_BRASIL,
   BANDEIRAS_BRASIL,
   CONFIGURACAO_PADRAO_DINO,
+  CONFIGURACAO_PADRAO_STALLONE,
+  EMPRESA_STALLONE_ID,
+  restaurarPadraoStallone,
+  obterDadosFiscaisNfeCard,
   obterConfiguracoesTef,
   salvarConfiguracoesTef,
   listarTerminaisTef,
@@ -84,6 +88,19 @@ export function createTefRouter({ obterEmpresaId }) {
     res.json({ ok: true, config, mensagem: 'Configurações oficiais da Barbearia Dino restauradas com sucesso.' });
   });
 
+  // Restaurar padrões oficiais da Stallone Nutre Sport
+  router.post('/restaurar-padrao-stallone', (req, res) => {
+    const empresaId = resolverEmpresa(req) || EMPRESA_STALLONE_ID;
+    const config = restaurarPadraoStallone(empresaId);
+    res.json({ ok: true, config, mensagem: 'Configurações oficiais do TEF da Stallone Nutre Sport restauradas com sucesso.' });
+  });
+  router.post('/configurar-padrao-stallone', (req, res) => {
+    const empresaId = resolverEmpresa(req) || EMPRESA_STALLONE_ID;
+    const config = restaurarPadraoStallone(empresaId);
+    res.json({ ok: true, config, mensagem: 'Configurações oficiais do TEF da Stallone Nutre Sport restauradas com sucesso.' });
+  });
+
+
   // Gestão de Terminais Pinpad
   router.get('/terminais', (req, res) => {
     const empresaId = resolverEmpresa(req);
@@ -124,7 +141,8 @@ export function createTefRouter({ obterEmpresaId }) {
   router.post('/terminais/:id/testar-conexao', (req, res) => {
     try {
       const empresaId = resolverEmpresa(req);
-      const resultado = testarConexaoTerminal(empresaId, req.params.id);
+      const opcoes = req.body || {};
+      const resultado = testarConexaoTerminal(empresaId, req.params.id, opcoes);
       res.json({ ok: true, ...resultado });
     } catch (err) {
       res.status(400).json({ ok: false, erro: err.message });
@@ -135,7 +153,11 @@ export function createTefRouter({ obterEmpresaId }) {
   router.get('/transacoes', (req, res) => {
     const empresaId = resolverEmpresa(req);
     const transacoes = listarTransacoesTef(empresaId, req.query);
-    res.json({ ok: true, total: transacoes.length, transacoes });
+    const enriquecidas = transacoes.map((t) => ({
+      ...t,
+      dadosFiscaisNfe: obterDadosFiscaisNfeCard(t),
+    }));
+    res.json({ ok: true, total: enriquecidas.length, transacoes: enriquecidas });
   });
 
   // Excluir transação TEF específica
@@ -196,7 +218,8 @@ export function createTefRouter({ obterEmpresaId }) {
       res.status(201).json({
         ok: true,
         mensagem: 'Transação TEF autorizada com sucesso pela adquirente.',
-        transacao
+        transacao,
+        dadosFiscaisNfe: obterDadosFiscaisNfeCard(transacao)
       });
     } catch (err) {
       res.status(500).json({ ok: false, erro: err.message });

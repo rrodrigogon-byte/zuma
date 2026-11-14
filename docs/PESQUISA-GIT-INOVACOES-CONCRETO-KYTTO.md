@@ -10,7 +10,7 @@
 ## 1. Contexto e Motivação
 A operação de fornecimento de concreto usinado e mineração de agregados exige rigor técnico extremo, abrangendo desde a formulação estequiométrica dos traços (ABNT NBR 7212 e NBR 12655), pesagem automatizada em balança rodoviária de 80t, despacho logístico perecível com tempo máximo de pega de 150 minutos, até o controle tecnológico de ruptura em prensa eletro-hidráulica (NBR 5739).
 
-A partir de pesquisa aprofundada em repositórios abertos no GitHub, artigos científicos e sistemas líderes globais de dosagem e despacho (Command Alkon, Jonel, Sysdyne, Marcotte e Liebherr), identificamos as melhores práticas, algoritmos e arquiteturas de software livre que podem ser adaptados e incorporados diretamente ao Kytto ERP.
+A partir de pesquisa aprofundada em repositórios abertos no GitHub, artigos científicos e sistemas líderes globais de dosagem e despacho (normas internacionais e boas práticas industriais de dosagem), identificamos as melhores práticas, algoritmos e arquiteturas de software livre que podem ser adaptados e incorporados diretamente ao Kytto ERP.
 
 ---
 

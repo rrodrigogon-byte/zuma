@@ -114,7 +114,7 @@ import {
   STICKERS_RESTRITAS,
 } from './whatsapp-ai-persona.js';
 import { bubbleDelayMs, splitBubbles, styleModelText } from './whatsapp-ai-style.js';
-import { agendaCalendarText, buildAppAndBookingPromptReply, detectAppOrSelfBookingRequest, ensureToolLinks, extractFastScheduleChoice, fixWeekdayMistakes, obterLinkAgendaDino, serviceWithProfessional, toolMoneyValues, unbackedPrices, withSelfBookingAgendaOption } from './whatsapp-ai-normalize.js';
+import { agendaCalendarText, buildAppAndBookingPromptReply, detectAppOrSelfBookingRequest, detectDinoQuickFaq, ensureToolLinks, extractFastScheduleChoice, fixWeekdayMistakes, obterLinkAgendaDino, serviceWithProfessional, toolMoneyValues, unbackedPrices, withSelfBookingAgendaOption } from './whatsapp-ai-normalize.js';
 import { enviarFigurinha as enviarFigurinhaPersona, figurinhaDisponivel, figurinhaSuportada } from './whatsapp-figurinhas.js';
 import { mapWhatsappAiProviderLatency24h, WHATSAPP_AI_PROVIDER_RUNS_24H_CHANNEL_SQL } from './whatsapp-ai-provider-metrics.js';
 
@@ -420,7 +420,7 @@ export function buildWhatsappAiSystemPrompt({
   const profileData = customerProfile ? JSON.stringify(customerProfile) : '{"consent":{"personalization":false,"marketing":false}}';
   const capabilityData = JSON.stringify(safeCapabilities(capabilities));
   const opening = persona
-    ? `${referenciaTemporal}\n\n${personaSystemBlock(persona, storeName)}\n\nUse o primeiro nome somente quando permitido pelo perfil consentido, resolva primeiro a intenção principal e admita limites. Nunca force uma venda. Ofertas e combos só depois de propor_oportunidade liberar, como manda a política abaixo.`
+    ? `${personaSystemBlock(persona, storeName)}\n\n${referenciaTemporal}\n\nUse o primeiro nome somente quando permitido pelo perfil consentido, resolva primeiro a intenção principal e admita limites. Nunca force uma venda. Ofertas e combos só depois de propor_oportunidade liberar, como manda a política abaixo.`
     : `Você é o atendente virtual humanizado da ${cleanText(storeName, 120)} no WhatsApp. Atenda em português brasileiro com calor humano, cortesia, prudência, clareza e mensagens curtas, como uma pessoa experiente da equipe. Na primeira apresentação, informe com transparência que é um assistente virtual. Use o primeiro nome somente quando permitido pelo perfil consentido, faça no máximo uma pergunta por mensagem, resolva primeiro a intenção principal e admita limites. Nunca force uma venda.`;
   // A persona de suplementos já traz as travas no próprio bloco; sem persona, o
   // segmento do canal acrescenta as travas no fim (posição de maior prioridade).
@@ -1186,6 +1186,13 @@ async function putSessionInHandoff(session, reason, priority = 2) {
   // nova mensagem do cliente numa conversa que já está em atendimento humano.
   if (updated.rows.length) {
     void notificarHandoffParaEquipe(session, reason, prioridade).catch(() => null);
+    void recordLearningProposal(session.empresa_id, {
+      tipo: 'handoff',
+      chave: String(reason || 'transbordo_geral').slice(0, 60),
+      titulo: `Atrito / Transbordo: ${cleanText(reason, 60)}`,
+      proposta: `Atrito de atendimento registrado pelo T-Rex (${cleanText(reason, 120)}). Analisar para incorporar diretriz preventiva.`,
+      evidencias: [{ sessionId: session.id, motivo: reason, data: new Date().toISOString() }],
+    }).catch(() => null);
   }
 }
 
@@ -1562,6 +1569,60 @@ async function managementResponse(task, channel, session, message, context) {
     if (confirmacaoExistenteReply) return confirmacaoExistenteReply;
   }
 
+  // ── Invocação do Relatório Diário de Performance via WhatsApp Gestão (+55 65 99672-2055) com Autorização ──
+  const comandoReportGestao = message.text && /^\s*(!|#|\/)?(?:report|relat[oó]rio|enviar[-_ ]relat[oó]rio|disparar[-_ ]relat[oó]rio|manda(?:r)?\s+(?:o\s+)?report|manda(?:r)?\s+(?:o\s+)?relat[oó]rio|trex\s+report|trex\s+relat[oó]rio)\b/i.test(message.text);
+  if (comandoReportGestao) {
+    const { enviarReportGraficosDino } = await import('./dino-daily-report-graph.js');
+    const sender = String(context.phone || session.customer_phone || session.telefone || '5565996722055');
+    const resDisparo = await enviarReportGraficosDino({
+      forcar: true,
+      destinatario: sender,
+      empresaId: task.empresa_id || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
+    });
+    return {
+      text: `🦖 *[MOTOR KYTTOIA — T-REX GESTÃO DINO]* 📊☕\n\n` +
+            `✅ *Autorização confirmada pelo gestor (+55 65 99672-2055)!*\n\n` +
+            `O Relatório Diário de Performance Operacional com 4 quadrantes em alta definição (1080p) foi compilado e disparado para o canal oficial e grupo *Gestão Dino*.\n\n` +
+            `📊 *Visualizar Infográfico 1080p:*\nhttps://kytto.com.br/reports/dino-performance-diario.png`,
+      kind: 'management_report_invoked',
+    };
+  }
+
+  // ── Invocação do Fechamento Executivo / DRE Diário via WhatsApp Gestão ──
+  const comandoFechamentoGestao = message.text && /^\s*(!|#|\/)?(?:fechamento|dre|caixa|resumo[-_ ]dia|fechar[-_ ]dia)\b/i.test(message.text);
+  if (comandoFechamentoGestao) {
+    const { dispararFechamentoGestaoDino } = await import("./dino-whats-gestao-hub.js");
+    const sender = String(context.phone || session.customer_phone || session.telefone || "5565996722055");
+    const resFechamento = await dispararFechamentoGestaoDino({
+      empresaId: task.empresa_id || "d0d0ac01-8e50-4b61-8c79-de4aaa916da6",
+      telefoneSolicitante: sender
+    });
+    return {
+      text: resFechamento.mensagem || "✅ Fechamento diário compilado e enviado para o grupo Gestão Dino.",
+      kind: "management_closing_invoked"
+    };
+  }
+
+  // ── Painel de Satisfação NPS e Ranking de Barbeiros ──
+  const comandoNpsGestao = message.text && /^\s*(!|#|\/)?(?:nps|avalia[çc][oõ]es|avalia[çc][aã]o|reputa[çc][aã]o|ranking|equipe)\b/i.test(message.text);
+  if (comandoNpsGestao) {
+    const { formatarMensagemRankingNps } = await import("./dino-whats-gestao-hub.js");
+    return {
+      text: formatarMensagemRankingNps(),
+      kind: "management_nps_view"
+    };
+  }
+
+  // ── Menu de Ajuda e Comandos Executivos ──
+  const comandoAjudaGestao = message.text && /^\s*(!|#|\/)?(?:ajuda|help|comandos|menu)\b/i.test(message.text);
+  if (comandoAjudaGestao) {
+    const { formatarMenuComandosGestao } = await import("./dino-whats-gestao-hub.js");
+    return {
+      text: formatarMenuComandosGestao(),
+      kind: "management_help_menu"
+    };
+  }
+
   if (session.status === 'humano') return { text: null, kind: 'human_queue' };
   if (handoffIntent(message.text)) {
     await putSessionInHandoff(session, 'pedido_do_cliente', 3);
@@ -1733,7 +1794,7 @@ export function presenceConfirmIntent(text) {
   const value = semEmojis;
   if (!value) return false;
   return /^(confirmo|confirmando|confirmado|confirmada|confirmo presenca|confirmo sim|sim confirmo|confirma|confirma pra mim|pode confirmar|pode ser sim|sim pode ser|estarei ai|estarei la|sim estarei la|sim estarei ai|vou sim|vou|vou comparecer|confirmadissimo|ok confirmado|ta confirmado|esta confirmado|confirmar|sim confirmar|pode deixar marcado|vou querer esse|deixa marcado|deixa esse|marca esse|pode marcar)( obrigad[oa])?$/.test(value)
-    || /^(sim|ok|pode ser|com certeza|fechado|fechou|perfeito|beleza|blz|bora|show|tamo junto|combinado|certo|marcado|ta marcado|opa vou|partiu|fechado entao|combinado entao)( obrigad[oa])?$/.test(value);
+    || /^(sim|ok|pode ser|com certeza|fechado|fechou|perfeito|beleza|blz|bora|show|tamo junto|combinado|certo|marcado|ta marcado|opa vou|partiu|to a caminho|estou a caminho|chegando|fechado entao|combinado entao)( obrigad[oa])?$/.test(value);
 }
 
 export function isArrivalIntent(text) {
@@ -2014,7 +2075,7 @@ export async function confirmNextAppointment(context, userText = '') {
         const primeiroNome = context.customerName ? `, ${context.customerName.split(' ')[0]}` : '';
         const servicoComProf = serviceWithProfessional(especifico.servico?.nome || 'Seu horário', especifico.profissional?.nome || 'a equipe');
         return {
-          text: `Confirmado${primeiroNome}! ${servicoComProf}, ${quando}. Te esperamos na Dino Barbearia! 💈`,
+          text: `Confirmado${primeiroNome}! ${servicoComProf}, ${quando}. Te esperamos na Dino Barbearia! 💈\n\n💡 *Dica do Dino:* Deseja que eu já deixe separada sua *Pomada Modeladora Efeito Matte Dino (R$ 45,00)* ou o *Óleo Hidratante de Barba (R$ 38,00)* para você retirar no atendimento? É só me avisar!`,
           kind: 'presence_confirmed',
         };
       }
@@ -2096,7 +2157,7 @@ export async function confirmNextAppointment(context, userText = '') {
     const quando = new Date(proximo.dataHora).toLocaleString('pt-BR', { timeZone: 'America/Cuiaba', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const servicoComProf = serviceWithProfessional(proximo.servico?.nome || 'Seu horário', proximo.profissional?.nome || 'a equipe');
     return {
-      text: `Confirmado${primeiroNome}! ${servicoComProf}, ${quando}. Te esperamos na Dino Barbearia! 💈`,
+      text: `Confirmado${primeiroNome}! ${servicoComProf}, ${quando}. Te esperamos na Dino Barbearia! 💈\n\n💡 *Dica do Dino:* Deseja que eu já deixe separada sua *Pomada Modeladora Efeito Matte Dino (R$ 45,00)* ou o *Óleo Hidratante de Barba (R$ 38,00)* para você retirar no atendimento? É só me avisar!`,
       kind: 'presence_confirmed',
     };
   }
@@ -2109,7 +2170,7 @@ export async function confirmNextAppointment(context, userText = '') {
   const diaTexto = new Date(primeiro.dataHora).toLocaleDateString('pt-BR', { timeZone: 'America/Cuiaba', weekday: 'short', day: '2-digit', month: '2-digit' });
   const profNome = primeiro.profissional?.nome || 'a equipe';
   return {
-    text: `Confirmados${primeiroNome}! Seus ${confirmados.length} horários com ${profNome}, ${diaTexto}: ${itensTexto}. Te esperamos na Dino Barbearia! 💈`,
+    text: `Confirmados${primeiroNome}! Seus ${confirmados.length} horários com ${profNome}, ${diaTexto}: ${itensTexto}. Te esperamos na Dino Barbearia! 💈\n\n💡 *Dica do Dino:* Deseja incluir a *Pomada Modeladora Matte Dino (R$ 45,00)* ou *Óleo para Barba (R$ 38,00)* para retirar no atendimento?`,
     kind: 'presence_confirmed',
   };
 }
@@ -2545,7 +2606,7 @@ async function deterministicResponseCore(task, channel, session, message) {
     const cleanClosingText = plain(message.text).replace(/[!.,;?]+/g, ' ').replace(/\s+/g, ' ').trim();
     if (!lastAssHasTimeSlots && /^(?:joia\s+combinado|combinado|beleza\s+obrigad[oa]|ok\s+obrigad[oa]|valeu\s+obrigad[oa]|show\s+obrigad[oa]|perfeito\s+obrigad[oa]|tudo\s+certo\s+obrigad[oa]|ta\s+otimo|beleza\s+entao|joia\s+valeu)$/.test(cleanClosingText)) {
       return {
-        text: 'Combinado! Qualquer coisa que precisar é só chamar por aqui. Te esperamos na Dino Barbearia! 💈',
+        text: 'Combinado! Qualquer coisa que precisar é só chamar por aqui. Mas não fica sem dar aquele talento no visual: quando você puder vir, me avisa que já reservo o seu horário! 💈 (Ou veja a agenda online: https://kytto.com.br/agendar/dino )',
         kind: 'closing_ack',
         model: 'deterministic_closing_ack',
         provider: 'system',
@@ -2553,6 +2614,15 @@ async function deterministicResponseCore(task, channel, session, message) {
     }
     const appBookingReq = detectAppOrSelfBookingRequest(message.text);
     const hasTimeMention = /\b([01]?\d|2[0-3])(?:h(\d{2})?|:(\d{2}))\b/i.test(message.text);
+    const quickFaq = detectDinoQuickFaq(message.text, { storeName: personaStore || 'Dino Barbearia' });
+    if (quickFaq && !hasTimeMention) {
+      return {
+        text: quickFaq.text,
+        kind: quickFaq.kind,
+        model: 'deterministic_dino_quick_faq',
+        provider: 'system',
+      };
+    }
     if (appBookingReq?.isRequest && !hasTimeMention) {
       const reply = buildAppAndBookingPromptReply(appBookingReq);
       return {
@@ -2857,7 +2927,7 @@ async function deterministicResponseCore(task, channel, session, message) {
     }
     if (recoverableModelFailure(safeErrorCode(error))) {
       if (!hadPendingAction) await cancelPendingAction(context);
-      return { text: 'Não consegui concluir a consulta. Nada foi confirmado. Podemos tentar por aqui de novo: qual serviço e horário você quer?', kind: 'technical_retry' };
+      return { text: 'Tive uma oscilação momentânea aqui na verificação, mas já normalizou! Me diz: qual dia e horário fica melhor pra você? (Se preferir ver a grade ao vivo: https://kytto.com.br/agendar/dino )', kind: 'technical_retry' };
     }
     await putSessionInHandoff(session, `gemini:${safeErrorCode(error)}`, 4);
     return { text: 'Não consegui concluir com segurança pelo assistente virtual. Encaminhei sua conversa para a equipe humana.', kind: 'gemini_fallback' };

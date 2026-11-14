@@ -12,6 +12,7 @@ export const TENANTS_OFICIAIS = {
     lojaId: 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8',
     nome: 'Barbearia Dino',
     slug: 'dino',
+    cnpj: '50073355000189',
     roleIdOwner: 'b125e523-957d-4d12-a881-56b958ecec45',
     roleIdStaff: '85f0c5c5-584b-4d9f-946e-a348c3688483',
     usuarios: [
@@ -57,7 +58,7 @@ export const TENANTS_OFICIAIS = {
     roleIdOwner: 'b125e523-957d-4d12-a881-56b958ecec45',
     roleIdStaff: '85f0c5c5-584b-4d9f-946e-a348c3688483',
     usuarios: [
-      { id: 'usr-casanova-keyuser-01', username: 'casanova', email: 'casanova@casanovaimoveistga.com.br', nome: 'Key User - Imóveis (Casa Nova)', role: 'keyuser', pgRole: 'keyuser_imoveis', isOwner: false },
+      { id: 'usr-casanova-keyuser-01', username: 'casanova', email: 'casanova@casanovaimoveistga.com.br', nome: 'Key User - Imóveis (Casa Nova)', role: 'keyuser', pgRole: 'operador', isOwner: false },
       { id: 'usr-casanova-admin-01', username: 'admin_casanova', email: 'contato@casanovaimoveistga.com.br', nome: 'Administrador Casa Nova', role: 'organizador', pgRole: 'gerente', isOwner: true },
     ]
   },
@@ -79,6 +80,7 @@ export const TENANTS_OFICIAIS = {
     lojaId: "c2c2ac01-8e50-4b61-8c79-de4aaa916da0",
     nome: "Serrano Concreto Usinado",
     slug: "concreto",
+    cnpj: "14229191000190",
     roleIdOwner: "b125e523-957d-4d12-a881-56b958ecec45",
     roleIdStaff: "85f0c5c5-584b-4d9f-946e-a348c3688483",
     usuarios: [
@@ -99,6 +101,39 @@ export async function sincronizarTenantsEquipes(commerceDb) {
   rootDb.usuarios ||= [];
 
   for (const [tenantKey, config] of Object.entries(TENANTS_OFICIAIS)) {
+    // Garante que a empresa e loja do tenant existam no PostgreSQL para respeitar as FKs
+    if (commerceDb && typeof commerceDb.query === 'function') {
+      try {
+        await commerceDb.query(
+          `INSERT INTO empresas (id, nome, razao_social, cnpj, ativa, tipo_negocio, data_criacao, data_atualizacao)
+           VALUES ($1, $2, $2, $3, true, $4, NOW(), NOW())
+           ON CONFLICT (id) DO UPDATE SET
+             nome = EXCLUDED.nome,
+             ativa = true,
+             data_atualizacao = NOW()`,
+          [
+            config.empresaId,
+            config.nome,
+            String(config.cnpj || '12345678000199').replace(/\D/g, '').padEnd(14, '0').slice(0, 14),
+            tenantKey === 'palatare' ? 'restaurante' : (tenantKey === 'casanova' || tenantKey === 'stallone' ? 'loja' : (tenantKey === 'supermercado' ? 'supermercado' : (tenantKey === 'barbearia' || tenantKey === 'dino' ? 'barbearia' : 'outro')))
+          ]
+        );
+        if (config.lojaId) {
+          await commerceDb.query(
+            `INSERT INTO lojas (id, empresa_id, nome, codigo, timezone, ativa, configuracoes, data_criacao, data_atualizacao)
+             VALUES ($1, $2, $3, $4, 'America/Cuiaba', true, '{}'::jsonb, NOW(), NOW())
+             ON CONFLICT (id) DO UPDATE SET
+               nome = EXCLUDED.nome,
+               ativa = true,
+               data_atualizacao = NOW()`,
+            [config.lojaId, config.empresaId, `${config.nome} - Principal`, config.slug || 'principal']
+          );
+        }
+      } catch (tenantInitErr) {
+        console.warn(`[tenant-provisioning] Aviso ao garantir empresa/loja ${tenantKey} no PostgreSQL:`, tenantInitErr.message);
+      }
+    }
+
     for (const u of config.usuarios) {
       // 1. Sincroniza no JSON DB
       const indexJson = rootDb.usuarios.findIndex((item) =>

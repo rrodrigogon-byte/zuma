@@ -40,7 +40,7 @@ export const config = {
       user: process.env.DB_USER || 'postgres',
       password: process.env.DB_PASSWORD || 'postgres',
       ssl: process.env.DB_SSL === 'true',
-      max: positiveInt(process.env.PG_POOL_MAX, 12, 4),
+      max: positiveInt(process.env.PG_POOL_MAX, 6, 2),
       idleTimeoutMillis: positiveInt(process.env.PG_IDLE_TIMEOUT_MS, 30000, 10000),
       connectionTimeoutMillis: positiveInt(process.env.PG_CONNECTION_TIMEOUT_MS, 10000, 5000),
     },

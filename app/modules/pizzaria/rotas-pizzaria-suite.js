@@ -5,6 +5,7 @@
  */
 
 import { Router } from 'express';
+import { enviarMensagem } from '../../core/whatsapp.js';
 import { db, save } from '../../db.js';
 import {
   eventBus,

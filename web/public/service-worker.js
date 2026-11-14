@@ -1,11 +1,12 @@
-/* Kytto PWA — rede prioritária para nunca servir interface antiga após deploy.
- * v10: blindagem total contra travamento de tela e erro de módulo dinâmico em /admin/*
- * Rotas administrativas nunca usam cache estático defasado de index.html. */
-const VERSAO = 'kytto-pwa-v10'
+/* Kytto PWA — blindagem total contra travamento de tela e contaminação de cache.
+ * v12: PURGE TOTAL de caches legados e isolamento estrito da rota raiz '/'.
+ * Páginas estáticas secundárias (.html) NUNCA interceptam nem poluem o cache shell. */
+const VERSAO = 'kytto-pwa-v12-recovery-purge'
 const CACHE_SHELL = `${VERSAO}-shell`
 const CACHE_RUNTIME = `${VERSAO}-runtime`
 const CACHE_DADOS = `${VERSAO}-dados`
 const SHELL = ['/', '/manifest.json']
+
 // Só a agenda do modo barbeiro fica disponível sem internet. Demais APIs: só rede.
 const API_OFFLINE = /^\/api\/admin\/barbearia\/modo-barbeiro$/
 // Páginas dos apps instaláveis: cada uma tem meta tags próprias (manifesto, ícone).
@@ -13,15 +14,29 @@ const PAGINA_APP = /^\/(?:barbeiro|minha)(?:\/[^/]+)?\/?$/
 
 self.addEventListener('install', event => {
   self.skipWaiting()
-  event.waitUntil(caches.open(CACHE_SHELL).then(cache => cache.addAll(SHELL)))
+  event.waitUntil(
+    caches.open(CACHE_SHELL).then(cache => cache.addAll(SHELL)).catch(() => {})
+  )
 })
 
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
+    // PURGE TOTAL: limpa todos os caches antigos (v10, v11, etc.) para garantir
+    // que nenhuma página indevida (como a torre de pesagem) permaneça retida.
     const nomes = await caches.keys()
-    // Limpa qualquer cache antigo para não reter index.html obsoleto
-    await Promise.all(nomes.filter(nome => ![CACHE_SHELL, CACHE_RUNTIME, CACHE_DADOS].includes(nome)).map(nome => caches.delete(nome)))
+    await Promise.all(
+      nomes.filter(nome => nome !== CACHE_SHELL && nome !== CACHE_RUNTIME && nome !== CACHE_DADOS)
+        .map(nome => caches.delete(nome))
+    )
     await self.clients.claim()
+
+    // Força recarregamento limpo de todas as abas abertas sob este service worker
+    const clients = await self.clients.matchAll({ type: 'window' })
+    for (const client of clients) {
+      if (client.url && 'navigate' in client) {
+        client.navigate(client.url).catch(() => {})
+      }
+    }
   })())
 })
 
@@ -49,7 +64,9 @@ function chaveDados(request) {
 }
 
 async function redeComCopia(request) {
-  if (!contextoDadosCompleto(request)) return fetch(request).catch(() => new Response(JSON.stringify({ ok: false, offline: true, error: 'Selecione a empresa e unidade e entre no app para acessar a agenda.' }), { status: 503, headers: { 'Content-Type': 'application/json' } }))
+  if (!contextoDadosCompleto(request)) {
+    return fetch(request).catch(() => new Response(JSON.stringify({ ok: false, offline: true, error: 'Selecione a empresa e unidade e entre no app para acessar a agenda.' }), { status: 503, headers: { 'Content-Type': 'application/json' } }))
+  }
   const chave = chaveDados(request)
   try {
     const resposta = await fetch(request)
@@ -76,6 +93,12 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return
   const caminho = new URL(request.url).pathname
 
+  // 0. Arquivos HTML estáticos secundários (ex: torre-pesagem.html, relatórios avulsos)
+  // NUNCA são interceptados nem cacheados pelo Service Worker: vão SEMPRE direto na rede.
+  if (caminho.endsWith('.html') && caminho !== '/index.html') {
+    return
+  }
+
   // 1. Páginas do Clube e APIs públicas: direto na rede
   if (/^\/(?:contrato|clube\/(?:painel|passe|pagar))(?:\/|$)/.test(caminho) || /^\/api\/public\/(?:contratos|clube)\//.test(caminho)) return
 
@@ -84,25 +107,40 @@ self.addEventListener('fetch', event => {
   if (caminho.startsWith('/admin')) {
     event.respondWith(
       fetch(request).catch(async () => {
-        // Se realmente estiver offline sem rede, tenta o fallback
         return (await caches.match(request)) || (await caches.match('/')) || Response.error()
       })
     )
     return
   }
 
-  // 3. Navegação geral
+  // 3. Navegação geral: Network-first
   if (request.mode === 'navigate') {
-    const chave = PAGINA_APP.test(caminho) ? caminho : '/'
+    // ESTRITO: apenas a rota raiz '/' ou '/index.html' grava na chave '/'
+    const ehRaiz = caminho === '/' || caminho === '/index.html'
+    const chave = ehRaiz ? '/' : (PAGINA_APP.test(caminho) ? caminho : null)
+
     event.respondWith(
       fetch(request).then(async response => {
-        if ([502, 503, 504].includes(response.status)) return (await caches.match(chave)) || response
-        if (response.ok) {
+        if ([502, 503, 504].includes(response.status)) {
+          if (chave) {
+            const cached = await caches.match(chave)
+            if (cached) return cached
+          }
+          return response
+        }
+        if (response.ok && chave) {
           const copia = response.clone()
-          caches.open(CACHE_SHELL).then(cache => cache.put(chave, copia))
+          const cache = await caches.open(CACHE_SHELL)
+          await cache.put(chave, copia)
         }
         return response
-      }).catch(async () => (await caches.match(chave)) || (await caches.match('/')) || Response.error())
+      }).catch(async () => {
+        if (chave) {
+          const cached = await caches.match(chave)
+          if (cached) return cached
+        }
+        return (await caches.match('/')) || Response.error()
+      })
     )
     return
   }
@@ -126,7 +164,7 @@ self.addEventListener('fetch', event => {
     fetch(request).then(response => {
       if (response.ok && /\.(?:js|css|svg|png|jpg|webp|woff2?)$/i.test(caminho)) {
         const copia = response.clone()
-        caches.open(CACHE_RUNTIME).then(cache => cache.put(request, copia))
+        caches.open(CACHE_RUNTIME).then(cache => cache.put(request, copia)).catch(() => {})
       }
       return response
     }).catch(() => caches.match(request))

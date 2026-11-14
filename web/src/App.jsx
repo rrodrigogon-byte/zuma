@@ -50,6 +50,7 @@ function PlatformOnly({ children }) {
 // catálogo em kytto.com.br antes de uma publicação explícita por canal.
 function EntradaPrincipal() {
   const host = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : ''
+  if (host.startsWith('setpoint.')) return <Navigate to="/admin" replace />
   const destinoStallone = stalloneEntryFromHost(host)
   if (destinoStallone) return <Navigate to={destinoStallone} replace />
   const destinoDino = destinoInicialDino(host)
@@ -57,6 +58,13 @@ function EntradaPrincipal() {
   // Domínio próprio da Stallone (stallone.kytto.com.br): abre direto a loja.
   if (brandFromHost(host) === 'stallone') return <Navigate to="/ecommerce/stallone" replace />
   if (host === 'loja.kytto.com.br' || ehHostLojaDino(host)) return <Ecommerce />
+  const auth = useAuth()
+  if (auth.user) {
+    if (auth.isOrg) return <Navigate to="/admin" replace />
+    if (auth.isStaff) return <Navigate to="/pdv" replace />
+    if (auth.isAtleta) return <Navigate to="/meu-painel" replace />
+    return <Navigate to="/admin" replace />
+  }
   return <Layout marketing><Home /></Layout>
 }
 
@@ -199,7 +207,9 @@ const LojaModa        = lazy(() => import('./pages/admin/LojaModa'))
 const PalatarePizzariaSuite = lazyWithRetry(() => import("./pages/admin/PalatarePizzariaSuite"))
 const ConcretoUsinaERP = lazyWithRetry(() => import("./pages/admin/ConcretoUsinaERP"))
 const ConcretoPwaAssinatura = lazyWithRetry(() => import("./pages/public/ConcretoPwaAssinatura"))
+const ConcretoPortalCliente = lazyWithRetry(() => import("./pages/public/ConcretoPortalCliente"))
 const BalancaRodoviariaCockpit = lazyWithRetry(() => import("./pages/admin/concreto/BalancaRodoviariaCockpit"))
+const DinoLTKStorefront = lazyWithRetry(() => import("./pages/public/DinoLTKStorefront"))
 const BarbeariaERP    = lazyWithRetry(() => import("./pages/admin/BarbeariaERP"))
 const SorteiosCampanhas = lazyWithRetry(() => import('./pages/admin/SorteiosCampanhas'))
 const SorteiosPublico   = lazyWithRetry(() => import('./pages/public/SorteiosPublico'))
@@ -464,6 +474,11 @@ export default function App() {
           <Route path="/ecommerce"  element={<Layout marketing><Ecommerce /></Layout>} />
           <Route path="/ecommerce/:storeAlias" element={<Ecommerce />} />
           <Route path="/perfumaria/:storeAlias" element={<Ecommerce />} />
+        {/* Vitrine E-Commerce LTK Dino (@odinovisagista) */}
+        <Route path="/dino" element={<DinoLTKStorefront />} />
+        <Route path="/odinovisagista" element={<DinoLTKStorefront />} />
+        <Route path="/ltk/dino" element={<DinoLTKStorefront />} />
+        <Route path="/storefront/dino" element={<DinoLTKStorefront />} />
         <Route path="/inscricao"  element={<Layout><Inscricao /></Layout>} />
         <Route path="/ranking"    element={<Layout><Ranking /></Layout>} />
         <Route path="/loja"       element={<Layout><Loja /></Layout>} />
@@ -478,6 +493,10 @@ export default function App() {
         <Route path="/concreto/pwa" element={<ConcretoPwaAssinatura />} />
         <Route path="/concreto/assinatura" element={<ConcretoPwaAssinatura />} />
         <Route path="/concreto/assinatura/:cargaId" element={<ConcretoPwaAssinatura />} />
+        <Route path="/concreto/portal-cliente" element={<ConcretoPortalCliente />} />
+        <Route path="/concreto/portal-cliente/:cargaId" element={<ConcretoPortalCliente />} />
+        <Route path="/concreto/rastreamento" element={<ConcretoPortalCliente />} />
+        <Route path="/concreto/rastreamento/:cargaId" element={<ConcretoPortalCliente />} />
         <Route path="/sorteios/:slug" element={<SorteiosPublico />} />
         <Route path="/sorteios" element={<SorteiosPublico />} />
         <Route path="/sorteio/:slug" element={<SorteiosPublico />} />
