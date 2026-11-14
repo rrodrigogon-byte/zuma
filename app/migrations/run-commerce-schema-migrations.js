@@ -111,6 +111,7 @@ const migrationFiles = [
   '122_sorteios_campanhas_bilhetes_ganhadores.sql',
   '123_carga_casanova_clientes_saneados.sql',
   '124_captura_nfe_inbound_stallone_nutre_sport.sql',
+  '125_reclassificar_casanova_potenciais_clientes.sql',
 ];
 const advisoryLockKey = 825410732;
 
