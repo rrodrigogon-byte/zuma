@@ -134,6 +134,17 @@ import {
   formatarReportDiarioWhatsApp,
   hojeCuiaba as hojeCuiabaInfluencer
 } from './core/dino-influencer-growth-engine.js';
+import {
+  CATALOGO_PRODUTOS_LTK,
+  COLECOES_LTK,
+  MODELO_GESTAO_INSTAGRAM,
+  gerarLinkRastreadoLTK,
+  registrarCliqueLTK,
+  registrarConversaoLTK,
+  obterMetricasConsolidadasLTK,
+  formatarPautaDiariaWhatsApp,
+  dispararPautaDiariaWhatsApp
+} from './core/dino-ltk-commerce-engine.js';
 import { kyttoEventBus, TOPICOS_KYTTO } from './core/kytto-event-bus.js';
 import { armazenarCopiaSegura, listarArquivosSeguros, obterEstatisticasArmazenamento } from './core/armazenamento-seguro.js';
 import { configuracaoResumo, configuracaoResumoPublica, diaLocal as diaLocalResumo, enviarResumo, lojaDoCanal as lojaDoCanalResumo, montarResumoDiario, startResumoDiarioWorker } from './core/dino-resumo-diario.js';
@@ -933,6 +944,108 @@ app.post('/api/public/dino/influencer/report-whatsapp', async (req, res) => {
     }
 
     res.json({ ok: true, envios, textoReport });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+
+// ============================================================================
+// ROTAS DO MODELO DE GESTÃO DO INSTAGRAM & E-COMMERCE LTK (CREATOR STOREFRONT)
+// Dino Visagista (@odinovisagista)
+// ============================================================================
+
+// Vitrine Pública LTK (Storefront pública estilo LikeToKnow para seguidores)
+app.get('/api/public/dino/ltk/storefront', (req, res) => {
+  try {
+    const { colecao, busca } = req.query;
+    let produtos = [...CATALOGO_PRODUTOS_LTK];
+    if (colecao && colecao !== 'todos') {
+      produtos = produtos.filter(p => p.colecoes.includes(colecao));
+    }
+    if (busca) {
+      const q = String(busca).toLowerCase();
+      produtos = produtos.filter(p => p.nome.toLowerCase().includes(q) || p.categoria.toLowerCase().includes(q));
+    }
+    res.json({
+      ok: true,
+      perfil: PERFIL_DINO,
+      colecoes: COLECOES_LTK,
+      totalProdutos: produtos.length,
+      produtos
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Painel Administrativo LTK (Métricas de cliques, conversões e ranking de produtos)
+app.get('/api/admin/dino/ltk/overview', (req, res) => {
+  try {
+    const metricas = obterMetricasConsolidadasLTK();
+    res.json({
+      ok: true,
+      perfil: PERFIL_DINO,
+      colecoes: COLECOES_LTK,
+      metricas,
+      totalItensCatalogo: CATALOGO_PRODUTOS_LTK.length
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Registrar clique com UTM para tracking de criador
+app.post('/api/public/dino/ltk/track-click', (req, res) => {
+  try {
+    const { produtoId, colecaoId, canal } = req.body || {};
+    const resultado = registrarCliqueLTK({ produtoId, colecaoId, canal });
+    res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Registrar conversão da vitrine LTK
+app.post('/api/public/dino/ltk/track-conversion', (req, res) => {
+  try {
+    const { produtoId, valor, tipo } = req.body || {};
+    const resultado = registrarConversaoLTK({ produtoId, valor, tipo });
+    res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Gerador de links rastreados com UTM para Stories / Bio
+app.post('/api/admin/dino/ltk/gerar-link', (req, res) => {
+  try {
+    const { produtoId, canal, campanha, termo } = req.body || {};
+    const link = gerarLinkRastreadoLTK({ produtoId, canal, campanha, termo });
+    res.json({ ok: true, link });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Modelo de Gestão Completo do Instagram (Calendário Semanal 7 Dias, RACI, Esteira, SLAs)
+app.get('/api/admin/dino/gestao-instagram/modelo', (req, res) => {
+  try {
+    res.json({
+      ok: true,
+      modelo: MODELO_GESTAO_INSTAGRAM
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Disparo da Pauta Diária para o WhatsApp da Gestão Dino
+app.post('/api/admin/dino/gestao-instagram/disparar-pauta-whatsapp', async (req, res) => {
+  try {
+    const { diaSemana, telefones } = req.body || {};
+    const resultado = await dispararPautaDiariaWhatsApp({ diaSemana, targetPhones: telefones });
+    res.json({ ok: true, ...resultado });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

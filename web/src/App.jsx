@@ -209,6 +209,7 @@ const ConcretoUsinaERP = lazyWithRetry(() => import("./pages/admin/ConcretoUsina
 const ConcretoPwaAssinatura = lazyWithRetry(() => import("./pages/public/ConcretoPwaAssinatura"))
 const ConcretoPortalCliente = lazyWithRetry(() => import("./pages/public/ConcretoPortalCliente"))
 const BalancaRodoviariaCockpit = lazyWithRetry(() => import("./pages/admin/concreto/BalancaRodoviariaCockpit"))
+const DinoLTKStorefront = lazyWithRetry(() => import("./pages/public/DinoLTKStorefront"))
 const BarbeariaERP    = lazyWithRetry(() => import("./pages/admin/BarbeariaERP"))
 const SorteiosCampanhas = lazyWithRetry(() => import('./pages/admin/SorteiosCampanhas'))
 const SorteiosPublico   = lazyWithRetry(() => import('./pages/public/SorteiosPublico'))
@@ -473,6 +474,11 @@ export default function App() {
           <Route path="/ecommerce"  element={<Layout marketing><Ecommerce /></Layout>} />
           <Route path="/ecommerce/:storeAlias" element={<Ecommerce />} />
           <Route path="/perfumaria/:storeAlias" element={<Ecommerce />} />
+        {/* Vitrine E-Commerce LTK Dino (@odinovisagista) */}
+        <Route path="/dino" element={<DinoLTKStorefront />} />
+        <Route path="/odinovisagista" element={<DinoLTKStorefront />} />
+        <Route path="/ltk/dino" element={<DinoLTKStorefront />} />
+        <Route path="/storefront/dino" element={<DinoLTKStorefront />} />
         <Route path="/inscricao"  element={<Layout><Inscricao /></Layout>} />
         <Route path="/ranking"    element={<Layout><Ranking /></Layout>} />
         <Route path="/loja"       element={<Layout><Loja /></Layout>} />
