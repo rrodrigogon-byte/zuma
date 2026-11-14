@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { api } from '../../../lib/api'
 import { money, dateTime, formatCnpj, downloadCsv } from '../dino/format'
 import { Badge } from '../customer360/shared'
@@ -13,6 +13,75 @@ export default function MdeTab({ toast }) {
   const [modalDanfe, setModalDanfe] = useState(null) // nota selecionada para espelho DANFE
   const [justificativa, setJustificativa] = useState('')
   const [enviandoEvento, setEnviandoEvento] = useState(false)
+  const fileInputRef = useRef(null)
+
+  const processarArquivoXml = (file) => {
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      try {
+        const xmlText = event.target.result
+        const parser = new DOMParser()
+        const doc = parser.parseFromString(xmlText, "text/xml")
+        const infNFe = doc.querySelector("infNFe")
+        const chave = infNFe?.getAttribute("Id")?.replace(/\D/g, "") || ("352611" + Date.now() + "55001000000001")
+        const ide = doc.querySelector("ide")
+        const numero = ide?.querySelector("nNF")?.textContent || String(Math.floor(Math.random() * 90000) + 10000)
+        const serie = ide?.querySelector("serie")?.textContent || "1"
+        const emitidaEm = ide?.querySelector("dhEmi")?.textContent || ide?.querySelector("dEmi")?.textContent || new Date().toISOString()
+        const emit = doc.querySelector("emit")
+        const emitente = {
+          razaoSocial: emit?.querySelector("xNome")?.textContent || "Fornecedor XML Importado",
+          fantasia: emit?.querySelector("xFant")?.textContent || emit?.querySelector("xNome")?.textContent || "Fornecedor Importado",
+          cnpj: emit?.querySelector("CNPJ")?.textContent || emit?.querySelector("CPF")?.textContent || "00000000000000",
+          ie: emit?.querySelector("IE")?.textContent || "ISENTO",
+          uf: emit?.querySelector("enderEmit > UF")?.textContent || "MT",
+        }
+        const vNF = Number(doc.querySelector("total > ICMSTot > vNF")?.textContent || 0)
+        const vProd = Number(doc.querySelector("total > ICMSTot > vProd")?.textContent || 0)
+        const detElements = doc.querySelectorAll("det")
+        const itens = Array.from(detElements).map((det, idx) => {
+          const prod = det.querySelector("prod")
+          return {
+            numeroItem: idx + 1,
+            codigo: prod?.querySelector("cProd")?.textContent || "",
+            ean: prod?.querySelector("cEAN")?.textContent || "",
+            descricao: prod?.querySelector("xProd")?.textContent || ("Produto " + (idx + 1)),
+            ncm: prod?.querySelector("NCM")?.textContent || "",
+            cfop: prod?.querySelector("CFOP")?.textContent || "5102",
+            quantidade: Number(prod?.querySelector("qCom")?.textContent || 1),
+            unidade: prod?.querySelector("uCom")?.textContent || "UN",
+            valorUnitario: Number(prod?.querySelector("vUnCom")?.textContent || 0),
+            valorTotal: Number(prod?.querySelector("vProd")?.textContent || 0),
+          }
+        })
+        const dupElements = doc.querySelectorAll("cobr > dup")
+        const parcelas = Array.from(dupElements).map(dup => ({
+          numero: dup.querySelector("nDup")?.textContent || "",
+          vencimento: dup.querySelector("dVenc")?.textContent || "",
+          valor: Number(dup.querySelector("vDup")?.textContent || 0),
+        }))
+        const novaNota = {
+          chaveAcesso: chave,
+          numero: Number(numero),
+          serie: Number(serie),
+          emitente,
+          valorTotal: vNF || vProd,
+          emitidaEm,
+          statusManifestacao: "aguardando_manifestacao",
+          statusEntrada: "aguardando_confirmacao",
+          itens,
+          cobranca: { parcelas },
+        }
+        setNotas(prev => [novaNota, ...prev.filter(n => n.chaveAcesso !== chave)])
+        if (toast) toast("XML da NF-e nº " + numero + " (" + emitente.razaoSocial + ") importado com sucesso!", "success")
+      } catch (err) {
+        if (toast) toast("Erro ao processar arquivo XML da NF-e: " + err.message, "danger")
+      }
+    }
+    reader.readAsText(file)
+  }
+
 
   const carregarNotas = async () => {
     setCarregando(true)

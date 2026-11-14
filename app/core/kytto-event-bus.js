@@ -159,6 +159,13 @@ class KyttoEventBus extends EventEmitter {
   }
 
   /**
+   * Alias de conveniência para emitir()
+   */
+  emitirEvento(tipo, dados = {}, opcoes = {}) {
+    return this.emitir(tipo, dados, opcoes);
+  }
+
+  /**
    * Retorna os eventos internos registrados, com filtro opcional por empresa, tipo e origem.
    */
   listarEventos({ empresaId = '', tipo = '', origem = '', limite = 50 } = {}) {
