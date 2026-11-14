@@ -1,5 +1,12 @@
 import { Router } from 'express';
 import {
+  obterStatusConectores,
+  configurarModbusTCP,
+  acionarCoilModbus,
+  processarFrameBalanca,
+  executarCicloSimuladoCLP
+} from './conectores-industriais.js';
+import {
   obterDadosConcreto,
   criarCargaConcreto,
   atualizarStatusCarga,
@@ -1053,6 +1060,55 @@ router.post('/dosagem/calcular', (req, res) => {
       const volumeM3 = Number(req.body?.volumeM3) || 64.0;
       const tracoFck = Number(req.body?.traçoFck || req.body?.tracoFck) || 30;
       const resultado = calcularBalancoCarbonoRecicladorESG(volumeM3, tracoFck, req.body || {});
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+
+  // 6. Conectores Nativos para Automação Industrial (Modbus TCP & Balanças Universais)
+  router.get('/conectores-industriais/status', (req, res) => {
+    try {
+      const resultado = obterStatusConectores();
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post('/conectores-industriais/configurar-modbus', (req, res) => {
+    try {
+      const resultado = configurarModbusTCP(req.body || {});
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post('/conectores-industriais/acionar-coil', (req, res) => {
+    try {
+      const { coilId, estado } = req.body || {};
+      const resultado = acionarCoilModbus(coilId, estado);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post('/conectores-industriais/processar-frame-balanca', (req, res) => {
+    try {
+      const { fabricanteId, frameRaw } = req.body || {};
+      const resultado = processarFrameBalanca(fabricanteId, frameRaw);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post('/conectores-industriais/simular-ciclo-clp', (req, res) => {
+    try {
+      const resultado = executarCicloSimuladoCLP(req.body || {});
       return res.json(resultado);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });

@@ -12,6 +12,7 @@ import ConcretoMapaGpsFrota from './concreto/ConcretoMapaGpsFrota';
 import ConcretoChecklistFrota from './concreto/ConcretoChecklistFrota';
 import ConcretoRecicladorSustentabilidade from './concreto/ConcretoRecicladorSustentabilidade';
 import ConcretoAuditoriaMetrologica from './concreto/ConcretoAuditoriaMetrologica';
+import ConcretoConectoresIndustriais from './concreto/ConcretoConectoresIndustriais';
 import ConcretoCamerasVisionAI from './concreto/ConcretoCamerasVisionAI';
 import ConcretoLaboratorioTecnologico from './concreto/ConcretoLaboratorioTecnologico';
 import ConcretoAppCampoPainel from './concreto/ConcretoAppCampoPainel';
@@ -1094,9 +1095,25 @@ export default function ConcretoUsinaERP() {
               >
                 📊 Auditoria Metrológica das 4 Balanças (NBR 7212)
               </button>
+              <button
+                type="button"
+                className="btn-serrano"
+                style={{
+                  background: subAbaCentral === 'conectores' ? 'var(--serrano-orange)' : 'transparent',
+                  color: subAbaCentral === 'conectores' ? '#fff' : 'var(--text)',
+                  borderColor: subAbaCentral === 'conectores' ? 'var(--serrano-orange)' : 'var(--joint)',
+                  fontWeight: 600,
+                  fontSize: 12
+                }}
+                onClick={() => setSubAbaCentral('conectores')}
+              >
+                🔌 Conectores Industriais Modbus TCP &amp; Balanças
+              </button>
             </div>
 
-            {subAbaCentral === 'auditoria' ? (
+            {subAbaCentral === 'conectores' ? (
+              <ConcretoConectoresIndustriais onVoltar={() => setSubAbaCentral('dosadora')} />
+            ) : subAbaCentral === 'auditoria' ? (
               <ConcretoAuditoriaMetrologica />
             ) : (
           <div className="serrano-grid-2col">

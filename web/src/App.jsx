@@ -207,6 +207,7 @@ const LojaModa        = lazy(() => import('./pages/admin/LojaModa'))
 const PalatarePizzariaSuite = lazyWithRetry(() => import("./pages/admin/PalatarePizzariaSuite"))
 const ConcretoUsinaERP = lazyWithRetry(() => import("./pages/admin/ConcretoUsinaERP"))
 const ConcretoPwaAssinatura = lazyWithRetry(() => import("./pages/public/ConcretoPwaAssinatura"))
+const ConcretoPortalCliente = lazyWithRetry(() => import("./pages/public/ConcretoPortalCliente"))
 const BalancaRodoviariaCockpit = lazyWithRetry(() => import("./pages/admin/concreto/BalancaRodoviariaCockpit"))
 const BarbeariaERP    = lazyWithRetry(() => import("./pages/admin/BarbeariaERP"))
 const SorteiosCampanhas = lazyWithRetry(() => import('./pages/admin/SorteiosCampanhas'))
@@ -486,6 +487,10 @@ export default function App() {
         <Route path="/concreto/pwa" element={<ConcretoPwaAssinatura />} />
         <Route path="/concreto/assinatura" element={<ConcretoPwaAssinatura />} />
         <Route path="/concreto/assinatura/:cargaId" element={<ConcretoPwaAssinatura />} />
+        <Route path="/concreto/portal-cliente" element={<ConcretoPortalCliente />} />
+        <Route path="/concreto/portal-cliente/:cargaId" element={<ConcretoPortalCliente />} />
+        <Route path="/concreto/rastreamento" element={<ConcretoPortalCliente />} />
+        <Route path="/concreto/rastreamento/:cargaId" element={<ConcretoPortalCliente />} />
         <Route path="/sorteios/:slug" element={<SorteiosPublico />} />
         <Route path="/sorteios" element={<SorteiosPublico />} />
         <Route path="/sorteio/:slug" element={<SorteiosPublico />} />
