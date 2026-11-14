@@ -592,6 +592,84 @@ app.get('/api/admin/dino/gestao/configuracao', (req, res) => {
   }
 });
 
+app.get('/api/admin/dino/gestao/programar-envio', (req, res) => {
+  try {
+    const configResumo = configuracaoResumoPublica();
+    res.json({
+      ok: true,
+      agendamentos: {
+        briefingMatinal: {
+          ativo: true,
+          horario: '08:30',
+          timezone: 'America/Cuiaba',
+          descricao: 'Briefing matinal com resumo da agenda, clientes ausentes para recuperar e oportunidades de upsell',
+          destinatarios: ['5514997462929', '5565996722055']
+        },
+        fechamentoNoturno: {
+          ativo: configResumo.ativo !== false,
+          horario: configResumo.hora || '20:00',
+          timezone: 'America/Cuiaba',
+          descricao: 'Fechamento diário com total faturado, produção por barbeiro, formas de pagamento e estoque',
+          destinatarios: ['5514997462929', '5565996722055']
+        }
+      },
+      meuTelefoneCadastrado: {
+        nome: 'Rodrigo Gonçalves',
+        telefone: '5514997462929',
+        formatado: '+55 (14) 99746-2929',
+        papel: 'Gestão Executiva / Kytto'
+      },
+      statusWorkers: 'ativos'
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/dino/gestao/testar-meu-whats', async (req, res) => {
+  try {
+    const telefone = req.body?.telefone || '5514997462929';
+    const tipo = req.body?.tipo || 'fechamento'; // 'briefing' ou 'fechamento'
+    const agora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Cuiaba' });
+
+    let resultadoEnvio;
+    if (tipo === 'briefing') {
+      const { compilarBriefingDiarioDino } = await import('./core/dino-daily-briefing.js');
+      const briefing = compilarBriefingDiarioDino({ empresaId: 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6' });
+      resultadoEnvio = await enviarParaGestaoDino({
+        titulo: 'Teste do Briefing Matinal — Direcionado ao seu WhatsApp',
+        conteudo: briefing.mensagem,
+        tipo: 'briefing',
+        tenant: req.tenant || {}
+      });
+    } else {
+      const { montarResumoDiario } = await import('./core/dino-resumo-diario.js');
+      const resumo = await montarResumoDiario({
+        empresaId: 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
+        lojaId: '',
+        dia: new Date().toISOString().split('T')[0]
+      });
+      resultadoEnvio = await enviarParaGestaoDino({
+        titulo: 'Teste do Fechamento Noturno — Direcionado ao seu WhatsApp',
+        conteudo: resumo.texto,
+        tipo: 'fechamento',
+        tenant: req.tenant || {}
+      });
+    }
+
+    res.json({
+      ok: true,
+      mensagem: `Teste enviado com sucesso para o seu WhatsApp cadastrado (${telefone})!`,
+      telefone,
+      tipo,
+      horario: agora,
+      detalhes: resultadoEnvio
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.post('/api/admin/dino/gestao/disparo-imediato', async (req, res) => {
   try {
     const { titulo = 'Atualização de Performance & Metas Dino', conteudo = '', tipo = 'performance' } = req.body || {};

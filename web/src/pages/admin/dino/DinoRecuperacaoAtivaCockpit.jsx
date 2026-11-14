@@ -37,6 +37,9 @@ export default function DinoRecuperacaoAtivaCockpit() {
   const [servicoSimulado, setServicoSimulado] = useState('corte') // 'corte' | 'barba' | 'combo'
   const [pacoteQtd, setPacoteQtd] = useState(4) // 4, 6 ou 8 procedimentos
   const [copiouPacote, setCopiouPacote] = useState(false)
+  const [testandoWhats, setTestandoWhats] = useState(false)
+  const [statusWhatsMsg, setStatusWhatsMsg] = useState(null)
+  const [tipoWhatsTeste, setTipoWhatsTeste] = useState('fechamento')
 
   // Carregar status dos clientes elegíveis
   const carregarElegiveis = useCallback(async () => {
@@ -74,6 +77,36 @@ export default function DinoRecuperacaoAtivaCockpit() {
   }, [carregarElegiveis])
 
   // Disparar recuperação
+  const handleTestarMeuWhats = async (tipo = 'fechamento') => {
+    setTestandoWhats(true)
+    setStatusWhatsMsg(null)
+    setTipoWhatsTeste(tipo)
+    try {
+      const res = await api.post('/api/admin/dino/gestao/testar-meu-whats', {
+        telefone: '5514997462929',
+        tipo
+      })
+      if (res && res.ok) {
+        setStatusWhatsMsg({
+          tipo: 'sucesso',
+          texto: `Mensagem de ${tipo === 'briefing' ? 'Briefing Matinal' : 'Fechamento Diário'} enviada com sucesso para o seu WhatsApp (14) 99746-2929!`
+        })
+      } else {
+        setStatusWhatsMsg({
+          tipo: 'erro',
+          texto: res?.error || 'Falha ao conectar com o provedor WhatsApp.'
+        })
+      }
+    } catch (err) {
+      setStatusWhatsMsg({
+        tipo: 'erro',
+        texto: err.message || 'Erro de comunicação ao disparar para seu WhatsApp.'
+      })
+    } finally {
+      setTestandoWhats(false)
+    }
+  }
+
   const handleDispararLote = async () => {
     setDisparando(true)
     setResultadoDisparo(null)
