@@ -5519,17 +5519,36 @@ app.get('/api/public/dino/grupos-evolution', async (req, res) => {
 app.get('/api/public/dino/debug-waha-full', async (req, res) => {
   try {
     const baseUrl = req.query.url || 'https://waha.kytto.com.br';
-    const secret = process.env.WAHA_CONTROL_BRIDGE_SECRET || '';
-    const apiKey = process.env.WAHA_API_KEY || secret;
     const fetchImpl = globalThis.fetch;
 
-    const testUrl = async (path, extraHeaders = {}) => {
+    const secretsToTest = [
+      { name: 'WAHA_CONTROL_BRIDGE_SECRET', val: process.env.WAHA_CONTROL_BRIDGE_SECRET || '' },
+      { name: 'WAHA_WEBHOOK_SECRET', val: process.env.WAHA_WEBHOOK_SECRET || '' },
+      { name: 'WAHA_WEBHOOK_HMAC_KEY', val: process.env.WAHA_WEBHOOK_HMAC_KEY || '' },
+    ].filter((s) => s.val);
+
+    const authResults = [];
+    for (const s of secretsToTest) {
+      try {
+        const r = await fetchImpl(`${baseUrl}/v1/sessions/barbearia-dino-gestao/status`, {
+          headers: {
+            Accept: 'application/json',
+            'X-Kytto-Waha-Bridge-Secret': s.val,
+          }
+        });
+        const text = await r.text();
+        authResults.push({ secretName: s.name, status: r.status, body: text.slice(0, 200) });
+      } catch (e) {
+        authResults.push({ secretName: s.name, error: e.message });
+      }
+    }
+
+    const testUrl = async (path, secretVal, extraHeaders = {}) => {
       try {
         const r = await fetchImpl(`${baseUrl}${path}`, {
           headers: {
             'Accept': 'application/json',
-            'X-Api-Key': apiKey,
-            'X-Kytto-Waha-Bridge-Secret': secret,
+            'X-Kytto-Waha-Bridge-Secret': secretVal,
             ...extraHeaders
           }
         });
@@ -5543,21 +5562,7 @@ app.get('/api/public/dino/debug-waha-full', async (req, res) => {
       }
     };
 
-    const results = {
-      root: await testUrl('/'),
-      apiSessions: await testUrl('/api/sessions'),
-      v1Sessions: await testUrl('/v1/sessions'),
-      swagger: await testUrl('/api/docs/swagger.json'),
-      apiDocs: await testUrl('/api/docs'),
-      defaultChats: await testUrl('/api/default/chats'),
-      defaultGroups: await testUrl('/api/default/groups'),
-      dinoChats: await testUrl('/api/dino/chats'),
-      dinoGroups: await testUrl('/api/dino/groups'),
-      barbeariaDinoChats: await testUrl('/api/barbearia-dino-gestao/chats'),
-      barbeariaDinoGroups: await testUrl('/api/barbearia-dino-gestao/groups'),
-    };
-
-    res.json({ ok: true, baseUrl, hasSecret: Boolean(secret), hasApiKey: Boolean(process.env.WAHA_API_KEY), results });
+    res.json({ ok: true, baseUrl, authResults });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
