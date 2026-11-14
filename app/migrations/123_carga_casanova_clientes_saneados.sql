@@ -7,6 +7,32 @@
 -- Evento Interno: Registro em eventos_integracao_canais
 -- ============================================================================
 
+-- 0. Garantir existência da empresa Casa Nova e loja matriz (evita violação de FK)
+INSERT INTO empresas (id, nome, razao_social, cnpj, ativa, data_criacao, data_atualizacao, tipo_negocio)
+VALUES (
+  'b7b7ac01-8e50-4b61-8c79-de4aaa916db1',
+  'Casa Nova Materiais para Construção',
+  'Casa Nova Materiais para Construcao Ltda',
+  '03.882.498/0001-10',
+  true,
+  now(),
+  now(),
+  'varejo'
+) ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO lojas (id, empresa_id, nome, codigo, timezone, ativa, configuracoes, data_criacao, data_atualizacao)
+VALUES (
+  'b7b7ac01-8e50-4b61-8c79-de4aaa916db2',
+  'b7b7ac01-8e50-4b61-8c79-de4aaa916db1',
+  'Casa Nova - Matriz',
+  'LJ01',
+  'America/Cuiaba',
+  true,
+  '{}'::jsonb,
+  now(),
+  now()
+) ON CONFLICT (id) DO NOTHING;
+
 -- 1. Carga em commerce_customers (PDV e Commerce)
 -- Observação: email_normalizado e telefone_normalizado são colunas geradas (GENERATED ALWAYS) e omitidas.
 
