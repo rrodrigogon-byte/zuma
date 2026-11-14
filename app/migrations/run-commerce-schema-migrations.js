@@ -109,6 +109,7 @@ const migrationFiles = [
   '120_corrigir_emitentes_fiscais_todas_empresas.sql',
   '121_saneamento_varejo_sem_dados_ficticios.sql',
   '122_sorteios_campanhas_bilhetes_ganhadores.sql',
+  '123_carga_casanova_clientes_saneados.sql',
 ];
 const advisoryLockKey = 825410732;
 
