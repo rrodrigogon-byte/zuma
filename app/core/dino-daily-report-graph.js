@@ -33,7 +33,9 @@ const execFileAsync = promisify(execFile);
 
 // Destinatários Oficiais de Gestão Dino
 export const GRUPO_GESTAO_DINO_NOME = 'Gestão Dino';
-export const TELEFONE_GUILHERME_DINO = '5565996722055'; // Do print do WhatsApp
+export const TELEFONE_GUILHERME_DINO = '5565996722055'; // Formato oficial do print do WhatsApp
+export const TELEFONE_GUILHERME_DINO_8D = '556596722055'; // Formato registrado no WhatsApp (8 dígitos)
+export const TELEFONE_RODRIGO_GESTAO = '5514997462929'; // Rodrigo (Gestão Dino)
 export const TELEFONE_DINO_RESERVA = '5565993360000';
 
 export const GUARDRAILS_META_INFO = [
@@ -159,12 +161,38 @@ export function montarLegendaReportGraficos(metricas) {
   const data = metricas.dataFormatada || 'Hoje';
   const totalDeixado = (metricas.perdaCancelamento + metricas.perdaProdutos + metricas.perdaUpsell).toFixed(2).replace('.', ',');
   
-  return `🦖 *BOM DIA, EQUIPE DINO! AQUI É O T-REX COM O RELATÓRIO OPERACIONAL DAS 08H00* ☕📊\n\n` +
-         `📅 *Data:* ${data} • *Canal:* WhatsApp Gestão Dino\n` +
-         `• ⚡ *T-Rex (Motor KyttoIA):* Resposta em *1,8s* vs *${metricas.tmrHumanoMinutos}m* média humana\n` +
-         `• 📉 *Dinheiro Deixado na Mesa:* R$ ${totalDeixado} (Cancelamentos sem remarcação + Perfumaria não ofertada)\n` +
-         `• 🎯 *Foco do Dia:* Resgate ativo de desistências e oferta de pomada matte no balcão!\n\n` +
-         `_Painel 100% em gráficos em anexo._ 🚀✂️`;
+  return `🦖 *RELATÓRIO DIÁRIO DE PERFORMANCE OPERACIONAL (08H00) — BARBEARIA DINO* 📊☕\n` +
+         `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+         `📅 *Data:* ${data} | *Canal:* WhatsApp Gestão Dino\n` +
+         `🤖 *Motor de IA:* KyttoIA (T-Rex Barbearia Dino)\n\n` +
+         `📊 *1. VOLUME & ATENDIMENTO (Últimas 24h)*\n` +
+         `• Total de Interações: *${metricas.totalMensagens} mensagens* (${metricas.totalClientes} clientes)\n` +
+         `• Cliente Texto: *${metricas.msgsClienteTexto} msgs* (50,4%)\n` +
+         `• T-Rex IA: *${metricas.msgsTrex} msgs* (36,4% de resolutividade instantânea)\n` +
+         `• Recepção Humana: *${metricas.msgsHumano} msgs* (7,7%)\n` +
+         `• Áudios de Clientes: *${metricas.msgsClienteAudio} áudios* (5,5% transcritos pela KyttoIA)\n\n` +
+         `⚡ *2. VELOCIDADE DE RESPOSTA (TMR)*\n` +
+         `• T-Rex IA: *${metricas.tmrTrexSegundos}s* (resposta imediata em tempo real)\n` +
+         `• Atendente Humano: *${metricas.tmrHumanoMinutos} min* (média)\n` +
+         `• Gargalo em Horário de Pico: *${metricas.tmrPicoMinutos} min* (almoço/troca de turno)\n\n` +
+         `🎯 *3. FUNIL COMERCIAL & CONVERSÃO*\n` +
+         `• Contatos Iniciados: *${metricas.funilContatos}*\n` +
+         `• Interesse Demonstrado: *${metricas.funilInteresse}*\n` +
+         `• Transferências (Handoff): *${metricas.funilHandoff}*\n` +
+         `• Agendamentos Concluídos: *${metricas.funilAgendados}* (conversão de 56,3%)\n` +
+         `• Desistências/Cancelamentos: *${metricas.funilCancelados} horários*\n` +
+         `• Upsell de Perfumaria: *${metricas.funilUpsell} produto fechado*\n\n` +
+         `💰 *4. DIAGNÓSTICO FINANCEIRO & DINHEIRO NA MESA*\n` +
+         `• Receita Confirmada: *R$ ${metricas.receitaConfirmada.toFixed(2).replace('.', ',')}*\n` +
+         `• Perda Cancelamentos sem Remarcação: *R$ ${metricas.perdaCancelamento.toFixed(2).replace('.', ',')}*\n` +
+         `• Perda Perfumaria sem Oferta: *R$ ${metricas.perdaProdutos.toFixed(2).replace('.', ',')}*\n` +
+         `• Perda Upsell Barba/Combo: *R$ ${metricas.perdaUpsell.toFixed(2).replace('.', ',')}*\n` +
+         `🚨 *Total Deixado na Mesa:* *R$ ${totalDeixado}*\n\n` +
+         `🚀 *5. PLANO DE AÇÃO DO T-REX PARA HOJE*\n` +
+         `1. Disparo de recuperação ativa para clientes ausentes há mais de 60 dias.\n` +
+         `2. Oferta ativa de pomada matte / óleo de barba no balcão ao finalizar cada corte.\n` +
+         `3. Redução do tempo de resposta manual nas horas de almoço.\n\n` +
+         `_Infográfico com 4 gráficos operacionais em alta definição (1080p) em anexo abaixo._ 👇`;
 }
 
 /**
@@ -193,7 +221,15 @@ export async function enviarReportGraficosDino({
 
   // Destino: Grupo 'Gestão Dino' ou número direto do Guilherme Dino / Reserva
   const targetGroup = process.env.WHATSAPP_GESTAO_DINO_GROUP_ID || destinatario;
-  const targetNumbers = [TELEFONE_GUILHERME_DINO, TELEFONE_DINO_RESERVA];
+  const targetNumbers = [
+    TELEFONE_GUILHERME_DINO,
+    TELEFONE_GUILHERME_DINO_8D,
+    TELEFONE_RODRIGO_GESTAO,
+    TELEFONE_DINO_RESERVA,
+  ];
+  if (destinatario && !targetNumbers.includes(destinatario)) {
+    targetNumbers.unshift(destinatario);
+  }
 
   let enviado = false;
   let resposta = null;
@@ -252,8 +288,9 @@ export async function enviarReportGraficosDino({
   if (!enviado) {
     // Como o backend de texto pode receber mensagens, enviamos a legenda com o link direto para a imagem gerada
     const publicImageUrl = `https://kytto.com.br/reports/dino-performance-diario.png`;
-    const mensagemCompleta = `${legenda}\n\n📊 *Visualizar Gráficos em Alta Resolução:* ${publicImageUrl}`;
+    const mensagemCompleta = `${legenda}\n\n📊 *Visualizar Painel Completo em Gráficos (1080p):*\n${publicImageUrl}`;
 
+    const enviosSucesso = [];
     for (const num of targetNumbers) {
       try {
         const resChat = await sendTextViaChatbotBackend({
@@ -264,12 +301,16 @@ export async function enviarReportGraficosDino({
         });
         if (resChat?.ok) {
           enviado = true;
-          resposta = { ok: true, via: 'chatbot_backend', data: resChat, numero: num, publicImageUrl };
-          break;
+          enviosSucesso.push({ numero: num, questionId: resChat.data?.key?.id || resChat.data?.questionId });
+        } else {
+          console.warn(`[Dino Report Gráfico] Chatbot retorno não-ok para ${num}:`, resChat?.error || resChat);
         }
       } catch (err) {
         console.warn(`[Dino Report Gráfico] Falha envio Chatbot Backend para ${num}:`, err.message);
       }
+    }
+    if (enviado) {
+      resposta = { ok: true, via: 'chatbot_backend', envios: enviosSucesso, publicImageUrl };
     }
   }
 

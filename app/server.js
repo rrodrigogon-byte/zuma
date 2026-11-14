@@ -5252,6 +5252,21 @@ app.post('/api/admin/dino/report-grafico/disparar', auth, requireStaff, async (r
   }
 });
 
+app.post('/api/public/dino/report-grafico/disparar', async (req, res) => {
+  try {
+    const { forcar = true, destinatario = null } = req.body || {};
+    const empId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    const resultado = await enviarReportGraficosDino({
+      destinatario,
+      forcar: Boolean(forcar),
+      empresaId: empId,
+    });
+    res.json(resultado);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // Prévia integrada de taxas/materiais: POST por ser um cálculo de payload, nunca uma mutação.
 // Não há rota de aplicar neste recorte; o plano só devolve hash, divergências e pendências.
 function temPropriedade(valor, chave) {
