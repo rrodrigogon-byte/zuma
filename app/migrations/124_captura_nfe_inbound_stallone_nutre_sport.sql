@@ -4,8 +4,8 @@
 -- ============================================================================
 
 -- 1. Sincronização de categorias e catálogo de produtos no ERP físico
-INSERT INTO categorias (id, empresa_id, nome, ativo, data_criacao, data_atualizacao)
-SELECT id, empresa_id, nome, true, criado_em, atualizado_em
+INSERT INTO categorias (id, empresa_id, nome, ativa, data_criacao)
+SELECT id, empresa_id, nome, true, criado_em
 FROM commerce_categories
 WHERE empresa_id = '31f70c83-9172-40c2-945f-9e793b5048be'
 ON CONFLICT (id) DO NOTHING;
