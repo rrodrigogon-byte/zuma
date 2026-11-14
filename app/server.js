@@ -95,6 +95,7 @@ import { startIsaPollWorker } from './core/whatsapp-isa-poll.js';
 import { startDinoDailyConfirmationWorker } from './core/dino-confirmacao-diaria.js';
 import { startDinoDailyBriefingWorker } from './core/dino-daily-briefing.js';
 import { startDinoRecuperacaoAtivaWorker, executarRecuperacaoAtivaDiaria, listarClientesElegiveisRecuperacao } from './core/dino-recuperacao-ativa.js';
+import { startDinoDailyReportWorker, enviarReportGraficosDino, compilarMetricasReportGrafico, GUARDRAILS_META_INFO } from './core/dino-daily-report-graph.js';
 import { configuracaoResumo, configuracaoResumoPublica, diaLocal as diaLocalResumo, enviarResumo, lojaDoCanal as lojaDoCanalResumo, montarResumoDiario, startResumoDiarioWorker } from './core/dino-resumo-diario.js';
 import { startPendingFollowUpWorker } from './core/whatsapp-ai-followup.js';
 import { db as commerceDb, getPool as getCommercePool } from './core/database.js';
@@ -5219,6 +5220,38 @@ registerWhatsappConexaoRoutes(app, { legacyEmpresaId: whatsappEmpresaId, legacyL
 registerWhatsappConexaoRoutes(app, { legacyEmpresaId: whatsappEmpresaId, legacyLojaId: whatsappLojaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user), basePath: '/api/admin/barbearia/whatsapp-conexao-gestao', tipoCanal: 'gestao' });
 registerWhatsappConexaoRoutes(app, { legacyEmpresaId: whatsappEmpresaId, legacyLojaId: whatsappLojaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user), basePath: '/api/admin/barbearia/whatsapp-conexao-lancamentos', tipoCanal: 'lancamentos' });
 registerWhatsappCloudRoutes(app, { isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user) });
+
+// Rotas do Relatório Diário de Performance & Auditoria Operacional do T-Rex (Motor KyttoIA)
+app.get('/api/admin/dino/report-grafico/preview', auth, requireStaff, async (req, res) => {
+  try {
+    const empId = req.headers['x-empresa-id'] || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    const metricas = await compilarMetricasReportGrafico({ empresaId: empId });
+    res.json({
+      ok: true,
+      metricas,
+      imageUrl: '/reports/dino-performance-diario.png',
+      guardrails: GUARDRAILS_META_INFO,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/dino/report-grafico/disparar', auth, requireStaff, async (req, res) => {
+  try {
+    const { forcar, destinatario } = req.body || {};
+    const empId = req.headers['x-empresa-id'] || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    const resultado = await enviarReportGraficosDino({
+      destinatario,
+      forcar: Boolean(forcar),
+      empresaId: empId,
+    });
+    res.json(resultado);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Prévia integrada de taxas/materiais: POST por ser um cálculo de payload, nunca uma mutação.
 // Não há rota de aplicar neste recorte; o plano só devolve hash, divergências e pendências.
 function temPropriedade(valor, chave) {
@@ -12421,6 +12454,7 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
   startDinoDailyConfirmationWorker();
   startDinoDailyBriefingWorker();
   startDinoRecuperacaoAtivaWorker();
+  startDinoDailyReportWorker();
   startAiBrainSchedulers();
   // Cobranças da barbearia: sinal vencido libera o horário (e avisa a lista de
   // espera); a cobrança do clube é gerada e enviada uma vez por hora.
