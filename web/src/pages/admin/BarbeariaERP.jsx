@@ -11013,6 +11013,53 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                 />
               </div>
             </Field>
+            {/* Upsell Presencial de Balcão (Onda 1) */}
+            <div style={{
+              background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+              border: '1px solid #86efac',
+              borderRadius: 8,
+              padding: '12px 14px',
+              marginBottom: 14,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 10
+            }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: '#166534', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span>💈</span> Sugestão de Upsell de Perfumaria
+                </div>
+                <div style={{ fontSize: 12, color: '#15803d' }}>
+                  Pomada Matte Dino (150g) por <strong>R$ 45,00</strong> (+R$ 4,50 de comissão para o profissional)
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (modal?.agendamento) {
+                    modal.agendamento.valor = Number(modal.agendamento.valor || 0) + 45.0;
+                    toast("Pomada Matte Dino (R$ 45,00) adicionada com sucesso ao atendimento!", "success");
+                    setFormRecebimento((prev) => ({ ...prev }));
+                  }
+                }}
+                style={{
+                  background: '#16a34a',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '8px 14px',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  boxShadow: '0 2px 4px rgba(22, 163, 74, 0.2)'
+                }}
+              >
+                + Incluir Pomada (R$ 45)
+              </button>
+            </div>
+
             <Field
               label="Valor a receber agora (R$)"
               hint="Valor do serviço menos sinal pago, cashback e vale usados. Para desconto ou ajuste, use a comanda com aprovação e auditoria."

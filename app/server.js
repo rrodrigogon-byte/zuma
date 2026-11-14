@@ -239,6 +239,7 @@ import { buildCurrentMaterials, previewTaxMaterialPlan, PreviewConflictError, Pr
 import { perfilDoUsuario, profissionalPode, operadorPodeNaBarbearia, respostaParaOperador, papelLegadoDoRole, permissoesDoPerfil, MODULOS_FECHADOS_AO_OPERADOR, MENSAGEM_PERFIL } from './core/perfis-acesso.js';
 import { profissionalDoUsuario } from './dino-modo-barbeiro.js';
 import { provisionarEquipeDino } from './dino-equipe-seed.js';
+import { provisionarCatalogoDino, SERVICOS_DINO_OFICIAIS, PRODUTOS_DINO_OFICIAIS } from './dino-catalogo-seed.js';
 import { provisionarPalatarePizzaria, PALATARE_EMPRESA_ID, PALATARE_DADOS_EMPRESA } from './palatare-pizzaria-seed.js';
 import { provisionarConcretoUsina, CONCRETO_EMPRESA_ID, CONCRETO_DADOS_EMPRESA, CONCRETO_SILOS_INICIAIS, CONCRETO_BAIAS_INICIAIS, CONCRETO_TANQUES_ADITIVOS, CONCRETO_ENTRADAS_SUPRIMENTOS, CONCRETO_BATELADAS_PROCESSO } from './concreto-usina-seed.js';
 import { criarRotasConcreto } from './modules/concreto/rotas.js';
@@ -601,6 +602,71 @@ app.get('/api/admin/dino/gestao/configuracao', (req, res) => {
       grupo: GRUPO_GESTAO_DINO_INFO,
       canalEgress: 'gestao',
       status: 'ativo'
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ROTAS OFICIAIS DE CATÁLOGO & UPSELL DE BALCÃO — BARBEARIA DINO (ONDA 1)
+app.get('/api/admin/dino/catalogo', (req, res) => {
+  try {
+    const { estadoEmpresa } = barbeariaErpKytto;
+    const empresaId = req.query.empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    const estado = estadoEmpresa(empresaId);
+    res.json({
+      ok: true,
+      servicos: Object.values(estado.servicos || {}),
+      produtos: Object.values(estado.produtosRevenda || {}),
+      totalServicos: Object.keys(estado.servicos || {}).length,
+      totalProdutos: Object.keys(estado.produtosRevenda || {}).length
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/dino/catalogo/sincronizar', (req, res) => {
+  try {
+    const empresaId = req.body?.empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    const resultado = provisionarCatalogoDino({ empresaId, commerceDb });
+    res.json(resultado);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/dino/comandas/:id/adicionar-upsell-pomada', (req, res) => {
+  try {
+    const { estadoEmpresa, adicionarItemComandaBarbearia } = barbeariaErpKytto;
+    const empresaId = req.body?.empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    const comandaId = req.params.id;
+    const estado = estadoEmpresa(empresaId);
+    const comanda = estado.comandas?.[comandaId];
+
+    if (!comanda) {
+      return res.status(404).json({ ok: false, error: 'Comanda não encontrada' });
+    }
+
+    const barbeiroId = comanda.profissionalId || comanda.itens?.[0]?.profissionalId || 'prof-mwf821gx-004';
+    const itemPomada = {
+      tipo: 'produto',
+      produtoId: 'prod-dino-pomada-001',
+      nome: 'Pomada Modeladora Efeito Matte Dino (150g)',
+      precoUnitario: 45.0,
+      quantidade: 1,
+      profissionalId: barbeiroId,
+      subtotal: 45.0,
+      comissaoPercentual: 10,
+      comissaoValor: 4.5
+    };
+
+    const comandaAtualizada = barbeariaErpKytto.adicionarItensComandaBarbearia(empresaId, comandaId, [itemPomada]);
+    res.json({
+      ok: true,
+      mensagem: 'Pomada Modeladora Matte adicionada com sucesso na comanda!',
+      comanda: comandaAtualizada,
+      comissaoBarbeiro: 4.5
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -13219,6 +13285,7 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
   void inicializarBloqueiosEquipe().catch(() => null);
   setTimeout(() => {
     try { provisionarEquipeDino({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar equipe Dino:', err.message); }
+    try { provisionarCatalogoDino({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar catálogo Dino:', err.message); }
     try { configurarWhatsappGestaoDino({ dbPg: commerceDb }); } catch (err) { console.warn('Aviso ao provisionar WhatsApp Gestão Dino:', err.message); }
     try { sincronizarTenantsEquipes(commerceDb); } catch (err) { console.warn('Aviso ao sincronizar tenants:', err.message); }
     try { provisionarPalatarePizzaria({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar Palatare:', err.message); }
