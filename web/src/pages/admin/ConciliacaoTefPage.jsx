@@ -1188,6 +1188,40 @@ export default function ConciliacaoTefPage() {
             >
               🖨️ Imprimir Cupom Térmico
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                const texto = `*COMPROVANTE TEF - STALLONE NUTRE SPORT*%0A%0A` +
+                  `*Valor:* ${fmtMoney(comprovanteModal.valor)}%0A` +
+                  `*Modalidade:* ${comprovanteModal.modalidade?.toUpperCase()} ${comprovanteModal.parcelas > 1 ? `(${comprovanteModal.parcelas}X)` : ''}%0A` +
+                  `*Adquirente:* ${comprovanteModal.adquirenteNome}%0A` +
+                  `*Bandeira:* ${comprovanteModal.bandeiraNome}%0A` +
+                  `*NSU:* ${comprovanteModal.nsu}%0A` +
+                  `*Autorização:* ${comprovanteModal.codigoAutorizacao}%0A` +
+                  `*Terminal:* ${comprovanteModal.terminalNome}%0A` +
+                  `*Data:* ${fmtDate(comprovanteModal.data)}%0A%0A` +
+                  `_Obrigado pela preferência! Equipe Stallone Nutre Sport_`;
+                window.open(`https://api.whatsapp.com/send?text=${texto}`, '_blank');
+              }}
+              style={{
+                width: '100%',
+                background: '#25d366',
+                color: '#ffffff',
+                border: 'none',
+                padding: '10px 14px',
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+                marginTop: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+              }}
+            >
+              📲 Enviar Comprovante por WhatsApp
+            </button>
           </div>
         </div>
       )}

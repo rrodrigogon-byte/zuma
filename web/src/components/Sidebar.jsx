@@ -474,6 +474,7 @@ const NAV_STALLONE_GROUPS = [
       { to: '/admin/cadastros-mestres', icon: '▤', label: 'Fornecedores e funcionários' },
       { to: '/admin/empresas', icon: '🏢', label: 'Empresas' },
       { to: '/admin/consolidacao-grupo', icon: '🏛️', label: 'Consolidação Holding' },
+      { to: '/admin/cockpit-360', icon: '🌐', label: 'Cockpit Executivo 360' },
       { to: '/admin/negocios-modulos', icon: '⚡', label: 'Negócios & Módulos' },
       { to: '/admin/lojas', icon: '▤', label: 'Unidades' },
       { to: '/admin/ecommerce?tab=users', icon: '♧', label: 'Usuários e acessos' },
@@ -581,6 +582,7 @@ export const NAV_HOLDING_GROUPS = [
       { to: "/admin/concreto?secao=empresa-holding&aba=dividendos", icon: "💎", label: "Dividendos & Remuneração Acionária" },
       { to: "/admin/concreto?secao=empresa-holding", icon: "🤖", label: "Copilot KyttoIA de Expansão" },
       { to: "/admin/consolidacao-grupo", icon: "🏛️", label: "Consolidação Geral dos Negócios" },
+      { to: "/admin/cockpit-360", icon: "🌐", label: "Cockpit Executivo 360" },
     ],
   },
   {

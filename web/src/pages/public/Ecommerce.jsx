@@ -190,6 +190,38 @@ function StalloneHero({ tagline, productCount, topCategories, onCategory, onTrac
         <li><QrCode size={18} aria-hidden="true" />Pix ou cartão de crédito</li>
       </ul>
     </div>
+    <div className="stallone-objetivos-kyttoia" style={{
+      background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%)',
+      border: '1px solid #334155',
+      borderRadius: 12,
+      padding: '16px 20px',
+      margin: '18px 0',
+      color: '#fff',
+      boxShadow: '0 4px 20px rgba(0,0,0,0.15)'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 20 }}>⚡</span>
+          <strong style={{ fontSize: 15, letterSpacing: '-0.01em' }}>KyttoIA Nutre Sport · Consultor Nutricional por Objetivo</strong>
+          <span style={{ background: '#f59e0b', color: '#000', fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 4 }}>MOTOR KYTTOIA</span>
+        </div>
+        <small style={{ color: '#94a3b8', fontSize: 12 }}>Clique no seu objetivo para carregar os suplementos recomendados:</small>
+      </div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <button type="button" onClick={() => onCategory('Creatina')} style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s' }}>
+          🏋️‍♂️ Hipertrofia & Força
+        </button>
+        <button type="button" onClick={() => onCategory('Whey & Proteínas')} style={{ background: '#059669', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s' }}>
+          🏃‍♀️ Proteínas & Definição
+        </button>
+        <button type="button" onClick={() => onCategory('Pré-treino & Energia')} style={{ background: '#ea580c', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s' }}>
+          ⚡ Pré-Treino Explosivo
+        </button>
+        <button type="button" onClick={() => onCategory('Vitaminas & Minerais')} style={{ background: '#7c3aed', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s' }}>
+          🌿 Longevidade & Imunidade
+        </button>
+      </div>
+    </div>
     {topCategories.length > 0 && <nav className="stallone-hero-shelf" aria-label="Categorias com mais produtos">
       <h2>Comece por uma categoria</h2>
       <ul>
