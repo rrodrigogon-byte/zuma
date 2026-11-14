@@ -5518,7 +5518,7 @@ app.get('/api/public/dino/grupos-evolution', async (req, res) => {
 
 app.get('/api/public/dino/debug-waha-full', async (req, res) => {
   try {
-    const baseUrl = process.env.WAHA_CONTROL_URL || 'https://waha.kytto.com.br';
+    const baseUrl = req.query.url || 'https://waha.kytto.com.br';
     const secret = process.env.WAHA_CONTROL_BRIDGE_SECRET || '';
     const apiKey = process.env.WAHA_API_KEY || secret;
     const fetchImpl = globalThis.fetch;
