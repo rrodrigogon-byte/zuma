@@ -17,7 +17,7 @@ VALUES (
   true,
   now(),
   now(),
-  'varejo'
+  'loja'
 ) ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO lojas (id, empresa_id, nome, codigo, timezone, ativa, configuracoes, data_criacao, data_atualizacao)
