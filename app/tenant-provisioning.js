@@ -175,16 +175,32 @@ export async function sincronizarTenantsEquipes(commerceDb) {
           const emailPrincipal = u.email.toLowerCase().trim();
           const emailAlt = (u.emailAlt || '').toLowerCase().trim();
 
-          // Atualiza usuário no PostgreSQL preservando senha alterada se houver
-          const updateRes = await commerceDb.query(
-            `UPDATE usuarios 
-                SET nome_completo = $1, role = $2, empresa_id = $3, ativo = true, data_atualizacao = NOW()
-              WHERE lower(btrim(email)) = $4 OR (length($5) > 0 AND lower(btrim(email)) = $5)
-              RETURNING id`,
-            [u.nome, u.pgRole, config.empresaId, emailPrincipal, emailAlt]
+          // Verifica se o usuário já existe no PostgreSQL
+          const userExist = await commerceDb.query(
+            `SELECT id, empresa_id FROM usuarios 
+              WHERE lower(btrim(email)) = $1 OR (length($2) > 0 AND lower(btrim(email)) = $2) 
+              LIMIT 1`,
+            [emailPrincipal, emailAlt]
           );
 
-          let userId = updateRes.rows?.[0]?.id;
+          let userId = null;
+          if (userExist.rows?.[0]?.id) {
+            userId = userExist.rows[0].id;
+            const currentEmpresaId = userExist.rows[0].empresa_id;
+            // Se pertencer a outra empresa com membership referenciada, preserva empresa_id para não violar FK
+            const targetEmpresaId = (currentEmpresaId && currentEmpresaId !== config.empresaId) 
+              ? currentEmpresaId 
+              : config.empresaId;
+
+            const updateRes = await commerceDb.query(
+              `UPDATE usuarios 
+                  SET nome_completo = $1, role = $2, empresa_id = $3, ativo = true, data_atualizacao = NOW()
+                WHERE id = $4
+                RETURNING id`,
+              [u.nome, u.pgRole, targetEmpresaId, userId]
+            );
+            userId = updateRes.rows?.[0]?.id || userId;
+          }
 
           if (!userId) {
             const insertRes = await commerceDb.query(
