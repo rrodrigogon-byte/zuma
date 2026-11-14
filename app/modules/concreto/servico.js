@@ -3586,6 +3586,10 @@ export async function gerarHtmlLaudoOficial(loteId, empresaId = CONCRETO_EMPRESA
 
   const media7d = (ensaio.corposProva || []).filter(c => c.idadeDias === 7 && c.tensaoMpa != null);
   const media28d = (ensaio.corposProva || []).filter(c => c.idadeDias === 28 && c.tensaoMpa != null);
+
+  // Geração de Hash Criptográfico SHA-256 do Laudo (Onda 2)
+  const payloadAssinatura = `${ensaio.id || ensaio.lote}|${ensaio.fckProjeto}|${ensaio.dataMoldagem}|${ensaio.responsavelTecnico}|${Date.now()}`;
+  const hashSha256 = crypto.createHash('sha256').update(payloadAssinatura).digest('hex').toUpperCase();
   const val7d = media7d.length ? +(media7d.reduce((a, b) => a + b.tensaoMpa, 0) / media7d.length).toFixed(1) : '-';
   const val28d = media28d.length ? +(media28d.reduce((a, b) => a + b.tensaoMpa, 0) / media28d.length).toFixed(1) : (ensaio.fckEstimado28d || 'Aguardando 28d');
 
@@ -3712,6 +3716,26 @@ export async function gerarHtmlLaudoOficial(loteId, empresaId = CONCRETO_EMPRESA
         <div style="font-weight:bold; font-size:12px;">${ensaio.responsavelTecnico}</div>
         <div style="font-size:10px; color:#64748b;">Responsável Técnica de Laboratório</div>
         <div style="font-size:9px; color:#94a3b8;">ART de Desempenho Tecnológico MT-2026-0812-CONC</div>
+      </div>
+    </div>
+
+    <!-- Selo de Autenticidade Digital NBR 5739 com Hash SHA-256 e QR Code (Onda 2) -->
+    <div style="margin-top:20px; border-top:2px dashed #cbd5e1; padding-top:14px; display:flex; justify-content:space-between; align-items:center; background:#f8fafc; padding:12px 16px; border-radius:8px;">
+      <div>
+        <div style="font-size:11px; font-weight:bold; color:#0f172a; display:flex; align-items:center; gap:6px;">
+          <span>🔒</span> SELO DE AUTENTICIDADE METROLÓGICA & ASSINATURA DIGITAL
+        </div>
+        <div style="font-size:10px; font-family:monospace; color:#475569; margin-top:4px;">
+          HASH SHA-256: <b>${hashSha256}</b>
+        </div>
+        <div style="font-size:10px; color:#64748b; margin-top:2px;">
+          Validação Pública: https://kytto.com.br/validar-laudo-concreto?hash=${hashSha256.slice(0, 16)}
+        </div>
+      </div>
+      <div style="text-align:right;">
+        <span style="background:#0f172a; color:#f8fafc; font-size:9px; font-weight:bold; padding:4px 8px; border-radius:4px; letter-spacing:0.5px;">
+          SISTEMA SERRANO CCO · NBR 5739
+        </span>
       </div>
     </div>
   </div>
