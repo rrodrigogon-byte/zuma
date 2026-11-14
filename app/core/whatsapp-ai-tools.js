@@ -230,7 +230,7 @@ export function matchAgendaName(value, items = [], { isDino = null } = {}) {
     const correspondencias = APELIDOS_SERVICOS[chaveServico];
     const achados = items.filter((item) => {
       const n = nomeComparavel(item?.nome);
-      if (!/\b(corte|cabelo)\b/i.test(semPreposicao) && /\b(corte|cabelo)\b/i.test(n) && !/\b(corte|cabelo)\b/i.test(chaveServico)) return false;
+      if (!/\b(combo|completo)\b/i.test(chaveServico) && !/\b(corte|cabelo)\b/i.test(semPreposicao) && /\b(corte|cabelo)\b/i.test(n) && !/\b(corte|cabelo)\b/i.test(chaveServico)) return false;
       return correspondencias.some((c) => n === c || n.includes(c));
     });
     if (achados.length === 1) {
@@ -336,16 +336,29 @@ async function resolveAgendaId(scope, value, field, { allowAny = false, professi
   // Fallback inteligente para serviços padrão da barbearia (evita erro "não encontrei o serviço" para termos comuns)
   if (!profissional && lista.length) {
     const pVal = nomeComparavel(normalized);
-    const ehCombo = /corte.*barba|barba.*corte|combo/i.test(pVal);
-    const ehCorte = /corte|cabelo/i.test(pVal) && !ehCombo;
-    const ehBarba = /barba/i.test(pVal) && !ehCombo;
+    const ehCombo = /corte.*barba|barba.*corte|cabelo.*barba|barba.*cabelo|combo|completo|ambos|os dois/i.test(pVal)
+      || ((pVal.includes('corte') || pVal.includes('cabelo')) && pVal.includes('barba'));
+    const ehCorte = (/corte|cabelo|cortar|aparar/i.test(pVal)) && !ehCombo;
+    const ehBarba = (/barba|barboterapia/i.test(pVal)) && !ehCombo;
+    const ehSobrancelha = /sobrancelha/i.test(pVal);
+    const ehPezinho = /pezinho|pesinho|acabamento/i.test(pVal);
     if (ehCombo) {
-      const combo = lista.find((it) => /corte.*barba|barba.*corte/i.test(it.nome));
+      const combo = lista.find((it) => /corte.*barba|barba.*corte|cabelo.*barba|combo/i.test(it.nome) || (/corte|cabelo/i.test(it.nome) && /barba/i.test(it.nome)));
       if (combo?.id) return combo.id;
     }
     if (ehCorte) {
       const corte = lista.find((it) => /corte/i.test(it.nome) && !/barba/i.test(it.nome));
       if (corte?.id) return corte.id;
+      const cabelo = lista.find((it) => /cabelo/i.test(it.nome) && !/barba/i.test(it.nome));
+      if (cabelo?.id) return cabelo.id;
+    }
+    if (ehSobrancelha) {
+      const sob = lista.find((it) => /sobrancelha/i.test(it.nome));
+      if (sob?.id) return sob.id;
+    }
+    if (ehPezinho) {
+      const pez = lista.find((it) => /pezinho|pesinho|acabamento/i.test(it.nome));
+      if (pez?.id) return pez.id;
     }
     if (ehBarba) {
       const barba = lista.find((it) => /barba/i.test(it.nome) && !/corte/i.test(it.nome));

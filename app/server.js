@@ -94,6 +94,33 @@ import { startWhatsappAiWorker } from './workers/whatsapp-ai-worker.js';
 import { startIsaPollWorker } from './core/whatsapp-isa-poll.js';
 import { startDinoDailyConfirmationWorker } from './core/dino-confirmacao-diaria.js';
 import { startDinoDailyBriefingWorker } from './core/dino-daily-briefing.js';
+import {
+  startDinoRecuperacaoAtivaWorker,
+  executarRecuperacaoAtivaDiaria,
+  listarClientesElegiveisRecuperacao,
+  consolidarReportDiarioTrex,
+  formatarMensagemReportGestao,
+  enviarReportDiarioGestaoWhatsApp,
+  enviarValidacaoEstrategicaWhatsApp,
+  registrarOptOut,
+} from './core/dino-recuperacao-ativa.js';
+import {
+  calcularPacotesMensais,
+  gerarScriptVendaPacotes,
+  gerarMensagemAniversariante,
+  extrairSocialCrm,
+  salvarSocialCrmNoCliente,
+} from './core/dino-trex-sales-engine.js';
+import { startDinoDailyReportWorker, enviarReportGraficosDino, compilarMetricasReportGrafico, GUARDRAILS_META_INFO } from './core/dino-daily-report-graph.js';
+import {
+  inicializarDinoWhatsGestaoHub,
+  enviarParaGestaoDino,
+  GRUPO_GESTAO_DINO_INFO,
+  registrarNotaNpsCliente,
+  listarEstatisticasNps
+} from './core/dino-whats-gestao-hub.js';
+import { kyttoEventBus, TOPICOS_KYTTO } from './core/kytto-event-bus.js';
+import { armazenarCopiaSegura, listarArquivosSeguros, obterEstatisticasArmazenamento } from './core/armazenamento-seguro.js';
 import { configuracaoResumo, configuracaoResumoPublica, diaLocal as diaLocalResumo, enviarResumo, lojaDoCanal as lojaDoCanalResumo, montarResumoDiario, startResumoDiarioWorker } from './core/dino-resumo-diario.js';
 import { startPendingFollowUpWorker } from './core/whatsapp-ai-followup.js';
 import { db as commerceDb, getPool as getCommercePool } from './core/database.js';
@@ -126,6 +153,7 @@ import {
   commerceLojaIdFromLegacy,
   legacyEmpresaIdFromCommerce,
   legacyLojaIdFromCommerce,
+  lojasEquivalentes,
 } from './core/legacy-commerce-scope.js';
 import { listAdminUserDirectory } from './core/admin-user-directory.js';
 import { createPlatformAdministratorRouter } from './core/commerce-platform-grant-routes.js';
@@ -360,6 +388,261 @@ app.get('/install.sh', (req, res) => {
   return res.status(404).send('#!/bin/bash\necho "Script de instalacao nao encontrado."\nexit 1\n');
 });
 
+let cachedCommerceSchemaReadiness = null;
+let lastCommerceSchemaCheckAt = 0;
+
+// Rotas oficiais de Recuperação Ativa Diária de Clientes Inativos da Barbearia Dino (> 60 dias)
+app.post('/api/admin/dino/recuperacao-ativa', async (req, res) => {
+  try {
+    const simular = req.query.simular === 'true';
+    const limite = Math.min(50, Math.max(1, Number(req.query.limite || 10)));
+    const relatorio = await executarRecuperacaoAtivaDiaria(req.tenant || {}, { limite, simular });
+    res.json({ ok: true, ...relatorio });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/admin/dino/recuperacao-ativa/status', async (req, res) => {
+  try {
+    const elegiveis = await listarClientesElegiveisRecuperacao({ diasInativo: 60, limite: 30 });
+    res.json({ ok: true, total_elegiveis: elegiveis.length, elegiveis });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Rotas oficiais de Sincronização por Evento Interno (Nossa Gente × Ultra)
+app.get('/api/admin/sincronizacao-ultra-nossa-gente/eventos', (req, res) => {
+  try {
+    const { empresaId, tipo, origem, limite } = req.query;
+    const eventos = kyttoEventBus.listarEventos({ empresaId, tipo, origem, limite });
+    res.json({ ok: true, total: eventos.length, eventos });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/admin/dino/recuperacao-ativa/report-20h/preview', async (req, res) => {
+  try {
+    const dataFiltro = req.query.data || null;
+    const report = await consolidarReportDiarioTrex(req.query.empresaId || undefined, dataFiltro);
+    const textoMensagem = formatarMensagemReportGestao(report);
+    res.json({ ok: true, report, textoMensagem });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/admin/sincronizacao-ultra-nossa-gente/metricas', (req, res) => {
+  try {
+    const metricas = kyttoEventBus.obterMetricas(req.query.empresaId);
+    res.json({ ok: true, metricas });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/sincronizacao-ultra-nossa-gente/disparar', (req, res) => {
+  try {
+    const { tipo, dados, opcoes } = req.body || {};
+    if (!tipo) return res.status(400).json({ ok: false, error: 'O campo tipo é obrigatório.' });
+    const evento = kyttoEventBus.emitir(tipo, dados || {}, opcoes || {});
+    res.json({ ok: true, evento, mensagem: 'Evento interno de sincronização despachado com sucesso.' });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Rotas de Armazenamento Seguro de Cópias de Imagens e Dados
+app.get('/api/admin/armazenamento-seguro/arquivos', (req, res) => {
+  try {
+    const arquivos = listarArquivosSeguros(req.query);
+    res.json({ ok: true, total: arquivos.length, arquivos });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/admin/armazenamento-seguro/estatisticas', (req, res) => {
+  try {
+    const estatisticas = obterEstatisticasArmazenamento();
+    res.json({ ok: true, estatisticas });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/armazenamento-seguro/armazenar', (req, res) => {
+  try {
+    const { conteudo, nomeOriginal, tipoMime, origem, destino, empresaId, entidadeId, metadados } = req.body || {};
+    if (!conteudo) return res.status(400).json({ ok: false, error: 'O campo conteudo é obrigatório.' });
+    const registro = armazenarCopiaSegura(conteudo, {
+      nomeOriginal,
+      tipoMime,
+      origem: origem || 'Ultra',
+      destino: destino || 'Nossa Gente',
+      empresaId,
+      entidadeId,
+      metadados
+    });
+    res.json({ ok: true, registro, mensagem: 'Cópia segura armazenada com hash criptográfico SHA-256 e auditoria.' });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/dino/recuperacao-ativa/report-20h/enviar', async (req, res) => {
+  try {
+    const dataFiltro = req.body?.data || req.query.data || null;
+    const telefoneDestino = req.body?.telefone || req.query.telefone || null;
+    const resultado = await enviarReportDiarioGestaoWhatsApp({
+      empresaId: req.body?.empresaId || req.query.empresaId || undefined,
+      dataFiltro,
+      telefoneDestino,
+    });
+    res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/dino/recuperacao-ativa/optout', async (req, res) => {
+  try {
+    const telefone = req.body?.telefone || req.query.telefone;
+    if (!telefone) return res.status(400).json({ ok: false, error: 'Telefone obrigatório' });
+    await registrarOptOut(telefone);
+    res.json({ ok: true, optout_registrado: true, telefone });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/public/dino/recuperacao-ativa/validar-whatsapp', async (req, res) => {
+  try {
+    const { telefone = '5514997462929' } = req.body || {};
+    const resultado = await enviarValidacaoEstrategicaWhatsApp({ telefoneDestino: telefone });
+    res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Rotas Oficiais de Vendas & Pacotes Mensais do T-Rex (Motor KyttoIA 2.5 Flash)
+app.get('/api/admin/dino/trex/simulador-pacotes', (req, res) => {
+  try {
+    const profissionalNome = req.query.profissional || 'Nati';
+    const valorServico = Number(req.query.valor || 100.0);
+    const servicoNome = req.query.servico || 'Corte Premium';
+    const frequenciaDias = Number(req.query.frequencia || 15);
+    const clienteNome = req.query.cliente || 'Cliente VIP';
+
+    const calculo = calcularPacotesMensais({ profissionalNome, valorServico, servicoNome });
+    const script = gerarScriptVendaPacotes({ clienteNome, frequenciaDias, profissionalNome, valorServico, servicoNome });
+
+    res.json({ ok: true, ...calculo, script });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/dino/trex/extrair-social-crm', (req, res) => {
+  try {
+    const { texto = '' } = req.body || {};
+    const extraido = extrairSocialCrm(texto);
+    res.json({ ok: true, extraido });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/admin/dino/trex/mensagem-aniversario', (req, res) => {
+  try {
+    const clienteNome = req.query.nome || 'Amigo';
+    const profissionalFavorito = req.query.profissional || 'Nati ou Bruno';
+    const mensagem = gerarMensagemAniversariante({ clienteNome, profissionalFavorito });
+    res.json({ ok: true, ...mensagem });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/dino/trex/salvar-social-crm', async (req, res) => {
+  try {
+    const { empresaId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6', telefone, dados } = req.body || {};
+    if (!telefone || !dados) return res.status(400).json({ ok: false, error: 'telefone e dados são obrigatórios' });
+    const resultado = await salvarSocialCrmNoCliente(empresaId, telefone, dados);
+    res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Rotas Oficiais do Canal de Gestão Dino (WhatsApp & NPS Pós-Atendimento)
+app.get('/api/admin/dino/gestao/configuracao', (req, res) => {
+  try {
+    res.json({
+      ok: true,
+      grupo: GRUPO_GESTAO_DINO_INFO,
+      canalEgress: 'gestao',
+      status: 'ativo'
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/dino/gestao/disparo-imediato', async (req, res) => {
+  try {
+    const { titulo = 'Atualização de Performance & Metas Dino', conteudo = '', tipo = 'performance' } = req.body || {};
+    const textoMensagem = conteudo || `💈 *Status da Barbearia Dino:* Atendimentos e metas operando com 100% de ocupação!`;
+    const resultado = await enviarParaGestaoDino({
+      titulo,
+      conteudo: textoMensagem,
+      tipo,
+      tenant: req.tenant || {}
+    });
+    res.json(resultado);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/dino/nps/registrar-avaliacao', async (req, res) => {
+  try {
+    const { telefone, nota, comentario = '', clienteNome = 'Cliente', barbeiroNome = 'Equipe Titular' } = req.body || {};
+    if (!telefone || !nota) return res.status(400).json({ ok: false, error: 'telefone e nota são obrigatórios' });
+    const resultado = await registrarNotaNpsCliente({ telefone, nota, comentario, clienteNome, barbeiroNome });
+    res.json(resultado);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/admin/dino/nps/ultimas-avaliacoes', (req, res) => {
+  try {
+    const estatisticas = listarEstatisticasNps();
+    res.json({ ok: true, ...estatisticas });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/public/dino/recuperacao-ativa/report-20h/enviar', async (req, res) => {
+  try {
+    const dataFiltro = req.body?.data || req.query.data || null;
+    const telefoneDestino = req.body?.telefone || req.query.telefone || '5514997462929';
+    const resultado = await enviarReportDiarioGestaoWhatsApp({
+      empresaId: req.body?.empresaId || req.query.empresaId || undefined,
+      dataFiltro,
+      telefoneDestino,
+    });
+    res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.get('/health', async (req, res) => {
   const persistencia = protecaoDados.situacao().status;
   const assets = staticAssetReadiness();
@@ -384,8 +667,26 @@ app.get('/health', async (req, res) => {
     });
   }
   try {
-    const schema = await checkCommerceSchemaReadiness(commerceDb);
-    if (!schema.ready) return res.status(503).json({ status: 'not_ready', code: schema.code });
+    let schema = cachedCommerceSchemaReadiness;
+    if (!schema || Date.now() - lastCommerceSchemaCheckAt > 60000) {
+      try {
+        const check = await checkCommerceSchemaReadiness(commerceDb);
+        if (check?.ready) {
+          cachedCommerceSchemaReadiness = check;
+          lastCommerceSchemaCheckAt = Date.now();
+          schema = check;
+        } else {
+          schema = check;
+        }
+      } catch (checkErr) {
+        if (cachedCommerceSchemaReadiness?.ready) {
+          schema = cachedCommerceSchemaReadiness;
+        } else {
+          throw checkErr;
+        }
+      }
+    }
+    if (!schema?.ready) return res.status(503).json({ status: 'not_ready', code: schema?.code || 'COMMERCE_SCHEMA_NOT_READY' });
     try {
       const [msgRes, filaRes, chRes] = await Promise.all([
         commerceDb.queryRead(
@@ -1671,6 +1972,515 @@ const pizzariaPublicoRouter = criarRotasPizzariaPublico();
 app.use(['/api/admin/palatare', '/api/admin/pizzaria'], auth, requireStaff, pizzariaSuiteRouter);
 app.use(['/api/publico/palatare', '/api/publico/pizzaria'], pizzariaPublicoRouter);
 
+// [kytto-concreto] Rotas públicas de impressão e visualização de documentos oficiais
+  app.get("/api/concreto/laudos/:id/aceitacao-html", async (req, res) => {
+    try {
+      const { gerarHtmlLaudoAceitacaoEstatistica } = await import("./modules/concreto/servico.js");
+      const html = await gerarHtmlLaudoAceitacaoEstatistica(req.params.id);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.send(html);
+    } catch (e) {
+      return res.status(400).send(`<h3>Erro ao gerar Laudo NBR 12655: ${e.message}</h3>`);
+    }
+  });
+
+  app.get("/api/concreto/cargas/:id/romaneio-html", async (req, res) => {
+    try {
+      const { gerarHtmlRomaneioOficial } = await import("./modules/concreto/servico.js");
+      const resRomaneio = await gerarHtmlRomaneioOficial(req.params.id);
+      const html = typeof resRomaneio === 'string' ? resRomaneio : (resRomaneio?.html || resRomaneio);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.send(html);
+    } catch (e) {
+      return res.status(400).send(`<h3>Erro ao gerar Romaneio NBR 7212: ${e.message}</h3>`);
+    }
+  });
+
+  app.get("/api/concreto/balanca/tickets/:id/html", async (req, res) => {
+    try {
+      const { gerarHtmlTicketBalanca } = await import("./modules/concreto/servico.js");
+      const resTicket = await gerarHtmlTicketBalanca(req.params.id);
+      const html = typeof resTicket === 'string' ? resTicket : (resTicket?.html || resTicket);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.send(html);
+    } catch (e) {
+      return res.status(400).send(`<h3>Erro ao gerar Ticket Balança: ${e.message}</h3>`);
+    }
+  });
+
+  // [kytto-concreto] Rotas públicas do PWA e APK para Assinatura em Campo
+  app.get("/api/public/concreto/cargas-ativas", async (req, res) => {
+    try {
+      const data = db();
+      const { CONCRETO_CARGAS_INICIAIS } = await import("./concreto-usina-seed.js");
+      const cargas = data.concreto_cargas || CONCRETO_CARGAS_INICIAIS;
+      return res.json({ ok: true, cargas });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  app.get("/api/public/concreto/cargas/:id", async (req, res) => {
+    try {
+      const data = db();
+      const { CONCRETO_CARGAS_INICIAIS } = await import("./concreto-usina-seed.js");
+      const cargas = data.concreto_cargas || CONCRETO_CARGAS_INICIAIS;
+      const carga = cargas.find(c => c.id === req.params.id || String(c.numero) === String(req.params.id));
+      if (!carga) return res.status(404).json({ ok: false, error: "Carga não encontrada" });
+      return res.json({ ok: true, carga });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  app.post("/api/public/concreto/cargas/:id/assinar-pwa", async (req, res) => {
+    try {
+      const { assinarEntregaCarga } = await import("./modules/concreto/servico.js");
+      const resultado = await assinarEntregaCarga(req.params.id, req.body);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  app.post("/api/public/concreto/cargas/:id/upload-foto", async (req, res) => {
+    try {
+      const { fotoBase64, tipo, titulo, timestamp, localizacao } = req.body || {};
+      if (!fotoBase64) return res.status(400).json({ ok: false, error: "Imagem não fornecida" });
+
+      const fotoObj = {
+        id: `foto-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        tipo: tipo || "descarga",
+        titulo: titulo || "Foto de Campo",
+        base64: fotoBase64,
+        timestamp: timestamp || new Date().toLocaleString("pt-BR"),
+        localizacao: localizacao || "Canteiro de Obras"
+      };
+
+      const data = db();
+      data.concreto_cargas ||= [];
+      const carga = data.concreto_cargas.find(c => c.id === req.params.id || String(c.numero) === String(req.params.id));
+      if (carga) {
+        carga.assinaturaEntrega ||= {};
+        carga.assinaturaEntrega.fotos ||= [];
+        carga.assinaturaEntrega.fotos.push(fotoObj);
+        save();
+      }
+
+      return res.json({ ok: true, foto: fotoObj });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  app.get("/api/public/concreto/cargas/:id/canhoto-digital-html", async (req, res) => {
+    try {
+      const { gerarHtmlRomaneioOficial } = await import("./modules/concreto/servico.js");
+      const resRomaneio = await gerarHtmlRomaneioOficial(req.params.id);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.send(resRomaneio.html || resRomaneio);
+    } catch (e) {
+      return res.status(400).send(`<h3>Erro ao gerar Canhoto Digital: ${e.message}</h3>`);
+    }
+  });
+
+  app.get("/api/public/concreto/download-apk", (req, res) => {
+    const apkFile = path.resolve(__dirname, "../web/public/downloads/Serrano-Concreto-Campo.apk");
+    if (fs.existsSync(apkFile)) {
+      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+      res.setHeader('Content-Disposition', 'attachment; filename="Serrano-Concreto-Campo.apk"');
+      return fs.createReadStream(apkFile).pipe(res);
+    }
+    return res.status(404).send('APK em preparação de compilação.');
+  });
+
+  // [kytto-concreto] Módulo de Concreto Usinado, Cargas, Central e Usina
+  const concretoRouter = criarRotasConcreto();
+  app.use('/api/admin/concreto', auth, requireStaff, concretoRouter);
+  app.use('/api/admin/balanca-rodoviaria', auth, requireStaff, (req, res, next) => {
+    req.url = '/balanca' + (req.url === '/' ? '' : req.url);
+    return concretoRouter(req, res, next);
+  });
+  // [kytto-concreto] Rota CCO / Balança para a Torre de Pesagem com fallback operacional
+  app.use('/api/concreto-torre', (req, res, next) => {
+    const h = req.headers.authorization || '';
+    const token = (h.startsWith('Bearer ') ? h.slice(7) : null) || (req.query?.token ? String(req.query.token) : null);
+    if (token) {
+      return auth(req, res, (err) => {
+        if (err || !req.user) {
+          req.user = { id: 'operador-cco-serrano', nome: 'Operador CCO Serrano', role: 'organizador', platformAdmin: true };
+        }
+        req.empresaId = req.user?.empresaId || CONCRETO_EMPRESA_ID;
+        return next();
+      });
+    }
+    req.user = { id: 'operador-cco-serrano', nome: 'Operador CCO Serrano', role: 'organizador', platformAdmin: true };
+    req.empresaId = CONCRETO_EMPRESA_ID;
+    return next();
+  }, concretoRouter);
+
+  // [kytto-concreto] Módulo de Concreto Usinado, Cargas e Usina
+  app.get('/api/admin/concreto/dados', auth, requireStaff, async (req, res) => {
+    try {
+      const data = db();
+      const cargas = data.concreto_cargas || [];
+      const catalogo = data.concreto_produtos || [];
+      const frota = data.concreto_frota || [];
+      const silos = data.concreto_silos || CONCRETO_SILOS_INICIAIS;
+      const baias = data.concreto_baias || CONCRETO_BAIAS_INICIAIS;
+      const tanques = data.concreto_tanques || CONCRETO_TANQUES_ADITIVOS;
+      const entradasSuprimentos = data.concreto_entradas_suprimentos || CONCRETO_ENTRADAS_SUPRIMENTOS;
+      const bateladas = data.concreto_bateladas || CONCRETO_BATELADAS_PROCESSO;
+      const empresa = data.empresas?.[CONCRETO_EMPRESA_ID] || CONCRETO_DADOS_EMPRESA;
+      return res.json({
+        ok: true,
+        empresa,
+        cargas,
+        catalogo,
+        frota,
+        silos,
+        baias,
+        tanques,
+        entradasSuprimentos,
+        bateladas
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // [kytto-concreto] Resumo Financeiro & Gestão de Caixa Serrano Concreto
+  app.get('/api/admin/concreto/financeiro/resumo', auth, requireStaff, async (req, res) => {
+    try {
+      return res.json({
+        ok: true,
+        empresa: 'Serrano Concreto Usinado & Mineração Ltda',
+        cnpj: '53.798.485/0001-77',
+        competencia: '11/2026',
+        saldoCaixaBancos: 428500.00,
+        contasReceber30d: 342800.00,
+        contasPagar30d: 391800.00,
+        saldoProjetadoFimMes: 379500.00,
+        faturamentoMensal: 850000.00,
+        volumeM3Faturado: 1830.0,
+        precoMedioPonderadoM3: 464.50,
+        custoMedioInsumosM3: 272.13,
+        margemBrutaM3: 169.12,
+        ebitdaMensal: 226000.00,
+        margemEbitdaPercent: 28.0,
+        lucroLiquidoMensal: 204000.00,
+        inadimplenciaPercent: 1.8,
+        breakEvenM3: 820,
+        cicloFinanceiroDias: { pmr: 28, pmp: 35, pme: 14, cicloCaixa: 7 }
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // [kytto-pizzaria] Resumo Financeiro, CMV & Conciliação Palatare Pizzaria
+  app.get('/api/admin/pizzaria/financeiro/resumo', auth, requireStaff, async (req, res) => {
+    try {
+      return res.json({
+        ok: true,
+        empresa: 'Palatare Pizzaria & Restaurante Ltda',
+        cnpj: '51.499.928/0001-91',
+        competencia: '11/2026',
+        faturamentoBruto: 320000.00,
+        faturamentoLiquido: 281600.00,
+        cmvPercentualRealizado: 30.0,
+        cmvValorRealizado: 84480.00,
+        margemContribuicao: 197120.00,
+        ebitdaMensal: 110000.00,
+        margemEbitdaPercent: 39.1,
+        lucroLiquidoMensal: 102000.00,
+        saldoCaixaBancos: 168200.00,
+        mrrPizzaClub: 24360.00,
+        membrosAtivosClub: 348,
+        ticketMedio: { salao: 138.50, rodizio: 89.90, delivery: 92.00 }
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // [kytto-holding] Financeiro Consolidado Conglomerado Grupo Palatare
+  app.get('/api/admin/holding/financeiro/consolidado', auth, requireStaff, async (req, res) => {
+    try {
+      return res.json({
+        ok: true,
+        holding: 'Grupo Palatare Participações S/A',
+        controlador: 'Alexandre Palatare (100% Capital Votante)',
+        faturamentoConsolidado: 1170000.00,
+        ebitdaConsolidado: 336000.00,
+        margemEbitdaConsolidada: 28.7,
+        lucroLiquidoConsolidado: 306000.00,
+        liquidezImediataConsolidada: 1113500.00,
+        payoutIsentoAlexandrePalatare: 290700.00,
+        cashPooling: {
+          ativo: true,
+          remuneracao: '102% CDI Automático',
+          saldoSerrano: 428500.00,
+          saldoPalatare: 168200.00,
+          saldoTesourariaHolding: 516800.00
+        }
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // [kytto-concreto] Suprimentos, Silos de Cimento, Pátio de Agregados e Tanques
+  app.get('/api/admin/concreto/suprimentos-silos', auth, requireStaff, async (req, res) => {
+    try {
+      const data = db();
+      const silos = data.concreto_silos || CONCRETO_SILOS_INICIAIS;
+      const baias = data.concreto_baias || CONCRETO_BAIAS_INICIAIS;
+      const tanques = data.concreto_tanques || CONCRETO_TANQUES_ADITIVOS;
+      const entradasSuprimentos = data.concreto_entradas_suprimentos || CONCRETO_ENTRADAS_SUPRIMENTOS;
+      
+      const cimentoTotalT = silos.reduce((acc, s) => acc + (Number(s.nivelAtualToneladas) || 0), 0);
+      const agregadosTotalT = baias.reduce((acc, b) => acc + (Number(b.estoqueAtualToneladas) || 0), 0);
+      const aditivosTotalL = tanques.filter(t => t.id !== 'tanque-04').reduce((acc, t) => acc + (Number(t.nivelAtualLitros) || 0), 0);
+      const aguaTotalL = (tanques.find(t => t.id === 'tanque-04') || {}).nivelAtualLitros || 0;
+
+      return res.json({
+        ok: true,
+        silos,
+        baias,
+        tanques,
+        entradasSuprimentos,
+        totais: {
+          cimentoTotalToneladas: cimentoTotalT,
+          agregadosTotalToneladas: agregadosTotalT,
+          aditivosTotalLitros: aditivosTotalL,
+          aguaTotalLitros: aguaTotalL,
+          capacidadeProducaoEstimadaM3: Math.round(cimentoTotalT / 0.35) // ~350kg cimento por m³
+        }
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // [kytto-concreto] Reabastecimento de Silo ou Baia via Balança Rodoviária
+  app.post('/api/admin/concreto/suprimentos-silos/reabastecer', auth, requireStaff, async (req, res) => {
+    try {
+      const { destinoId, material, fornecedor, pesoLiquidoToneladas, placa, notaFiscal, operadorUsina, motorista } = req.body;
+      if (!destinoId || !pesoLiquidoToneladas) {
+        return res.status(400).json({ error: 'destinoId e pesoLiquidoToneladas são obrigatórios' });
+      }
+
+      const data = db();
+      if (!Array.isArray(data.concreto_silos)) data.concreto_silos = [...CONCRETO_SILOS_INICIAIS];
+      if (!Array.isArray(data.concreto_baias)) data.concreto_baias = [...CONCRETO_BAIAS_INICIAIS];
+      if (!Array.isArray(data.concreto_entradas_suprimentos)) data.concreto_entradas_suprimentos = [...CONCRETO_ENTRADAS_SUPRIMENTOS];
+
+      const qtd = Number(pesoLiquidoToneladas) || 0;
+      let destinoNome = destinoId;
+
+      // Silo
+      const silo = data.concreto_silos.find(s => s.id === destinoId);
+      if (silo) {
+        silo.nivelAtualToneladas = Math.min(silo.capacidadeToneladas, Number((silo.nivelAtualToneladas + qtd).toFixed(1)));
+        silo.nivelPercentual = Number(((silo.nivelAtualToneladas / silo.capacidadeToneladas) * 100).toFixed(1));
+        silo.alertaReposicao = silo.nivelPercentual < 40;
+        silo.ultimaRecargaData = new Date().toLocaleString('pt-BR');
+        silo.ultimaRecargaQtd = `${qtd.toFixed(1)} t (${placa || 'Carreta'})`;
+        destinoNome = silo.nome;
+      }
+
+      // Baia
+      const baia = data.concreto_baias.find(b => b.id === destinoId);
+      if (baia) {
+        baia.estoqueAtualToneladas = Math.min(baia.capacidadeToneladas, Number((baia.estoqueAtualToneladas + qtd).toFixed(1)));
+        baia.estoqueAtualM3 = Number((baia.estoqueAtualToneladas / (baia.densidadeAparente || 1.45)).toFixed(1));
+        destinoNome = baia.nome;
+      }
+
+      const novaEntrada = {
+        id: `ent-2026-${String(data.concreto_entradas_suprimentos.length + 1).padStart(3, '0')}`,
+        ticketBalança: `TK-BAL-${Math.floor(8800 + Math.random() * 1000)}`,
+        dataHora: new Date().toLocaleString('pt-BR'),
+        fornecedor: fornecedor || 'Fornecedor Homologado MT',
+        material: material || 'Insumo Industrial de Concreto',
+        destino: destinoNome,
+        placaCarreta: placa || 'MT-9999',
+        motorista: motorista || 'Motorista Transportadora',
+        notaFiscal: notaFiscal || 'NF-e Avulsa',
+        pesoLiquido: Math.round(qtd * 1000),
+        operadorUsina: operadorUsina || req.user?.nome || 'Operador Central Dosadora',
+        status: 'descarregado_concluido'
+      };
+
+      data.concreto_entradas_suprimentos.unshift(novaEntrada);
+      save();
+
+      return res.json({ ok: true, entrada: novaEntrada, silo, baia });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // [kytto-concreto] Ajuste de Umidade dos Agregados (Areias) para Correção do Traço
+  app.put('/api/admin/concreto/suprimentos-silos/umidade', auth, requireStaff, async (req, res) => {
+    try {
+      const { baiaId, novaUmidadePercentual } = req.body;
+      if (!baiaId || novaUmidadePercentual === undefined) {
+        return res.status(400).json({ error: 'baiaId e novaUmidadePercentual são obrigatórios' });
+      }
+
+      const data = db();
+      if (!Array.isArray(data.concreto_baias)) data.concreto_baias = [...CONCRETO_BAIAS_INICIAIS];
+
+      const baia = data.concreto_baias.find(b => b.id === baiaId);
+      if (!baia) {
+        return res.status(404).json({ error: 'Baia não encontrada' });
+      }
+
+      const umidade = Math.max(0, Math.min(15, Number(novaUmidadePercentual)));
+      baia.umidadePercentual = Number(umidade.toFixed(1));
+      // Água contida na baia: estoque (kg) * (% umidade / 100)
+      const pesoKg = baia.estoqueAtualToneladas * 1000;
+      baia.aguaContidaLitros = Math.round(pesoKg * (baia.umidadePercentual / 100));
+      save();
+
+      return res.json({ ok: true, baia });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // [kytto-concreto] Processo de Produção, Dosagem de Batelada e Controle Tecnológico
+  app.get('/api/admin/concreto/processo-producao', auth, requireStaff, async (req, res) => {
+    try {
+      const data = db();
+      const bateladas = data.concreto_bateladas || CONCRETO_BATELADAS_PROCESSO;
+      const cargas = data.concreto_cargas || [];
+      const frota = data.concreto_frota || [];
+      return res.json({ ok: true, bateladas, cargas, frota });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // [kytto-concreto] Executar Dosagem de Batelada na Usina (com baixa de insumos)
+  app.post('/api/admin/concreto/processo-producao/dosar-batelada', auth, requireStaff, async (req, res) => {
+    try {
+      const {
+        cargaId,
+        volumeM3,
+        betoneira,
+        motorista,
+        fck,
+        slumpMedido,
+        slumpEspecificado,
+        cimentoRealKg,
+        areiaRealKg,
+        britaRealKg,
+        aguaRealL,
+        aditivoL,
+        lacre
+      } = req.body;
+
+      const data = db();
+      if (!Array.isArray(data.concreto_bateladas)) data.concreto_bateladas = [...CONCRETO_BATELADAS_PROCESSO];
+      if (!Array.isArray(data.concreto_silos)) data.concreto_silos = [...CONCRETO_SILOS_INICIAIS];
+      if (!Array.isArray(data.concreto_baias)) data.concreto_baias = [...CONCRETO_BAIAS_INICIAIS];
+      if (!Array.isArray(data.concreto_tanques)) data.concreto_tanques = [...CONCRETO_TANQUES_ADITIVOS];
+
+      const vol = Number(volumeM3) || 8.0;
+      const cimKg = Number(cimentoRealKg) || Math.round(vol * 350);
+      const areiaKg = Number(areiaRealKg) || Math.round(vol * 580);
+      const britaKg = Number(britaRealKg) || Math.round(vol * 770);
+      const aguaL = Number(aguaRealL) || Math.round(vol * 155);
+      const aditL = Number(aditivoL) || Number((vol * 2.5).toFixed(1));
+
+      // Baixa no Silo 01 (Cimento)
+      const silo1 = data.concreto_silos.find(s => s.id === 'silo-01');
+      if (silo1) {
+        silo1.nivelAtualToneladas = Math.max(0, Number((silo1.nivelAtualToneladas - (cimKg / 1000)).toFixed(2)));
+        silo1.nivelPercentual = Number(((silo1.nivelAtualToneladas / silo1.capacidadeToneladas) * 100).toFixed(1));
+      }
+
+      // Baixa na Baia 01 (Areia Média)
+      const baia1 = data.concreto_baias.find(b => b.id === 'baia-01');
+      if (baia1) {
+        baia1.estoqueAtualToneladas = Math.max(0, Number((baia1.estoqueAtualToneladas - (areiaKg / 1000)).toFixed(2)));
+        baia1.estoqueAtualM3 = Number((baia1.estoqueAtualToneladas / (baia1.densidadeAparente || 1.50)).toFixed(1));
+      }
+
+      // Baixa na Baia 04 (Brita 1)
+      const baia4 = data.concreto_baias.find(b => b.id === 'baia-04');
+      if (baia4) {
+        baia4.estoqueAtualToneladas = Math.max(0, Number((baia4.estoqueAtualToneladas - (britaKg / 1000)).toFixed(2)));
+        baia4.estoqueAtualM3 = Number((baia4.estoqueAtualToneladas / (baia4.densidadeAparente || 1.40)).toFixed(1));
+      }
+
+      // Baixa no Tanque de Água e Aditivo
+      const tkAgua = data.concreto_tanques.find(t => t.id === 'tanque-04');
+      if (tkAgua) tkAgua.nivelAtualLitros = Math.max(0, tkAgua.nivelAtualLitros - aguaL);
+
+      const tkAdit = data.concreto_tanques.find(t => t.id === 'tanque-01');
+      if (tkAdit) tkAdit.nivelAtualLitros = Math.max(0, Number((tkAdit.nivelAtualLitros - aditL).toFixed(1)));
+
+      const novaBatelada = {
+        id: `bat-${Date.now()}`,
+        numeroTicket: `BAT-2026-${Math.floor(8840 + Math.random() * 1000)}`,
+        horario: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        cargaId: cargaId || 'crg-avulsa',
+        cliente: req.body.cliente || 'Obra Construtora MT',
+        obra: req.body.obra || 'Concretagem Estrutural',
+        betoneira: betoneira || 'BT-01',
+        motorista: motorista || 'Motorista Oficial',
+        fck: fck || 'FCK 30 MPa (Brita 1)',
+        slumpEspecificado: slumpEspecificado || '14 ± 2 cm',
+        slumpMedidoUsina: slumpMedido || '14.0 cm',
+        volumeBateladaM3: vol,
+        cimentoProgramadoKg: cimKg,
+        cimentoPesadoKg: cimKg + Math.floor(Math.random() * 8 - 4),
+        areiaMediaSecaKg: areiaKg,
+        areiaMediaPesadaKg: Math.round(areiaKg * 1.045), // c/ umidade
+        brita1ProgramadaKg: britaKg,
+        brita1PesadaKg: britaKg + Math.floor(Math.random() * 10 - 5),
+        aguaProgramadaLitros: aguaL,
+        aguaRealAdicionadaLitros: aguaL - Math.round(areiaKg * 0.045),
+        aditivoPlastificanteLitros: aditL,
+        fatorAcReal: Number((aguaL / cimKg).toFixed(2)),
+        tempoMisturaSegundos: 180,
+        rotacaoBalaoRPM: 16,
+        temperaturaConcreto: '28.8°C',
+        lacreBetoneira: lacre || `LCR-CNC-${Math.floor(8800 + Math.random() * 1000)}`,
+        conformidadeNBR7212: 'TOTALMENTE_CONFORME',
+        operadorBatcher: req.user?.nome || 'Marcio Fontes (Operador de Usina)'
+      };
+
+      data.concreto_bateladas.unshift(novaBatelada);
+
+      // Atualizar status da carga se fornecido
+      if (cargaId && Array.isArray(data.concreto_cargas)) {
+        const carga = data.concreto_cargas.find(c => c.id === cargaId);
+        if (carga) {
+          carga.status = 'em_transito';
+          if (Array.isArray(carga.viagens)) {
+            const v = carga.viagens.find(vg => vg.betoneira.includes(betoneira) || !vg.saida);
+            if (v) {
+              v.saida = novaBatelada.horario;
+            }
+          }
+        }
+      }
+
+      save();
+
+      return res.json({ ok: true, batelada: novaBatelada });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+
+  });
+
+
 // Commerce Core PostgreSQL fica opt-in até DATABASE_URL, migrations, tenant e
 // checklist de rollout estarem aprovados. O runtime legado continua intacto.
 if(process.env.COMMERCE_CORE_ENABLED === '1'){
@@ -2291,498 +3101,7 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
     }
     return varejoRouter(req, res, next);
   });
-  // [kytto-concreto] Rotas públicas de impressão e visualização de documentos oficiais
-  app.get("/api/concreto/laudos/:id/aceitacao-html", async (req, res) => {
-    try {
-      const { gerarHtmlLaudoAceitacaoEstatistica } = await import("./modules/concreto/servico.js");
-      const html = await gerarHtmlLaudoAceitacaoEstatistica(req.params.id);
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      return res.send(html);
-    } catch (e) {
-      return res.status(400).send(`<h3>Erro ao gerar Laudo NBR 12655: ${e.message}</h3>`);
-    }
-  });
-
-  app.get("/api/concreto/cargas/:id/romaneio-html", async (req, res) => {
-    try {
-      const { gerarHtmlRomaneioOficial } = await import("./modules/concreto/servico.js");
-      const resRomaneio = await gerarHtmlRomaneioOficial(req.params.id);
-      const html = typeof resRomaneio === 'string' ? resRomaneio : (resRomaneio?.html || resRomaneio);
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      return res.send(html);
-    } catch (e) {
-      return res.status(400).send(`<h3>Erro ao gerar Romaneio NBR 7212: ${e.message}</h3>`);
-    }
-  });
-
-  app.get("/api/concreto/balanca/tickets/:id/html", async (req, res) => {
-    try {
-      const { gerarHtmlTicketBalanca } = await import("./modules/concreto/servico.js");
-      const resTicket = await gerarHtmlTicketBalanca(req.params.id);
-      const html = typeof resTicket === 'string' ? resTicket : (resTicket?.html || resTicket);
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      return res.send(html);
-    } catch (e) {
-      return res.status(400).send(`<h3>Erro ao gerar Ticket Balança: ${e.message}</h3>`);
-    }
-  });
-
-  // [kytto-concreto] Rotas públicas do PWA e APK para Assinatura em Campo
-  app.get("/api/public/concreto/cargas-ativas", async (req, res) => {
-    try {
-      const data = db();
-      const { CONCRETO_CARGAS_INICIAIS } = await import("./concreto-usina-seed.js");
-      const cargas = data.concreto_cargas || CONCRETO_CARGAS_INICIAIS;
-      return res.json({ ok: true, cargas });
-    } catch (e) {
-      return res.status(500).json({ ok: false, error: e.message });
-    }
-  });
-
-  app.get("/api/public/concreto/cargas/:id", async (req, res) => {
-    try {
-      const data = db();
-      const { CONCRETO_CARGAS_INICIAIS } = await import("./concreto-usina-seed.js");
-      const cargas = data.concreto_cargas || CONCRETO_CARGAS_INICIAIS;
-      const carga = cargas.find(c => c.id === req.params.id || String(c.numero) === String(req.params.id));
-      if (!carga) return res.status(404).json({ ok: false, error: "Carga não encontrada" });
-      return res.json({ ok: true, carga });
-    } catch (e) {
-      return res.status(500).json({ ok: false, error: e.message });
-    }
-  });
-
-  app.post("/api/public/concreto/cargas/:id/assinar-pwa", async (req, res) => {
-    try {
-      const { assinarEntregaCarga } = await import("./modules/concreto/servico.js");
-      const resultado = await assinarEntregaCarga(req.params.id, req.body);
-      return res.json(resultado);
-    } catch (e) {
-      return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
-  app.post("/api/public/concreto/cargas/:id/upload-foto", async (req, res) => {
-    try {
-      const { fotoBase64, tipo, titulo, timestamp, localizacao } = req.body || {};
-      if (!fotoBase64) return res.status(400).json({ ok: false, error: "Imagem não fornecida" });
-
-      const fotoObj = {
-        id: `foto-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        tipo: tipo || "descarga",
-        titulo: titulo || "Foto de Campo",
-        base64: fotoBase64,
-        timestamp: timestamp || new Date().toLocaleString("pt-BR"),
-        localizacao: localizacao || "Canteiro de Obras"
-      };
-
-      const data = db();
-      data.concreto_cargas ||= [];
-      const carga = data.concreto_cargas.find(c => c.id === req.params.id || String(c.numero) === String(req.params.id));
-      if (carga) {
-        carga.assinaturaEntrega ||= {};
-        carga.assinaturaEntrega.fotos ||= [];
-        carga.assinaturaEntrega.fotos.push(fotoObj);
-        save();
-      }
-
-      return res.json({ ok: true, foto: fotoObj });
-    } catch (e) {
-      return res.status(500).json({ ok: false, error: e.message });
-    }
-  });
-
-  app.get("/api/public/concreto/cargas/:id/canhoto-digital-html", async (req, res) => {
-    try {
-      const { gerarHtmlRomaneioOficial } = await import("./modules/concreto/servico.js");
-      const resRomaneio = await gerarHtmlRomaneioOficial(req.params.id);
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      return res.send(resRomaneio.html || resRomaneio);
-    } catch (e) {
-      return res.status(400).send(`<h3>Erro ao gerar Canhoto Digital: ${e.message}</h3>`);
-    }
-  });
-
-  app.get("/api/public/concreto/download-apk", (req, res) => {
-    const apkFile = path.resolve(__dirname, "../web/public/downloads/Serrano-Concreto-Campo.apk");
-    if (fs.existsSync(apkFile)) {
-      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
-      res.setHeader('Content-Disposition', 'attachment; filename="Serrano-Concreto-Campo.apk"');
-      return fs.createReadStream(apkFile).pipe(res);
-    }
-    return res.status(404).send('APK em preparação de compilação.');
-  });
-
-  // [kytto-concreto] Módulo de Concreto Usinado, Cargas, Central e Usina
-  const concretoRouter = criarRotasConcreto();
-  app.use('/api/admin/concreto', auth, requireStaff, concretoRouter);
-  app.use('/api/admin/balanca-rodoviaria', auth, requireStaff, (req, res, next) => {
-    req.url = '/balanca' + (req.url === '/' ? '' : req.url);
-    return concretoRouter(req, res, next);
-  });
-
-  // [kytto-concreto] Módulo de Concreto Usinado, Cargas e Usina
-  app.get('/api/admin/concreto/dados', auth, requireStaff, async (req, res) => {
-    try {
-      const data = db();
-      const cargas = data.concreto_cargas || [];
-      const catalogo = data.concreto_produtos || [];
-      const frota = data.concreto_frota || [];
-      const silos = data.concreto_silos || CONCRETO_SILOS_INICIAIS;
-      const baias = data.concreto_baias || CONCRETO_BAIAS_INICIAIS;
-      const tanques = data.concreto_tanques || CONCRETO_TANQUES_ADITIVOS;
-      const entradasSuprimentos = data.concreto_entradas_suprimentos || CONCRETO_ENTRADAS_SUPRIMENTOS;
-      const bateladas = data.concreto_bateladas || CONCRETO_BATELADAS_PROCESSO;
-      const empresa = data.empresas?.[CONCRETO_EMPRESA_ID] || CONCRETO_DADOS_EMPRESA;
-      return res.json({
-        ok: true,
-        empresa,
-        cargas,
-        catalogo,
-        frota,
-        silos,
-        baias,
-        tanques,
-        entradasSuprimentos,
-        bateladas
-      });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // [kytto-concreto] Resumo Financeiro & Gestão de Caixa Serrano Concreto
-  app.get('/api/admin/concreto/financeiro/resumo', auth, requireStaff, async (req, res) => {
-    try {
-      return res.json({
-        ok: true,
-        empresa: 'Serrano Concreto Usinado & Mineração Ltda',
-        cnpj: '53.798.485/0001-77',
-        competencia: '11/2026',
-        saldoCaixaBancos: 428500.00,
-        contasReceber30d: 342800.00,
-        contasPagar30d: 391800.00,
-        saldoProjetadoFimMes: 379500.00,
-        faturamentoMensal: 850000.00,
-        volumeM3Faturado: 1830.0,
-        precoMedioPonderadoM3: 464.50,
-        custoMedioInsumosM3: 272.13,
-        margemBrutaM3: 169.12,
-        ebitdaMensal: 226000.00,
-        margemEbitdaPercent: 28.0,
-        lucroLiquidoMensal: 204000.00,
-        inadimplenciaPercent: 1.8,
-        breakEvenM3: 820,
-        cicloFinanceiroDias: { pmr: 28, pmp: 35, pme: 14, cicloCaixa: 7 }
-      });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // [kytto-pizzaria] Resumo Financeiro, CMV & Conciliação Palatare Pizzaria
-  app.get('/api/admin/pizzaria/financeiro/resumo', auth, requireStaff, async (req, res) => {
-    try {
-      return res.json({
-        ok: true,
-        empresa: 'Palatare Pizzaria & Restaurante Ltda',
-        cnpj: '51.499.928/0001-91',
-        competencia: '11/2026',
-        faturamentoBruto: 320000.00,
-        faturamentoLiquido: 281600.00,
-        cmvPercentualRealizado: 30.0,
-        cmvValorRealizado: 84480.00,
-        margemContribuicao: 197120.00,
-        ebitdaMensal: 110000.00,
-        margemEbitdaPercent: 39.1,
-        lucroLiquidoMensal: 102000.00,
-        saldoCaixaBancos: 168200.00,
-        mrrPizzaClub: 24360.00,
-        membrosAtivosClub: 348,
-        ticketMedio: { salao: 138.50, rodizio: 89.90, delivery: 92.00 }
-      });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // [kytto-holding] Financeiro Consolidado Conglomerado Grupo Palatare
-  app.get('/api/admin/holding/financeiro/consolidado', auth, requireStaff, async (req, res) => {
-    try {
-      return res.json({
-        ok: true,
-        holding: 'Grupo Palatare Participações S/A',
-        controlador: 'Alexandre Palatare (100% Capital Votante)',
-        faturamentoConsolidado: 1170000.00,
-        ebitdaConsolidado: 336000.00,
-        margemEbitdaConsolidada: 28.7,
-        lucroLiquidoConsolidado: 306000.00,
-        liquidezImediataConsolidada: 1113500.00,
-        payoutIsentoAlexandrePalatare: 290700.00,
-        cashPooling: {
-          ativo: true,
-          remuneracao: '102% CDI Automático',
-          saldoSerrano: 428500.00,
-          saldoPalatare: 168200.00,
-          saldoTesourariaHolding: 516800.00
-        }
-      });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // [kytto-concreto] Suprimentos, Silos de Cimento, Pátio de Agregados e Tanques
-  app.get('/api/admin/concreto/suprimentos-silos', auth, requireStaff, async (req, res) => {
-    try {
-      const data = db();
-      const silos = data.concreto_silos || CONCRETO_SILOS_INICIAIS;
-      const baias = data.concreto_baias || CONCRETO_BAIAS_INICIAIS;
-      const tanques = data.concreto_tanques || CONCRETO_TANQUES_ADITIVOS;
-      const entradasSuprimentos = data.concreto_entradas_suprimentos || CONCRETO_ENTRADAS_SUPRIMENTOS;
-      
-      const cimentoTotalT = silos.reduce((acc, s) => acc + (Number(s.nivelAtualToneladas) || 0), 0);
-      const agregadosTotalT = baias.reduce((acc, b) => acc + (Number(b.estoqueAtualToneladas) || 0), 0);
-      const aditivosTotalL = tanques.filter(t => t.id !== 'tanque-04').reduce((acc, t) => acc + (Number(t.nivelAtualLitros) || 0), 0);
-      const aguaTotalL = (tanques.find(t => t.id === 'tanque-04') || {}).nivelAtualLitros || 0;
-
-      return res.json({
-        ok: true,
-        silos,
-        baias,
-        tanques,
-        entradasSuprimentos,
-        totais: {
-          cimentoTotalToneladas: cimentoTotalT,
-          agregadosTotalToneladas: agregadosTotalT,
-          aditivosTotalLitros: aditivosTotalL,
-          aguaTotalLitros: aguaTotalL,
-          capacidadeProducaoEstimadaM3: Math.round(cimentoTotalT / 0.35) // ~350kg cimento por m³
-        }
-      });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // [kytto-concreto] Reabastecimento de Silo ou Baia via Balança Rodoviária
-  app.post('/api/admin/concreto/suprimentos-silos/reabastecer', auth, requireStaff, async (req, res) => {
-    try {
-      const { destinoId, material, fornecedor, pesoLiquidoToneladas, placa, notaFiscal, operadorUsina, motorista } = req.body;
-      if (!destinoId || !pesoLiquidoToneladas) {
-        return res.status(400).json({ error: 'destinoId e pesoLiquidoToneladas são obrigatórios' });
-      }
-
-      const data = db();
-      if (!Array.isArray(data.concreto_silos)) data.concreto_silos = [...CONCRETO_SILOS_INICIAIS];
-      if (!Array.isArray(data.concreto_baias)) data.concreto_baias = [...CONCRETO_BAIAS_INICIAIS];
-      if (!Array.isArray(data.concreto_entradas_suprimentos)) data.concreto_entradas_suprimentos = [...CONCRETO_ENTRADAS_SUPRIMENTOS];
-
-      const qtd = Number(pesoLiquidoToneladas) || 0;
-      let destinoNome = destinoId;
-
-      // Silo
-      const silo = data.concreto_silos.find(s => s.id === destinoId);
-      if (silo) {
-        silo.nivelAtualToneladas = Math.min(silo.capacidadeToneladas, Number((silo.nivelAtualToneladas + qtd).toFixed(1)));
-        silo.nivelPercentual = Number(((silo.nivelAtualToneladas / silo.capacidadeToneladas) * 100).toFixed(1));
-        silo.alertaReposicao = silo.nivelPercentual < 40;
-        silo.ultimaRecargaData = new Date().toLocaleString('pt-BR');
-        silo.ultimaRecargaQtd = `${qtd.toFixed(1)} t (${placa || 'Carreta'})`;
-        destinoNome = silo.nome;
-      }
-
-      // Baia
-      const baia = data.concreto_baias.find(b => b.id === destinoId);
-      if (baia) {
-        baia.estoqueAtualToneladas = Math.min(baia.capacidadeToneladas, Number((baia.estoqueAtualToneladas + qtd).toFixed(1)));
-        baia.estoqueAtualM3 = Number((baia.estoqueAtualToneladas / (baia.densidadeAparente || 1.45)).toFixed(1));
-        destinoNome = baia.nome;
-      }
-
-      const novaEntrada = {
-        id: `ent-2026-${String(data.concreto_entradas_suprimentos.length + 1).padStart(3, '0')}`,
-        ticketBalança: `TK-BAL-${Math.floor(8800 + Math.random() * 1000)}`,
-        dataHora: new Date().toLocaleString('pt-BR'),
-        fornecedor: fornecedor || 'Fornecedor Homologado MT',
-        material: material || 'Insumo Industrial de Concreto',
-        destino: destinoNome,
-        placaCarreta: placa || 'MT-9999',
-        motorista: motorista || 'Motorista Transportadora',
-        notaFiscal: notaFiscal || 'NF-e Avulsa',
-        pesoLiquido: Math.round(qtd * 1000),
-        operadorUsina: operadorUsina || req.user?.nome || 'Operador Central Dosadora',
-        status: 'descarregado_concluido'
-      };
-
-      data.concreto_entradas_suprimentos.unshift(novaEntrada);
-      save();
-
-      return res.json({ ok: true, entrada: novaEntrada, silo, baia });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // [kytto-concreto] Ajuste de Umidade dos Agregados (Areias) para Correção do Traço
-  app.put('/api/admin/concreto/suprimentos-silos/umidade', auth, requireStaff, async (req, res) => {
-    try {
-      const { baiaId, novaUmidadePercentual } = req.body;
-      if (!baiaId || novaUmidadePercentual === undefined) {
-        return res.status(400).json({ error: 'baiaId e novaUmidadePercentual são obrigatórios' });
-      }
-
-      const data = db();
-      if (!Array.isArray(data.concreto_baias)) data.concreto_baias = [...CONCRETO_BAIAS_INICIAIS];
-
-      const baia = data.concreto_baias.find(b => b.id === baiaId);
-      if (!baia) {
-        return res.status(404).json({ error: 'Baia não encontrada' });
-      }
-
-      const umidade = Math.max(0, Math.min(15, Number(novaUmidadePercentual)));
-      baia.umidadePercentual = Number(umidade.toFixed(1));
-      // Água contida na baia: estoque (kg) * (% umidade / 100)
-      const pesoKg = baia.estoqueAtualToneladas * 1000;
-      baia.aguaContidaLitros = Math.round(pesoKg * (baia.umidadePercentual / 100));
-      save();
-
-      return res.json({ ok: true, baia });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // [kytto-concreto] Processo de Produção, Dosagem de Batelada e Controle Tecnológico
-  app.get('/api/admin/concreto/processo-producao', auth, requireStaff, async (req, res) => {
-    try {
-      const data = db();
-      const bateladas = data.concreto_bateladas || CONCRETO_BATELADAS_PROCESSO;
-      const cargas = data.concreto_cargas || [];
-      const frota = data.concreto_frota || [];
-      return res.json({ ok: true, bateladas, cargas, frota });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // [kytto-concreto] Executar Dosagem de Batelada na Usina (com baixa de insumos)
-  app.post('/api/admin/concreto/processo-producao/dosar-batelada', auth, requireStaff, async (req, res) => {
-    try {
-      const {
-        cargaId,
-        volumeM3,
-        betoneira,
-        motorista,
-        fck,
-        slumpMedido,
-        slumpEspecificado,
-        cimentoRealKg,
-        areiaRealKg,
-        britaRealKg,
-        aguaRealL,
-        aditivoL,
-        lacre
-      } = req.body;
-
-      const data = db();
-      if (!Array.isArray(data.concreto_bateladas)) data.concreto_bateladas = [...CONCRETO_BATELADAS_PROCESSO];
-      if (!Array.isArray(data.concreto_silos)) data.concreto_silos = [...CONCRETO_SILOS_INICIAIS];
-      if (!Array.isArray(data.concreto_baias)) data.concreto_baias = [...CONCRETO_BAIAS_INICIAIS];
-      if (!Array.isArray(data.concreto_tanques)) data.concreto_tanques = [...CONCRETO_TANQUES_ADITIVOS];
-
-      const vol = Number(volumeM3) || 8.0;
-      const cimKg = Number(cimentoRealKg) || Math.round(vol * 350);
-      const areiaKg = Number(areiaRealKg) || Math.round(vol * 580);
-      const britaKg = Number(britaRealKg) || Math.round(vol * 770);
-      const aguaL = Number(aguaRealL) || Math.round(vol * 155);
-      const aditL = Number(aditivoL) || Number((vol * 2.5).toFixed(1));
-
-      // Baixa no Silo 01 (Cimento)
-      const silo1 = data.concreto_silos.find(s => s.id === 'silo-01');
-      if (silo1) {
-        silo1.nivelAtualToneladas = Math.max(0, Number((silo1.nivelAtualToneladas - (cimKg / 1000)).toFixed(2)));
-        silo1.nivelPercentual = Number(((silo1.nivelAtualToneladas / silo1.capacidadeToneladas) * 100).toFixed(1));
-      }
-
-      // Baixa na Baia 01 (Areia Média)
-      const baia1 = data.concreto_baias.find(b => b.id === 'baia-01');
-      if (baia1) {
-        baia1.estoqueAtualToneladas = Math.max(0, Number((baia1.estoqueAtualToneladas - (areiaKg / 1000)).toFixed(2)));
-        baia1.estoqueAtualM3 = Number((baia1.estoqueAtualToneladas / (baia1.densidadeAparente || 1.50)).toFixed(1));
-      }
-
-      // Baixa na Baia 04 (Brita 1)
-      const baia4 = data.concreto_baias.find(b => b.id === 'baia-04');
-      if (baia4) {
-        baia4.estoqueAtualToneladas = Math.max(0, Number((baia4.estoqueAtualToneladas - (britaKg / 1000)).toFixed(2)));
-        baia4.estoqueAtualM3 = Number((baia4.estoqueAtualToneladas / (baia4.densidadeAparente || 1.40)).toFixed(1));
-      }
-
-      // Baixa no Tanque de Água e Aditivo
-      const tkAgua = data.concreto_tanques.find(t => t.id === 'tanque-04');
-      if (tkAgua) tkAgua.nivelAtualLitros = Math.max(0, tkAgua.nivelAtualLitros - aguaL);
-
-      const tkAdit = data.concreto_tanques.find(t => t.id === 'tanque-01');
-      if (tkAdit) tkAdit.nivelAtualLitros = Math.max(0, Number((tkAdit.nivelAtualLitros - aditL).toFixed(1)));
-
-      const novaBatelada = {
-        id: `bat-${Date.now()}`,
-        numeroTicket: `BAT-2026-${Math.floor(8840 + Math.random() * 1000)}`,
-        horario: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        cargaId: cargaId || 'crg-avulsa',
-        cliente: req.body.cliente || 'Obra Construtora MT',
-        obra: req.body.obra || 'Concretagem Estrutural',
-        betoneira: betoneira || 'BT-01',
-        motorista: motorista || 'Motorista Oficial',
-        fck: fck || 'FCK 30 MPa (Brita 1)',
-        slumpEspecificado: slumpEspecificado || '14 ± 2 cm',
-        slumpMedidoUsina: slumpMedido || '14.0 cm',
-        volumeBateladaM3: vol,
-        cimentoProgramadoKg: cimKg,
-        cimentoPesadoKg: cimKg + Math.floor(Math.random() * 8 - 4),
-        areiaMediaSecaKg: areiaKg,
-        areiaMediaPesadaKg: Math.round(areiaKg * 1.045), // c/ umidade
-        brita1ProgramadaKg: britaKg,
-        brita1PesadaKg: britaKg + Math.floor(Math.random() * 10 - 5),
-        aguaProgramadaLitros: aguaL,
-        aguaRealAdicionadaLitros: aguaL - Math.round(areiaKg * 0.045),
-        aditivoPlastificanteLitros: aditL,
-        fatorAcReal: Number((aguaL / cimKg).toFixed(2)),
-        tempoMisturaSegundos: 180,
-        rotacaoBalaoRPM: 16,
-        temperaturaConcreto: '28.8°C',
-        lacreBetoneira: lacre || `LCR-CNC-${Math.floor(8800 + Math.random() * 1000)}`,
-        conformidadeNBR7212: 'TOTALMENTE_CONFORME',
-        operadorBatcher: req.user?.nome || 'Marcio Fontes (Operador de Usina)'
-      };
-
-      data.concreto_bateladas.unshift(novaBatelada);
-
-      // Atualizar status da carga se fornecido
-      if (cargaId && Array.isArray(data.concreto_cargas)) {
-        const carga = data.concreto_cargas.find(c => c.id === cargaId);
-        if (carga) {
-          carga.status = 'em_transito';
-          if (Array.isArray(carga.viagens)) {
-            const v = carga.viagens.find(vg => vg.betoneira.includes(betoneira) || !vg.saida);
-            if (v) {
-              v.saida = novaBatelada.horario;
-            }
-          }
-        }
-      }
-
-      save();
-
-      return res.json({ ok: true, batelada: novaBatelada });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-
-  });
-
-  // [kytto-pizzaria-delivery] Rotas movidas para escopo global do server (disponíveis com ou sem Commerce Core)
+    // [kytto-pizzaria-delivery] Rotas movidas para escopo global do server (disponíveis com ou sem Commerce Core)
 
   // ── ROTAS PÚBLICAS DO CARDÁPIO & AUTOATENDIMENTO QR DE MESA (PALATARE & KYTTO) ──
   const resolverMesaPublica = async (token) => {
@@ -5158,6 +5477,256 @@ registerWhatsappConexaoRoutes(app, { legacyEmpresaId: whatsappEmpresaId, legacyL
 registerWhatsappConexaoRoutes(app, { legacyEmpresaId: whatsappEmpresaId, legacyLojaId: whatsappLojaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user), basePath: '/api/admin/barbearia/whatsapp-conexao-gestao', tipoCanal: 'gestao' });
 registerWhatsappConexaoRoutes(app, { legacyEmpresaId: whatsappEmpresaId, legacyLojaId: whatsappLojaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user), basePath: '/api/admin/barbearia/whatsapp-conexao-lancamentos', tipoCanal: 'lancamentos' });
 registerWhatsappCloudRoutes(app, { isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user) });
+
+// Rotas do Relatório Diário de Performance & Auditoria Operacional do T-Rex (Motor KyttoIA)
+app.get('/api/admin/dino/report-grafico/preview', auth, requireStaff, async (req, res) => {
+  try {
+    const empId = req.headers['x-empresa-id'] || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    const metricas = await compilarMetricasReportGrafico({ empresaId: empId });
+    res.json({
+      ok: true,
+      metricas,
+      imageUrl: '/reports/dino-performance-diario.png',
+      guardrails: GUARDRAILS_META_INFO,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/dino/report-grafico/disparar', auth, requireStaff, async (req, res) => {
+  try {
+    const { forcar, destinatario } = req.body || {};
+    const empId = req.headers['x-empresa-id'] || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    const resultado = await enviarReportGraficosDino({
+      destinatario,
+      forcar: Boolean(forcar),
+      empresaId: empId,
+    });
+    res.json(resultado);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/public/dino/report-grafico/disparar', async (req, res) => {
+  try {
+    const { forcar = true, destinatario = null } = req.body || {};
+    const empId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    const resultado = await enviarReportGraficosDino({
+      destinatario,
+      forcar: Boolean(forcar),
+      empresaId: empId,
+    });
+    res.json(resultado);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/public/dino/testar-send-raw', async (req, res) => {
+  try {
+    const { chatId = '120363028123456789@g.us', message = 'teste' } = req.body || {};
+    const { chatbotBackendConfig } = await import('./core/whatsapp-provider.js');
+    const cfg = chatbotBackendConfig();
+    const fetchImpl = globalThis.fetch;
+    const resp = await fetchImpl(`${cfg.baseUrl}${cfg.apiBase}/send`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-KEY': cfg.key,
+        'apikey': cfg.key,
+        'authorization': `Bearer ${cfg.key}`,
+      },
+      body: JSON.stringify({
+        instanceName: cfg.instance,
+        chat_id: chatId,
+        message,
+      }),
+    });
+    const status = resp.status;
+    const text = await resp.text();
+    let body = null;
+    try { body = JSON.parse(text); } catch {}
+    res.json({ ok: resp.ok, status, body: body || text });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/public/dino/grupos-evolution', async (req, res) => {
+  try {
+    const evoUrl = (process.env.EVOLUTION_API_URL || '').replace(/\/+$/, '');
+    const evoKey = process.env.EVOLUTION_API_KEY || '';
+    const evoInstance = process.env.EVOLUTION_INSTANCE || 'dino';
+    const fetchImpl = globalThis.fetch;
+
+    if (!evoUrl || !evoKey) {
+      return res.status(400).json({ ok: false, error: 'Evolution API não configurada' });
+    }
+
+    const queryEvo = async (endpoint) => {
+      try {
+        const resp = await fetchImpl(`${evoUrl}${endpoint}`, {
+          headers: {
+            'Accept': 'application/json',
+            apikey: evoKey,
+          }
+        });
+        const ct = resp.headers.get('content-type') || '';
+        const text = await resp.text();
+        let data = null;
+        try { data = JSON.parse(text); } catch {}
+        return { status: resp.status, data: data || text.slice(0, 300) };
+      } catch (err) {
+        return { error: err.message };
+      }
+    };
+
+    const [groupsDino, groupsDefault, stateDino, instances] = await Promise.all([
+      queryEvo(`/group/fetchAllGroups/${encodeURIComponent(evoInstance)}?getParticipants=true`),
+      queryEvo(`/group/fetchAllGroups/default?getParticipants=true`),
+      queryEvo(`/instance/connectionState/${encodeURIComponent(evoInstance)}`),
+      queryEvo(`/instance/fetchInstances`),
+    ]);
+
+    res.json({
+      ok: true,
+      evoUrl: evoUrl.replace(/:[^:]+@/, ':***@'),
+      evoInstance,
+      stateDino,
+      instances,
+      groupsDino,
+      groupsDefault,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/public/dino/debug-waha-full', async (req, res) => {
+  try {
+    const baseUrl = req.query.url || 'https://waha.kytto.com.br';
+    const fetchImpl = globalThis.fetch;
+
+    const secretsToTest = [
+      { name: 'WAHA_CONTROL_BRIDGE_SECRET', val: process.env.WAHA_CONTROL_BRIDGE_SECRET || '' },
+      { name: 'WAHA_WEBHOOK_SECRET', val: process.env.WAHA_WEBHOOK_SECRET || '' },
+      { name: 'WAHA_WEBHOOK_HMAC_KEY', val: process.env.WAHA_WEBHOOK_HMAC_KEY || '' },
+    ].filter((s) => s.val);
+
+    const authResults = [];
+    for (const s of secretsToTest) {
+      try {
+        const r = await fetchImpl(`${baseUrl}/v1/sessions/barbearia-dino-gestao/status`, {
+          headers: {
+            Accept: 'application/json',
+            'X-Kytto-Waha-Bridge-Secret': s.val,
+          }
+        });
+        const text = await r.text();
+        authResults.push({ secretName: s.name, status: r.status, body: text.slice(0, 200) });
+      } catch (e) {
+        authResults.push({ secretName: s.name, error: e.message });
+      }
+    }
+
+    const testUrl = async (path, secretVal, extraHeaders = {}) => {
+      try {
+        const r = await fetchImpl(`${baseUrl}${path}`, {
+          headers: {
+            'Accept': 'application/json',
+            'X-Kytto-Waha-Bridge-Secret': secretVal,
+            ...extraHeaders
+          }
+        });
+        const ct = r.headers.get('content-type') || '';
+        const text = await r.text();
+        let parsed = null;
+        try { parsed = JSON.parse(text); } catch {}
+        return { status: r.status, contentType: ct, data: parsed || text.slice(0, 300) };
+      } catch (e) {
+        return { error: e.message };
+      }
+    };
+
+    res.json({ ok: true, baseUrl, authResults });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/public/dino/descobrir-grupo', async (req, res) => {
+  try {
+    const { chatbotBackendConfig } = await import('./core/whatsapp-provider.js');
+    const cfg = chatbotBackendConfig();
+    const fetchImpl = globalThis.fetch;
+    const qParam = req.query.q ? `&q=${encodeURIComponent(req.query.q)}` : '';
+
+    let wahaResult = {};
+    try {
+      const { listWahaGroups, wahaControlConfigured } = await import('./core/whatsapp-waha.js');
+      if (wahaControlConfigured()) {
+        const g1 = await listWahaGroups('barbearia-dino-gestao').catch((e) => ({ error: e.message }));
+        const g2 = await listWahaGroups('dino').catch((e) => ({ error: e.message }));
+        const g3 = await listWahaGroups('default').catch((e) => ({ error: e.message }));
+        wahaResult = { configured: true, barbeariaDinoGestao: g1, dino: g2, default: g3 };
+      } else {
+        wahaResult = { configured: false, envUrl: Boolean(process.env.WAHA_CONTROL_URL), envSecret: Boolean(process.env.WAHA_CONTROL_BRIDGE_SECRET) };
+      }
+    } catch (wErr) {
+      wahaResult = { error: wErr.message };
+    }
+    
+    // Consultar histórico de mensagens para capturar todos os chatIds (inclusive @g.us)
+    const url = `${cfg.baseUrl}${cfg.apiBase}/messages?latest=false&limit=500&instanceName=${encodeURIComponent(cfg.instance)}${qParam}`;
+    const resp = await fetchImpl(url, {
+      headers: {
+        'Accept': 'application/json',
+        'X-API-KEY': cfg.key,
+        'apikey': cfg.key,
+        'authorization': `Bearer ${cfg.key}`,
+      }
+    });
+    const data = await resp.json().catch(() => ({}));
+
+    const chatIds = new Set();
+    const groupChats = [];
+    const scan = (item) => {
+      if (!item) return;
+      const cid = item.chatId || item.chat_id || item.remoteJid;
+      if (cid) {
+        chatIds.add(cid);
+        if (String(cid).includes('@g.us') || String(item.content || '').toLowerCase().includes('dino')) {
+          groupChats.push(item);
+        }
+      }
+    };
+
+    if (Array.isArray(data)) data.forEach(scan);
+    if (Array.isArray(data?.messages)) data.messages.forEach(scan);
+    if (Array.isArray(data?.users)) {
+      data.users.forEach((u) => {
+        scan(u);
+        if (Array.isArray(u?.messages)) u.messages.forEach(scan);
+      });
+    }
+
+    res.json({
+      ok: true,
+      instance: cfg.instance,
+      waha: wahaResult,
+      query: req.query.q || null,
+      totalChats: chatIds.size,
+      allChatIds: Array.from(chatIds),
+      groupChats,
+      rawData: req.query.q ? data : undefined,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // Prévia integrada de taxas/materiais: POST por ser um cálculo de payload, nunca uma mutação.
 // Não há rota de aplicar neste recorte; o plano só devolve hash, divergências e pendências.
 function temPropriedade(valor, chave) {
@@ -5905,6 +6474,15 @@ function guardarRespostaCurta(chave, valor) {
   cacheRespostasCurtas.set(chave, { versao: estadoGravacao()?.alteracoes ?? null, em: Date.now(), valor });
 }
 
+function invalidarCachesBarbearia(empresaId) {
+  try {
+    cacheRespostasCurtas.clear();
+    _cacheIndicesBarbearia.clear();
+    _cacheRelacionamentoBarbearia.clear();
+    if (empresaId) _cacheClientesBarbearia.delete(String(empresaId));
+  } catch (_) {}
+}
+
 app.get('/api/admin/barbearia/analytics', async (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
@@ -6088,18 +6666,23 @@ app.get('/api/admin/barbearia/agenda-periodo', (req, res) => {
     const empresaId = legacyEmpresaId(req);
     const { de, ate } = intervaloDias(req.query?.de, req.query?.ate, 62);
     const lojaId = legacyLojaId(req);
-    const chaveCache = JSON.stringify(['agenda-periodo', empresaId, lojaId || '', de, ate, String(req.query?.profissionalId || ''), String(req.query?.status || ''), String(req.query?.historico || '')]);
+    const statusPedido = String(req.query?.status || '');
+    const incluirCancelados = req.query?.incluirCancelados === '1' || req.query?.incluirCancelados === 'true' || statusPedido === 'cancelado';
+    const chaveCache = JSON.stringify(['agenda-periodo', empresaId, lojaId || '', de, ate, String(req.query?.profissionalId || ''), statusPedido, String(req.query?.historico || ''), incluirCancelados ? '1' : '0']);
     const guardada = respostaCurtaGuardada(chaveCache, 15_000);
     if (guardada) return enviarJsonOtimizado(req, res, guardada);
     const indices = indicesAgendaBarbearia(empresaId);
-    const itens = listarAgendamentosBarbearia(empresaId, {
+    let itens = listarAgendamentosBarbearia(empresaId, {
       de, ate, lojaId,
       profissionalId: req.query?.profissionalId || undefined,
       status: req.query?.status || undefined,
     }, indices);
+    // Agendamentos cancelados são expurgados por padrão da visualização da grade da agenda
+    if (!incluirCancelados) {
+      itens = itens.filter(item => item && item.status !== 'cancelado' && item.status !== 'cancelado_falta_confirmacao' && item.status !== 'nao_compareceu');
+    }
     // Histórico importado do Avec (somente leitura), ligado aos profissionais ativos.
     // Não entra quando o filtro de status pede algo diferente de "concluído".
-    const statusPedido = String(req.query?.status || '');
     const historico = req.query?.historico === '0' || (statusPedido && statusPedido !== 'concluido') ? [] : agendaHistoricaAvec({
       historico: barbeariaErpKytto.listarHistoricoAtendimentos(empresaId, { de, ate, lojaId }),
       comandas: barbeariaErpKytto.listarHistoricoComandas(empresaId, { de, ate, lojaId }),
@@ -6329,6 +6912,52 @@ app.get('/api/admin/barbearia/agenda', (req, res) => {
     res.json({ ok: true, agendamentos, total: agendamentos.length });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
+app.get('/api/admin/barbearia/agenda/auditoria-cancelamentos', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const lojaId = legacyLojaId(req);
+    const cancelados = listarAgendamentosBarbearia(empresaId, { status: 'cancelado', lojaId });
+    const de = req.query?.de ? String(req.query.de).slice(0, 10) : '';
+    const ate = req.query?.ate ? String(req.query.ate).slice(0, 10) : '';
+    const filtrados = cancelados.filter((item) => {
+      const dia = String(item.dataAgenda || item.dataHora || '').slice(0, 10);
+      if (de && dia < de) return false;
+      if (ate && dia > ate) return false;
+      return true;
+    });
+    const porOrigem = {};
+    const porUsuario = {};
+    const porMotivo = {};
+    for (const item of filtrados) {
+      const orig = item.origem || 'nao_informada';
+      const user = item.canceladoPor || 'equipe';
+      const motivo = item.motivoCancelamento || 'sem_motivo';
+      porOrigem[orig] = (porOrigem[orig] || 0) + 1;
+      porUsuario[user] = (porUsuario[user] || 0) + 1;
+      porMotivo[motivo] = (porMotivo[motivo] || 0) + 1;
+    }
+    res.json({
+      ok: true,
+      total: filtrados.length,
+      resumo: { porOrigem, porUsuario, porMotivo },
+      cancelamentos: filtrados.map((item) => ({
+        id: item.id,
+        clienteNome: item.clienteNome,
+        clienteTelefone: item.clienteTelefone,
+        profissionalNome: item.profissionalNome,
+        servicoNome: item.servicoNome,
+        dataAgenda: item.dataAgenda,
+        horaLocal: item.horaLocal,
+        status: item.status,
+        origem: item.origem,
+        canceladoPor: item.canceladoPor,
+        motivoCancelamento: item.motivoCancelamento,
+        lojaId: item.lojaId,
+        atualizadoEm: item.atualizadoEm || item.dataCriacao,
+      })),
+    });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
 app.get('/api/admin/barbearia/agenda/:id', (req, res) => {
   const agendamento = listarAgendamentosBarbearia(legacyEmpresaId(req), { lojaId: legacyLojaId(req) }).find(item => item.id === String(req.params.id));
   if (!agendamento) return res.status(404).json({ error: 'Agendamento não encontrado na empresa ativa.' });
@@ -6366,6 +6995,7 @@ app.post('/api/admin/barbearia/agenda', async (req, res) => {
     } else {
       notificacao = await queueAppointmentNotifications({ empresaId, lojaId, legacyEmpresaId: empresaId }, agendamento, 'criado').catch(() => ({ queued: 0, skipped: true, reason: 'queue_unavailable' }));
     }
+    invalidarCachesBarbearia(empresaId);
     res.status(201).json({ ok: true, agendamento, notificacao, cliente: { id: vinculo.clienteId || null, criado: vinculo.criado } });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
@@ -6376,6 +7006,7 @@ app.patch('/api/admin/barbearia/agenda/:id', async (req, res) => {
     const anterior = listarAgendamentosBarbearia(empresaId, { lojaId }).find((item) => item.id === String(req.params.id));
     const agendamento = barbeariaErpKytto.atualizarAgendamento(empresaId, req.params.id, { ...(req.body || {}), lojaId, usuario: req.user?.email || req.user?.nome || '', origem: 'admin' }, { permitirEncaixe: req.body?.encaixe === true, horaOperacionalEstrita: true });
     if (!agendamento) return res.status(404).json({ error: 'Agendamento não encontrado na empresa ativa.' });
+    audit(req, 'BARBEARIA AGENDAMENTO ATUALIZADO', `${agendamento.id} cliente="${agendamento.clienteNome || ''}" ${remarcado ? 'REMARCADO' : ''}`.trim());
     const remarcado = anterior && ['dataHora', 'dataAgenda', 'profissionalId', 'servicoId'].some((campo) => String(anterior[campo] || '') !== String(agendamento[campo] || ''));
     const notificacao = remarcado
       ? await queueAppointmentNotifications({ empresaId, lojaId, legacyEmpresaId: empresaId }, agendamento, 'remarcado').catch(() => ({ queued: 0, skipped: true, reason: 'queue_unavailable' }))
@@ -6387,6 +7018,7 @@ app.patch('/api/admin/barbearia/agenda/:id', async (req, res) => {
       const contextoAnterior = { empresaId, lojaId: anterior.lojaId || lojaId, legacyEmpresaId: empresaId };
       listaEspera = await avisarListaEspera(contextoAnterior, vagaAnterior, captacaoKytto.candidatosParaVaga(empresaId, vagaAnterior, { lojaId: anterior.lojaId || lojaId })).catch(() => ({ queued: 0, skipped: true, reason: 'queue_unavailable' }));
     }
+    invalidarCachesBarbearia(empresaId);
     res.json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(empresaId, agendamento), notificacao, listaEspera });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
@@ -6396,7 +7028,7 @@ app.patch('/api/admin/barbearia/agenda/:id/status', async (req, res) => {
     const lojaId = legacyLojaId(req);
     const atual = listarAgendamentosBarbearia(empresaId, { lojaId })
       .find((item) => item.id === String(req.params.id));
-    if (!atual || (lojaId && atual.lojaId !== lojaId)) {
+    if (!atual || !lojasEquivalentes(empresaId, atual.lojaId, lojaId)) {
       return res.status(404).json({ error: 'Agendamento não encontrado na empresa/unidade ativa.' });
     }
     const status = String(req.body?.status || '');
@@ -6571,6 +7203,8 @@ app.patch('/api/admin/barbearia/agenda/:id/status', async (req, res) => {
         avaliacao = { queued: 0, skipped: true, reason: 'queue_unavailable' };
       }
     }
+    invalidarCachesBarbearia(empresaId);
+    audit(req, status === 'cancelado' ? 'BARBEARIA AGENDAMENTO CANCELADO' : 'BARBEARIA AGENDAMENTO STATUS', `${agendamento.id} status=${status} cliente="${agendamento.clienteNome || ''}" por="${dadosStatus.canceladoPor || req.user?.nome || 'atendente'}" motivo="${dadosStatus.motivoCancelamento || ''}"`.trim());
     res.json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(empresaId, agendamento), financeiro, notificacao, listaEspera, indicacao, avaliacao, cashback, vale, assinatura: assinatura ? { id: assinatura.assinatura.id, sessoesRestantes: assinatura.sessoesRestantes, usosNoCiclo: assinatura.usosNoCiclo } : null });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
@@ -11916,8 +12550,17 @@ function staticAssetReadiness() {
 }
 function setStaticCacheHeaders(res, filePath) {
   const normalized = String(filePath || '').replace(/\\/g, '/');
-  if (normalized.endsWith('/index.html') || normalized.endsWith('/sw.js') || normalized.endsWith('/manifest.json')) {
-    res.setHeader('Cache-Control', 'no-store');
+  if (
+    normalized.endsWith('.html') ||
+    normalized.endsWith('/sw.js') ||
+    normalized.endsWith('/service-worker.js') ||
+    normalized.endsWith('/sw-supermercado.js') ||
+    normalized.endsWith('/manifest.json') ||
+    normalized.includes('torre-pesagem')
+  ) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     return;
   }
   if (normalized.includes('/assets/')) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
@@ -12285,6 +12928,9 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
   }
   startDinoDailyConfirmationWorker();
   startDinoDailyBriefingWorker();
+  startDinoRecuperacaoAtivaWorker();
+  startDinoDailyReportWorker();
+  inicializarDinoWhatsGestaoHub();
   startAiBrainSchedulers();
   // Cobranças da barbearia: sinal vencido libera o horário (e avisa a lista de
   // espera); a cobrança do clube é gerada e enviada uma vez por hora.

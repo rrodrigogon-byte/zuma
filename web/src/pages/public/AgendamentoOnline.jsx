@@ -74,6 +74,24 @@ const PRODUTOS_UPSELL_DINO = [
     descricao: 'Controle de oleosidade e fortalecimento dos fios de cabelo desde a raiz.',
     badge: 'Cuidado Capilar',
   },
+  {
+    id: 'shampoo-tonalizante-barba-200ml',
+    nome: 'Shampoo Escurecedor Tonalizante Dino',
+    volume: '200ml',
+    preco: 85.00,
+    emoji: '✨',
+    descricao: 'Disfarça gradualmente os fios brancos de cabelo e barba sem agredir a pele. Dura mais de 2 meses.',
+    badge: 'Destaque VIP',
+  },
+  {
+    id: 'perfume-pocket-dino-15ml',
+    nome: 'Perfume Masculino Pocket Dino',
+    volume: '15ml',
+    preco: 60.00,
+    emoji: '👑',
+    descricao: 'Fragrância nobre amadeirada e marcante em frasco prático para levar no bolso ou carro.',
+    badge: 'Fragrância Nobre',
+  },
 ];
 
 function obterEstiloServico(nomeServico = '') {

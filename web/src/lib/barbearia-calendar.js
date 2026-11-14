@@ -90,11 +90,33 @@ export function diaNumero(iso) {
   return String(iso).slice(8, 10)
 }
 
-export function filtrarAgenda(itens, { busca = '', status = '' } = {}) {
+export function isStatusCancelado(status) {
+  if (!status) return false
+  const s = String(status).toLowerCase().trim()
+  return (
+    s === 'cancelado' ||
+    s === 'cancelada' ||
+    s === 'cancelled' ||
+    s === 'cancel' ||
+    s === 'nao_compareceu' ||
+    s.startsWith('cancelad')
+  )
+}
+
+export function isItemCancelado(item) {
+  if (!item) return false
+  if (item.cancelado === true || item.isCancelado === true) return true
+  return isStatusCancelado(item.status)
+}
+
+export function filtrarAgenda(itens, { busca = '', status = '', incluirCancelados = false } = {}) {
   const normalizar = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-  return itens.filter(item => {
-    if (status && item.status !== status && !item.isBloqueio) return false;
-    if (!status && (item.status === 'cancelado' || item.status === 'cancelado_falta_confirmacao')) return false;
+  const statusFiltro = String(status || '').toLowerCase().trim()
+  const querCancelados = incluirCancelados || isStatusCancelado(statusFiltro)
+  return (itens || []).filter(item => {
+    if (!item) return false
+    if (isItemCancelado(item) && !querCancelados) return false
+    if (statusFiltro && !item.isBloqueio && String(item.status || '').toLowerCase().trim() !== statusFiltro) return false
     return normalizar([item.clienteNome, item.cliente_nome, item.servicoNome, item.servico_nome, item.profissionalNome, item.profissional_nome, item.codigo].join(' ')).includes(normalizar(busca).trim());
   })
 }

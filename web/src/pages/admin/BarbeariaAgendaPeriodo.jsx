@@ -21,6 +21,8 @@ import {
   mesAnoLegivel,
   diaSemanaCurto,
   diaNumero,
+  isStatusCancelado,
+  isItemCancelado,
 } from "../../lib/barbearia-calendar";
 import "./BarbeariaAgendaPeriodo.css";
 
@@ -108,7 +110,8 @@ function chaveDiaCuiaba(dataOuIso) {
 function processarItensEEncaixes(lista) {
   if (!Array.isArray(lista) || lista.length === 0) return [];
   const bloqueios = lista.filter((item) => item.isBloqueio);
-  const agendamentos = lista.filter((item) => !item.isBloqueio);
+  // Agendamentos ativos (cancelados NUNCA devem colidir nem ser marcados como encaixes)
+  const agendamentos = lista.filter((item) => !item.isBloqueio && !isItemCancelado(item));
 
   function toMins(h) {
     if (!h) return 0;
@@ -208,7 +211,7 @@ function prepararLinhasAvec(itens) {
   }
 
   const bloqueios = itens.filter((it) => it.isBloqueio);
-  const agendamentos = itens.filter((it) => !it.isBloqueio);
+  const agendamentos = itens.filter((it) => !it.isBloqueio && !isItemCancelado(it));
 
   bloqueios.sort((a, b) => (horaDoItem(a) || '00:00').localeCompare(horaDoItem(b) || '00:00'));
   agendamentos.sort((a, b) => (horaDoItem(a) || '00:00').localeCompare(horaDoItem(b) || '00:00'));
@@ -434,6 +437,48 @@ export default function BarbeariaAgendaPeriodo({
   const [erro, setErro] = useState("");
   const [atualizacao, setAtualizacao] = useState(0);
 
+  // Sincronização em tempo real da agenda (otimista, abas e eventos internos)
+  useEffect(() => {
+    function expurgarCancelado(id) {
+      if (!id) return;
+      setConsulta((prev) => {
+        if (!prev || !prev.itens) return prev;
+        const novoItens = prev.itens.filter(
+          (it) => it && String(it.id) !== String(id) && String(it.rawId || '') !== String(id)
+        );
+        if (novoItens.length === prev.itens.length) return prev;
+        return { ...prev, itens: novoItens };
+      });
+      setAtualizacao((n) => n + 1);
+    }
+
+    function handleEventoCancelado(e) {
+      const id = e?.detail?.agendamentoId || e?.detail?.id;
+      expurgarCancelado(id);
+    }
+
+    function handleStorage(e) {
+      if (e.key === 'kytto:sync_agenda' && e.newValue) {
+        try {
+          const dados = JSON.parse(e.newValue);
+          if (dados?.tipo === 'cancelado' && dados?.id) {
+            expurgarCancelado(dados.id);
+          }
+        } catch (_) {}
+      }
+    }
+
+    window.addEventListener('kytto:agenda_cancelada', handleEventoCancelado);
+    window.addEventListener('kytto:agenda_atualizada', handleEventoCancelado);
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      window.removeEventListener('kytto:agenda_cancelada', handleEventoCancelado);
+      window.removeEventListener('kytto:agenda_atualizada', handleEventoCancelado);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
+
   // Controle de Horário em Tempo Real
   const [agora, setAgora] = useState(new Date());
   useEffect(() => {
@@ -558,7 +603,11 @@ export default function BarbeariaAgendaPeriodo({
   const carregando = dias.length > 0 && consulta?.chave !== chave && !erro;
   const itens = useMemo(() => {
     if (consulta?.chave !== chave) return [];
-    const _itens = consulta.itens || [];
+    const _itens = (consulta.itens || []).filter((item) => {
+      if (!item) return false;
+      if (isItemCancelado(item) && !isStatusCancelado(statusFiltro)) return false;
+      return true;
+    });
     const _bloqueios = [];
     for (const b of consulta.bloqueios || []) {
       const ini = new Date(b.inicio);
@@ -828,6 +877,8 @@ export default function BarbeariaAgendaPeriodo({
       const statusPorBarbeiro = barbeirosDoDia.map((b) => {
         const ags = agendamentosPorBarbeiroNoDia.mapa.get(b.id) || [];
         const itensOcupando = ags.filter((item) => {
+          if (!item) return false;
+          if (!item.isBloqueio && isItemCancelado(item)) return false;
           const h = horaDoItem(item);
           if (h === horaSlot) return true;
           const dur = Number(item.duracao || item.duracaoMinutos || 35);

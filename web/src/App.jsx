@@ -50,6 +50,7 @@ function PlatformOnly({ children }) {
 // catálogo em kytto.com.br antes de uma publicação explícita por canal.
 function EntradaPrincipal() {
   const host = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : ''
+  if (host.startsWith('setpoint.')) return <Navigate to="/admin" replace />
   const destinoStallone = stalloneEntryFromHost(host)
   if (destinoStallone) return <Navigate to={destinoStallone} replace />
   const destinoDino = destinoInicialDino(host)
@@ -57,6 +58,13 @@ function EntradaPrincipal() {
   // Domínio próprio da Stallone (stallone.kytto.com.br): abre direto a loja.
   if (brandFromHost(host) === 'stallone') return <Navigate to="/ecommerce/stallone" replace />
   if (host === 'loja.kytto.com.br' || ehHostLojaDino(host)) return <Ecommerce />
+  const auth = useAuth()
+  if (auth.user) {
+    if (auth.isOrg) return <Navigate to="/admin" replace />
+    if (auth.isStaff) return <Navigate to="/pdv" replace />
+    if (auth.isAtleta) return <Navigate to="/meu-painel" replace />
+    return <Navigate to="/admin" replace />
+  }
   return <Layout marketing><Home /></Layout>
 }
 

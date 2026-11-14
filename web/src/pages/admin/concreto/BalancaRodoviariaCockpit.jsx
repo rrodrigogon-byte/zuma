@@ -12,6 +12,8 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
   const [salvandoConfig, setSalvandoConfig] = useState(false);
   const [buscaTermo, setBuscaTermo] = useState('');
   const [filtroMaterial, setFiltroMaterial] = useState('todos');
+  const [pilotoAutonomoExecutando, setPilotoAutonomoExecutando] = useState(false);
+  const [ultimoCicloAutonomo, setUltimoCicloAutonomo] = useState(null);
 
   // Estado do Hardware da Balança
   const [hardware, setHardware] = useState({
@@ -140,16 +142,72 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
     },
     {
       id: 'cam07',
-      nome: 'CAM-07 · Balança Extra (Positivo Seg IP)',
-      marca: 'positivo',
-      modelo: 'Smart Câmera IP Wi-Fi 1080p',
-      ip: '192.168.1.126',
+      nome: 'CAM-07 · Balança 80t (Células de Carga C1-C8 Toledo Prix)',
+      marca: 'bosch',
+      modelo: 'Dinion IP Starlight 7000 HD',
+      ip: '192.168.1.130',
       portaRtsp: 554,
       portaHttp: 80,
       ponto: 'balanca',
-      codec: 'H.264 · 25 FPS',
-      foto: '/assets/cftv/cftv_cam03_cancela_saida.jpg',
-      status: 'Conectada · ONVIF Porta 8899',
+      codec: 'H.265 · 30 FPS',
+      foto: '/assets/cftv/cftv_cam07_bosch_celulas.jpg',
+      status: '8 Células Calibradas RBC / IPEM',
+      statusCor: '#10B981'
+    },
+    {
+      id: 'cam08',
+      nome: 'CAM-08 · Balança 80t (Totem Motorista Autoatendimento)',
+      marca: 'toledo_prix_lpr',
+      modelo: 'Totem Prix 9094 / Indicador 720i',
+      ip: '192.168.1.135',
+      portaRtsp: 554,
+      portaHttp: 80,
+      ponto: 'balanca',
+      codec: 'H.264 · 30 FPS',
+      foto: '/assets/cftv/cftv_cam09_toledo_totem.jpg',
+      status: 'RFID & Leitor Biométrico Ativo',
+      statusCor: '#10B981'
+    },
+    {
+      id: 'cam09',
+      nome: 'CAM-09 · Balança 80t (Traseira Veicular & Descarga)',
+      marca: 'hikvision',
+      modelo: 'DS-2CD2T47G2P-LSU (AcuSense)',
+      ip: '192.168.1.132',
+      portaRtsp: 554,
+      portaHttp: 80,
+      ponto: 'balanca',
+      codec: 'H.265 · 30 FPS',
+      foto: '/assets/cftv/cftv_cam08_avigilon_traseira.jpg',
+      status: 'Enquadramento Traseiro 100% OK',
+      statusCor: '#10B981'
+    },
+    {
+      id: 'cam10',
+      nome: 'CAM-10 · Termografia FLIR (Motores & Silos)',
+      marca: 'flir',
+      modelo: 'FLIR A700 Smart Thermal Sensor',
+      ip: '192.168.1.150',
+      portaRtsp: 554,
+      portaHttp: 80,
+      ponto: 'patio',
+      codec: 'Radiométrica · 30 FPS',
+      foto: '/assets/cftv/cftv_cam12_flir_termica.jpg',
+      status: 'Gradiente Térmico Normal (61.3°C / 78.6°C)',
+      statusCor: '#10B981'
+    },
+    {
+      id: 'cam11',
+      nome: 'CAM-11 · Baias de Agregados (Britas 0, 1 e Areia)',
+      marca: 'tplink_vigi',
+      modelo: 'VIGI C340-W 4MP Outdoor',
+      ip: '192.168.1.138',
+      portaRtsp: 554,
+      portaHttp: 80,
+      ponto: 'patio',
+      codec: 'H.265+ · 25 FPS (2K)',
+      foto: '/assets/cftv/cftv_cam11_tplink_vigi_baias.jpg',
+      status: 'Carregamento Moega em Andamento',
       statusCor: '#10B981'
     }
   ];
@@ -327,6 +385,30 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
     const interval = setInterval(carregarDados, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  // Disparo manual do Piloto Automático Zero-Touch
+  const dispararPilotoAutonomo = async () => {
+    try {
+      setPilotoAutonomoExecutando(true);
+      const res = await api.post('/api/admin/concreto/balanca/ciclo-autonomo', {
+        placa: hardware.veiculoAtual?.placa || 'BT-01 (RRA-4E80)',
+        tipoOperacao: 'expedicao_concreto',
+        pesoLidoKg: hardware.pesoAtualKg || 33480
+      });
+      if (res?.ok) {
+        setUltimoCicloAutonomo(res.resultado);
+        if (res.resultado?.ticket) {
+          setModalTicket(res.resultado.ticket);
+        }
+        carregarDados();
+        alert('🤖 Ciclo Autônomo Zero-Touch executado com sucesso! Ticket gerado e cancela liberada.');
+      }
+    } catch (err) {
+      alert('Erro no ciclo autônomo: ' + err.message);
+    } finally {
+      setPilotoAutonomoExecutando(false);
+    }
+  };
 
   // Comandos de automação
   const executarComando = async (comando, payload = {}) => {
@@ -691,6 +773,55 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
       {/* 2. CONTEÚDO DA ABA: PISTA & BALANÇA (VISÃO INTERATIVA HI-FI) */}
       {abaPrincipal === 'operacao' && (
         <>
+          {/* BANNER PILOTO AUTOMÁTICO ZERO-TOUCH */}
+          <div style={{
+            background: 'linear-gradient(90deg, rgba(16, 185, 129, 0.15) 0%, rgba(2, 132, 199, 0.15) 100%)',
+            border: '1.5px solid #10B981',
+            borderRadius: '10px',
+            padding: '12px 16px',
+            marginBottom: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '10px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: '#10B981', color: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 'bold' }}>
+                ⚡
+              </div>
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: '800', color: '#FFF', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>PILOTO AUTOMÁTICO ZERO-TOUCH · BALANÇA 80T &amp; CCO</span>
+                  <span style={{ fontSize: '9px', background: '#10B981', color: '#000', padding: '2px 6px', borderRadius: '4px', fontWeight: '900' }}>100% AUTÔNOMO</span>
+                </div>
+                <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>
+                  LPR Intelbras + Estabilidade Toledo Prix 9094 + Emissão Instantânea Toledo &amp; MDF-e SEFAZ sem operador
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={dispararPilotoAutonomo}
+              disabled={pilotoAutonomoExecutando}
+              style={{
+                background: pilotoAutonomoExecutando ? '#64748B' : 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                color: '#FFF',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '9px 18px',
+                fontSize: '12px',
+                fontWeight: '800',
+                cursor: pilotoAutonomoExecutando ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)'
+              }}
+            >
+              <span>{pilotoAutonomoExecutando ? '⏳' : '🚀'}</span>
+              <span>{pilotoAutonomoExecutando ? 'Executando Ciclo...' : 'Disparar Ciclo Autônomo Agora'}</span>
+            </button>
+          </div>
           {/* TOPO: INDICADOR DIGITAL TOLEDO PRIX 9094 */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '12px', marginBottom: '12px' }}>
             
@@ -1396,7 +1527,7 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
           {/* FILTROS DE PONTO */}
           <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
             {[
-              { id: 'todos', label: 'Todos os 7 Canais' },
+              { id: 'todos', label: `Todos os ${LISTA_CAMERAS_COCKPIT.length} Canais Operacionais` },
               { id: 'balanca', label: 'Balança 80t (Pista &amp; Cancela)' },
               { id: 'patio', label: 'Pátio &amp; Central Dosadora' },
               { id: 'mineracao', label: 'Mineração Areia (Sepotuba)' },

@@ -66,13 +66,26 @@ import {
   atualizarTelemetriaBetoneira,
   listarCamerasIpConcreto,
   obterCameraIpPorId,
+  escanearRedeCamerasIpConcreto,
+  obterPresetsFabricantesCameras,
+  integrarCamerasLoteConcreto,
   criarCameraIpConcreto,
   atualizarCameraIpConcreto,
   excluirCameraIpConcreto,
   testarConexaoCameraIp,
   analisarFrameVisionKyttoIa,
   listarEventosVisionConcreto,
-  reconhecerEventoVision
+  reconhecerEventoVision,
+  processarCicloAutonomoBalanca,
+  executarDosagemMalhaFechadaNBR7212,
+  auditarInviolabilidadeAguaTrajeto,
+  registrarRupturaAutomaticaPrensa,
+  gerarMedicaoPeriodicaObra,
+  processarCicloTransporteGeofenceNBR7212,
+  calcularAceitacaoEstatisticaNBR12655,
+  monitorarSilosRessuprimentoAutonomo,
+  auditarTelemetriaBombaDesgasteNBR15649,
+  calcularBalancoCarbonoRecicladorESG
 } from './servico.js';
 import { CONCRETO_EMPRESA_ID } from '../../concreto-usina-seed.js';
 
@@ -849,6 +862,39 @@ router.post('/dosagem/calcular', (req, res) => {
     }
   });
 
+  // Scanner de Rede de Câmeras IP (Varredura de Sub-rede / Portas ONVIF / RTSP / SDKs)
+  router.post('/cameras/scanner', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await escanearRedeCamerasIpConcreto(req.body, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // Presets de Fabricantes Homologados (19 marcas industriais)
+  router.get('/cameras/scanner/presets', (req, res) => {
+    try {
+      const presets = obterPresetsFabricantesCameras();
+      return res.json({ ok: true, presets });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // Integração em Lote de Câmeras Descobertas no Scanner
+  router.post('/cameras/integrar-lote', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const dispositivos = Array.isArray(req.body?.dispositivos) ? req.body.dispositivos : (Array.isArray(req.body) ? req.body : []);
+      const resultado = integrarCamerasLoteConcreto(dispositivos, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
   router.post('/cameras/testar-conexao', (req, res) => {
     try {
       const empresaId = resolverEmpresa(req);
@@ -895,6 +941,119 @@ router.post('/dosagem/calcular', (req, res) => {
       const operador = req.body?.operador || req.user?.nome || 'Operador CCO Serrano';
       const ok = reconhecerEventoVision(req.params.id, empresaId, operador);
       return res.json({ ok });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // ─── ENDPOINTS AUTÔNOMOS DO MOTOR KYTTOIA (5 PILARES DE AUTONOMIA) ───
+  
+  // Pilar 1: Balança e Portaria Zero-Touch (Piloto Automático)
+  router.post('/balanca/ciclo-autonomo', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await processarCicloAutonomoBalanca(req.body || {}, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // Pilar 2: Central Dosadora em Malha Fechada de Umidade NBR 7212
+  router.post('/central/dosagem-malha-fechada', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = executarDosagemMalhaFechadaNBR7212(req.body || {}, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // Pilar 3: Virtual Verifi & Inviolabilidade de Água em Trânsito
+  router.post('/frota/auditar-inviolabilidade', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = auditarInviolabilidadeAguaTrajeto(req.body || {}, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // Pilar 4: Prensa Servo-Hidráulica & Ruptura Automática NBR 5739
+  router.post('/laboratorio/ruptura-automatica', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = registrarRupturaAutomaticaPrensa(req.body || {}, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // Pilar 5: Medição Periódica e Faturamento Consolidado de Obras
+  router.post('/medicoes/gerar-fechamento-obra', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = gerarMedicaoPeriodicaObra(req.body || {}, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // ─── MOTORES DE SUPERAÇÃO DE MERCADO & AUTONOMIA MÁXIMA CCO ───
+  
+  // 1. Ciclo de Transporte & Geofencing NBR 7212 (Virtual TrackIt)
+  router.post('/transporte/ciclo-geofence', (req, res) => {
+    try {
+      const caminhaoId = req.body?.caminhaoId || 'BT-05';
+      const resultado = processarCicloTransporteGeofenceNBR7212(caminhaoId, req.body || {});
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 2. Aceitação Estatística Rigorosa NBR 12655 (Amostragem Total e Parcial)
+  router.post('/laboratorio/aceitacao-estatistica-nbr12655', (req, res) => {
+    try {
+      const resultado = calcularAceitacaoEstatisticaNBR12655(req.body || {});
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 3. Monitoramento Preditivo de Silos e Ressuprimento Autônomo
+  router.get('/silos/ressuprimento-autonomo', (req, res) => {
+    try {
+      const resultado = monitorarSilosRessuprimentoAutonomo();
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 4. Telemetria de Bombas de Concreto, Vento e Desgaste NBR 15649
+  router.post('/bombas/auditar-desgaste', (req, res) => {
+    try {
+      const bombaId = req.body?.bombaId || 'BOMBA-01';
+      const resultado = auditarTelemetriaBombaDesgasteNBR15649(bombaId, req.body || {});
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 5. Balanço de Carbono ESG & Reciclador Ecológico (NBR ISO 14064)
+  router.post('/sustentabilidade/balanco-carbono-esg', (req, res) => {
+    try {
+      const volumeM3 = Number(req.body?.volumeM3) || 64.0;
+      const tracoFck = Number(req.body?.traçoFck || req.body?.tracoFck) || 30;
+      const resultado = calcularBalancoCarbonoRecicladorESG(volumeM3, tracoFck, req.body || {});
+      return res.json(resultado);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
     }

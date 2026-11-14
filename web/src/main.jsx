@@ -17,6 +17,17 @@ if (typeof window !== 'undefined') {
   window.fmtR = fmtR
 }
 
+// Purga preventiva contra retenção indevida de caches legados e contaminação no navegador
+if (typeof caches !== 'undefined') {
+  caches.keys().then(keys => {
+    keys.forEach(k => {
+      if (k.includes('v10') || k.includes('v11') || k.includes('supermercado-v5')) {
+        caches.delete(k).catch(() => {})
+      }
+    })
+  }).catch(() => {})
+}
+
 // Quando uma nova revisão substitui os arquivos com hash, uma aba já aberta pode
 // tentar carregar um módulo que existia apenas na revisão anterior. Recarregamos
 // uma única vez para buscar o index e os assets consistentes da revisão atual.
