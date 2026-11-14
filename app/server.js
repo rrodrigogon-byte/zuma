@@ -1972,6 +1972,515 @@ const pizzariaPublicoRouter = criarRotasPizzariaPublico();
 app.use(['/api/admin/palatare', '/api/admin/pizzaria'], auth, requireStaff, pizzariaSuiteRouter);
 app.use(['/api/publico/palatare', '/api/publico/pizzaria'], pizzariaPublicoRouter);
 
+// [kytto-concreto] Rotas públicas de impressão e visualização de documentos oficiais
+  app.get("/api/concreto/laudos/:id/aceitacao-html", async (req, res) => {
+    try {
+      const { gerarHtmlLaudoAceitacaoEstatistica } = await import("./modules/concreto/servico.js");
+      const html = await gerarHtmlLaudoAceitacaoEstatistica(req.params.id);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.send(html);
+    } catch (e) {
+      return res.status(400).send(`<h3>Erro ao gerar Laudo NBR 12655: ${e.message}</h3>`);
+    }
+  });
+
+  app.get("/api/concreto/cargas/:id/romaneio-html", async (req, res) => {
+    try {
+      const { gerarHtmlRomaneioOficial } = await import("./modules/concreto/servico.js");
+      const resRomaneio = await gerarHtmlRomaneioOficial(req.params.id);
+      const html = typeof resRomaneio === 'string' ? resRomaneio : (resRomaneio?.html || resRomaneio);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.send(html);
+    } catch (e) {
+      return res.status(400).send(`<h3>Erro ao gerar Romaneio NBR 7212: ${e.message}</h3>`);
+    }
+  });
+
+  app.get("/api/concreto/balanca/tickets/:id/html", async (req, res) => {
+    try {
+      const { gerarHtmlTicketBalanca } = await import("./modules/concreto/servico.js");
+      const resTicket = await gerarHtmlTicketBalanca(req.params.id);
+      const html = typeof resTicket === 'string' ? resTicket : (resTicket?.html || resTicket);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.send(html);
+    } catch (e) {
+      return res.status(400).send(`<h3>Erro ao gerar Ticket Balança: ${e.message}</h3>`);
+    }
+  });
+
+  // [kytto-concreto] Rotas públicas do PWA e APK para Assinatura em Campo
+  app.get("/api/public/concreto/cargas-ativas", async (req, res) => {
+    try {
+      const data = db();
+      const { CONCRETO_CARGAS_INICIAIS } = await import("./concreto-usina-seed.js");
+      const cargas = data.concreto_cargas || CONCRETO_CARGAS_INICIAIS;
+      return res.json({ ok: true, cargas });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  app.get("/api/public/concreto/cargas/:id", async (req, res) => {
+    try {
+      const data = db();
+      const { CONCRETO_CARGAS_INICIAIS } = await import("./concreto-usina-seed.js");
+      const cargas = data.concreto_cargas || CONCRETO_CARGAS_INICIAIS;
+      const carga = cargas.find(c => c.id === req.params.id || String(c.numero) === String(req.params.id));
+      if (!carga) return res.status(404).json({ ok: false, error: "Carga não encontrada" });
+      return res.json({ ok: true, carga });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  app.post("/api/public/concreto/cargas/:id/assinar-pwa", async (req, res) => {
+    try {
+      const { assinarEntregaCarga } = await import("./modules/concreto/servico.js");
+      const resultado = await assinarEntregaCarga(req.params.id, req.body);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  app.post("/api/public/concreto/cargas/:id/upload-foto", async (req, res) => {
+    try {
+      const { fotoBase64, tipo, titulo, timestamp, localizacao } = req.body || {};
+      if (!fotoBase64) return res.status(400).json({ ok: false, error: "Imagem não fornecida" });
+
+      const fotoObj = {
+        id: `foto-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        tipo: tipo || "descarga",
+        titulo: titulo || "Foto de Campo",
+        base64: fotoBase64,
+        timestamp: timestamp || new Date().toLocaleString("pt-BR"),
+        localizacao: localizacao || "Canteiro de Obras"
+      };
+
+      const data = db();
+      data.concreto_cargas ||= [];
+      const carga = data.concreto_cargas.find(c => c.id === req.params.id || String(c.numero) === String(req.params.id));
+      if (carga) {
+        carga.assinaturaEntrega ||= {};
+        carga.assinaturaEntrega.fotos ||= [];
+        carga.assinaturaEntrega.fotos.push(fotoObj);
+        save();
+      }
+
+      return res.json({ ok: true, foto: fotoObj });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  app.get("/api/public/concreto/cargas/:id/canhoto-digital-html", async (req, res) => {
+    try {
+      const { gerarHtmlRomaneioOficial } = await import("./modules/concreto/servico.js");
+      const resRomaneio = await gerarHtmlRomaneioOficial(req.params.id);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.send(resRomaneio.html || resRomaneio);
+    } catch (e) {
+      return res.status(400).send(`<h3>Erro ao gerar Canhoto Digital: ${e.message}</h3>`);
+    }
+  });
+
+  app.get("/api/public/concreto/download-apk", (req, res) => {
+    const apkFile = path.resolve(__dirname, "../web/public/downloads/Serrano-Concreto-Campo.apk");
+    if (fs.existsSync(apkFile)) {
+      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+      res.setHeader('Content-Disposition', 'attachment; filename="Serrano-Concreto-Campo.apk"');
+      return fs.createReadStream(apkFile).pipe(res);
+    }
+    return res.status(404).send('APK em preparação de compilação.');
+  });
+
+  // [kytto-concreto] Módulo de Concreto Usinado, Cargas, Central e Usina
+  const concretoRouter = criarRotasConcreto();
+  app.use('/api/admin/concreto', auth, requireStaff, concretoRouter);
+  app.use('/api/admin/balanca-rodoviaria', auth, requireStaff, (req, res, next) => {
+    req.url = '/balanca' + (req.url === '/' ? '' : req.url);
+    return concretoRouter(req, res, next);
+  });
+  // [kytto-concreto] Rota CCO / Balança para a Torre de Pesagem com fallback operacional
+  app.use('/api/concreto-torre', (req, res, next) => {
+    const h = req.headers.authorization || '';
+    const token = (h.startsWith('Bearer ') ? h.slice(7) : null) || (req.query?.token ? String(req.query.token) : null);
+    if (token) {
+      return auth(req, res, (err) => {
+        if (err || !req.user) {
+          req.user = { id: 'operador-cco-serrano', nome: 'Operador CCO Serrano', role: 'organizador', platformAdmin: true };
+        }
+        req.empresaId = req.user?.empresaId || CONCRETO_EMPRESA_ID;
+        return next();
+      });
+    }
+    req.user = { id: 'operador-cco-serrano', nome: 'Operador CCO Serrano', role: 'organizador', platformAdmin: true };
+    req.empresaId = CONCRETO_EMPRESA_ID;
+    return next();
+  }, concretoRouter);
+
+  // [kytto-concreto] Módulo de Concreto Usinado, Cargas e Usina
+  app.get('/api/admin/concreto/dados', auth, requireStaff, async (req, res) => {
+    try {
+      const data = db();
+      const cargas = data.concreto_cargas || [];
+      const catalogo = data.concreto_produtos || [];
+      const frota = data.concreto_frota || [];
+      const silos = data.concreto_silos || CONCRETO_SILOS_INICIAIS;
+      const baias = data.concreto_baias || CONCRETO_BAIAS_INICIAIS;
+      const tanques = data.concreto_tanques || CONCRETO_TANQUES_ADITIVOS;
+      const entradasSuprimentos = data.concreto_entradas_suprimentos || CONCRETO_ENTRADAS_SUPRIMENTOS;
+      const bateladas = data.concreto_bateladas || CONCRETO_BATELADAS_PROCESSO;
+      const empresa = data.empresas?.[CONCRETO_EMPRESA_ID] || CONCRETO_DADOS_EMPRESA;
+      return res.json({
+        ok: true,
+        empresa,
+        cargas,
+        catalogo,
+        frota,
+        silos,
+        baias,
+        tanques,
+        entradasSuprimentos,
+        bateladas
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // [kytto-concreto] Resumo Financeiro & Gestão de Caixa Serrano Concreto
+  app.get('/api/admin/concreto/financeiro/resumo', auth, requireStaff, async (req, res) => {
+    try {
+      return res.json({
+        ok: true,
+        empresa: 'Serrano Concreto Usinado & Mineração Ltda',
+        cnpj: '53.798.485/0001-77',
+        competencia: '11/2026',
+        saldoCaixaBancos: 428500.00,
+        contasReceber30d: 342800.00,
+        contasPagar30d: 391800.00,
+        saldoProjetadoFimMes: 379500.00,
+        faturamentoMensal: 850000.00,
+        volumeM3Faturado: 1830.0,
+        precoMedioPonderadoM3: 464.50,
+        custoMedioInsumosM3: 272.13,
+        margemBrutaM3: 169.12,
+        ebitdaMensal: 226000.00,
+        margemEbitdaPercent: 28.0,
+        lucroLiquidoMensal: 204000.00,
+        inadimplenciaPercent: 1.8,
+        breakEvenM3: 820,
+        cicloFinanceiroDias: { pmr: 28, pmp: 35, pme: 14, cicloCaixa: 7 }
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // [kytto-pizzaria] Resumo Financeiro, CMV & Conciliação Palatare Pizzaria
+  app.get('/api/admin/pizzaria/financeiro/resumo', auth, requireStaff, async (req, res) => {
+    try {
+      return res.json({
+        ok: true,
+        empresa: 'Palatare Pizzaria & Restaurante Ltda',
+        cnpj: '51.499.928/0001-91',
+        competencia: '11/2026',
+        faturamentoBruto: 320000.00,
+        faturamentoLiquido: 281600.00,
+        cmvPercentualRealizado: 30.0,
+        cmvValorRealizado: 84480.00,
+        margemContribuicao: 197120.00,
+        ebitdaMensal: 110000.00,
+        margemEbitdaPercent: 39.1,
+        lucroLiquidoMensal: 102000.00,
+        saldoCaixaBancos: 168200.00,
+        mrrPizzaClub: 24360.00,
+        membrosAtivosClub: 348,
+        ticketMedio: { salao: 138.50, rodizio: 89.90, delivery: 92.00 }
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // [kytto-holding] Financeiro Consolidado Conglomerado Grupo Palatare
+  app.get('/api/admin/holding/financeiro/consolidado', auth, requireStaff, async (req, res) => {
+    try {
+      return res.json({
+        ok: true,
+        holding: 'Grupo Palatare Participações S/A',
+        controlador: 'Alexandre Palatare (100% Capital Votante)',
+        faturamentoConsolidado: 1170000.00,
+        ebitdaConsolidado: 336000.00,
+        margemEbitdaConsolidada: 28.7,
+        lucroLiquidoConsolidado: 306000.00,
+        liquidezImediataConsolidada: 1113500.00,
+        payoutIsentoAlexandrePalatare: 290700.00,
+        cashPooling: {
+          ativo: true,
+          remuneracao: '102% CDI Automático',
+          saldoSerrano: 428500.00,
+          saldoPalatare: 168200.00,
+          saldoTesourariaHolding: 516800.00
+        }
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // [kytto-concreto] Suprimentos, Silos de Cimento, Pátio de Agregados e Tanques
+  app.get('/api/admin/concreto/suprimentos-silos', auth, requireStaff, async (req, res) => {
+    try {
+      const data = db();
+      const silos = data.concreto_silos || CONCRETO_SILOS_INICIAIS;
+      const baias = data.concreto_baias || CONCRETO_BAIAS_INICIAIS;
+      const tanques = data.concreto_tanques || CONCRETO_TANQUES_ADITIVOS;
+      const entradasSuprimentos = data.concreto_entradas_suprimentos || CONCRETO_ENTRADAS_SUPRIMENTOS;
+      
+      const cimentoTotalT = silos.reduce((acc, s) => acc + (Number(s.nivelAtualToneladas) || 0), 0);
+      const agregadosTotalT = baias.reduce((acc, b) => acc + (Number(b.estoqueAtualToneladas) || 0), 0);
+      const aditivosTotalL = tanques.filter(t => t.id !== 'tanque-04').reduce((acc, t) => acc + (Number(t.nivelAtualLitros) || 0), 0);
+      const aguaTotalL = (tanques.find(t => t.id === 'tanque-04') || {}).nivelAtualLitros || 0;
+
+      return res.json({
+        ok: true,
+        silos,
+        baias,
+        tanques,
+        entradasSuprimentos,
+        totais: {
+          cimentoTotalToneladas: cimentoTotalT,
+          agregadosTotalToneladas: agregadosTotalT,
+          aditivosTotalLitros: aditivosTotalL,
+          aguaTotalLitros: aguaTotalL,
+          capacidadeProducaoEstimadaM3: Math.round(cimentoTotalT / 0.35) // ~350kg cimento por m³
+        }
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // [kytto-concreto] Reabastecimento de Silo ou Baia via Balança Rodoviária
+  app.post('/api/admin/concreto/suprimentos-silos/reabastecer', auth, requireStaff, async (req, res) => {
+    try {
+      const { destinoId, material, fornecedor, pesoLiquidoToneladas, placa, notaFiscal, operadorUsina, motorista } = req.body;
+      if (!destinoId || !pesoLiquidoToneladas) {
+        return res.status(400).json({ error: 'destinoId e pesoLiquidoToneladas são obrigatórios' });
+      }
+
+      const data = db();
+      if (!Array.isArray(data.concreto_silos)) data.concreto_silos = [...CONCRETO_SILOS_INICIAIS];
+      if (!Array.isArray(data.concreto_baias)) data.concreto_baias = [...CONCRETO_BAIAS_INICIAIS];
+      if (!Array.isArray(data.concreto_entradas_suprimentos)) data.concreto_entradas_suprimentos = [...CONCRETO_ENTRADAS_SUPRIMENTOS];
+
+      const qtd = Number(pesoLiquidoToneladas) || 0;
+      let destinoNome = destinoId;
+
+      // Silo
+      const silo = data.concreto_silos.find(s => s.id === destinoId);
+      if (silo) {
+        silo.nivelAtualToneladas = Math.min(silo.capacidadeToneladas, Number((silo.nivelAtualToneladas + qtd).toFixed(1)));
+        silo.nivelPercentual = Number(((silo.nivelAtualToneladas / silo.capacidadeToneladas) * 100).toFixed(1));
+        silo.alertaReposicao = silo.nivelPercentual < 40;
+        silo.ultimaRecargaData = new Date().toLocaleString('pt-BR');
+        silo.ultimaRecargaQtd = `${qtd.toFixed(1)} t (${placa || 'Carreta'})`;
+        destinoNome = silo.nome;
+      }
+
+      // Baia
+      const baia = data.concreto_baias.find(b => b.id === destinoId);
+      if (baia) {
+        baia.estoqueAtualToneladas = Math.min(baia.capacidadeToneladas, Number((baia.estoqueAtualToneladas + qtd).toFixed(1)));
+        baia.estoqueAtualM3 = Number((baia.estoqueAtualToneladas / (baia.densidadeAparente || 1.45)).toFixed(1));
+        destinoNome = baia.nome;
+      }
+
+      const novaEntrada = {
+        id: `ent-2026-${String(data.concreto_entradas_suprimentos.length + 1).padStart(3, '0')}`,
+        ticketBalança: `TK-BAL-${Math.floor(8800 + Math.random() * 1000)}`,
+        dataHora: new Date().toLocaleString('pt-BR'),
+        fornecedor: fornecedor || 'Fornecedor Homologado MT',
+        material: material || 'Insumo Industrial de Concreto',
+        destino: destinoNome,
+        placaCarreta: placa || 'MT-9999',
+        motorista: motorista || 'Motorista Transportadora',
+        notaFiscal: notaFiscal || 'NF-e Avulsa',
+        pesoLiquido: Math.round(qtd * 1000),
+        operadorUsina: operadorUsina || req.user?.nome || 'Operador Central Dosadora',
+        status: 'descarregado_concluido'
+      };
+
+      data.concreto_entradas_suprimentos.unshift(novaEntrada);
+      save();
+
+      return res.json({ ok: true, entrada: novaEntrada, silo, baia });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // [kytto-concreto] Ajuste de Umidade dos Agregados (Areias) para Correção do Traço
+  app.put('/api/admin/concreto/suprimentos-silos/umidade', auth, requireStaff, async (req, res) => {
+    try {
+      const { baiaId, novaUmidadePercentual } = req.body;
+      if (!baiaId || novaUmidadePercentual === undefined) {
+        return res.status(400).json({ error: 'baiaId e novaUmidadePercentual são obrigatórios' });
+      }
+
+      const data = db();
+      if (!Array.isArray(data.concreto_baias)) data.concreto_baias = [...CONCRETO_BAIAS_INICIAIS];
+
+      const baia = data.concreto_baias.find(b => b.id === baiaId);
+      if (!baia) {
+        return res.status(404).json({ error: 'Baia não encontrada' });
+      }
+
+      const umidade = Math.max(0, Math.min(15, Number(novaUmidadePercentual)));
+      baia.umidadePercentual = Number(umidade.toFixed(1));
+      // Água contida na baia: estoque (kg) * (% umidade / 100)
+      const pesoKg = baia.estoqueAtualToneladas * 1000;
+      baia.aguaContidaLitros = Math.round(pesoKg * (baia.umidadePercentual / 100));
+      save();
+
+      return res.json({ ok: true, baia });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // [kytto-concreto] Processo de Produção, Dosagem de Batelada e Controle Tecnológico
+  app.get('/api/admin/concreto/processo-producao', auth, requireStaff, async (req, res) => {
+    try {
+      const data = db();
+      const bateladas = data.concreto_bateladas || CONCRETO_BATELADAS_PROCESSO;
+      const cargas = data.concreto_cargas || [];
+      const frota = data.concreto_frota || [];
+      return res.json({ ok: true, bateladas, cargas, frota });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // [kytto-concreto] Executar Dosagem de Batelada na Usina (com baixa de insumos)
+  app.post('/api/admin/concreto/processo-producao/dosar-batelada', auth, requireStaff, async (req, res) => {
+    try {
+      const {
+        cargaId,
+        volumeM3,
+        betoneira,
+        motorista,
+        fck,
+        slumpMedido,
+        slumpEspecificado,
+        cimentoRealKg,
+        areiaRealKg,
+        britaRealKg,
+        aguaRealL,
+        aditivoL,
+        lacre
+      } = req.body;
+
+      const data = db();
+      if (!Array.isArray(data.concreto_bateladas)) data.concreto_bateladas = [...CONCRETO_BATELADAS_PROCESSO];
+      if (!Array.isArray(data.concreto_silos)) data.concreto_silos = [...CONCRETO_SILOS_INICIAIS];
+      if (!Array.isArray(data.concreto_baias)) data.concreto_baias = [...CONCRETO_BAIAS_INICIAIS];
+      if (!Array.isArray(data.concreto_tanques)) data.concreto_tanques = [...CONCRETO_TANQUES_ADITIVOS];
+
+      const vol = Number(volumeM3) || 8.0;
+      const cimKg = Number(cimentoRealKg) || Math.round(vol * 350);
+      const areiaKg = Number(areiaRealKg) || Math.round(vol * 580);
+      const britaKg = Number(britaRealKg) || Math.round(vol * 770);
+      const aguaL = Number(aguaRealL) || Math.round(vol * 155);
+      const aditL = Number(aditivoL) || Number((vol * 2.5).toFixed(1));
+
+      // Baixa no Silo 01 (Cimento)
+      const silo1 = data.concreto_silos.find(s => s.id === 'silo-01');
+      if (silo1) {
+        silo1.nivelAtualToneladas = Math.max(0, Number((silo1.nivelAtualToneladas - (cimKg / 1000)).toFixed(2)));
+        silo1.nivelPercentual = Number(((silo1.nivelAtualToneladas / silo1.capacidadeToneladas) * 100).toFixed(1));
+      }
+
+      // Baixa na Baia 01 (Areia Média)
+      const baia1 = data.concreto_baias.find(b => b.id === 'baia-01');
+      if (baia1) {
+        baia1.estoqueAtualToneladas = Math.max(0, Number((baia1.estoqueAtualToneladas - (areiaKg / 1000)).toFixed(2)));
+        baia1.estoqueAtualM3 = Number((baia1.estoqueAtualToneladas / (baia1.densidadeAparente || 1.50)).toFixed(1));
+      }
+
+      // Baixa na Baia 04 (Brita 1)
+      const baia4 = data.concreto_baias.find(b => b.id === 'baia-04');
+      if (baia4) {
+        baia4.estoqueAtualToneladas = Math.max(0, Number((baia4.estoqueAtualToneladas - (britaKg / 1000)).toFixed(2)));
+        baia4.estoqueAtualM3 = Number((baia4.estoqueAtualToneladas / (baia4.densidadeAparente || 1.40)).toFixed(1));
+      }
+
+      // Baixa no Tanque de Água e Aditivo
+      const tkAgua = data.concreto_tanques.find(t => t.id === 'tanque-04');
+      if (tkAgua) tkAgua.nivelAtualLitros = Math.max(0, tkAgua.nivelAtualLitros - aguaL);
+
+      const tkAdit = data.concreto_tanques.find(t => t.id === 'tanque-01');
+      if (tkAdit) tkAdit.nivelAtualLitros = Math.max(0, Number((tkAdit.nivelAtualLitros - aditL).toFixed(1)));
+
+      const novaBatelada = {
+        id: `bat-${Date.now()}`,
+        numeroTicket: `BAT-2026-${Math.floor(8840 + Math.random() * 1000)}`,
+        horario: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        cargaId: cargaId || 'crg-avulsa',
+        cliente: req.body.cliente || 'Obra Construtora MT',
+        obra: req.body.obra || 'Concretagem Estrutural',
+        betoneira: betoneira || 'BT-01',
+        motorista: motorista || 'Motorista Oficial',
+        fck: fck || 'FCK 30 MPa (Brita 1)',
+        slumpEspecificado: slumpEspecificado || '14 ± 2 cm',
+        slumpMedidoUsina: slumpMedido || '14.0 cm',
+        volumeBateladaM3: vol,
+        cimentoProgramadoKg: cimKg,
+        cimentoPesadoKg: cimKg + Math.floor(Math.random() * 8 - 4),
+        areiaMediaSecaKg: areiaKg,
+        areiaMediaPesadaKg: Math.round(areiaKg * 1.045), // c/ umidade
+        brita1ProgramadaKg: britaKg,
+        brita1PesadaKg: britaKg + Math.floor(Math.random() * 10 - 5),
+        aguaProgramadaLitros: aguaL,
+        aguaRealAdicionadaLitros: aguaL - Math.round(areiaKg * 0.045),
+        aditivoPlastificanteLitros: aditL,
+        fatorAcReal: Number((aguaL / cimKg).toFixed(2)),
+        tempoMisturaSegundos: 180,
+        rotacaoBalaoRPM: 16,
+        temperaturaConcreto: '28.8°C',
+        lacreBetoneira: lacre || `LCR-CNC-${Math.floor(8800 + Math.random() * 1000)}`,
+        conformidadeNBR7212: 'TOTALMENTE_CONFORME',
+        operadorBatcher: req.user?.nome || 'Marcio Fontes (Operador de Usina)'
+      };
+
+      data.concreto_bateladas.unshift(novaBatelada);
+
+      // Atualizar status da carga se fornecido
+      if (cargaId && Array.isArray(data.concreto_cargas)) {
+        const carga = data.concreto_cargas.find(c => c.id === cargaId);
+        if (carga) {
+          carga.status = 'em_transito';
+          if (Array.isArray(carga.viagens)) {
+            const v = carga.viagens.find(vg => vg.betoneira.includes(betoneira) || !vg.saida);
+            if (v) {
+              v.saida = novaBatelada.horario;
+            }
+          }
+        }
+      }
+
+      save();
+
+      return res.json({ ok: true, batelada: novaBatelada });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+
+  });
+
+
 // Commerce Core PostgreSQL fica opt-in até DATABASE_URL, migrations, tenant e
 // checklist de rollout estarem aprovados. O runtime legado continua intacto.
 if(process.env.COMMERCE_CORE_ENABLED === '1'){
@@ -2592,515 +3101,7 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
     }
     return varejoRouter(req, res, next);
   });
-  // [kytto-concreto] Rotas públicas de impressão e visualização de documentos oficiais
-  app.get("/api/concreto/laudos/:id/aceitacao-html", async (req, res) => {
-    try {
-      const { gerarHtmlLaudoAceitacaoEstatistica } = await import("./modules/concreto/servico.js");
-      const html = await gerarHtmlLaudoAceitacaoEstatistica(req.params.id);
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      return res.send(html);
-    } catch (e) {
-      return res.status(400).send(`<h3>Erro ao gerar Laudo NBR 12655: ${e.message}</h3>`);
-    }
-  });
-
-  app.get("/api/concreto/cargas/:id/romaneio-html", async (req, res) => {
-    try {
-      const { gerarHtmlRomaneioOficial } = await import("./modules/concreto/servico.js");
-      const resRomaneio = await gerarHtmlRomaneioOficial(req.params.id);
-      const html = typeof resRomaneio === 'string' ? resRomaneio : (resRomaneio?.html || resRomaneio);
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      return res.send(html);
-    } catch (e) {
-      return res.status(400).send(`<h3>Erro ao gerar Romaneio NBR 7212: ${e.message}</h3>`);
-    }
-  });
-
-  app.get("/api/concreto/balanca/tickets/:id/html", async (req, res) => {
-    try {
-      const { gerarHtmlTicketBalanca } = await import("./modules/concreto/servico.js");
-      const resTicket = await gerarHtmlTicketBalanca(req.params.id);
-      const html = typeof resTicket === 'string' ? resTicket : (resTicket?.html || resTicket);
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      return res.send(html);
-    } catch (e) {
-      return res.status(400).send(`<h3>Erro ao gerar Ticket Balança: ${e.message}</h3>`);
-    }
-  });
-
-  // [kytto-concreto] Rotas públicas do PWA e APK para Assinatura em Campo
-  app.get("/api/public/concreto/cargas-ativas", async (req, res) => {
-    try {
-      const data = db();
-      const { CONCRETO_CARGAS_INICIAIS } = await import("./concreto-usina-seed.js");
-      const cargas = data.concreto_cargas || CONCRETO_CARGAS_INICIAIS;
-      return res.json({ ok: true, cargas });
-    } catch (e) {
-      return res.status(500).json({ ok: false, error: e.message });
-    }
-  });
-
-  app.get("/api/public/concreto/cargas/:id", async (req, res) => {
-    try {
-      const data = db();
-      const { CONCRETO_CARGAS_INICIAIS } = await import("./concreto-usina-seed.js");
-      const cargas = data.concreto_cargas || CONCRETO_CARGAS_INICIAIS;
-      const carga = cargas.find(c => c.id === req.params.id || String(c.numero) === String(req.params.id));
-      if (!carga) return res.status(404).json({ ok: false, error: "Carga não encontrada" });
-      return res.json({ ok: true, carga });
-    } catch (e) {
-      return res.status(500).json({ ok: false, error: e.message });
-    }
-  });
-
-  app.post("/api/public/concreto/cargas/:id/assinar-pwa", async (req, res) => {
-    try {
-      const { assinarEntregaCarga } = await import("./modules/concreto/servico.js");
-      const resultado = await assinarEntregaCarga(req.params.id, req.body);
-      return res.json(resultado);
-    } catch (e) {
-      return res.status(400).json({ ok: false, error: e.message });
-    }
-  });
-
-  app.post("/api/public/concreto/cargas/:id/upload-foto", async (req, res) => {
-    try {
-      const { fotoBase64, tipo, titulo, timestamp, localizacao } = req.body || {};
-      if (!fotoBase64) return res.status(400).json({ ok: false, error: "Imagem não fornecida" });
-
-      const fotoObj = {
-        id: `foto-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        tipo: tipo || "descarga",
-        titulo: titulo || "Foto de Campo",
-        base64: fotoBase64,
-        timestamp: timestamp || new Date().toLocaleString("pt-BR"),
-        localizacao: localizacao || "Canteiro de Obras"
-      };
-
-      const data = db();
-      data.concreto_cargas ||= [];
-      const carga = data.concreto_cargas.find(c => c.id === req.params.id || String(c.numero) === String(req.params.id));
-      if (carga) {
-        carga.assinaturaEntrega ||= {};
-        carga.assinaturaEntrega.fotos ||= [];
-        carga.assinaturaEntrega.fotos.push(fotoObj);
-        save();
-      }
-
-      return res.json({ ok: true, foto: fotoObj });
-    } catch (e) {
-      return res.status(500).json({ ok: false, error: e.message });
-    }
-  });
-
-  app.get("/api/public/concreto/cargas/:id/canhoto-digital-html", async (req, res) => {
-    try {
-      const { gerarHtmlRomaneioOficial } = await import("./modules/concreto/servico.js");
-      const resRomaneio = await gerarHtmlRomaneioOficial(req.params.id);
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      return res.send(resRomaneio.html || resRomaneio);
-    } catch (e) {
-      return res.status(400).send(`<h3>Erro ao gerar Canhoto Digital: ${e.message}</h3>`);
-    }
-  });
-
-  app.get("/api/public/concreto/download-apk", (req, res) => {
-    const apkFile = path.resolve(__dirname, "../web/public/downloads/Serrano-Concreto-Campo.apk");
-    if (fs.existsSync(apkFile)) {
-      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
-      res.setHeader('Content-Disposition', 'attachment; filename="Serrano-Concreto-Campo.apk"');
-      return fs.createReadStream(apkFile).pipe(res);
-    }
-    return res.status(404).send('APK em preparação de compilação.');
-  });
-
-  // [kytto-concreto] Módulo de Concreto Usinado, Cargas, Central e Usina
-  const concretoRouter = criarRotasConcreto();
-  app.use('/api/admin/concreto', auth, requireStaff, concretoRouter);
-  app.use('/api/admin/balanca-rodoviaria', auth, requireStaff, (req, res, next) => {
-    req.url = '/balanca' + (req.url === '/' ? '' : req.url);
-    return concretoRouter(req, res, next);
-  });
-  // [kytto-concreto] Rota CCO / Balança para a Torre de Pesagem com fallback operacional
-  app.use('/api/concreto-torre', (req, res, next) => {
-    const h = req.headers.authorization || '';
-    const token = (h.startsWith('Bearer ') ? h.slice(7) : null) || (req.query?.token ? String(req.query.token) : null);
-    if (token) {
-      return auth(req, res, (err) => {
-        if (err || !req.user) {
-          req.user = { id: 'operador-cco-serrano', nome: 'Operador CCO Serrano', role: 'organizador', platformAdmin: true };
-        }
-        req.empresaId = req.user?.empresaId || CONCRETO_EMPRESA_ID;
-        return next();
-      });
-    }
-    req.user = { id: 'operador-cco-serrano', nome: 'Operador CCO Serrano', role: 'organizador', platformAdmin: true };
-    req.empresaId = CONCRETO_EMPRESA_ID;
-    return next();
-  }, concretoRouter);
-
-  // [kytto-concreto] Módulo de Concreto Usinado, Cargas e Usina
-  app.get('/api/admin/concreto/dados', auth, requireStaff, async (req, res) => {
-    try {
-      const data = db();
-      const cargas = data.concreto_cargas || [];
-      const catalogo = data.concreto_produtos || [];
-      const frota = data.concreto_frota || [];
-      const silos = data.concreto_silos || CONCRETO_SILOS_INICIAIS;
-      const baias = data.concreto_baias || CONCRETO_BAIAS_INICIAIS;
-      const tanques = data.concreto_tanques || CONCRETO_TANQUES_ADITIVOS;
-      const entradasSuprimentos = data.concreto_entradas_suprimentos || CONCRETO_ENTRADAS_SUPRIMENTOS;
-      const bateladas = data.concreto_bateladas || CONCRETO_BATELADAS_PROCESSO;
-      const empresa = data.empresas?.[CONCRETO_EMPRESA_ID] || CONCRETO_DADOS_EMPRESA;
-      return res.json({
-        ok: true,
-        empresa,
-        cargas,
-        catalogo,
-        frota,
-        silos,
-        baias,
-        tanques,
-        entradasSuprimentos,
-        bateladas
-      });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // [kytto-concreto] Resumo Financeiro & Gestão de Caixa Serrano Concreto
-  app.get('/api/admin/concreto/financeiro/resumo', auth, requireStaff, async (req, res) => {
-    try {
-      return res.json({
-        ok: true,
-        empresa: 'Serrano Concreto Usinado & Mineração Ltda',
-        cnpj: '53.798.485/0001-77',
-        competencia: '11/2026',
-        saldoCaixaBancos: 428500.00,
-        contasReceber30d: 342800.00,
-        contasPagar30d: 391800.00,
-        saldoProjetadoFimMes: 379500.00,
-        faturamentoMensal: 850000.00,
-        volumeM3Faturado: 1830.0,
-        precoMedioPonderadoM3: 464.50,
-        custoMedioInsumosM3: 272.13,
-        margemBrutaM3: 169.12,
-        ebitdaMensal: 226000.00,
-        margemEbitdaPercent: 28.0,
-        lucroLiquidoMensal: 204000.00,
-        inadimplenciaPercent: 1.8,
-        breakEvenM3: 820,
-        cicloFinanceiroDias: { pmr: 28, pmp: 35, pme: 14, cicloCaixa: 7 }
-      });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // [kytto-pizzaria] Resumo Financeiro, CMV & Conciliação Palatare Pizzaria
-  app.get('/api/admin/pizzaria/financeiro/resumo', auth, requireStaff, async (req, res) => {
-    try {
-      return res.json({
-        ok: true,
-        empresa: 'Palatare Pizzaria & Restaurante Ltda',
-        cnpj: '51.499.928/0001-91',
-        competencia: '11/2026',
-        faturamentoBruto: 320000.00,
-        faturamentoLiquido: 281600.00,
-        cmvPercentualRealizado: 30.0,
-        cmvValorRealizado: 84480.00,
-        margemContribuicao: 197120.00,
-        ebitdaMensal: 110000.00,
-        margemEbitdaPercent: 39.1,
-        lucroLiquidoMensal: 102000.00,
-        saldoCaixaBancos: 168200.00,
-        mrrPizzaClub: 24360.00,
-        membrosAtivosClub: 348,
-        ticketMedio: { salao: 138.50, rodizio: 89.90, delivery: 92.00 }
-      });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // [kytto-holding] Financeiro Consolidado Conglomerado Grupo Palatare
-  app.get('/api/admin/holding/financeiro/consolidado', auth, requireStaff, async (req, res) => {
-    try {
-      return res.json({
-        ok: true,
-        holding: 'Grupo Palatare Participações S/A',
-        controlador: 'Alexandre Palatare (100% Capital Votante)',
-        faturamentoConsolidado: 1170000.00,
-        ebitdaConsolidado: 336000.00,
-        margemEbitdaConsolidada: 28.7,
-        lucroLiquidoConsolidado: 306000.00,
-        liquidezImediataConsolidada: 1113500.00,
-        payoutIsentoAlexandrePalatare: 290700.00,
-        cashPooling: {
-          ativo: true,
-          remuneracao: '102% CDI Automático',
-          saldoSerrano: 428500.00,
-          saldoPalatare: 168200.00,
-          saldoTesourariaHolding: 516800.00
-        }
-      });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // [kytto-concreto] Suprimentos, Silos de Cimento, Pátio de Agregados e Tanques
-  app.get('/api/admin/concreto/suprimentos-silos', auth, requireStaff, async (req, res) => {
-    try {
-      const data = db();
-      const silos = data.concreto_silos || CONCRETO_SILOS_INICIAIS;
-      const baias = data.concreto_baias || CONCRETO_BAIAS_INICIAIS;
-      const tanques = data.concreto_tanques || CONCRETO_TANQUES_ADITIVOS;
-      const entradasSuprimentos = data.concreto_entradas_suprimentos || CONCRETO_ENTRADAS_SUPRIMENTOS;
-      
-      const cimentoTotalT = silos.reduce((acc, s) => acc + (Number(s.nivelAtualToneladas) || 0), 0);
-      const agregadosTotalT = baias.reduce((acc, b) => acc + (Number(b.estoqueAtualToneladas) || 0), 0);
-      const aditivosTotalL = tanques.filter(t => t.id !== 'tanque-04').reduce((acc, t) => acc + (Number(t.nivelAtualLitros) || 0), 0);
-      const aguaTotalL = (tanques.find(t => t.id === 'tanque-04') || {}).nivelAtualLitros || 0;
-
-      return res.json({
-        ok: true,
-        silos,
-        baias,
-        tanques,
-        entradasSuprimentos,
-        totais: {
-          cimentoTotalToneladas: cimentoTotalT,
-          agregadosTotalToneladas: agregadosTotalT,
-          aditivosTotalLitros: aditivosTotalL,
-          aguaTotalLitros: aguaTotalL,
-          capacidadeProducaoEstimadaM3: Math.round(cimentoTotalT / 0.35) // ~350kg cimento por m³
-        }
-      });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // [kytto-concreto] Reabastecimento de Silo ou Baia via Balança Rodoviária
-  app.post('/api/admin/concreto/suprimentos-silos/reabastecer', auth, requireStaff, async (req, res) => {
-    try {
-      const { destinoId, material, fornecedor, pesoLiquidoToneladas, placa, notaFiscal, operadorUsina, motorista } = req.body;
-      if (!destinoId || !pesoLiquidoToneladas) {
-        return res.status(400).json({ error: 'destinoId e pesoLiquidoToneladas são obrigatórios' });
-      }
-
-      const data = db();
-      if (!Array.isArray(data.concreto_silos)) data.concreto_silos = [...CONCRETO_SILOS_INICIAIS];
-      if (!Array.isArray(data.concreto_baias)) data.concreto_baias = [...CONCRETO_BAIAS_INICIAIS];
-      if (!Array.isArray(data.concreto_entradas_suprimentos)) data.concreto_entradas_suprimentos = [...CONCRETO_ENTRADAS_SUPRIMENTOS];
-
-      const qtd = Number(pesoLiquidoToneladas) || 0;
-      let destinoNome = destinoId;
-
-      // Silo
-      const silo = data.concreto_silos.find(s => s.id === destinoId);
-      if (silo) {
-        silo.nivelAtualToneladas = Math.min(silo.capacidadeToneladas, Number((silo.nivelAtualToneladas + qtd).toFixed(1)));
-        silo.nivelPercentual = Number(((silo.nivelAtualToneladas / silo.capacidadeToneladas) * 100).toFixed(1));
-        silo.alertaReposicao = silo.nivelPercentual < 40;
-        silo.ultimaRecargaData = new Date().toLocaleString('pt-BR');
-        silo.ultimaRecargaQtd = `${qtd.toFixed(1)} t (${placa || 'Carreta'})`;
-        destinoNome = silo.nome;
-      }
-
-      // Baia
-      const baia = data.concreto_baias.find(b => b.id === destinoId);
-      if (baia) {
-        baia.estoqueAtualToneladas = Math.min(baia.capacidadeToneladas, Number((baia.estoqueAtualToneladas + qtd).toFixed(1)));
-        baia.estoqueAtualM3 = Number((baia.estoqueAtualToneladas / (baia.densidadeAparente || 1.45)).toFixed(1));
-        destinoNome = baia.nome;
-      }
-
-      const novaEntrada = {
-        id: `ent-2026-${String(data.concreto_entradas_suprimentos.length + 1).padStart(3, '0')}`,
-        ticketBalança: `TK-BAL-${Math.floor(8800 + Math.random() * 1000)}`,
-        dataHora: new Date().toLocaleString('pt-BR'),
-        fornecedor: fornecedor || 'Fornecedor Homologado MT',
-        material: material || 'Insumo Industrial de Concreto',
-        destino: destinoNome,
-        placaCarreta: placa || 'MT-9999',
-        motorista: motorista || 'Motorista Transportadora',
-        notaFiscal: notaFiscal || 'NF-e Avulsa',
-        pesoLiquido: Math.round(qtd * 1000),
-        operadorUsina: operadorUsina || req.user?.nome || 'Operador Central Dosadora',
-        status: 'descarregado_concluido'
-      };
-
-      data.concreto_entradas_suprimentos.unshift(novaEntrada);
-      save();
-
-      return res.json({ ok: true, entrada: novaEntrada, silo, baia });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // [kytto-concreto] Ajuste de Umidade dos Agregados (Areias) para Correção do Traço
-  app.put('/api/admin/concreto/suprimentos-silos/umidade', auth, requireStaff, async (req, res) => {
-    try {
-      const { baiaId, novaUmidadePercentual } = req.body;
-      if (!baiaId || novaUmidadePercentual === undefined) {
-        return res.status(400).json({ error: 'baiaId e novaUmidadePercentual são obrigatórios' });
-      }
-
-      const data = db();
-      if (!Array.isArray(data.concreto_baias)) data.concreto_baias = [...CONCRETO_BAIAS_INICIAIS];
-
-      const baia = data.concreto_baias.find(b => b.id === baiaId);
-      if (!baia) {
-        return res.status(404).json({ error: 'Baia não encontrada' });
-      }
-
-      const umidade = Math.max(0, Math.min(15, Number(novaUmidadePercentual)));
-      baia.umidadePercentual = Number(umidade.toFixed(1));
-      // Água contida na baia: estoque (kg) * (% umidade / 100)
-      const pesoKg = baia.estoqueAtualToneladas * 1000;
-      baia.aguaContidaLitros = Math.round(pesoKg * (baia.umidadePercentual / 100));
-      save();
-
-      return res.json({ ok: true, baia });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // [kytto-concreto] Processo de Produção, Dosagem de Batelada e Controle Tecnológico
-  app.get('/api/admin/concreto/processo-producao', auth, requireStaff, async (req, res) => {
-    try {
-      const data = db();
-      const bateladas = data.concreto_bateladas || CONCRETO_BATELADAS_PROCESSO;
-      const cargas = data.concreto_cargas || [];
-      const frota = data.concreto_frota || [];
-      return res.json({ ok: true, bateladas, cargas, frota });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // [kytto-concreto] Executar Dosagem de Batelada na Usina (com baixa de insumos)
-  app.post('/api/admin/concreto/processo-producao/dosar-batelada', auth, requireStaff, async (req, res) => {
-    try {
-      const {
-        cargaId,
-        volumeM3,
-        betoneira,
-        motorista,
-        fck,
-        slumpMedido,
-        slumpEspecificado,
-        cimentoRealKg,
-        areiaRealKg,
-        britaRealKg,
-        aguaRealL,
-        aditivoL,
-        lacre
-      } = req.body;
-
-      const data = db();
-      if (!Array.isArray(data.concreto_bateladas)) data.concreto_bateladas = [...CONCRETO_BATELADAS_PROCESSO];
-      if (!Array.isArray(data.concreto_silos)) data.concreto_silos = [...CONCRETO_SILOS_INICIAIS];
-      if (!Array.isArray(data.concreto_baias)) data.concreto_baias = [...CONCRETO_BAIAS_INICIAIS];
-      if (!Array.isArray(data.concreto_tanques)) data.concreto_tanques = [...CONCRETO_TANQUES_ADITIVOS];
-
-      const vol = Number(volumeM3) || 8.0;
-      const cimKg = Number(cimentoRealKg) || Math.round(vol * 350);
-      const areiaKg = Number(areiaRealKg) || Math.round(vol * 580);
-      const britaKg = Number(britaRealKg) || Math.round(vol * 770);
-      const aguaL = Number(aguaRealL) || Math.round(vol * 155);
-      const aditL = Number(aditivoL) || Number((vol * 2.5).toFixed(1));
-
-      // Baixa no Silo 01 (Cimento)
-      const silo1 = data.concreto_silos.find(s => s.id === 'silo-01');
-      if (silo1) {
-        silo1.nivelAtualToneladas = Math.max(0, Number((silo1.nivelAtualToneladas - (cimKg / 1000)).toFixed(2)));
-        silo1.nivelPercentual = Number(((silo1.nivelAtualToneladas / silo1.capacidadeToneladas) * 100).toFixed(1));
-      }
-
-      // Baixa na Baia 01 (Areia Média)
-      const baia1 = data.concreto_baias.find(b => b.id === 'baia-01');
-      if (baia1) {
-        baia1.estoqueAtualToneladas = Math.max(0, Number((baia1.estoqueAtualToneladas - (areiaKg / 1000)).toFixed(2)));
-        baia1.estoqueAtualM3 = Number((baia1.estoqueAtualToneladas / (baia1.densidadeAparente || 1.50)).toFixed(1));
-      }
-
-      // Baixa na Baia 04 (Brita 1)
-      const baia4 = data.concreto_baias.find(b => b.id === 'baia-04');
-      if (baia4) {
-        baia4.estoqueAtualToneladas = Math.max(0, Number((baia4.estoqueAtualToneladas - (britaKg / 1000)).toFixed(2)));
-        baia4.estoqueAtualM3 = Number((baia4.estoqueAtualToneladas / (baia4.densidadeAparente || 1.40)).toFixed(1));
-      }
-
-      // Baixa no Tanque de Água e Aditivo
-      const tkAgua = data.concreto_tanques.find(t => t.id === 'tanque-04');
-      if (tkAgua) tkAgua.nivelAtualLitros = Math.max(0, tkAgua.nivelAtualLitros - aguaL);
-
-      const tkAdit = data.concreto_tanques.find(t => t.id === 'tanque-01');
-      if (tkAdit) tkAdit.nivelAtualLitros = Math.max(0, Number((tkAdit.nivelAtualLitros - aditL).toFixed(1)));
-
-      const novaBatelada = {
-        id: `bat-${Date.now()}`,
-        numeroTicket: `BAT-2026-${Math.floor(8840 + Math.random() * 1000)}`,
-        horario: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        cargaId: cargaId || 'crg-avulsa',
-        cliente: req.body.cliente || 'Obra Construtora MT',
-        obra: req.body.obra || 'Concretagem Estrutural',
-        betoneira: betoneira || 'BT-01',
-        motorista: motorista || 'Motorista Oficial',
-        fck: fck || 'FCK 30 MPa (Brita 1)',
-        slumpEspecificado: slumpEspecificado || '14 ± 2 cm',
-        slumpMedidoUsina: slumpMedido || '14.0 cm',
-        volumeBateladaM3: vol,
-        cimentoProgramadoKg: cimKg,
-        cimentoPesadoKg: cimKg + Math.floor(Math.random() * 8 - 4),
-        areiaMediaSecaKg: areiaKg,
-        areiaMediaPesadaKg: Math.round(areiaKg * 1.045), // c/ umidade
-        brita1ProgramadaKg: britaKg,
-        brita1PesadaKg: britaKg + Math.floor(Math.random() * 10 - 5),
-        aguaProgramadaLitros: aguaL,
-        aguaRealAdicionadaLitros: aguaL - Math.round(areiaKg * 0.045),
-        aditivoPlastificanteLitros: aditL,
-        fatorAcReal: Number((aguaL / cimKg).toFixed(2)),
-        tempoMisturaSegundos: 180,
-        rotacaoBalaoRPM: 16,
-        temperaturaConcreto: '28.8°C',
-        lacreBetoneira: lacre || `LCR-CNC-${Math.floor(8800 + Math.random() * 1000)}`,
-        conformidadeNBR7212: 'TOTALMENTE_CONFORME',
-        operadorBatcher: req.user?.nome || 'Marcio Fontes (Operador de Usina)'
-      };
-
-      data.concreto_bateladas.unshift(novaBatelada);
-
-      // Atualizar status da carga se fornecido
-      if (cargaId && Array.isArray(data.concreto_cargas)) {
-        const carga = data.concreto_cargas.find(c => c.id === cargaId);
-        if (carga) {
-          carga.status = 'em_transito';
-          if (Array.isArray(carga.viagens)) {
-            const v = carga.viagens.find(vg => vg.betoneira.includes(betoneira) || !vg.saida);
-            if (v) {
-              v.saida = novaBatelada.horario;
-            }
-          }
-        }
-      }
-
-      save();
-
-      return res.json({ ok: true, batelada: novaBatelada });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-
-  });
-
-  // [kytto-pizzaria-delivery] Rotas movidas para escopo global do server (disponíveis com ou sem Commerce Core)
+    // [kytto-pizzaria-delivery] Rotas movidas para escopo global do server (disponíveis com ou sem Commerce Core)
 
   // ── ROTAS PÚBLICAS DO CARDÁPIO & AUTOATENDIMENTO QR DE MESA (PALATARE & KYTTO) ──
   const resolverMesaPublica = async (token) => {

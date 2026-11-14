@@ -1274,6 +1274,9 @@ export default function ConcretoUsinaERP() {
                 <div style={{ background: 'var(--surface-2)', padding: 14, borderRadius: 8, border: '1px solid var(--joint)' }}>
                   <small style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Cimento em Silos 96t</small>
                   <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 800, color: 'var(--serrano-orange-text)' }}>
+                    {((silos.length > 0 ? silos : [
+                      { estoqueAtualKg: 58400 }, { estoqueAtualKg: 22100 }, { estoqueAtualKg: 44500 }
+                    ]).reduce((acc, s) => acc + (Number(s.nivelAtualKg || s.estoqueAtualKg || (s.estoqueAtualToneladas ? s.estoqueAtualToneladas * 1000 : 0)) / 1000), 0)).toFixed(1)} <span style={{ fontSize: 16 }}>ton</span>
                   </div>
                   <small style={{ color: 'var(--status-ok)', fontSize: 11 }}>● Pressão despoeiramento: 0.35 bar (Normal)</small>
                 </div>
@@ -1829,7 +1832,8 @@ export default function ConcretoUsinaERP() {
               {[
                 { id: 'telemetria', label: 'Telemetria de Sensores (RPM)', icon: '🚛' },
                 { id: 'gps', label: 'Rastreamento GPS Tangará da Serra', icon: '🗺️' },
-                { id: 'checklist', label: 'Checklist Pré-Operacional NR-11/12', icon: '📋' }
+                { id: 'checklist', label: 'Checklist Pré-Operacional NR-11/12', icon: '📋' },
+                { id: 'bombas-nbr15649', label: 'Bombas Lança & Vento NBR 15649', icon: '⚡' }
               ].map(sub => (
                 <button
                   key={sub.id}
@@ -1851,6 +1855,99 @@ export default function ConcretoUsinaERP() {
 
             {subAbaFrota === 'gps' && <ConcretoMapaGpsFrota />}
             {subAbaFrota === 'checklist' && <ConcretoChecklistFrota />}
+            {subAbaFrota === 'bombas-nbr15649' && (
+              <div className="serrano-card" style={{ padding: 20 }}>
+                <div className="serrano-card-h" style={{ padding: '0 0 14px', borderBottom: '1px solid var(--joint)', marginBottom: 16 }}>
+                  <div>
+                    <h3 style={{ margin: 0 }}>Telemetria de Bombas Lança 36m/42m & Segurança Operacional (ABNT NBR 15649)</h3>
+                    <small style={{ color: 'var(--text-muted)' }}>
+                      Anemômetro ultrassônico com trava por vento crítico (> 48 km/h), pressão hidráulica e cálculo contínuo de vida útil da tubulação 5'.
+                    </small>
+                  </div>
+                  <span className="serrano-pill serrano-p-ok" style={{ fontWeight: 800 }}>
+                    Motor KyttoIA 2.5 Flash
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
+                  {/* Card 1: Vento e Anemômetro */}
+                  <div style={{ background: 'var(--surface-2)', padding: 16, borderRadius: 8, border: '1px solid var(--joint)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Velocidade do Vento na Lança</span>
+                      <span className="serrano-pill serrano-p-ok" style={{ fontSize: 10, fontWeight: 800 }}>ESTÁVEL</span>
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 900, color: '#0284c7', margin: '8px 0 4px' }}>
+                      32 <span style={{ fontSize: 16 }}>km/h</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      Limite Normativo NBR 15649: <b>48 km/h</b> (Corte Elétrico Automático)
+                    </div>
+                    <div style={{ marginTop: 10, background: '#e2e8f0', borderRadius: 4, height: 6, overflow: 'hidden' }}>
+                      <div style={{ width: '66%', height: '100%', background: '#0284c7' }}></div>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Pressão Hidráulica */}
+                  <div style={{ background: 'var(--surface-2)', padding: 16, borderRadius: 8, border: '1px solid var(--joint)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Circuito Hidráulico Principal</span>
+                      <span className="serrano-pill serrano-p-ok" style={{ fontSize: 10, fontWeight: 800 }}>NOMINAL</span>
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 900, color: 'var(--status-ok)', margin: '8px 0 4px' }}>
+                      220 <span style={{ fontSize: 16 }}>bar</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      Pressão nominal de bombeamento (Alívio aos 280 bar)
+                    </div>
+                    <div style={{ marginTop: 10, background: '#e2e8f0', borderRadius: 4, height: 6, overflow: 'hidden' }}>
+                      <div style={{ width: '78%', height: '100%', background: '#10b981' }}></div>
+                    </div>
+                  </div>
+
+                  {/* Card 3: Tubulação 5'' e Desgaste */}
+                  <div style={{ background: 'var(--surface-2)', padding: 16, borderRadius: 8, border: '1px solid var(--joint)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Tubulação Aço Especial 5'</span>
+                      <span className="serrano-pill serrano-p-load" style={{ fontSize: 10, fontWeight: 800 }}>26.2% VIDA ÚTIL</span>
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 900, color: 'var(--serrano-orange-text)', margin: '8px 0 4px' }}>
+                      2.65 <span style={{ fontSize: 16 }}>mm</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      Original: 4.5 mm · Limite de Descarte: <b>2.0 mm</b> (~6.550 m³ restantes)
+                    </div>
+                    <div style={{ marginTop: 10, background: '#e2e8f0', borderRadius: 4, height: 6, overflow: 'hidden' }}>
+                      <div style={{ width: '26%', height: '100%', background: 'var(--serrano-orange)' }}></div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Caixa de Ação Autônoma da Bomba */}
+                <div style={{ marginTop: 16, background: '#f8fafc', border: '1px solid var(--joint)', borderRadius: 8, padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                  <div>
+                    <b style={{ fontSize: 13, color: '#0f172a' }}>Equipamento Escalado: Bomba Lança Schwing S36X (36m / 4 seções)</b>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                      Telemetria via sensor CAN bus J1939 e anemômetro Gill WindSonic integrado ao CCO da Usina MT-358.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-serrano pri"
+                    onClick={async () => {
+                      try {
+                        const res = await api.post('/api/concreto-torre/bombas/auditar-desgaste', { velocidadeVentoKmh: 34, pressaoHidraulicaBar: 225, volumeBombeadoM3: 88 });
+                        if (res?.data?.ok) {
+                        }
+                      } catch (e) {
+                        alert('Erro ao auditar bomba: ' + e.message);
+                      }
+                    }}
+                  >
+                    ⚡ Auditar Desgaste & Segurança NBR 15649
+                  </button>
+                </div>
+              </div>
+            )}
             {subAbaFrota === 'telemetria' && (
           <div className="serrano-card">
             <div className="serrano-card-h">

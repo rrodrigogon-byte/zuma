@@ -30,11 +30,43 @@ export default function ConcretoLaboratorioTecnologico({ ensaios = [], onAtualiz
   });
   const [resultadoMaturidade, setResultadoMaturidade] = useState(null);
 
+  // Estados para aceitação rigorosa NBR 12655
+  const [simuladorAceitacao, setSimuladorAceitacao] = useState({
+    fckProjeto: 30,
+    tipoControle: '100%',
+    exemplaresStr: '31.5, 33.2, 34.0, 32.8, 35.1, 33.9'
+  });
+  const [resultadoAceitacao, setResultadoAceitacao] = useState(null);
+  const [calculandoAceitacao, setCalculandoAceitacao] = useState(false);
+
+  const executarAceitacaoEstatistica = async (params = simuladorAceitacao) => {
+    try {
+      setCalculandoAceitacao(true);
+      const exArray = String(params.exemplaresStr || '')
+        .split(/[,\s]+/)
+        .map(Number)
+      const res = await api.post('/api/concreto-torre/laboratorio/aceitacao-estatistica-nbr12655', {
+        fckProjeto: Number(params.fckProjeto),
+        tipoControle: params.tipoControle,
+        exemplares: exArray
+      });
+      const data = res?.data || res;
+      if (data?.ok) {
+        setResultadoAceitacao(data);
+      }
+    } catch (e) {
+      console.warn('Erro ao calcular aceitação NBR 12655:', e);
+    } finally {
+      setCalculandoAceitacao(false);
+    }
+  };
+
   // Carregar dados de estatística ao montar
   useEffect(() => {
     carregarEstatistica();
     executarOtimizacaoSustentavel(simuladorSustentavel);
     executarCalculoMaturidade(simuladorMaturidade);
+    executarAceitacaoEstatistica();
   }, []);
 
   async function carregarEstatistica() {
@@ -162,6 +194,7 @@ export default function ConcretoLaboratorioTecnologico({ ensaios = [], onAtualiz
         <div style={{ display: 'flex', gap: 8, marginTop: 20, borderBottom: '1px solid var(--joint)', paddingBottom: 10, flexWrap: 'wrap' }}>
           {[
             { id: 'estatistica', label: '📊 Controle Estatístico NBR 12655 (Shewhart & CUSUM)' },
+            { id: 'aceitacao-rigorosa', label: '⚖️ Aceitação Rigorosa NBR 12655 (Amostragens 100% & Parcial)' },
             { id: 'comparativo-tracos', label: '📈 Gráficos Comparativos NBR 5739 (Por Traço)' },
             { id: 'sustentavel', label: '🌿 Traços Sustentáveis & Carbono ESG (Meta BOxCrete)' },
             { id: 'maturidade', label: '⏳ Maturidade In-Situ & Desforma (ASTM C1074)' },
@@ -750,6 +783,106 @@ export default function ConcretoLaboratorioTecnologico({ ensaios = [], onAtualiz
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Fluxo uniforme e constante 24/7</div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── SUB-ABA: ACEITAÇÃO ESTATÍSTICA RIGOROSA NBR 12655 ─── */}
+      {subAba === 'aceitacao-rigorosa' && (
+        <div style={{ display: 'grid', gap: 20 }}>
+          <div className="serrano-card" style={{ padding: 20 }}>
+            <div className="serrano-card-h" style={{ padding: '0 0 14px', borderBottom: '1px solid var(--joint)', marginBottom: 16 }}>
+              <div>
+                <h3 style={{ margin: 0 }}>Cálculo Normativo de Aceitação Estrutural de Lote (ABNT NBR 12655:2022)</h3>
+                <small style={{ color: 'var(--text-muted)' }}>
+                  Amostragem Total (100% dos caminhões) ou Parcial com recálculo automático de fck,est, média fcm, desvio padrão sn e trava de segurança psi6.
+                </small>
+              </div>
+              <span className="serrano-pill serrano-p-ok" style={{ fontWeight: 800 }}>
+                Motor KyttoIA 2.5 Flash
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, marginBottom: 16 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>fck de Projeto (MPa)</label>
+                <select
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--joint)', marginTop: 4, background: 'var(--surface-2)', color: 'var(--text)', fontWeight: 700 }}
+                  value={simuladorAceitacao.fckProjeto}
+                  onChange={(e) => {
+                    const prox = { ...simuladorAceitacao, fckProjeto: Number(e.target.value) };
+                    setSimuladorAceitacao(prox);
+                    executarAceitacaoEstatistica(prox);
+                  }}
+                >
+                  {[20, 25, 30, 35, 40, 50].map(v => (
+                    <option key={v} value={v}>{v} MPa</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>Tipo de Controle Normativo</label>
+                <select
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--joint)', marginTop: 4, background: 'var(--surface-2)', color: 'var(--text)', fontWeight: 700 }}
+                  value={simuladorAceitacao.tipoControle}
+                  onChange={(e) => {
+                    const prox = { ...simuladorAceitacao, tipoControle: e.target.value };
+                    setSimuladorAceitacao(prox);
+                    executarAceitacaoEstatistica(prox);
+                  }}
+                >
+                  <option value="100%">Amostragem Total (100% dos Caminhões)</option>
+                  <option value="parcial">Amostragem Parcial (6 ≤ n &lt; 20 com Trava Ψ₆)</option>
+                </select>
+              </div>
+
+              <div style={{ gridColumn: 'span 2' }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>Exemplares Ensaiados aos 28 Dias (MPa, separados por vírgula)</label>
+                <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                  <input
+                    type="text"
+                    style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: '1px solid var(--joint)', background: 'var(--surface-2)', color: 'var(--text)', fontFamily: 'var(--font-data)' }}
+                    value={simuladorAceitacao.exemplaresStr}
+                    onChange={(e) => setSimuladorAceitacao({ ...simuladorAceitacao, exemplaresStr: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    className="btn-serrano pri"
+                    onClick={() => executarAceitacaoEstatistica()}
+                    disabled={calculandoAceitacao}
+                  >
+                    {calculandoAceitacao ? 'Calculando...' : 'Recalcular Lote'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {resultadoAceitacao && (
+              <div style={{ background: resultadoAceitacao.decisaoNormativa?.aprovado ? '#f0fdf4' : '#fef2f2', border: resultadoAceitacao.decisaoNormativa?.aprovado ? '1.5px solid #10b981' : '1.5px solid #ef4444', padding: 16, borderRadius: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                  <div>
+                    <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', color: resultadoAceitacao.decisaoNormativa?.aprovado ? '#065f46' : '#991b1b' }}>Status da Decisão Normativa</span>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: resultadoAceitacao.decisaoNormativa?.aprovado ? '#047857' : '#b91c1c' }}>
+                      {resultadoAceitacao.decisaoNormativa?.status}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>fck estimado (fck,est)</div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 900, color: resultadoAceitacao.decisaoNormativa?.aprovado ? '#047857' : '#b91c1c' }}>
+                      {resultadoAceitacao.estatisticas?.resistenciaCaracteristicaEstimadaFckEst} MPa
+                    </div>
+                  </div>
+                </div>
+                <p style={{ margin: '10px 0 0', fontSize: 13, color: resultadoAceitacao.decisaoNormativa?.aprovado ? '#065f46' : '#7f1d1d' }}>
+                  {resultadoAceitacao.decisaoNormativa?.parecerTecnico}
+                </p>
+                <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: 8 }}>
+                  <span>Fórmula: {resultadoAceitacao.estatisticas?.formulaAplicada}</span>
+                  <span>Certificado: <b>{resultadoAceitacao.certificadoAutenticidade}</b></span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
