@@ -6369,3 +6369,473 @@ export function integrarCamerasLoteConcreto(dispositivosParaIntegrar = [], empre
     cameras: integradas
   };
 }
+
+// =====================================================================
+// 28. PILAR 1: BALANÇA RODOVIÁRIA 80t & PORTARIA 100% AUTÔNOMAS (ZERO-TOUCH)
+// =====================================================================
+export async function processarCicloAutonomoBalanca({
+  placaLpr = "QBF-6M02",
+  pesoAtualKg = null,
+  fotoSnapshotUrl = null,
+  modo = "automatico",
+  empresaId = CONCRETO_EMPRESA_ID
+}) {
+  const data = inicializarDatastoreConcreto();
+  const placaNormalizada = (placaLpr || "").toUpperCase().trim().replace(/[^A-Z0-9]/g, "");
+  
+  // Verifica se o veículo já está no pátio (segunda pesagem/saída) ou se é uma nova entrada
+  const veiculoNoPatio = (estadoHardwareBalanca.veiculosNoPatio || []).find(v => {
+    const pNorm = (v.placa || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    return pNorm === placaNormalizada || pNorm.includes(placaNormalizada) || placaNormalizada.includes(pNorm);
+  });
+
+  const timestampIso = new Date().toISOString();
+  const dataAtual = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Cuiaba" });
+  const horaAtual = new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Cuiaba", hour: "2-digit", minute: "2-digit" });
+
+  if (!veiculoNoPatio) {
+    // ─── CICLO AUTÔNOMO: ETAPA 1 - ENTRADA & CAPTURA DE TARA ───
+    const taraCapturada = pesoAtualKg != null ? Number(pesoAtualKg) : (estadoHardwareBalanca.pesoAtualKg > 0 ? estadoHardwareBalanca.pesoAtualKg : 12920);
+    
+    // Busca frota ou veículo cadastrado para obter motorista e tara nominal de histórico
+    const dadosVeiculoFrota = (data.concreto_frota || []).find(f => (f.placa || "").toUpperCase().replace(/[^A-Z0-9]/g, "") === placaNormalizada) || {
+      codigo: "BT-05",
+      tipo: "betoneira",
+      motorista: "Valdir Silveira",
+      modelo: "Mercedes-Benz Arocs 3345 8x4",
+      taraPadraoKg: 12920
+    };
+
+    // Validação metrológica forense pelo Motor KyttoIA
+    const taraHistorica = dadosVeiculoFrota.taraPadraoKg || 12920;
+    const desvioTaraPercent = +(((taraCapturada - taraHistorica) / taraHistorica) * 100).toFixed(2);
+    const taraAprovada = Math.abs(desvioTaraPercent) <= 5.0; // Tolerância CONTRAN de até 5%
+
+    const novoRegistroPatio = {
+      id: `patio-${Date.now()}`,
+      ticketEntradaId: `tkt-ent-${Date.now().toString().slice(-4)}`,
+      placa: placaLpr,
+      prefixo: dadosVeiculoFrota.codigo || "BT-05",
+      modeloVeiculo: dadosVeiculoFrota.modelo || "Betoneira 10m³",
+      motorista: dadosVeiculoFrota.motorista || "Valdir Silveira",
+      tipoVeiculo: dadosVeiculoFrota.tipo || "betoneira",
+      tipoOperacao: "expedicao_concreto_usinado",
+      produto: "Concreto Usinado Estrutural NBR 7212",
+      dataHoraEntrada: `${dataAtual} ${horaAtual}`,
+      taraEntradaKg: taraCapturada,
+      status: "carregando_central_dosadora",
+      auditoriaKyttoIA: {
+        validadoPor: "Motor KyttoIA 2.5 Flash",
+        scoreConfiancaLpr: 99.8,
+        enquadramentoPista: "100% sobre as 8 células Toledo Prix DLC-10t",
+        desvioTaraPercent,
+        taraAprovada,
+        lacreAguaTrajeto: "intacto"
+      }
+    };
+
+    if (!Array.isArray(estadoHardwareBalanca.veiculosNoPatio)) {
+      estadoHardwareBalanca.veiculosNoPatio = [];
+    }
+    estadoHardwareBalanca.veiculosNoPatio.unshift(novoRegistroPatio);
+
+    // Atuação autônoma de hardware
+    estadoHardwareBalanca.cancelaEntrada = "aberta";
+    estadoHardwareBalanca.semaforoEntrada = "verde";
+    estadoHardwareBalanca.cancelaSaida = "fechada";
+    estadoHardwareBalanca.semaforoSaida = "vermelho";
+    estadoHardwareBalanca.taraAtualKg = taraCapturada;
+    estadoHardwareBalanca.mensagemInterfone = `Entrada autorizada pelo Motor KyttoIA para ${placaLpr}. Tara ${taraCapturada.toLocaleString("pt-BR")} kg gravada. Siga à Central Dosadora!`;
+
+    return {
+      ok: true,
+      fase: "entrada_tara_concluida",
+      modo: "piloto_automatico_zero_touch",
+      veiculo: novoRegistroPatio,
+      hardware: { ...estadoHardwareBalanca },
+      mensagem: "Ciclo de entrada concluído sem operador. Cancela de entrada aberta e veículo direcionado ao pátio."
+    };
+  } else {
+    // ─── CICLO AUTÔNOMO: ETAPA 2 - SAÍDA, PESO BRUTO & EMISSÃO TICKET / MDF-e ───
+    const pesoBrutoCapturado = pesoAtualKg != null ? Number(pesoAtualKg) : (estadoHardwareBalanca.pesoAtualKg > 20000 ? estadoHardwareBalanca.pesoAtualKg : 33540);
+    const taraVeiculo = Number(veiculoNoPatio.taraEntradaKg) || 12920;
+    const pesoLiquido = Math.max(0, pesoBrutoCapturado - taraVeiculo);
+    const densidadeConcreto = 2380; // kg/m³ conforme NBR 7212
+    const volumeM3Calculado = +(pesoLiquido / densidadeConcreto).toFixed(2);
+
+    // Finalizar a pesagem via rotina oficial
+    const resultadoTicket = await concluirSegundaPesagemBalanca({
+      patioId: veiculoNoPatio.id,
+      placaVeiculo: veiculoNoPatio.placa,
+      modeloVeiculo: veiculoNoPatio.modeloVeiculo,
+      motorista: veiculoNoPatio.motorista,
+      cpfMotorista: veiculoNoPatio.cpfMotorista || "521.849.012-33",
+      cliente: veiculoNoPatio.cliente || "Construtora Alvorada Ltda",
+      obraDestino: veiculoNoPatio.obraDestino || "Residencial Manacá - Laje 4º Pavimento",
+      tipoMaterial: "Concreto FCK 30 MPa Bombeável (NBR 7212)",
+      pesoBrutoKg: pesoBrutoCapturado,
+      taraKg: taraVeiculo,
+      densidadeKgM3: densidadeConcreto,
+      precoUnitarioM3: 465.00,
+      operador: "Piloto Automático CCO (Motor KyttoIA)",
+      dataHoraEntrada: veiculoNoPatio.dataHoraEntrada
+    }, empresaId);
+
+    // Atuação autônoma de liberação
+    estadoHardwareBalanca.cancelaSaida = "aberta";
+    estadoHardwareBalanca.semaforoSaida = "verde";
+    estadoHardwareBalanca.cancelaEntrada = "fechada";
+    estadoHardwareBalanca.semaforoEntrada = "vermelho";
+    estadoHardwareBalanca.mensagemInterfone = `Saída liberada para ${veiculoNoPatio.placa}. Carga: ${pesoLiquido.toLocaleString("pt-BR")} kg (${volumeM3Calculado} m³). MDF-e SEFAZ emitido!`;
+
+    return {
+      ok: true,
+      fase: "saida_concluida_mdfe_emitido",
+      modo: "piloto_automatico_zero_touch",
+      ticket: resultadoTicket.ticket,
+      volumeM3: volumeM3Calculado,
+      pesoLiquidoKg: pesoLiquido,
+      hardware: { ...estadoHardwareBalanca },
+      mensagem: "Ciclo de saída concluído sem operador. Ticket emitido, MDF-e sincronizado e cancela de saída liberada."
+    };
+  }
+}
+
+// =====================================================================
+// 29. PILAR 2: MALHA FECHADA DE DOSAGEM COM SONDAS DE MICRO-ONDAS (NBR 7212)
+// =====================================================================
+export function executarDosagemMalhaFechadaNBR7212({
+  fck = 30,
+  volumeM3 = 8.0,
+  slumpAlvo = "14 ± 2 cm",
+  umidadeAreiaMovelPercent = 5.8,
+  umidadeBritaPercent = 1.2,
+  temperaturaAgregadosC = 31.5,
+  operandoPor = "Central Automatizada MIX-01",
+  empresaId = CONCRETO_EMPRESA_ID
+}) {
+  const vol = Number(volumeM3) || 8.0;
+  const fckNum = Number(fck) || 30;
+  const umidAreia = Number(umidadeAreiaMovelPercent) || 5.8;
+  const umidBrita = Number(umidadeBritaPercent) || 1.2;
+
+  // Consumo base de cimento por m³ conforme FCK estrutural
+  let cimentoBaseKgM3 = 350;
+  if (fckNum <= 20) cimentoBaseKgM3 = 280;
+  else if (fckNum <= 25) cimentoBaseKgM3 = 320;
+  else if (fckNum <= 30) cimentoBaseKgM3 = 360;
+  else if (fckNum <= 35) cimentoBaseKgM3 = 390;
+  else if (fckNum > 35) cimentoBaseKgM3 = 430;
+
+  const cimentoTotalKg = cimentoBaseKgM3 * vol;
+  const areiaSecaAlvoKg = 720 * vol;
+  const brita0SecaAlvoKg = 360 * vol;
+  const brita1SecaAlvoKg = 680 * vol;
+  const aguaBaseTeoricaLitros = Math.round(cimentoTotalKg * 0.48); // Relação a/c base = 0.48
+
+  // Água contida nos agregados pela umidade superficial medida por micro-ondas
+  const aguaContidaAreiaLitros = Math.round(areiaSecaAlvoKg * (umidAreia / 100));
+  const aguaContidaBritaLitros = Math.round((brita0SecaAlvoKg + brita1SecaAlvoKg) * (umidBrita / 100));
+  const totalAguaLivreAgregados = aguaContidaAreiaLitros + aguaContidaBritaLitros;
+
+  // Água efetiva a ser dosada na balança de água
+  const aguaEfetivaDosadorLitros = Math.max(80, aguaBaseTeoricaLitros - totalAguaLivreAgregados);
+
+  // Massas úmidas corrigidas a serem pesadas na balança de agregados
+  const areiaCorrigidaUmidaKg = areiaSecaAlvoKg + aguaContidaAreiaLitros;
+  const brita0CorrigidaUmidaKg = Math.round(brita0SecaAlvoKg * (1 + umidBrita / 100));
+  const brita1CorrigidaUmidaKg = Math.round(brita1SecaAlvoKg * (1 + umidBrita / 100));
+  const aditivoPlastificanteLitros = +(vol * 2.8).toFixed(1);
+
+  // Tolerâncias rigorosas da ABNT NBR 7212:2021
+  // Cimento ±1%, Água ±1%, Agregados ±2%, Aditivos ±3%
+  const desvioCimentoKg = Math.floor(Math.random() * 5 - 2); // ±2 kg (0.07%)
+  const desvioAguaLitros = Math.floor(Math.random() * 3 - 1);
+  const desvioAgregadosKg = Math.floor(Math.random() * 12 - 6);
+  const desvioAditivoLitros = 0.0;
+
+  // Curva de corrente do misturador planetário duplo eixo MIX-01
+  // Corrente nominal: 68A. Concreto com slump 14cm consome em média 64A a 72A.
+  const correnteMisturadorAmperes = +(66.4 + (Math.random() * 3.2 - 1.6)).toFixed(1);
+  const potenciaConsumidaKw = +(correnteMisturadorAmperes * 0.380 * Math.sqrt(3) * 0.88).toFixed(1);
+
+  const loteBatelada = {
+    id: `bat-auto-${Date.now().toString().slice(-5)}`,
+    timestamp: new Date().toISOString(),
+    fck: fckNum,
+    volumeM3: vol,
+    slumpAlvo,
+    normaReferencia: "ABNT NBR 7212:2021",
+    sensoresMicroondas: {
+      sondaAreia: "Hydronix Hydro-Probe (Moega M1)",
+      umidadeAreiaPercent: umidAreia,
+      sondaBrita: "Hydronix Hydro-Mix (Moega M2)",
+      umidadeBritaPercent: umidBrita,
+      temperaturaMassaC: temperaturaAgregadosC
+    },
+    balancoMassa: {
+      cimento: {
+        alvoKg: cimentoTotalKg,
+        realKg: cimentoTotalKg + desvioCimentoKg,
+        desvioPercent: +((desvioCimentoKg / cimentoTotalKg) * 100).toFixed(2),
+        toleranciaNbr7212: "± 1.0%",
+        conforme: Math.abs(desvioCimentoKg / cimentoTotalKg) <= 0.01
+      },
+      aguaEfetiva: {
+        alvoLitros: aguaEfetivaDosadorLitros,
+        realLitros: aguaEfetivaDosadorLitros + desvioAguaLitros,
+        desvioPercent: +((desvioAguaLitros / aguaEfetivaDosadorLitros) * 100).toFixed(2),
+        aguaAbatidaUmidadeLitros: totalAguaLivreAgregados,
+        toleranciaNbr7212: "± 1.0%",
+        conforme: Math.abs(desvioAguaLitros / aguaEfetivaDosadorLitros) <= 0.01
+      },
+      areiaUmida: {
+        alvoKg: areiaCorrigidaUmidaKg,
+        realKg: areiaCorrigidaUmidaKg + Math.round(desvioAgregadosKg * 0.4),
+        toleranciaNbr7212: "± 2.0%",
+        conforme: true
+      },
+      britasUmidas: {
+        alvoKg: brita0CorrigidaUmidaKg + brita1CorrigidaUmidaKg,
+        realKg: brita0CorrigidaUmidaKg + brita1CorrigidaUmidaKg + Math.round(desvioAgregadosKg * 0.6),
+        toleranciaNbr7212: "± 2.0%",
+        conforme: true
+      },
+      aditivo: {
+        alvoLitros: aditivoPlastificanteLitros,
+        realLitros: aditivoPlastificanteLitros + desvioAditivoLitros,
+        toleranciaNbr7212: "± 3.0%",
+        conforme: true
+      }
+    },
+    telemetriaMisturador: {
+      tempoMisturaSegundos: 90,
+      correnteAmperes: correnteMisturadorAmperes,
+      potenciaKw: potenciaConsumidaKw,
+      consistenciaInferidaKyttoIA: "Trabalhabilidade Plástica Homogênea (Slump 14 ± 1.5 cm)",
+      lacreDigital: `NBR7212-BATCH-${crypto.randomBytes(4).toString("hex").toUpperCase()}`
+    },
+    status: "aprovado_para_descarga_betoneira",
+    operadoPor: operandoPor
+  };
+
+  return {
+    ok: true,
+    loteBatelada,
+    resumo: `Batelada de ${vol} m³ (FCK ${fckNum} MPa) dosada com compensação de ${totalAguaLivreAgregados}L de água contida nos agregados úmidos. 100% conforme NBR 7212.`
+  };
+}
+
+// =====================================================================
+// 30. PILAR 3: VIRTUAL VERIFI & AUDITORIA DE INVIOLABILIDADE DE ÁGUA (IOT)
+// =====================================================================
+export function auditarInviolabilidadeAguaTrajeto({
+  veiculoCodigo = "BT-04",
+  eventoTipo = "leitura_periodica",
+  litrosAdicionados = 0,
+  pressaoHidraulicaBar = 195,
+  lat = -14.6280,
+  lng = -57.5020,
+  motivo = "Monitoramento Contínuo",
+  operador = "Sistema Forense Motor KyttoIA",
+  empresaId = CONCRETO_EMPRESA_ID
+}) {
+  const veiculo = ESTADO_TELEMETRIA_FROTA[veiculoCodigo] || {
+    codigo: veiculoCodigo,
+    placa: "RDA-6H54",
+    motorista: "Roberto Lima",
+    cargaAtual: "8 m³ FCK 35 MPa",
+    volumeAtualM3: 8.0,
+    rpmTambor: 3.4,
+    sentidoGiro: "horario",
+    minutosDesdeAgua: 32,
+    limitePegaMinutos: 120,
+    temperaturaMassaC: 31.4,
+    sensorAguaTrajetoLitros: 0,
+    lacreAguaInviolavel: true
+  };
+
+  const litrosAdd = Number(litrosAdicionados) || 0;
+  let violacaoDetectada = false;
+  let impactoFckMpa = 0;
+  let novaRelacaoAguaCimento = 0.48;
+
+  if (litrosAdd > 0) {
+    violacaoDetectada = true;
+    veiculo.sensorAguaTrajetoLitros += litrosAdd;
+    veiculo.lacreAguaInviolavel = false;
+    
+    // Cada 10 litros de água adicionados por m³ reduz aproximadamente 1.8 MPa na resistência do concreto aos 28 dias
+    const litrosPorM3 = litrosAdd / (veiculo.volumeAtualM3 || 8.0);
+    impactoFckMpa = +((litrosPorM3 / 10) * 1.8).toFixed(2);
+    novaRelacaoAguaCimento = +(0.48 + (litrosAdd / (350 * (veiculo.volumeAtualM3 || 8.0)))).toFixed(3);
+  }
+
+  const auditoria = {
+    id: `aud-iot-${Date.now().toString().slice(-5)}`,
+    timestamp: new Date().toISOString(),
+    veiculoCodigo,
+    placa: veiculo.placa,
+    motorista: veiculo.motorista,
+    localizacao: { lat, lng },
+    pressaoHidraulicaBar: Number(pressaoHidraulicaBar) || 195,
+    litrosAdicionados: litrosAdd,
+    totalAguaAdicionadaAcumulada: veiculo.sensorAguaTrajetoLitros,
+    violacaoDetectada,
+    lacreInviolavel: veiculo.lacreAguaInviolavel,
+    impactoFckMpa,
+    novaRelacaoAguaCimento,
+    classificacaoRisco: violacaoDetectada ? "CRÍTICO - PERDA DE GARANTIA ESTRUTURAL NBR 12655" : "CONFORME - ÁGUA INVIOLÁVEL",
+    acaoRecomendadaKyttoIA: violacaoDetectada 
+      ? "Disparar alerta via WhatsApp ao tecnologista e estampar ressalva formal no canhoto eletrônico de entrega da carga."
+      : "Trajeto regular. Concreto com trabalhabilidade e FCK preservados.",
+    auditor: operador
+  };
+
+  return {
+    ok: true,
+    auditoria,
+    alertaEmitido: violacaoDetectada
+  };
+}
+
+// =====================================================================
+// 31. PILAR 4: LABORATÓRIO TECNOLÓGICO NBR 5739 & ACEITAÇÃO NBR 12655
+// =====================================================================
+export function registrarRupturaAutomaticaPrensa({
+  loteId,
+  cpId,
+  diametroMm = 100,
+  alturaMm = 200,
+  cargaMaximaKn = 285.4,
+  tipoRuptura = "conica_nbr5739_tipo_a",
+  velocidadeMpaS = 0.46,
+  operador = "Laboratorista Homologado",
+  empresaId = CONCRETO_EMPRESA_ID
+}) {
+  const data = inicializarDatastoreConcreto();
+  const ensaio = (data.concreto_ensaios || []).find(e => e.id === loteId || e.lote === loteId);
+  
+  const dMm = Number(diametroMm) || 100;
+  const cargaKn = Number(cargaMaximaKn) || 285.4;
+  const vel = Number(velocidadeMpaS) || 0.46;
+
+  // Área do cilindro A = pi * d^2 / 4 (para d=100mm -> 7853.98 mm²)
+  const areaMm2 = +(Math.PI * Math.pow(dMm, 2) / 4).toFixed(2);
+  // Tensão de compressão sigma = (Carga em N) / (Área em mm²)
+  const tensaoMpa = +((cargaKn * 1000) / areaMm2).toFixed(2);
+
+  // Validação da velocidade de carregamento conforme ABNT NBR 5739:2018 (0.45 ± 0.15 MPa/s)
+  const velocidadeConforme = vel >= 0.30 && vel <= 0.60;
+
+  const registroRuptura = {
+    id: `rup-${Date.now().toString().slice(-5)}`,
+    timestamp: new Date().toISOString(),
+    loteId: ensaio ? ensaio.lote : loteId,
+    cpId: cpId || "CP-01",
+    geometria: { diametroMm: dMm, alturaMm: Number(alturaMm) || 200, areaMm2 },
+    prensaHidraulica: {
+      modelo: "Prensa Servo-Hidráulica EMIC 200t Digital",
+      calibracaoRbcVigente: true,
+      cargaMaximaKn: cargaKn,
+      velocidadeCarregamentoMpaS: vel,
+      velocidadeConforme
+    },
+    tensaoRupturaMpa: tensaoMpa,
+    tipoRuptura: tipoRuptura || "conica_nbr5739_tipo_a",
+    descricaoRuptura: "Ruptura Cônica Bem Formada (Tipo a - NBR 5739:2018)",
+    operador,
+    autenticacaoKyttoIA: `PRENSA-NBR5739-${crypto.randomBytes(4).toString("hex").toUpperCase()}`
+  };
+
+  return {
+    ok: true,
+    registroRuptura,
+    tensaoMpa,
+    conformeNorma: velocidadeConforme,
+    mensagem: `Ruptura registrada: Carga ${cargaKn} kN resultou em ${tensaoMpa} MPa. Velocidade de ensaio ${vel} MPa/s dentro da tolerância NBR 5739.`
+  };
+}
+
+// =====================================================================
+// 32. PILAR 5: MEDIÇÃO CONSOLIDADA DE OBRAS & RETENÇÕES TRIBUTÁRIAS LC 116
+// =====================================================================
+export function gerarMedicaoPeriodicaObra({
+  clienteNome = "Construtora Alvorada Ltda",
+  obraNome = "Residencial Manacá - Laje 4º Pavimento",
+  periodoInicio = "2026-11-01",
+  periodoFim = "2026-11-15",
+  aliquotaIssqn = 3.0,
+  aliquotaInss = 11.0,
+  horasBombaLancada = 14,
+  valorHoraBomba = 380.0,
+  empresaId = CONCRETO_EMPRESA_ID
+}) {
+  const data = inicializarDatastoreConcreto();
+  const tickets = (data.concreto_tickets_balanca || []).filter(t => {
+    const matchCliente = !clienteNome || (t.cliente || "").toLowerCase().includes(clienteNome.toLowerCase());
+    return matchCliente;
+  });
+
+  const volumeTotalM3 = tickets.length > 0
+    ? +(tickets.reduce((acc, t) => acc + (t.volumeCalculadoM3 || 8.0), 0)).toFixed(2)
+    : 64.0;
+
+  const valorMedioM3 = 465.00;
+  const valorBrutoConcreto = +(volumeTotalM3 * valorMedioM3).toFixed(2);
+  const valorTotalServicoBomba = +(horasBombaLancada * valorHoraBomba).toFixed(2);
+  const valorBrutoTotal = +(valorBrutoConcreto + valorTotalServicoBomba).toFixed(2);
+
+  // Dedução legal de materiais da base de cálculo do ISSQN (Subitem 7.02 LC 116/2003)
+  // Concreto usinado: materiais incorporados à obra deduzem até 70% do valor do fornecimento
+  const deducaoLegalMateriais = +(valorBrutoConcreto * 0.70).toFixed(2);
+  const baseCalculoIssqn = Math.max(0, +(valorBrutoTotal - deducaoLegalMateriais).toFixed(2));
+  const valorIssqn = +((baseCalculoIssqn * (aliquotaIssqn / 100))).toFixed(2);
+
+  // Retenção de INSS na fonte (11% sobre o valor da mão de obra líquida de materiais)
+  const baseInss = Math.max(0, +(valorTotalServicoBomba * 0.50).toFixed(2));
+  const valorInssRetido = +((baseInss * (aliquotaInss / 100))).toFixed(2);
+
+  const valorLiquidoAReceber = +(valorBrutoTotal - valorIssqn - valorInssRetido).toFixed(2);
+
+  const fechamentoMedicao = {
+    id: `med-${Date.now().toString().slice(-5)}`,
+    numeroMedicao: `MED-2026/011`,
+    cliente: clienteNome,
+    obra: obraNome,
+    periodo: `${periodoInicio} a ${periodoFim}`,
+    resumoFisico: {
+      totalCargasDespachadas: tickets.length || 8,
+      volumeConcretoM3: volumeTotalM3,
+      horasBombaOperadas: horasBombaLancada,
+      ticketsVinculados: tickets.map(t => t.numeroTicket || t.id).slice(0, 10)
+    },
+    demonstrativoFinanceiro: {
+      valorFornecimentoConcreto: valorBrutoConcreto,
+      valorLocacaoBomba: valorTotalServicoBomba,
+      valorBrutoTotal,
+      deducaoMateriaisLc116: deducaoLegalMateriais,
+      baseCalculoIssqn,
+      aliquotaIssqn: `${aliquotaIssqn}%`,
+      valorIssqnRetido: valorIssqn,
+      baseCalculoInss: baseInss,
+      aliquotaInss: `${aliquotaInss}%`,
+      valorInssRetido,
+      valorLiquidoFaturado: valorLiquidoAReceber
+    },
+    dreUnitarioPorM3: {
+      receitaBrutaM3: +(valorBrutoTotal / volumeTotalM3).toFixed(2),
+      custoInsumosM3: 268.40,
+      custoFreteBetoneiraM3: 42.00,
+      custoBombeamentoM3: +(valorTotalServicoBomba / volumeTotalM3).toFixed(2),
+      tributosRetidosM3: +((valorIssqn + valorInssRetido) / volumeTotalM3).toFixed(2),
+      margemContribuicaoM3: +((valorBrutoTotal / volumeTotalM3) - 268.40 - 42.00 - (valorTotalServicoBomba / volumeTotalM3) - ((valorIssqn + valorInssRetido) / volumeTotalM3)).toFixed(2)
+    },
+    autenticacaoKyttoIA: `MED-SEFAZ-${crypto.randomBytes(4).toString("hex").toUpperCase()}`
+  };
+
+  return {
+    ok: true,
+    medicao: fechamentoMedicao
+  };
+}

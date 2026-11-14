@@ -25,7 +25,8 @@ import {
   Sparkles,
   ExternalLink,
   Flame,
-  Grid
+  Grid,
+  Zap
 } from 'lucide-react';
 
 const LISTA_CAMERAS_COCKPIT_11 = [
@@ -220,6 +221,9 @@ export default function WeighingCockpit({
   // View mode: 4 primary scale cameras vs all 11 operational cameras
   const [modoVisualizacao, setModoVisualizacao] = useState('4_balanca'); // '4_balanca' | '11_completo'
   const [cameraModal, setCameraModal] = useState(null);
+  const [pilotoAutomaticoAtivo, setPilotoAutomaticoAtivo] = useState(true);
+  const [executandoAutonomo, setExecutandoAutonomo] = useState(false);
+  const [notificacaoAutonoma, setNotificacaoAutonoma] = useState(null);
 
   // Weights recorded during cycle
   const [capturedTara, setCapturedTara] = useState(12920);
@@ -344,6 +348,38 @@ export default function WeighingCockpit({
     setLastTicket(null);
   };
 
+  // Disparo do ciclo autônomo sem intervenção do operador (Zero-Touch CCO)
+  const handleDispararCicloAutonomo = () => {
+    setExecutandoAutonomo(true);
+    if (activeStep === 1) {
+      setNotificacaoAutonoma('⚡ [Piloto Automático Motor KyttoIA] Câmera LPR identificou QBF-6M02 · Peso estável 12.920 kg · Tara gravada e cancela de entrada aberta!');
+      handleCaptureStep();
+      setTimeout(() => {
+        setExecutandoAutonomo(false);
+        setTimeout(() => setNotificacaoAutonoma(null), 6000);
+      }, 800);
+    } else if (activeStep === 2) {
+      setNotificacaoAutonoma('⚡ [Piloto Automático Motor KyttoIA] Central Dosadora concluiu 8.0 m³ FCK 30 MPa · Caminhão posicionado para 2ª pesagem!');
+      handleCaptureStep();
+      setTimeout(() => {
+        setExecutandoAutonomo(false);
+        setTimeout(() => setNotificacaoAutonoma(null), 6000);
+      }, 800);
+    } else if (activeStep === 3) {
+      setNotificacaoAutonoma('⚡ [Piloto Automático Motor KyttoIA] 2ª Pesagem concluída: 33.540 kg (20.620 kg líquido) · MDF-e SEFAZ emitido e cancela de saída liberada!');
+      handleCaptureStep();
+      setTimeout(() => {
+        setExecutandoAutonomo(false);
+        setTimeout(() => setNotificacaoAutonoma(null), 6000);
+      }, 800);
+    } else {
+      handleResetCycle();
+      setNotificacaoAutonoma('⚡ [Piloto Automático Motor KyttoIA] Balança reiniciada. Pronta para o próximo veículo.');
+      setExecutandoAutonomo(false);
+      setTimeout(() => setNotificacaoAutonoma(null), 4000);
+    }
+  };
+
   // As 4 câmeras de foco principal da balança
   const camerasQuatroFoco = [
     LISTA_CAMERAS_COCKPIT_11[0], // CAM-01 Frontal LPR
@@ -397,6 +433,119 @@ export default function WeighingCockpit({
           >
             BAL-02 · Mineração Rio Sangue (60t)
           </button>
+        </div>
+      </div>
+
+      {/* Banner de Piloto Automático Zero-Touch & Notificações KyttoIA */}
+      <div className="bg-gradient-to-r from-stone-900 via-stone-950 to-stone-900 p-3.5 rounded-2xl border border-stone-800 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs text-white">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-serrano-500/20 border border-serrano-500/40 flex items-center justify-center flex-shrink-0 text-serrano-400">
+            <Zap className="w-5 h-5 animate-pulse" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-extrabold text-sm text-white tracking-wide">PILOTO AUTOMÁTICO ZERO-TOUCH</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                pilotoAutomaticoAtivo 
+                  ? 'bg-emerald-950 text-emerald-400 border-emerald-700' 
+                  : 'bg-stone-800 text-stone-400 border-stone-700'
+              }`}>
+                {pilotoAutomaticoAtivo ? '● MODO AUTÔNOMO ATIVO' : '○ MODO MANUAL'}
+              </span>
+            </div>
+            <p className="text-[11px] text-stone-400 mt-0.5">
+              Supervisão de pesagem sem operador · LPR automático · MDF-e SEFAZ instantâneo · Malha fechada NBR 7212
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleDispararCicloAutonomo}
+            disabled={executandoAutonomo}
+            className="px-3.5 py-2 bg-serrano-500 hover:bg-serrano-600 text-white rounded-xl font-bold text-xs shadow-md transition-all active:scale-98 flex items-center gap-1.5"
+            title="Executar ciclo completo autônomo da balança (LPR -> Toledo 720i -> MDF-e -> Cancela)"
+          >
+            <Sparkles className={`w-3.5 h-3.5 ${executandoAutonomo ? 'animate-spin' : ''}`} />
+            <span>{executandoAutonomo ? 'Processando Ciclo...' : 'Disparar Ciclo Autônomo Agora'}</span>
+          </button>
+          
+          <button
+            type="button"
+            onClick={() => setPilotoAutomaticoAtivo(!pilotoAutomaticoAtivo)}
+            className={`px-3 py-2 rounded-xl font-bold text-xs border transition-colors ${
+              pilotoAutomaticoAtivo
+                ? 'bg-stone-800 text-stone-300 border-stone-700 hover:bg-stone-700'
+                : 'bg-emerald-900 text-emerald-200 border-emerald-700'
+            }`}
+          >
+            {pilotoAutomaticoAtivo ? 'Pausar Autonomia' : 'Ativar Piloto Automático'}
+          </button>
+        </div>
+      </div>
+
+      {/* Alerta / Notificação do Ciclo Autônomo */}
+      {notificacaoAutonoma && (
+        <div className="p-3 rounded-xl bg-emerald-950 border border-emerald-700 text-emerald-200 text-xs font-mono flex items-center justify-between shadow-lg animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            <span>{notificacaoAutonoma}</span>
+          </div>
+          <button 
+            type="button" 
+            onClick={() => setNotificacaoAutonoma(null)}
+            className="text-stone-400 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Cards dos 4 Pilares de Autonomia da Usina */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+        <div className="bg-white p-3 rounded-xl border border-concrete-200 shadow-2xs">
+          <div className="flex items-center justify-between text-stone-500 text-[10px] uppercase font-bold mb-1">
+            <span>Sondas Micro-ondas</span>
+            <span className="text-emerald-600 font-bold">NBR 7212</span>
+          </div>
+          <div className="text-stone-900 font-extrabold text-sm">5,8% Umidade Areia</div>
+          <div className="text-[10px] text-emerald-700 mt-0.5 font-medium">
+            -342L água compensados na batelada
+          </div>
+        </div>
+
+        <div className="bg-white p-3 rounded-xl border border-concrete-200 shadow-2xs">
+          <div className="flex items-center justify-between text-stone-500 text-[10px] uppercase font-bold mb-1">
+            <span>Virtual Verifi IoT</span>
+            <span className="text-emerald-600 font-bold">Anti-Fraude</span>
+          </div>
+          <div className="text-stone-900 font-extrabold text-sm">Lacre 100% Intacto</div>
+          <div className="text-[10px] text-stone-500 mt-0.5">
+            0L adicionados clandestinamente
+          </div>
+        </div>
+
+        <div className="bg-white p-3 rounded-xl border border-concrete-200 shadow-2xs">
+          <div className="flex items-center justify-between text-stone-500 text-[10px] uppercase font-bold mb-1">
+            <span>Prensa Servo NBR 5739</span>
+            <span className="text-emerald-600 font-bold">28 Dias</span>
+          </div>
+          <div className="text-stone-900 font-extrabold text-sm">36,3 MPa (121%)</div>
+          <div className="text-[10px] text-emerald-700 mt-0.5 font-medium">
+            Velocidade: 0,46 MPa/s (Conforme)
+          </div>
+        </div>
+
+        <div className="bg-white p-3 rounded-xl border border-concrete-200 shadow-2xs">
+          <div className="flex items-center justify-between text-stone-500 text-[10px] uppercase font-bold mb-1">
+            <span>Medição Obra LC 116</span>
+            <span className="text-emerald-600 font-bold">SEFAZ-MT</span>
+          </div>
+          <div className="text-stone-900 font-extrabold text-sm">70% Dedução Legal</div>
+          <div className="text-[10px] text-stone-500 mt-0.5">
+            Retenções de ISS &amp; INSS apuradas
+          </div>
         </div>
       </div>
 

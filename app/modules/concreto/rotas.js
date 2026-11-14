@@ -75,7 +75,12 @@ import {
   testarConexaoCameraIp,
   analisarFrameVisionKyttoIa,
   listarEventosVisionConcreto,
-  reconhecerEventoVision
+  reconhecerEventoVision,
+  processarCicloAutonomoBalanca,
+  executarDosagemMalhaFechadaNBR7212,
+  auditarInviolabilidadeAguaTrajeto,
+  registrarRupturaAutomaticaPrensa,
+  gerarMedicaoPeriodicaObra
 } from './servico.js';
 import { CONCRETO_EMPRESA_ID } from '../../concreto-usina-seed.js';
 
@@ -931,6 +936,63 @@ router.post('/dosagem/calcular', (req, res) => {
       const operador = req.body?.operador || req.user?.nome || 'Operador CCO Serrano';
       const ok = reconhecerEventoVision(req.params.id, empresaId, operador);
       return res.json({ ok });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // ─── ENDPOINTS AUTÔNOMOS DO MOTOR KYTTOIA (5 PILARES DE AUTONOMIA) ───
+  
+  // Pilar 1: Balança e Portaria Zero-Touch (Piloto Automático)
+  router.post('/balanca/ciclo-autonomo', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await processarCicloAutonomoBalanca(req.body || {}, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // Pilar 2: Central Dosadora em Malha Fechada de Umidade NBR 7212
+  router.post('/central/dosagem-malha-fechada', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = executarDosagemMalhaFechadaNBR7212(req.body || {}, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // Pilar 3: Virtual Verifi & Inviolabilidade de Água em Trânsito
+  router.post('/frota/auditar-inviolabilidade', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = auditarInviolabilidadeAguaTrajeto(req.body || {}, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // Pilar 4: Prensa Servo-Hidráulica & Ruptura Automática NBR 5739
+  router.post('/laboratorio/ruptura-automatica', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = registrarRupturaAutomaticaPrensa(req.body || {}, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // Pilar 5: Medição Periódica e Faturamento Consolidado de Obras
+  router.post('/medicoes/gerar-fechamento-obra', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = gerarMedicaoPeriodicaObra(req.body || {}, empresaId);
+      return res.json(resultado);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
     }
