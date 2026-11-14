@@ -94,7 +94,16 @@ import { startWhatsappAiWorker } from './workers/whatsapp-ai-worker.js';
 import { startIsaPollWorker } from './core/whatsapp-isa-poll.js';
 import { startDinoDailyConfirmationWorker } from './core/dino-confirmacao-diaria.js';
 import { startDinoDailyBriefingWorker } from './core/dino-daily-briefing.js';
-import { startDinoRecuperacaoAtivaWorker, executarRecuperacaoAtivaDiaria, listarClientesElegiveisRecuperacao } from './core/dino-recuperacao-ativa.js';
+import {
+  startDinoRecuperacaoAtivaWorker,
+  executarRecuperacaoAtivaDiaria,
+  listarClientesElegiveisRecuperacao,
+  consolidarReportDiarioTrex,
+  formatarMensagemReportGestao,
+  enviarReportDiarioGestaoWhatsApp,
+  enviarValidacaoEstrategicaWhatsApp,
+  registrarOptOut,
+} from './core/dino-recuperacao-ativa.js';
 import { startDinoDailyReportWorker, enviarReportGraficosDino, compilarMetricasReportGrafico, GUARDRAILS_META_INFO } from './core/dino-daily-report-graph.js';
 import { kyttoEventBus, TOPICOS_KYTTO } from './core/kytto-event-bus.js';
 import { armazenarCopiaSegura, listarArquivosSeguros, obterEstatisticasArmazenamento } from './core/armazenamento-seguro.js';
@@ -395,6 +404,13 @@ app.get('/api/admin/sincronizacao-ultra-nossa-gente/eventos', (req, res) => {
     const { empresaId, tipo, origem, limite } = req.query;
     const eventos = kyttoEventBus.listarEventos({ empresaId, tipo, origem, limite });
     res.json({ ok: true, total: eventos.length, eventos });
+
+app.get('/api/admin/dino/recuperacao-ativa/report-20h/preview', async (req, res) => {
+  try {
+    const dataFiltro = req.query.data || null;
+    const report = await consolidarReportDiarioTrex(req.query.empresaId || undefined, dataFiltro);
+    const textoMensagem = formatarMensagemReportGestao(report);
+    res.json({ ok: true, report, textoMensagem });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -453,6 +469,57 @@ app.post('/api/admin/armazenamento-seguro/armazenar', (req, res) => {
       metadados
     });
     res.json({ ok: true, registro, mensagem: 'Cópia segura armazenada com hash criptográfico SHA-256 e auditoria.' });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/dino/recuperacao-ativa/report-20h/enviar', async (req, res) => {
+  try {
+    const dataFiltro = req.body?.data || req.query.data || null;
+    const telefoneDestino = req.body?.telefone || req.query.telefone || null;
+    const resultado = await enviarReportDiarioGestaoWhatsApp({
+      empresaId: req.body?.empresaId || req.query.empresaId || undefined,
+      dataFiltro,
+      telefoneDestino,
+    });
+    res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/dino/recuperacao-ativa/optout', async (req, res) => {
+  try {
+    const telefone = req.body?.telefone || req.query.telefone;
+    if (!telefone) return res.status(400).json({ ok: false, error: 'Telefone obrigatório' });
+    await registrarOptOut(telefone);
+    res.json({ ok: true, optout_registrado: true, telefone });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/public/dino/recuperacao-ativa/validar-whatsapp', async (req, res) => {
+  try {
+    const { telefone = '5514997462929' } = req.body || {};
+    const resultado = await enviarValidacaoEstrategicaWhatsApp({ telefoneDestino: telefone });
+    res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/public/dino/recuperacao-ativa/report-20h/enviar', async (req, res) => {
+  try {
+    const dataFiltro = req.body?.data || req.query.data || null;
+    const telefoneDestino = req.body?.telefone || req.query.telefone || '5514997462929';
+    const resultado = await enviarReportDiarioGestaoWhatsApp({
+      empresaId: req.body?.empresaId || req.query.empresaId || undefined,
+      dataFiltro,
+      telefoneDestino,
+    });
+    res.json({ ok: true, ...resultado });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
