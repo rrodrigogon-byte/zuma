@@ -5,6 +5,7 @@
 // ============================================================================
 
 import { kyttoEventBus } from './kytto-event-bus.js';
+import { sendTextViaChatbotBackend } from './whatsapp-provider.js';
 import { enviarMensagem } from './whatsapp.js';
 import { db } from './database.js';
 
@@ -14,16 +15,15 @@ export const GRUPO_GESTAO_DINO_INFO = {
   participantes: [
     { nome: 'Rodrigo Gonçalves (Kytto / Gestão)', telefone: '5514997462929', papel: 'Admin' },
     { nome: 'Guilherme Dino (~Guilherme Dino)', telefone: '5565996722055', telefoneAlternativo: '556596722055', papel: 'Admin / Proprietário' },
-    { nome: 'Dino Oficial (Linha Corporativa)', telefone: '5565999056008', telefoneAlternativo: '5565993360000', papel: 'Linha Atendimento' }
+    { nome: 'Dino Oficial (Linha Corporativa / Remetente)', telefone: '5565999056008', telefoneAlternativo: '5565993360000', papel: 'Linha Atendimento Bot' }
   ]
 };
 
-// Destinatários para broadcast corporativo imediato (garantia de entrega)
+// Destinatários para broadcast corporativo imediato (exclusivo para os gestores humanos, não para a linha da barbearia)
 export const DESTINATARIOS_GESTAO_DINO = [
   '5514997462929', // Rodrigo Kytto
   '5565996722055', // Guilherme Dino
   '556596722055',  // Guilherme Dino (8D)
-  '5565999056008', // Dino Oficial
 ];
 
 // Registro em memória de avaliações pós-atendimento
@@ -32,7 +32,7 @@ const AVALIACOES_NPS_MEMORIA = [];
 /**
  * Envia mensagem executiva de gestão para o canal oficial "Gestão Dino"
  * Transmite para o Group ID (se configurado) e simultaneamente em broadcast
- * para todos os administradores do grupo (Guilherme e Rodrigo).
+ * para os administradores do grupo (Guilherme e Rodrigo).
  */
 export async function enviarParaGestaoDino({
   titulo = 'Relatório de Performance & Gestão Dino',
@@ -58,18 +58,36 @@ export async function enviarParaGestaoDino({
   // 1. Envio para o Grupo específico caso exista o JID cadastrado
   if (targetGroup && targetGroup.includes('@g.us')) {
     try {
-      const resGrupo = await enviarMensagem(tenant, targetGroup, textoFinal);
-      envios.push({ destino: targetGroup, tipo: 'grupo', status: resGrupo?.ok ? 'sucesso' : 'erro' });
+      let resGrupo = await enviarMensagem(tenant, targetGroup, textoFinal);
+      if (!resGrupo?.ok) {
+        resGrupo = await sendTextViaChatbotBackend({
+          instance: process.env.CHATBOT_BACKEND_INSTANCE || 'dino',
+          number: targetGroup,
+          text: textoFinal,
+          simulateTyping: true,
+        });
+      }
+      const okGrupo = Boolean(resGrupo?.ok || resGrupo?.data?.success === true);
+      envios.push({ destino: targetGroup, tipo: 'grupo', status: okGrupo ? 'sucesso' : 'erro', detalhe: resGrupo });
     } catch (err) {
       envios.push({ destino: targetGroup, tipo: 'grupo', status: 'falha', erro: err.message });
     }
   }
 
-  // 2. Broadcast para os membros administradores do grupo
+  // 2. Broadcast para os membros administradores do grupo (Rodrigo e Guilherme)
   for (const tel of DESTINATARIOS_GESTAO_DINO) {
     try {
-      const res = await enviarMensagem(tenant, tel, textoFinal);
-      envios.push({ destino: tel, tipo: 'admin_direto', status: res?.ok ? 'sucesso' : 'erro' });
+      let res = await enviarMensagem(tenant, tel, textoFinal);
+      if (!res?.ok) {
+        res = await sendTextViaChatbotBackend({
+          instance: process.env.CHATBOT_BACKEND_INSTANCE || 'dino',
+          number: tel,
+          text: textoFinal,
+          simulateTyping: true,
+        });
+      }
+      const okAdmin = Boolean(res?.ok || res?.data?.success === true);
+      envios.push({ destino: tel, tipo: 'admin_direto', status: okAdmin ? 'sucesso' : 'erro', detalhe: res });
     } catch (err) {
       envios.push({ destino: tel, tipo: 'admin_direto', status: 'falha', erro: err.message });
     }
@@ -147,7 +165,15 @@ export async function tratarComandaFechadaParaNps(evento) {
     });
 
     // Envia a pesquisa no WhatsApp do cliente
-    const envio = await enviarMensagem(null, telefoneCliente, mensagemNps);
+    let envio = await enviarMensagem(null, telefoneCliente, mensagemNps);
+    if (!envio?.ok) {
+      envio = await sendTextViaChatbotBackend({
+        instance: process.env.CHATBOT_BACKEND_INSTANCE || 'dino',
+        number: telefoneCliente,
+        text: mensagemNps,
+        simulateTyping: true,
+      });
+    }
 
     // Registra a solicitação de NPS em memória/banco
     const registroSolicitacao = {
@@ -167,7 +193,7 @@ export async function tratarComandaFechadaParaNps(evento) {
       clienteNome,
       telefoneCliente,
       barbeiroNome,
-      enviado: envio?.ok || false,
+      enviado: Boolean(envio?.ok || envio?.data?.success === true),
     };
   } catch (err) {
     console.warn('[Dino NPS] Erro ao tratar comanda fechada:', err.message);
