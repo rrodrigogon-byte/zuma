@@ -17,7 +17,12 @@ import {
   Info,
   Calendar,
   Layers,
-  ArrowRight
+  ArrowRight,
+  Compass,
+  Truck,
+  MapPin,
+  Check,
+  RotateCcw
 } from 'lucide-react'
 
 // Dados estáticos de fallback para renderização imediata com suporte offline/rápido
@@ -217,6 +222,11 @@ export default function DinoLTKStorefront() {
   const [produtoModal, setProdutoModal] = useState(null)
   const [opcaoPreco, setOpcaoPreco] = useState('decant') // 'decant' ou 'frasco'
   const [loading, setLoading] = useState(false)
+  const [quizAberto, setQuizAberto] = useState(false)
+  const [quizEtapa, setQuizEtapa] = useState(1)
+  const [quizRespostas, setQuizRespostas] = useState({ ocasiao: '', intensidade: '', formato: '' })
+  const [quizResultado, setQuizResultado] = useState(null)
+  const [modalFreteAberto, setModalFreteAberto] = useState(false)
 
   // Carrega produtos dinâmicos do backend caso disponível
   useEffect(() => {
@@ -272,6 +282,62 @@ export default function DinoLTKStorefront() {
       `Gostaria de fechar o pedido e receber em Tangará da Serra/região!`
     )
     window.open(`https://wa.me/5565993360000?text=${msg}`, '_blank')
+  }
+
+  // Lógica do Consultor Olfativo KyttoIA 2.5 Flash
+  const responderQuiz = (chave, valor) => {
+    const novasRespostas = { ...quizRespostas, [chave]: valor }
+    setQuizRespostas(novasRespostas)
+    if (quizEtapa < 3) {
+      setQuizEtapa(quizEtapa + 1)
+    } else {
+      // Finalizar e calcular resultado
+      const { ocasiao, intensidade, formato } = novasRespostas
+      let produtoRecomendado = produtos.find(p => p.id === 'lattafa-khamrah') || produtos[0]
+      let matchPct = 98
+      let justificativa = ''
+
+      if (ocasiao === 'calor') {
+        if (intensidade === 'frescor') {
+          produtoRecomendado = produtos.find(p => p.id === 'roja-elysium') || produtos[0]
+          matchPct = 99
+          justificativa = 'A combinação perfeita de toranja, limão e vetiver aristocrático. Não desanda sob 38°C e confere sensação de banho gelado revigorante o dia inteiro.'
+        } else if (intensidade === 'elegancia') {
+          produtoRecomendado = produtos.find(p => p.id === 'nishane-hacivat') || produtos[0]
+          matchPct = 99
+          justificativa = 'Extrait de Parfum com altíssima concentração de óleos nobres. Abacaxi frutado e musgo de carvalho com 14h+ de fixação blindada contra o calor de MT.'
+        } else {
+          produtoRecomendado = produtos.find(p => p.id === 'armaf-club-de-nuit') || produtos[0]
+          matchPct = 98
+          justificativa = 'O campeão absoluto de elogios em Tangará da Serra. Projeção intensa de limão siciliano e bétula defumada que domina o ambiente com presença marcante.'
+        }
+      } else if (ocasiao === 'noite') {
+        produtoRecomendado = produtos.find(p => p.id === 'lattafa-khamrah') || produtos[0]
+        matchPct = 99
+        justificativa = 'Uma obra-prima oriental com canela, tâmaras, pralinê e baunilha. Projeção doce e especiada envolvente que atrai olhares e elogios imediatos em encontros e eventos.'
+      } else if (ocasiao === 'fazenda') {
+        produtoRecomendado = produtos.find(p => p.id === 'lattafa-asad') || produtos[0]
+        matchPct = 97
+        justificativa = 'Âmbar especiado com notas de pimenta preta, tabaco e café. Perfeito para clima de fazenda, negócios agro e rodeios, mantendo rusticidade e alta masculinidade.'
+      } else {
+        produtoRecomendado = produtos.find(p => p.id === 'creed-aventus') || produtos[0]
+        matchPct = 98
+        justificativa = 'O ícone mundial de autoridade e liderança masculina. Abacaxi real, bétula e âmbar gris para reuniões executivas e presença imponente.'
+      }
+
+      setQuizResultado({
+        produto: produtoRecomendado,
+        matchPct,
+        justificativa,
+        formatoRecomendado: formato === 'frasco' ? 'frasco' : 'decant'
+      })
+    }
+  }
+
+  const reiniciarQuiz = () => {
+    setQuizEtapa(1)
+    setQuizRespostas({ ocasiao: '', intensidade: '', formato: '' })
+    setQuizResultado(null)
   }
 
   return (
@@ -355,6 +421,57 @@ export default function DinoLTKStorefront() {
           </div>
         </div>
       </header>
+
+      {/* CARDS DE DESTAQUE INTERATIVO: QUIZ OLFATIVO KYTTOIA & FRETE / RETIRADA NA CADEIRA */}
+      <section className="max-w-4xl mx-auto px-4 mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* Card do Quiz Olfativo */}
+        <div
+          onClick={() => { reiniciarQuiz(); setQuizAberto(true); }}
+          className="bg-gradient-to-r from-amber-950/70 via-slate-900 to-amber-900/40 border border-amber-500/40 hover:border-amber-400 rounded-2xl p-4 flex items-center justify-between gap-3 cursor-pointer transition shadow-lg group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+              <Compass className="w-5 h-5 text-amber-400" />
+            </div>
+            <div>
+              <span className="text-[11px] font-mono text-amber-400 uppercase tracking-wider block font-bold">
+                Motor KyttoIA 2.5 Flash
+              </span>
+              <h3 className="text-sm font-extrabold text-white group-hover:text-amber-200 transition">
+                Descubra seu Perfume Assinatura
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                3 perguntas rápidas para achar seu match no calor de MT
+              </p>
+            </div>
+          </div>
+          <ChevronRight className="w-5 h-5 text-amber-400 shrink-0 group-hover:translate-x-1 transition-transform" />
+        </div>
+
+        {/* Card de Retirada na Cadeira & Frete */}
+        <div
+          onClick={() => setModalFreteAberto(true)}
+          className="bg-gradient-to-r from-emerald-950/70 via-slate-900 to-slate-900 border border-emerald-500/30 hover:border-emerald-400 rounded-2xl p-4 flex items-center justify-between gap-3 cursor-pointer transition shadow-lg group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+              <Truck className="w-5 h-5 text-emerald-400" />
+            </div>
+            <div>
+              <span className="text-[11px] font-mono text-emerald-400 uppercase tracking-wider block font-bold">
+                Tangará da Serra & MT
+              </span>
+              <h3 className="text-sm font-extrabold text-white group-hover:text-emerald-200 transition">
+                Retirada na Cadeira & Sedex
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Retire na Barbearia c/ borrifada grátis ou Motoboy
+              </p>
+            </div>
+          </div>
+          <ChevronRight className="w-5 h-5 text-emerald-400 shrink-0 group-hover:translate-x-1 transition-transform" />
+        </div>
+      </section>
 
       {/* BANNER DO MOTOR DIRECT-TO-COMMERCE KYTTOIA */}
       <section className="max-w-4xl mx-auto px-4 mt-4">
@@ -661,6 +778,271 @@ export default function DinoLTKStorefront() {
               <p className="text-center text-[11px] text-slate-500">
                 📦 Entrega no mesmo dia para Tangará da Serra e envio para todo MT.
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DO QUIZ OLFATIVO KYTTOIA 2.5 FLASH */}
+      {quizAberto && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-amber-500/40 rounded-2xl max-w-md w-full p-6 relative shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <button
+              onClick={() => setQuizAberto(false)}
+              className="absolute top-4 right-4 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-full p-1.5 transition text-xs"
+            >
+              ✕
+            </button>
+
+            {/* Header do Quiz */}
+            <div className="flex items-center gap-2 mb-4">
+              <div className="p-2 rounded-xl bg-amber-500/20 text-amber-300">
+                <Compass className="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <span className="text-[10px] font-mono text-amber-400 uppercase tracking-widest block font-bold">
+                  Motor KyttoIA 2.5 Flash
+                </span>
+                <h2 className="text-base font-extrabold text-white">
+                  Consultor Olfativo Inteligente
+                </h2>
+              </div>
+            </div>
+
+            {!quizResultado ? (
+              <div>
+                {/* Barra de Progresso */}
+                <div className="w-full bg-slate-800 rounded-full h-1.5 mb-5 overflow-hidden">
+                  <div
+                    className="bg-gradient-to-r from-amber-500 to-yellow-400 h-1.5 transition-all duration-300"
+                    style={{ width: `${(quizEtapa / 3) * 100}%` }}
+                  />
+                </div>
+
+                {/* Etapa 1: Ocasião */}
+                {quizEtapa === 1 && (
+                  <div className="space-y-3">
+                    <span className="text-xs text-amber-400 font-bold block uppercase tracking-wide">
+                      Passo 1 de 3 • Ocasião Principal
+                    </span>
+                    <h3 className="text-sm font-bold text-white leading-snug">
+                      Onde você pretende mais usar esse perfume?
+                    </h3>
+                    <div className="space-y-2 mt-3">
+                      {[
+                        { id: 'calor', label: '🔥 Calor de Tangará (38°C) & Trabalho Diário', desc: 'Resistência ao sol sem desandar na pele' },
+                        { id: 'noite', label: '🌙 Noites, Baladas & Encontros a Dois', desc: 'Sedução, doçura e mistério' },
+                        { id: 'fazenda', label: '🚜 Fazenda, Agro, Lida & Rodeio', desc: 'Couro, café e especiarias de alta virilidade' },
+                        { id: 'escritorio', label: '💼 Reuniões & Escritório Climatizado', desc: 'Presença executiva e liderança refinada' }
+                      ].map(op => (
+                        <button
+                          key={op.id}
+                          onClick={() => responderQuiz('ocasiao', op.id)}
+                          className="w-full text-left p-3 rounded-xl border border-slate-800 bg-slate-950/70 hover:border-amber-500/60 hover:bg-amber-500/10 transition group"
+                        >
+                          <strong className="text-xs text-white group-hover:text-amber-200 block">{op.label}</strong>
+                          <span className="text-[10px] text-slate-400 mt-0.5 block">{op.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Etapa 2: Intensidade e Projeção */}
+                {quizEtapa === 2 && (
+                  <div className="space-y-3">
+                    <span className="text-xs text-amber-400 font-bold block uppercase tracking-wide">
+                      Passo 2 de 3 • Aura e Projeção
+                    </span>
+                    <h3 className="text-sm font-bold text-white leading-snug">
+                      Qual sensação você quer provocar no ambiente?
+                    </h3>
+                    <div className="space-y-2 mt-3">
+                      {[
+                        { id: 'frescor', label: '🧊 Frescor Gelado & Sensação de Banho Tomado', desc: 'Leveza aristocrática que não sufoca ninguém' },
+                        { id: 'marcante', label: '💥 Projeção Monstruosa (Chega Antes no Ambiente)', desc: 'Campeão de elogios imediatos por onde passa' },
+                        { id: 'elegancia', label: '👑 Aura de Riqueza & Exclusividade de Nicho', desc: 'Extrait de Parfum com fixação de mais de 12h' }
+                      ].map(op => (
+                        <button
+                          key={op.id}
+                          onClick={() => responderQuiz('intensidade', op.id)}
+                          className="w-full text-left p-3 rounded-xl border border-slate-800 bg-slate-950/70 hover:border-amber-500/60 hover:bg-amber-500/10 transition group"
+                        >
+                          <strong className="text-xs text-white group-hover:text-amber-200 block">{op.label}</strong>
+                          <span className="text-[10px] text-slate-400 mt-0.5 block">{op.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Etapa 3: Formato */}
+                {quizEtapa === 3 && (
+                  <div className="space-y-3">
+                    <span className="text-xs text-amber-400 font-bold block uppercase tracking-wide">
+                      Passo 3 de 3 • Formato Ideal
+                    </span>
+                    <h3 className="text-sm font-bold text-white leading-snug">
+                      Como prefere começar sua experiência?
+                    </h3>
+                    <div className="space-y-2 mt-3">
+                      {[
+                        { id: 'decant', label: '✨ Decant Oficial 10ml (~150 borrifadas)', desc: 'Preço acessível (R$ 79 a R$ 139), cabe no porta-luvas/bolso' },
+                        { id: 'frasco', label: '👑 Frasco Lacrado de Colecionador (100ml)', desc: 'Frasco original lacrado com selo de originalidade' }
+                      ].map(op => (
+                        <button
+                          key={op.id}
+                          onClick={() => responderQuiz('formato', op.id)}
+                          className="w-full text-left p-3 rounded-xl border border-slate-800 bg-slate-950/70 hover:border-amber-500/60 hover:bg-amber-500/10 transition group"
+                        >
+                          <strong className="text-xs text-white group-hover:text-amber-200 block">{op.label}</strong>
+                          <span className="text-[10px] text-slate-400 mt-0.5 block">{op.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Tela de Resultado do Motor KyttoIA */
+              <div className="space-y-4">
+                <div className="bg-gradient-to-r from-amber-500/20 via-yellow-500/10 to-transparent border border-amber-500/40 rounded-xl p-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <span className="text-xs font-extrabold text-amber-300">
+                      Match Perfeito KyttoIA
+                    </span>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-500/30">
+                    {quizResultado.matchPct}% de Compatibilidade
+                  </span>
+                </div>
+
+                <div className="bg-slate-950 rounded-xl p-3.5 border border-slate-800 flex gap-3.5 items-center">
+                  <img
+                    src={quizResultado.produto.imagemUrl}
+                    alt={quizResultado.produto.nome}
+                    className="w-16 h-16 rounded-lg object-cover shrink-0 border border-amber-500/30"
+                  />
+                  <div>
+                    <h4 className="text-sm font-extrabold text-white leading-tight">
+                      {quizResultado.produto.nome}
+                    </h4>
+                    <span className="text-[11px] text-amber-400 font-medium block mt-0.5">
+                      {quizResultado.produto.categoria}
+                    </span>
+                    <span className="text-xs font-bold text-white block mt-1">
+                      {quizResultado.formatoRecomendado === 'decant' && quizResultado.produto.permiteDecant
+                        ? `Decant 10ml: R$ ${quizResultado.produto.precoDecant10ml.toFixed(2)}`
+                        : `Frasco: R$ ${quizResultado.produto.precoFrasco.toFixed(2)}`}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800 text-xs text-slate-300 leading-relaxed">
+                  <strong className="text-amber-300 block mb-1">Por que é o perfume perfeito para você em MT?</strong>
+                  {quizResultado.justificativa}
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  <button
+                    onClick={() => {
+                      abrirWhatsAppComProduto(quizResultado.produto, quizResultado.formatoRecomendado)
+                      setQuizAberto(false)
+                    }}
+                    className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-2 transition shadow-lg shadow-amber-500/20"
+                  >
+                    <ShoppingBag className="w-4 h-4" />
+                    Pedir {quizResultado.formatoRecomendado === 'decant' ? 'Decant 10ml' : 'Frasco'} no WhatsApp do Dino
+                  </button>
+
+                  <button
+                    onClick={reiniciarQuiz}
+                    className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-2 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 transition"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Refazer Quiz
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE OPÇÕES DE FRETE E RETIRADA NA CADEIRA */}
+      {modalFreteAberto && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-emerald-500/40 rounded-2xl max-w-md w-full p-6 relative shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <button
+              onClick={() => setModalFreteAberto(false)}
+              className="absolute top-4 right-4 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-full p-1.5 transition text-xs"
+            >
+              ✕
+            </button>
+
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-300">
+                <Truck className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-widest block font-bold">
+                  Logística Regional Dino
+                </span>
+                <h2 className="text-base font-extrabold text-white">
+                  Como Receber seu Perfume
+                </h2>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              {/* Opção 1: Retirada na Cadeira */}
+              <div className="bg-slate-950 border border-amber-500/30 rounded-xl p-3.5">
+                <div className="flex items-center justify-between mb-1">
+                  <strong className="text-white flex items-center gap-1.5 text-xs">
+                    <Scissors className="w-3.5 h-3.5 text-amber-400" /> Retirada na Barbearia (Cadeira)
+                  </strong>
+                  <span className="text-emerald-400 font-bold font-mono">GRÁTIS</span>
+                </div>
+                <p className="text-slate-400 text-[11px] leading-relaxed">
+                  Retire no Centro de Tangará da Serra. Você ganha de cortesia uma borrifada teste de degustação na cadeira com a consultoria do Dino ou barbeiro!
+                </p>
+              </div>
+
+              {/* Opção 2: Motoboy Tangará */}
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5">
+                <div className="flex items-center justify-between mb-1">
+                  <strong className="text-white flex items-center gap-1.5 text-xs">
+                    <Zap className="w-3.5 h-3.5 text-emerald-400" /> Motoboy Express Tangará da Serra
+                  </strong>
+                  <span className="text-amber-300 font-bold font-mono">R$ 15,00</span>
+                </div>
+                <p className="text-slate-400 text-[11px] leading-relaxed">
+                  Entrega no mesmo dia em qualquer bairro de Tangará da Serra/MT. Grátis em pedidos acima de R$ 150,00!
+                </p>
+              </div>
+
+              {/* Opção 3: Sedex MT */}
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5">
+                <div className="flex items-center justify-between mb-1">
+                  <strong className="text-white flex items-center gap-1.5 text-xs">
+                    <Truck className="w-3.5 h-3.5 text-blue-400" /> Sedex Regional Mato Grosso
+                  </strong>
+                  <span className="text-slate-300 font-bold font-mono">1 a 3 dias</span>
+                </div>
+                <p className="text-slate-400 text-[11px] leading-relaxed">
+                  Envio expresso para Cuiabá, Rondonópolis, Sinop, Lucas do Rio Verde, Sorriso, Nova Mutum e Campo Novo do Parecis com rastreamento seguro.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <button
+                onClick={() => setModalFreteAberto(false)}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-4 rounded-xl text-xs transition"
+              >
+                Entendi, voltar para vitrine
+              </button>
             </div>
           </div>
         </div>

@@ -145,6 +145,12 @@ import {
   formatarPautaDiariaWhatsApp,
   dispararPautaDiariaWhatsApp
 } from './core/dino-ltk-commerce-engine.js';
+import {
+  iniciarAgendadorDinoGestao,
+  obterStatusAgendadorDino,
+  executarPautaDiaria,
+  executarFechamentoNoturno
+} from './core/dino-gestao-scheduler.js';
 import { kyttoEventBus, TOPICOS_KYTTO } from './core/kytto-event-bus.js';
 import { armazenarCopiaSegura, listarArquivosSeguros, obterEstatisticasArmazenamento } from './core/armazenamento-seguro.js';
 import { configuracaoResumo, configuracaoResumoPublica, diaLocal as diaLocalResumo, enviarResumo, lojaDoCanal as lojaDoCanalResumo, montarResumoDiario, startResumoDiarioWorker } from './core/dino-resumo-diario.js';
@@ -1045,6 +1051,38 @@ app.post('/api/admin/dino/gestao-instagram/disparar-pauta-whatsapp', async (req,
   try {
     const { diaSemana, telefones } = req.body || {};
     const resultado = await dispararPautaDiariaWhatsApp({ diaSemana, targetPhones: telefones });
+    res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Status do Agendador Operacional Dino (Pauta 08h30 e Fechamento 20h00 Cuiabá)
+app.get('/api/admin/dino/scheduler/status', (req, res) => {
+  try {
+    const status = obterStatusAgendadorDino();
+    res.json({ ok: true, status });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Acionamento manual sob demanda da Pauta Diária
+app.post('/api/admin/dino/scheduler/disparar-pauta-agora', async (req, res) => {
+  try {
+    const { telefones } = req.body || {};
+    const resultado = await executarPautaDiaria({ forcar: true, targetPhones: telefones });
+    res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Acionamento manual sob demanda do Fechamento Noturno Consolidado
+app.post('/api/admin/dino/scheduler/disparar-fechamento-agora', async (req, res) => {
+  try {
+    const { telefones } = req.body || {};
+    const resultado = await executarFechamentoNoturno({ forcar: true, targetPhones: telefones, db: commerceDb });
     res.json({ ok: true, ...resultado });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -13453,6 +13491,7 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
   startDinoRecuperacaoAtivaWorker();
   startDinoDailyReportWorker();
   inicializarDinoWhatsGestaoHub();
+  iniciarAgendadorDinoGestao({ db: commerceDb });
   startAiBrainSchedulers();
   // Cobranças da barbearia: sinal vencido libera o horário (e avisa a lista de
   // espera); a cobrança do clube é gerada e enviada uma vez por hora.

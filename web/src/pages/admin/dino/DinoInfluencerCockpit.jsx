@@ -88,6 +88,9 @@ export default function DinoInfluencerCockpit() {
   const [disparandoPauta, setDisparandoPauta] = useState(false)
   const [statusPauta, setStatusPauta] = useState(null)
   const [diaPautaSelecionado, setDiaPautaSelecionado] = useState(null)
+  const [statusScheduler, setStatusScheduler] = useState(null)
+  const [executandoScheduler, setExecutandoScheduler] = useState(false)
+  const [msgScheduler, setMsgScheduler] = useState(null)
 
   // Carregar dados da API
   const carregarCockpit = useCallback(async () => {
@@ -130,6 +133,11 @@ export default function DinoInfluencerCockpit() {
           receitaTotalDia: 3020
         })
       }
+
+      // Status do agendador autônomo
+      api.get('/api/admin/dino/scheduler/status')
+        .then(r => { if (r && r.ok) setStatusScheduler(r.status) })
+        .catch(() => {})
     } catch {
       // Ignora erro
     } finally {
@@ -175,6 +183,43 @@ export default function DinoInfluencerCockpit() {
       setStatusPauta({ sucesso: false, msg: e.message })
     } finally {
       setDisparandoPauta(false)
+    }
+  }
+
+  // Disparos manuais do Agendador Autônomo
+  const handleDispararPautaAgendador = async () => {
+    setExecutandoScheduler(true)
+    setMsgScheduler(null)
+    try {
+      const res = await api.post('/api/admin/dino/scheduler/disparar-pauta-agora', {})
+      if (res && res.ok) {
+        setMsgScheduler({ sucesso: true, texto: `Pauta matinal (08h30) disparada com sucesso para a governança!` })
+        api.get('/api/admin/dino/scheduler/status').then(r => r?.ok && setStatusScheduler(r.status)).catch(() => {})
+      } else {
+        setMsgScheduler({ sucesso: false, texto: res?.motivo || 'Erro ao disparar pauta' })
+      }
+    } catch (e) {
+      setMsgScheduler({ sucesso: false, texto: e.message })
+    } finally {
+      setExecutandoScheduler(false)
+    }
+  }
+
+  const handleDispararFechamentoAgendador = async () => {
+    setExecutandoScheduler(true)
+    setMsgScheduler(null)
+    try {
+      const res = await api.post('/api/admin/dino/scheduler/disparar-fechamento-agora', {})
+      if (res && res.ok) {
+        setMsgScheduler({ sucesso: true, texto: `Fechamento consolidado (20h00) disparado com sucesso para a governança!` })
+        api.get('/api/admin/dino/scheduler/status').then(r => r?.ok && setStatusScheduler(r.status)).catch(() => {})
+      } else {
+        setMsgScheduler({ sucesso: false, texto: res?.motivo || 'Erro ao disparar fechamento' })
+      }
+    } catch (e) {
+      setMsgScheduler({ sucesso: false, texto: e.message })
+    } finally {
+      setExecutandoScheduler(false)
     }
   }
 
@@ -921,6 +966,122 @@ export default function DinoInfluencerCockpit() {
             }}>
               {statusPauta.sucesso ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
               {statusPauta.msg}
+            </div>
+          )}
+
+          {/* CARD DE GOVERNANÇA DO AGENDADOR OPERACIONAL AUTÔNOMO */}
+          <div style={{
+            background: '#0f172a',
+            border: '1px solid rgba(59, 130, 246, 0.3)',
+            borderRadius: 14,
+            padding: 20,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 16
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{
+                width: 44,
+                height: 44,
+                borderRadius: 12,
+                background: 'rgba(59, 130, 246, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#60a5fa'
+              }}>
+                <Clock size={22} />
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#f8fafc' }}>
+                    Agendador Operacional Autônomo (Cuiabá/MT)
+                  </h3>
+                  <span style={{
+                    background: 'rgba(34, 197, 94, 0.2)',
+                    color: '#4ade80',
+                    fontSize: 11,
+                    fontWeight: 800,
+                    padding: '2px 8px',
+                    borderRadius: 12,
+                    border: '1px solid rgba(34, 197, 94, 0.3)'
+                  }}>
+                    🟢 Em Execução Contínua
+                  </span>
+                </div>
+                <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#94a3b8' }}>
+                  Disparos automáticos diários: <strong>08h30</strong> (Pauta & Roteiro Reels) e <strong>20h00</strong> (Fechamento Consolidado Trex/SocialBlade/LTK) via WhatsApp.
+                </p>
+                <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                  Canais: 5514997462929 (Rodrigo) • 5565996722055 (Dino) • 556596722055 (Gestão)
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={handleDispararPautaAgendador}
+                disabled={executandoScheduler}
+                style={{
+                  background: 'rgba(217, 119, 6, 0.15)',
+                  color: '#fbbf24',
+                  border: '1px solid rgba(217, 119, 6, 0.4)',
+                  borderRadius: 8,
+                  padding: '8px 14px',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: executandoScheduler ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6
+                }}
+              >
+                <Zap size={14} />
+                Disparar Pauta 08h30 Agora
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDispararFechamentoAgendador}
+                disabled={executandoScheduler}
+                style={{
+                  background: 'rgba(59, 130, 246, 0.15)',
+                  color: '#60a5fa',
+                  border: '1px solid rgba(59, 130, 246, 0.4)',
+                  borderRadius: 8,
+                  padding: '8px 14px',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: executandoScheduler ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6
+                }}
+              >
+                <BarChart3 size={14} />
+                Disparar Fechamento 20h00 Agora
+              </button>
+            </div>
+          </div>
+
+          {msgSender && (
+            <div style={{
+              background: msgScheduler.sucesso ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+              border: `1px solid ${msgSender.sucesso ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+              color: msgScheduler.sucesso ? '#4ade80' : '#f87171',
+              padding: '10px 16px',
+              borderRadius: 10,
+              fontSize: 13,
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8
+            }}>
+              {msgSender.sucesso ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+              {msgSender.texto}
             </div>
           )}
 
