@@ -17,8 +17,8 @@ SELECT
   cp.category_id, 
   cp.nome, 
   cp.descricao_curta,
-  50.00 AS preco_custo,
-  89.90 AS preco_venda,
+  COALESCE((SELECT cvp.custo FROM commerce_variant_prices cvp JOIN commerce_product_variants cpv ON cpv.id = cvp.variant_id WHERE cpv.product_id = cp.id LIMIT 1), 50.00) AS preco_custo,
+  COALESCE((SELECT cvp.preco FROM commerce_variant_prices cvp JOIN commerce_product_variants cpv ON cpv.id = cvp.variant_id WHERE cpv.product_id = cp.id LIMIT 1), 89.90) AS preco_venda,
   COALESCE(cp.slug, 'STAL-' || substring(cp.id::text, 1, 8)) AS codigo_interno,
   (cp.status = 'active') AS ativo,
   cp.criado_em,
@@ -281,7 +281,7 @@ VALUES (
 
 INSERT INTO movimentacoes_estoque (id, empresa_id, loja_id, produto_id, usuario_id, fornecedor_id, quantidade, tipo, motivo, custo_unitario, documento_numero, documento_serie, documento_tipo, lote, validade, data_operacao)
 VALUES (
-  'm0a10003-31f7-40c2-945f-9e793b504000',
+  'da010003-31f7-40c2-945f-9e793b504000',
   '31f70c83-9172-40c2-945f-9e793b5048be',
   '6a15e943-2570-4f29-a2d5-d900d2812911',
   '1492c857-8c78-426a-b750-630f74007020',
@@ -333,7 +333,7 @@ VALUES (
 
 INSERT INTO movimentacoes_estoque (id, empresa_id, loja_id, produto_id, usuario_id, fornecedor_id, quantidade, tipo, motivo, custo_unitario, documento_numero, documento_serie, documento_tipo, lote, validade, data_operacao)
 VALUES (
-  'm0a10003-31f7-40c2-945f-9e793b504001',
+  'da010003-31f7-40c2-945f-9e793b504001',
   '31f70c83-9172-40c2-945f-9e793b5048be',
   '6a15e943-2570-4f29-a2d5-d900d2812911',
   '70af09f9-4749-41b2-bc7b-c813743dcbc3',
@@ -385,7 +385,7 @@ VALUES (
 
 INSERT INTO movimentacoes_estoque (id, empresa_id, loja_id, produto_id, usuario_id, fornecedor_id, quantidade, tipo, motivo, custo_unitario, documento_numero, documento_serie, documento_tipo, lote, validade, data_operacao)
 VALUES (
-  'm0a10003-31f7-40c2-945f-9e793b504002',
+  'da010003-31f7-40c2-945f-9e793b504002',
   '31f70c83-9172-40c2-945f-9e793b5048be',
   '6a15e943-2570-4f29-a2d5-d900d2812911',
   '023e1548-9cbb-4ccf-a2b1-45a35c1efae2',
@@ -437,7 +437,7 @@ VALUES (
 
 INSERT INTO movimentacoes_estoque (id, empresa_id, loja_id, produto_id, usuario_id, fornecedor_id, quantidade, tipo, motivo, custo_unitario, documento_numero, documento_serie, documento_tipo, lote, validade, data_operacao)
 VALUES (
-  'm0a10003-31f7-40c2-945f-9e793b504003',
+  'da010003-31f7-40c2-945f-9e793b504003',
   '31f70c83-9172-40c2-945f-9e793b5048be',
   '6a15e943-2570-4f29-a2d5-d900d2812911',
   '70accb9a-3a38-49f5-b864-a24a341e5980',
@@ -489,7 +489,7 @@ VALUES (
 
 INSERT INTO movimentacoes_estoque (id, empresa_id, loja_id, produto_id, usuario_id, fornecedor_id, quantidade, tipo, motivo, custo_unitario, documento_numero, documento_serie, documento_tipo, lote, validade, data_operacao)
 VALUES (
-  'm0a10003-31f7-40c2-945f-9e793b504004',
+  'da010003-31f7-40c2-945f-9e793b504004',
   '31f70c83-9172-40c2-945f-9e793b5048be',
   '6a15e943-2570-4f29-a2d5-d900d2812911',
   '740c0e64-4abc-43e5-9115-10bad0ef052f',
@@ -541,7 +541,7 @@ VALUES (
 
 INSERT INTO movimentacoes_estoque (id, empresa_id, loja_id, produto_id, usuario_id, fornecedor_id, quantidade, tipo, motivo, custo_unitario, documento_numero, documento_serie, documento_tipo, lote, validade, data_operacao)
 VALUES (
-  'm0a10003-31f7-40c2-945f-9e793b504005',
+  'da010003-31f7-40c2-945f-9e793b504005',
   '31f70c83-9172-40c2-945f-9e793b5048be',
   '6a15e943-2570-4f29-a2d5-d900d2812911',
   '0522459b-d8ab-44ff-ac52-6371d20e57c7',
@@ -587,7 +587,7 @@ INSERT INTO fin_lancamentos (
   parcela, parcelas, chave, origem, origem_id, meio_pagamento,
   criado_por, criado_em, atualizado_em
 ) VALUES (
-  'p0a10003-31f7-40c2-945f-9e793b504001',
+  'fa010003-31f7-40c2-945f-9e793b504001',
   '31f70c83-9172-40c2-945f-9e793b5048be',
   '6a15e943-2570-4f29-a2d5-d900d2812911',
   'c1f70001-31f7-40c2-945f-9e793b5048be',
@@ -624,7 +624,7 @@ INSERT INTO fin_lancamentos (
   parcela, parcelas, chave, origem, origem_id, meio_pagamento,
   criado_por, criado_em, atualizado_em
 ) VALUES (
-  'p0a10003-31f7-40c2-945f-9e793b504002',
+  'fa010003-31f7-40c2-945f-9e793b504002',
   '31f70c83-9172-40c2-945f-9e793b5048be',
   '6a15e943-2570-4f29-a2d5-d900d2812911',
   'c1f70001-31f7-40c2-945f-9e793b5048be',
@@ -661,7 +661,7 @@ INSERT INTO fin_lancamentos (
   parcela, parcelas, chave, origem, origem_id, meio_pagamento,
   criado_por, criado_em, atualizado_em
 ) VALUES (
-  'p0a10003-31f7-40c2-945f-9e793b504003',
+  'fa010003-31f7-40c2-945f-9e793b504003',
   '31f70c83-9172-40c2-945f-9e793b5048be',
   '6a15e943-2570-4f29-a2d5-d900d2812911',
   'c1f70001-31f7-40c2-945f-9e793b5048be',
