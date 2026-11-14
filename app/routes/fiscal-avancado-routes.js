@@ -4,7 +4,14 @@
 
 import { Router } from 'express';
 import { calcularIcmsStMt, calcularMvaAjustada, ALIQUOTAS_MT } from '../core/tributacao-icms-st-mt.js';
-import { manifestarNota, listarNotasDestinadas, processarEntradaMercadoria, EVENTOS_MDE } from '../core/manifestacao-destinatario-mde.js';
+import {
+  manifestarNota,
+  manifestarNotaAsync,
+  listarNotasDestinadas,
+  listarNotasDestinadasAsync,
+  processarEntradaMercadoria,
+  EVENTOS_MDE,
+} from '../core/manifestacao-destinatario-mde.js';
 
 export function createFiscalAvancadoRouter({ auth, obterEmpresaId }) {
   const router = Router();
@@ -52,24 +59,28 @@ export function createFiscalAvancadoRouter({ auth, obterEmpresaId }) {
   });
 
   // Lista notas destinadas contra o CNPJ da empresa
-  router.get('/mde/notas-destinadas', (req, res) => {
-    const empresaId = typeof obterEmpresaId === 'function' ? obterEmpresaId(req) : req.empresaId;
-    const notas = listarNotasDestinadas(empresaId);
-    return res.json({
-      sucesso: true,
-      total: notas.length,
-      notas,
-    });
-  });
-
-  // Registra manifestação de uma NF-e
-  router.post('/mde/manifestar', (req, res) => {
+  router.get('/mde/notas-destinadas', async (req, res) => {
     try {
       const empresaId = typeof obterEmpresaId === 'function' ? obterEmpresaId(req) : req.empresaId;
-      const evento = manifestarNota({
+      const notas = await listarNotasDestinadasAsync(empresaId);
+      return res.json({
+        sucesso: true,
+        total: notas.length,
+        notas,
+      });
+    } catch (err) {
+      return res.status(500).json({ sucesso: false, erro: err.message });
+    }
+  });
+
+  // Registra manifestação de uma NF-e e alimenta automaticamente o ERP ao confirmar
+  router.post('/mde/manifestar', async (req, res) => {
+    try {
+      const empresaId = typeof obterEmpresaId === 'function' ? obterEmpresaId(req) : req.empresaId;
+      const evento = await manifestarNotaAsync({
         ...req.body,
         empresaId,
-        usuario: req.user?.username || req.user?.email || 'operador',
+        usuario: req.user?.username || req.user?.email || req.body?.usuario || 'Silvester Natal (Stallone)',
       });
       return res.status(201).json({
         sucesso: true,

@@ -58,7 +58,7 @@ export const TENANTS_OFICIAIS = {
     roleIdOwner: 'b125e523-957d-4d12-a881-56b958ecec45',
     roleIdStaff: '85f0c5c5-584b-4d9f-946e-a348c3688483',
     usuarios: [
-      { id: 'usr-casanova-keyuser-01', username: 'casanova', email: 'casanova@casanovaimoveistga.com.br', nome: 'Key User - Imóveis (Casa Nova)', role: 'keyuser', pgRole: 'keyuser_imoveis', isOwner: false },
+      { id: 'usr-casanova-keyuser-01', username: 'casanova', email: 'casanova@casanovaimoveistga.com.br', nome: 'Key User - Imóveis (Casa Nova)', role: 'keyuser', pgRole: 'operador', isOwner: false },
       { id: 'usr-casanova-admin-01', username: 'admin_casanova', email: 'contato@casanovaimoveistga.com.br', nome: 'Administrador Casa Nova', role: 'organizador', pgRole: 'gerente', isOwner: true },
     ]
   },
@@ -115,7 +115,7 @@ export async function sincronizarTenantsEquipes(commerceDb) {
             config.empresaId,
             config.nome,
             String(config.cnpj || '12345678000199').replace(/\D/g, '').padEnd(14, '0').slice(0, 14),
-            tenantKey === 'palatare' ? 'restaurante' : (tenantKey === 'casanova' ? 'loja' : (tenantKey === 'supermercado' ? 'supermercado' : (tenantKey === 'barbearia' || tenantKey === 'dino' ? 'barbearia' : 'outro')))
+            tenantKey === 'palatare' ? 'restaurante' : (tenantKey === 'casanova' || tenantKey === 'stallone' ? 'loja' : (tenantKey === 'supermercado' ? 'supermercado' : (tenantKey === 'barbearia' || tenantKey === 'dino' ? 'barbearia' : 'outro')))
           ]
         );
         if (config.lojaId) {
