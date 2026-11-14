@@ -13,7 +13,7 @@ VALUES (
   'b7b7ac01-8e50-4b61-8c79-de4aaa916db1',
   'Casa Nova Materiais para Construção',
   'Casa Nova Materiais para Construcao Ltda',
-  '03.882.498/0001-10',
+  '03882498000110',
   true,
   now(),
   now(),
