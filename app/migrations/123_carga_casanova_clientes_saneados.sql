@@ -10,7 +10,7 @@
 INSERT INTO commerce_customers (
   id, empresa_id, nome, email, email_normalizado, telefone, telefone_normalizado,
   documento_mascarado, tipo, consentimentos, metadados, criado_em, atualizado_em
-) VALUES
+) OVERRIDING SYSTEM VALUE VALUES
   ('8f47a78d-98d1-58cc-895a-447dc90ec017', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Matheus Lizalli Soares', NULL, NULL, '+5565999219896', '5565999219896', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "52657002", "fontes": [{"origem": "avec_commerce", "id_origem": "00003f0c-de68-47c0-8e8d-62019db9629c", "nome_raw": "Matheus Lizalli Soares", "criado_em": "2026-10-11T13:47:11.999916Z"}]}'::jsonb, '2026-10-11T13:47:11.999916Z'::timestamptz, now()),
   ('382708cd-d8ee-5af1-ab09-7f67fc297483', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Rodrigo Cantelli', NULL, NULL, '+5516992362400', '5516992362400', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": null, "fontes": [{"origem": "avec_commerce", "id_origem": "000afa51-d98a-4cdd-91d1-4e6cb26aad95", "nome_raw": "Rodrigo Cantelli", "criado_em": "2026-10-11T13:50:09.802866Z"}]}'::jsonb, '2026-10-11T13:50:09.802866Z'::timestamptz, now()),
   ('6b8aaefb-58e1-5860-a63f-b1cd20f2271d', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Davi Alves', NULL, NULL, '+5565998086207', '5565998086207', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "52656594", "fontes": [{"origem": "avec_commerce", "id_origem": "00212585-4e8a-4e17-8e7a-2ae68a546f6b", "nome_raw": "Davi Alves", "criado_em": "2026-10-11T13:36:12.645829Z"}]}'::jsonb, '2026-10-11T13:36:12.645829Z'::timestamptz, now()),
@@ -223,7 +223,7 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO commerce_customers (
   id, empresa_id, nome, email, email_normalizado, telefone, telefone_normalizado,
   documento_mascarado, tipo, consentimentos, metadados, criado_em, atualizado_em
-) VALUES
+) OVERRIDING SYSTEM VALUE VALUES
   ('321f5cbd-833e-5c89-a218-1f5f4b6dc025', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Eduardo Pereira', NULL, NULL, '+5517996157425', '5517996157425', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "52656295", "fontes": [{"origem": "avec_commerce", "id_origem": "0f3035e1-ee61-44be-859b-d4d5b05c91bd", "nome_raw": "Eduardo Pereira", "criado_em": "2026-10-11T13:37:36.864754Z"}]}'::jsonb, '2026-10-11T13:37:36.864754Z'::timestamptz, now()),
   ('f0a495aa-d5f1-5c0e-906d-6a39dc855cb3', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Vitor', NULL, NULL, '+5511999502989', '5511999502989', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": null, "fontes": [{"origem": "avec_commerce", "id_origem": "0f370146-4892-432c-a8bd-5f690f752cfa", "nome_raw": "Vitor", "criado_em": "2026-10-11T13:52:32.16187Z"}]}'::jsonb, '2026-10-11T13:52:32.16187Z'::timestamptz, now()),
   ('81a7624f-3bbd-56a9-8cfb-0dba0f79541a', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Rodrigo Corrêa', NULL, NULL, '+5517992806690', '5517992806690', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": null, "fontes": [{"origem": "avec_commerce", "id_origem": "0f4fa2c4-4bbf-4b93-b7ad-ad72f0342e6a", "nome_raw": "Rodrigo Corrêa", "criado_em": "2026-10-11T13:50:10.653035Z"}]}'::jsonb, '2026-10-11T13:50:10.653035Z'::timestamptz, now()),
@@ -436,7 +436,7 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO commerce_customers (
   id, empresa_id, nome, email, email_normalizado, telefone, telefone_normalizado,
   documento_mascarado, tipo, consentimentos, metadados, criado_em, atualizado_em
-) VALUES
+) OVERRIDING SYSTEM VALUE VALUES
   ('3849004f-bef2-5dcc-8925-9d9f99b66a80', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Eloisa Garcia Estrategista', NULL, NULL, '+5565999437303', '5565999437303', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": null, "fontes": [{"origem": "avec_commerce", "id_origem": "20899e26-92d6-41f8-be37-24407927a4b6", "nome_raw": "Eloisa Garcia Estrategista", "criado_em": "2026-10-11T13:37:58.588924Z"}]}'::jsonb, '2026-10-11T13:37:58.588924Z'::timestamptz, now()),
   ('77e87dd1-1bdc-5023-8969-42206db78101', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Mcell Assist Tecnica', NULL, NULL, '+5565999509118', '5565999509118', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": null, "fontes": [{"origem": "avec_commerce", "id_origem": "208d6c75-2238-4c7c-94c1-7b2d72144678", "nome_raw": "Mcell Assist Tecnica", "criado_em": "2026-10-11T13:47:30.111433Z"}]}'::jsonb, '2026-10-11T13:47:30.111433Z'::timestamptz, now()),
   ('6569e730-d575-5b10-bd05-8b0108ed8ffc', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Cesar Augusto', NULL, NULL, '+5565999877876', '5565999877876', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": null, "fontes": [{"origem": "avec_commerce", "id_origem": "20950415-7a35-4b6d-bd71-0dc7fed25e92", "nome_raw": "Cesar Augusto", "criado_em": "2026-10-11T13:34:57.423537Z"}]}'::jsonb, '2026-10-11T13:34:57.423537Z'::timestamptz, now()),
@@ -649,7 +649,7 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO commerce_customers (
   id, empresa_id, nome, email, email_normalizado, telefone, telefone_normalizado,
   documento_mascarado, tipo, consentimentos, metadados, criado_em, atualizado_em
-) VALUES
+) OVERRIDING SYSTEM VALUE VALUES
   ('22431940-a00f-5d94-9209-fbc178f790ce', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'João Vitor Bilinski', NULL, NULL, '+5565998169342', '5565998169342', NULL, 'pf', '{}'::jsonb, '{"nota_cadastro": "Vitot", "barbearia_dino": true, "codigo_avec": "42871391", "fontes": [{"origem": "avec_commerce", "id_origem": "305f3d8c-29e6-41c4-b5e7-aa08c716c08c", "nome_raw": "João Vitor Bilinski ( Vitot )", "criado_em": "2026-10-11T13:42:35.599572Z"}]}'::jsonb, '2026-10-11T13:42:35.599572Z'::timestamptz, now()),
   ('b5d9f782-6959-5877-bc8a-e33e1bddef51', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Thiago De Oliveira Maranhão', 'thiagomaranhao20@hotmail.com', 'thiagomaranhao20@hotmail.com', '+5565999098787', '5565999098787', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "16131347", "fontes": [{"origem": "avec_commerce", "id_origem": "3091d903-e492-43b2-905f-13934fe7815a", "nome_raw": "Thiago De Oliveira Maranhão", "criado_em": "2026-10-11T13:51:31.903572Z"}]}'::jsonb, '2026-10-11T13:51:31.903572Z'::timestamptz, now()),
   ('722e7c3b-71e8-55de-858e-65fa71be49d4', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Victor Gabriel Picinatto', NULL, NULL, '+5565999517161', '5565999517161', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "52656515", "fontes": [{"origem": "avec_commerce", "id_origem": "30a89f3e-6380-4bc0-864a-ca10cc0e187c", "nome_raw": "Victor Gabriel Picinatto", "criado_em": "2026-10-11T13:52:14.214503Z"}]}'::jsonb, '2026-10-11T13:52:14.214503Z'::timestamptz, now()),
@@ -862,7 +862,7 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO commerce_customers (
   id, empresa_id, nome, email, email_normalizado, telefone, telefone_normalizado,
   documento_mascarado, tipo, consentimentos, metadados, criado_em, atualizado_em
-) VALUES
+) OVERRIDING SYSTEM VALUE VALUES
   ('9830b052-dde9-5ff3-b721-fe1ff824b74f', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Marcos Biet', NULL, NULL, '+5565996801487', '5565996801487', NULL, 'pf', '{}'::jsonb, '{"atendente_preferencial": "Julio", "barbearia_dino": true, "codigo_avec": "41666588", "fontes": [{"origem": "avec_commerce", "id_origem": "40877e9e-c45b-40a9-9fe5-7bf215b48bf9", "nome_raw": "Marcos Biet ( Julio )", "criado_em": "2026-10-11T13:46:33.654026Z"}]}'::jsonb, '2026-10-11T13:46:33.654026Z'::timestamptz, now()),
   ('63c2cb85-3b53-5235-b1f8-89ad9428445b', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Erick Kawan', NULL, NULL, '+5565996952654', '5565996952654', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": null, "fontes": [{"origem": "avec_commerce", "id_origem": "409b4c39-3787-486a-ab57-6f8fc8d38a61", "nome_raw": "Erick Kawan", "criado_em": "2026-10-11T13:38:14.3048Z"}]}'::jsonb, '2026-10-11T13:38:14.3048Z'::timestamptz, now()),
   ('ba666750-1b8d-59e5-95a1-5734fbe1f508', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Fé Em Deus', NULL, NULL, '+5565992131341', '5565992131341', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": null, "fontes": [{"origem": "avec_commerce", "id_origem": "40d4430d-2081-42c4-9b11-4eb0d1d2bf96", "nome_raw": "Fé Em Deus", "criado_em": "2026-10-11T13:38:46.585776Z"}]}'::jsonb, '2026-10-11T13:38:46.585776Z'::timestamptz, now()),
@@ -1075,7 +1075,7 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO commerce_customers (
   id, empresa_id, nome, email, email_normalizado, telefone, telefone_normalizado,
   documento_mascarado, tipo, consentimentos, metadados, criado_em, atualizado_em
-) VALUES
+) OVERRIDING SYSTEM VALUE VALUES
   ('63bce848-0770-514b-b2d1-5af6e4f47e9c', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Douglas Do Carmo Pinto', 'douglascirurgiao@hotmail.com', 'douglascirurgiao@hotmail.com', '+5519981455633', '5519981455633', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "10855896", "fontes": [{"origem": "avec_commerce", "id_origem": "4fd398b1-8ec4-4900-b713-e6b5aa10a8b5", "nome_raw": "Douglas Do Carmo Pinto", "criado_em": "2026-10-11T13:36:53.808201Z"}]}'::jsonb, '2026-10-11T13:36:53.808201Z'::timestamptz, now()),
   ('046b60f3-263b-5d2f-9499-7b9ab7b7be00', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Jonatan Silva.', NULL, NULL, '+5565996097746', '5565996097746', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "52656622", "fontes": [{"origem": "avec_commerce", "id_origem": "4fd9f4ed-aac3-4202-ad9d-8c42d443df85", "nome_raw": "Jonatan Silva.", "criado_em": "2026-10-11T13:42:44.847763Z"}, {"origem": "whatsapp_lead", "id_origem": "dc63965c-95f3-4437-978f-ae7ef7f16e10", "nome_raw": "Lead WhatsApp 7746", "criado_em": "2026-11-04T17:01:25.597003Z"}]}'::jsonb, '2026-10-11T13:42:44.847763Z'::timestamptz, now()),
   ('40d49d52-5ba5-570a-83a3-55151804a2b7', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Henrique Pizzi', 'henriquepizzi9@gmail.com', 'henriquepizzi9@gmail.com', '+5565999282937', '5565999282937', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "17574443", "fontes": [{"origem": "avec_commerce", "id_origem": "4fdf5c3e-bdba-44ed-8829-b65d9e4ad75f", "nome_raw": "Henrique Pizzi", "criado_em": "2026-10-11T13:40:54.350174Z"}]}'::jsonb, '2026-10-11T13:40:54.350174Z'::timestamptz, now()),
@@ -1288,7 +1288,7 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO commerce_customers (
   id, empresa_id, nome, email, email_normalizado, telefone, telefone_normalizado,
   documento_mascarado, tipo, consentimentos, metadados, criado_em, atualizado_em
-) VALUES
+) OVERRIDING SYSTEM VALUE VALUES
   ('574c5316-bfde-567f-88d3-b84ddf5a5a64', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Gabriel Araújo Teixeira', NULL, NULL, '+5565999332064', '5565999332064', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "52657251", "nomes_alternativos_familia": ["Diana Luiza"], "fontes": [{"origem": "avec_commerce", "id_origem": "5f5088b3-7a12-43ed-b350-df83e78fe59f", "nome_raw": "Gabriel Araújo Teixeira", "criado_em": "2026-10-11T13:39:26.572226Z"}, {"origem": "avec_commerce", "id_origem": "813d6dc9-d180-40b7-89c0-a40e30fd7b2d", "nome_raw": "Diana Luiza", "criado_em": "2026-10-11T13:36:25.654878Z"}]}'::jsonb, '2026-10-11T13:36:25.654878Z'::timestamptz, now()),
   ('e36ec2ce-3297-5413-bdbc-923aa74f2d04', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'João Vitor Martins de Oliveira', NULL, NULL, '+5565996937476', '5565996937476', NULL, 'pf', '{}'::jsonb, '{"atendente_preferencial": "Kenidy", "barbearia_dino": true, "codigo_avec": "43893529", "fontes": [{"origem": "avec_commerce", "id_origem": "5f541ff8-ca2b-4947-abc9-27e437021d8a", "nome_raw": "João Vitor Martins de Oliveira (Kenidy)", "criado_em": "2026-10-11T13:42:37.696298Z"}]}'::jsonb, '2026-10-11T13:42:37.696298Z'::timestamptz, now()),
   ('89e90e45-ce39-5d8c-8903-60dfea5a57a3', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Lhays', NULL, NULL, '+5565999287799', '5565999287799', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": null, "fontes": [{"origem": "avec_commerce", "id_origem": "5f5597c3-b1db-4c93-bc8a-7cfbf6b2707e", "nome_raw": "Lhays", "criado_em": "2026-10-11T13:44:22.150959Z"}]}'::jsonb, '2026-10-11T13:44:22.150959Z'::timestamptz, now()),
@@ -1501,7 +1501,7 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO commerce_customers (
   id, empresa_id, nome, email, email_normalizado, telefone, telefone_normalizado,
   documento_mascarado, tipo, consentimentos, metadados, criado_em, atualizado_em
-) VALUES
+) OVERRIDING SYSTEM VALUE VALUES
   ('4d54abc1-b895-5e1e-a460-6fc5d37fedc7', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Amado Paulo Del Castel', NULL, NULL, '+5565998187633', '5565998187633', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "52656988", "fontes": [{"origem": "avec_commerce", "id_origem": "6e0e3e74-7827-42b9-ac84-aa44dce4a4b7", "nome_raw": "Amado Paulo Del Castel", "criado_em": "2026-10-11T13:32:51.649611Z"}]}'::jsonb, '2026-10-11T13:32:51.649611Z'::timestamptz, now()),
   ('bcbfe2dd-1ac9-570f-aa86-dbcfa6413f46', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Felipe Queiroz', NULL, NULL, '+5591986148975', '5591986148975', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "52656585", "fontes": [{"origem": "avec_commerce", "id_origem": "6e120c53-41cb-4382-9a88-4b5e0b7b8051", "nome_raw": "Felipe Queiroz", "criado_em": "2026-10-11T13:38:54.376641Z"}]}'::jsonb, '2026-10-11T13:38:54.376641Z'::timestamptz, now()),
   ('7b8f4b9b-c260-5b92-a7d2-43bdd2bd9ec1', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Leonardo Zamatta', NULL, NULL, '+5566999341065', '5566999341065', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "52656836", "fontes": [{"origem": "avec_commerce", "id_origem": "6e1e79b3-bf85-47bd-9fdd-bae7a92dc287", "nome_raw": "leonardo zamatta", "criado_em": "2026-10-11T13:44:17.057477Z"}]}'::jsonb, '2026-10-11T13:44:17.057477Z'::timestamptz, now()),
@@ -1714,7 +1714,7 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO commerce_customers (
   id, empresa_id, nome, email, email_normalizado, telefone, telefone_normalizado,
   documento_mascarado, tipo, consentimentos, metadados, criado_em, atualizado_em
-) VALUES
+) OVERRIDING SYSTEM VALUE VALUES
   ('13a71e01-f855-58d0-8dd0-d2cc1ab686f1', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Ct Pereira', NULL, NULL, '+5565999400488', '5565999400488', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "52543704", "fontes": [{"origem": "avec_commerce", "id_origem": "7b6b8af3-3ac4-48e7-ac16-3f8ed97f667d", "nome_raw": "Ct Pereira", "criado_em": "2026-10-11T13:35:43.306252Z"}]}'::jsonb, '2026-10-11T13:35:43.306252Z'::timestamptz, now()),
   ('d80d7bb3-ad62-5e84-a156-4d2e9de43b29', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Ihara', NULL, NULL, '+5566996907824', '5566996907824', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": null, "fontes": [{"origem": "avec_commerce", "id_origem": "7bc0ec11-c117-4d4e-a8be-c7b2d977eaa1", "nome_raw": "Ihara", "criado_em": "2026-10-11T13:41:12.402801Z"}]}'::jsonb, '2026-10-11T13:41:12.402801Z'::timestamptz, now()),
   ('2871ecb3-5fc8-5c2b-bd56-0489cbadeb80', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Sodemir', NULL, NULL, '+5565992696360', '5565992696360', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "52656398", "fontes": [{"origem": "avec_commerce", "id_origem": "7bc26601-1d4c-45c6-9fdb-32ca3e7e100f", "nome_raw": "Sodemir", "criado_em": "2026-10-11T13:51:05.604815Z"}]}'::jsonb, '2026-10-11T13:51:05.604815Z'::timestamptz, now()),
@@ -1927,7 +1927,7 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO commerce_customers (
   id, empresa_id, nome, email, email_normalizado, telefone, telefone_normalizado,
   documento_mascarado, tipo, consentimentos, metadados, criado_em, atualizado_em
-) VALUES
+) OVERRIDING SYSTEM VALUE VALUES
   ('5088149e-0f94-5fe3-b2af-4647caa96b8a', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Vivendo Cristo', NULL, NULL, '+5562995093254', '5562995093254', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": null, "fontes": [{"origem": "avec_commerce", "id_origem": "8b5a4fe0-db67-4d5c-8001-94a92e13310f", "nome_raw": "Vivendo Cristo", "criado_em": "2026-10-11T13:52:39.329126Z"}]}'::jsonb, '2026-10-11T13:52:39.329126Z'::timestamptz, now()),
   ('d20b29f6-c839-50df-ac0d-94d078667aab', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Brasil Sales', NULL, NULL, '+5565999541014', '5565999541014', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "52656206", "fontes": [{"origem": "avec_commerce", "id_origem": "8b73a4a5-5e00-4667-b3d6-95a781f84f84", "nome_raw": "Brasil Sales", "criado_em": "2026-10-11T13:33:57.394532Z"}]}'::jsonb, '2026-10-11T13:33:57.394532Z'::timestamptz, now()),
   ('a688aae9-f761-5dc2-aa12-58d315bfdd95', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Danilo Giroto', '5wffy5spxg@privaterelay.appleid.com', '5wffy5spxg@privaterelay.appleid.com', '+5565999971907', '5565999971907', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "13634269", "fontes": [{"origem": "avec_commerce", "id_origem": "8b740642-e35e-4f8b-9e10-b48f346e5e0b", "nome_raw": "Danilo Giroto", "criado_em": "2026-10-11T13:36:04.604498Z"}]}'::jsonb, '2026-10-11T13:36:04.604498Z'::timestamptz, now()),
@@ -2140,7 +2140,7 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO commerce_customers (
   id, empresa_id, nome, email, email_normalizado, telefone, telefone_normalizado,
   documento_mascarado, tipo, consentimentos, metadados, criado_em, atualizado_em
-) VALUES
+) OVERRIDING SYSTEM VALUE VALUES
   ('125b6572-acb9-5c82-971e-78d0e7cb3b6d', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Charles Junior', NULL, NULL, '+5565996423254', '5565996423254', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "52543685", "fontes": [{"origem": "avec_commerce", "id_origem": "9aae1fa3-7ec0-472a-a836-18698ea5fb0b", "nome_raw": "Charles Junior", "criado_em": "2026-10-11T13:35:01.670528Z"}]}'::jsonb, '2026-10-11T13:35:01.670528Z'::timestamptz, now()),
   ('39d56ac6-3450-50fa-a52f-0c5fdb9bf764', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Orley Ferreira', NULL, NULL, '+5565999672253', '5565999672253', NULL, 'pf', '{}'::jsonb, '{"atendente_preferencial": "Bruno", "barbearia_dino": true, "codigo_avec": "41602612", "fontes": [{"origem": "avec_commerce", "id_origem": "9ab20ea0-4b2b-4cc9-a1b1-3b4efb8bb6d7", "nome_raw": "Orley Ferreira ( Bruno )", "criado_em": "2026-10-11T13:48:15.462118Z"}]}'::jsonb, '2026-10-11T13:48:15.462118Z'::timestamptz, now()),
   ('74030eac-8365-5f30-acf6-5bfbf5325bd5', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Marcio Sousa', NULL, NULL, '+5566997113687', '5566997113687', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "52656182", "fontes": [{"origem": "avec_commerce", "id_origem": "9ad174e7-59dc-4a68-bda8-9f2029add4ec", "nome_raw": "marcio sousa", "criado_em": "2026-10-11T13:46:27.334618Z"}]}'::jsonb, '2026-10-11T13:46:27.334618Z'::timestamptz, now()),
@@ -2353,7 +2353,7 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO commerce_customers (
   id, empresa_id, nome, email, email_normalizado, telefone, telefone_normalizado,
   documento_mascarado, tipo, consentimentos, metadados, criado_em, atualizado_em
-) VALUES
+) OVERRIDING SYSTEM VALUE VALUES
   ('a8c5ff3e-ed14-51c8-bdc6-e3ec88ad6cf4', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Sem Nome', NULL, NULL, '+5565981335878', '5565981335878', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": null, "fontes": [{"origem": "avec_commerce", "id_origem": "a9c80252-4e02-4113-9fe6-6f76bc60b8c3", "nome_raw": "sem nome", "criado_em": "2026-10-11T13:50:49.499597Z"}]}'::jsonb, '2026-10-11T13:50:49.499597Z'::timestamptz, now()),
   ('37023ef7-ff07-5796-9642-8625b96482bb', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Hailton Tomasi Faz Lorenzetti', NULL, NULL, '+5565996743091', '5565996743091', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "20353026", "fontes": [{"origem": "avec_commerce", "id_origem": "a9d949b1-4c8e-470b-bd04-bdf386ed625a", "nome_raw": "Hailton Tomasi Faz Lorenzetti", "criado_em": "2026-10-11T13:40:39.453335Z"}]}'::jsonb, '2026-10-11T13:40:39.453335Z'::timestamptz, now()),
   ('98753015-51ed-5921-b300-9be0bcf33819', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Tião', NULL, NULL, '+5565999004443', '5565999004443', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "52656478", "fontes": [{"origem": "avec_commerce", "id_origem": "aa322e38-9d56-4708-ae76-c8ab90741838", "nome_raw": "Tião", "criado_em": "2026-10-11T13:51:46.148812Z"}]}'::jsonb, '2026-10-11T13:51:46.148812Z'::timestamptz, now()),
@@ -2566,7 +2566,7 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO commerce_customers (
   id, empresa_id, nome, email, email_normalizado, telefone, telefone_normalizado,
   documento_mascarado, tipo, consentimentos, metadados, criado_em, atualizado_em
-) VALUES
+) OVERRIDING SYSTEM VALUE VALUES
   ('38d2132b-d009-575c-9eb5-75be441b97f6', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Arquiteto e Engenheiro Diego Matias', NULL, NULL, '+5565999878675', '5565999878675', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": null, "fontes": [{"origem": "avec_commerce", "id_origem": "ba7b67f4-336f-406a-9bc4-c4a354a631ac", "nome_raw": "Arquiteto e Engenheiro Diego Matias", "criado_em": "2026-10-11T13:33:34.85104Z"}]}'::jsonb, '2026-10-11T13:33:34.85104Z'::timestamptz, now()),
   ('b7fabe05-0bfc-547b-8669-7b778ea92137', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Douglas Araujo Silva', NULL, NULL, '+5565999394313', '5565999394313', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "52657229", "fontes": [{"origem": "avec_commerce", "id_origem": "ba7bcb86-96f7-4638-b24e-0ceccfa72afd", "nome_raw": "Douglas Araujo Silva", "criado_em": "2026-10-11T13:36:50.986691Z"}]}'::jsonb, '2026-10-11T13:36:50.986691Z'::timestamptz, now()),
   ('82f775d2-c7a2-5e7f-9e86-f240472cb95d', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'All HANSER', NULL, NULL, '+5565999226406', '5565999226406', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": null, "fontes": [{"origem": "avec_commerce", "id_origem": "ba816386-4512-4d44-8930-46393a9e12c8", "nome_raw": "All HANSER", "criado_em": "2026-10-11T13:32:42.386951Z"}]}'::jsonb, '2026-10-11T13:32:42.386951Z'::timestamptz, now()),
@@ -2779,7 +2779,7 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO commerce_customers (
   id, empresa_id, nome, email, email_normalizado, telefone, telefone_normalizado,
   documento_mascarado, tipo, consentimentos, metadados, criado_em, atualizado_em
-) VALUES
+) OVERRIDING SYSTEM VALUE VALUES
   ('42518aff-4cc0-5468-95ce-21b1fdc6b20a', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Ct Nunes', NULL, NULL, '+5565999625161', '5565999625161', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "52543701", "fontes": [{"origem": "avec_commerce", "id_origem": "c833c625-4b7e-4fcf-8c3c-d24304233a1b", "nome_raw": "Ct Nunes", "criado_em": "2026-10-11T13:35:42.78161Z"}]}'::jsonb, '2026-10-11T13:35:42.78161Z'::timestamptz, now()),
   ('b4a5678b-97dd-5dc0-8c27-8315e1e22336', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Ary Junior', NULL, NULL, '+5565999878188', '5565999878188', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": null, "fontes": [{"origem": "avec_commerce", "id_origem": "c842c829-ed56-4111-a6b8-9229191f4a0b", "nome_raw": "Ary Junior", "criado_em": "2026-10-11T13:33:40.165871Z"}]}'::jsonb, '2026-10-11T13:33:40.165871Z'::timestamptz, now()),
   ('c5c5d775-33eb-5bb6-8b2f-80d29bca640a', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Alexsandrino Rodrigues', 'alexsandrino@hotmail.com', 'alexsandrino@hotmail.com', '+5565996330763', '5565996330763', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "11978128", "fontes": [{"origem": "avec_commerce", "id_origem": "c847b40f-c05c-47a2-9b91-d608d1ea6dd7", "nome_raw": "Alexsandrino Rodrigues", "criado_em": "2026-10-11T13:32:33.442181Z"}]}'::jsonb, '2026-10-11T13:32:33.442181Z'::timestamptz, now()),
@@ -2992,7 +2992,7 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO commerce_customers (
   id, empresa_id, nome, email, email_normalizado, telefone, telefone_normalizado,
   documento_mascarado, tipo, consentimentos, metadados, criado_em, atualizado_em
-) VALUES
+) OVERRIDING SYSTEM VALUE VALUES
   ('8d686d02-1b77-5e70-8f70-ac330589f74c', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Ze Mineiro', NULL, NULL, '+5565999871774', '5565999871774', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "19864001", "fontes": [{"origem": "avec_commerce", "id_origem": "d6d8afdc-8741-4df9-b497-0a28d0c95a47", "nome_raw": "Ze Mineiro", "criado_em": "2026-10-11T13:53:27.79865Z"}]}'::jsonb, '2026-10-11T13:53:27.79865Z'::timestamptz, now()),
   ('3e5874a2-ba7e-5b65-9035-2e568c43475b', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Kawan Hiarley', NULL, NULL, '+5565999096643', '5565999096643', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": null, "fontes": [{"origem": "avec_commerce", "id_origem": "d7257e06-7299-4ea6-b68e-235668f9bb02", "nome_raw": "Kawan Hiarley", "criado_em": "2026-10-11T13:43:40.599616Z"}]}'::jsonb, '2026-10-11T13:43:40.599616Z'::timestamptz, now()),
   ('ad348cd0-57a3-5632-a904-b9adcf4b2452', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Hugo Almeida', NULL, NULL, '+5565999692354', '5565999692354', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "52656391", "fontes": [{"origem": "avec_commerce", "id_origem": "d72dd16a-f682-4c3d-bb63-78b870d03315", "nome_raw": "Hugo Almeida", "criado_em": "2026-10-11T13:41:00.570929Z"}]}'::jsonb, '2026-10-11T13:41:00.570929Z'::timestamptz, now()),
@@ -3205,7 +3205,7 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO commerce_customers (
   id, empresa_id, nome, email, email_normalizado, telefone, telefone_normalizado,
   documento_mascarado, tipo, consentimentos, metadados, criado_em, atualizado_em
-) VALUES
+) OVERRIDING SYSTEM VALUE VALUES
   ('1cb70126-7860-5847-98d3-93abfe16bfb5', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Victor Emanuel', NULL, NULL, '+5565996049546', '5565996049546', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": null, "fontes": [{"origem": "avec_commerce", "id_origem": "e83b0d79-dcf3-4f08-90d8-a78c40a73789", "nome_raw": "Victor Emanuel", "criado_em": "2026-10-11T13:52:13.39763Z"}]}'::jsonb, '2026-10-11T13:52:13.39763Z'::timestamptz, now()),
   ('2e72d93a-231b-5149-a939-5f05846a12d0', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Dr Angel Medina', NULL, NULL, '+5565999727687', '5565999727687', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": null, "fontes": [{"origem": "avec_commerce", "id_origem": "e8567bb9-5a09-40a8-99b8-1d610b790ec9", "nome_raw": "Dr Angel Medina", "criado_em": "2026-10-11T13:36:56.486048Z"}]}'::jsonb, '2026-10-11T13:36:56.486048Z'::timestamptz, now()),
   ('bac40a65-7a80-5727-b25a-e6ac3cefdbf9', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Lucas Bueno', 'lucas_buenoamancio@hotmail.com', 'lucas_buenoamancio@hotmail.com', '+5567999528135', '5567999528135', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "11030066", "fontes": [{"origem": "avec_commerce", "id_origem": "e860704d-a208-4281-9f0a-ffdde1d2f46e", "nome_raw": "Lucas Bueno", "criado_em": "2026-10-11T13:44:39.848502Z"}]}'::jsonb, '2026-10-11T13:44:39.848502Z'::timestamptz, now()),
@@ -3418,7 +3418,7 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO commerce_customers (
   id, empresa_id, nome, email, email_normalizado, telefone, telefone_normalizado,
   documento_mascarado, tipo, consentimentos, metadados, criado_em, atualizado_em
-) VALUES
+) OVERRIDING SYSTEM VALUE VALUES
   ('ce59f283-ce8a-5686-ad1a-240772d39971', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Éder', NULL, NULL, '+5514999872518', '5514999872518', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": "52656544", "fontes": [{"origem": "avec_commerce", "id_origem": "f7f881a5-f92b-49c0-847d-4d0cd63a4766", "nome_raw": "Éder", "criado_em": "2026-10-11T13:37:07.604251Z"}]}'::jsonb, '2026-10-11T13:37:07.604251Z'::timestamptz, now()),
   ('0d14d851-61dc-52cd-913f-1412c00c0a02', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Raissa Lima', NULL, NULL, '+5565996877574', '5565996877574', NULL, 'pf', '{}'::jsonb, '{"barbearia_dino": true, "codigo_avec": null, "fontes": [{"origem": "avec_commerce", "id_origem": "f8084c4d-9d25-4fc4-930d-1ce70ab31191", "nome_raw": "Raissa Lima", "criado_em": "2026-10-11T13:49:26.011367Z"}]}'::jsonb, '2026-10-11T13:49:26.011367Z'::timestamptz, now()),
   ('2d00e86b-824b-52c8-a7bb-d73a06fca6a6', 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1', 'Vinicius Fernandes', NULL, NULL, '+5565999035825', '5565999035825', NULL, 'pf', '{}'::jsonb, '{"nota_cadastro": "Rafa", "barbearia_dino": true, "codigo_avec": "48469601", "fontes": [{"origem": "avec_commerce", "id_origem": "f8153818-e116-4c5e-8e2e-f4fec5022f01", "nome_raw": "Vinicius Fernandes(Rafa)", "criado_em": "2026-10-11T13:52:25.840249Z"}]}'::jsonb, '2026-10-11T13:52:25.840249Z'::timestamptz, now()),
