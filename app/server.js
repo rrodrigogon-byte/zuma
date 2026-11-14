@@ -5409,6 +5409,56 @@ app.post('/api/public/dino/report-grafico/disparar', async (req, res) => {
   }
 });
 
+app.get('/api/public/dino/grupos-evolution', async (req, res) => {
+  try {
+    const evoUrl = (process.env.EVOLUTION_API_URL || '').replace(/\/+$/, '');
+    const evoKey = process.env.EVOLUTION_API_KEY || '';
+    const evoInstance = process.env.EVOLUTION_INSTANCE || 'dino';
+    const fetchImpl = globalThis.fetch;
+
+    if (!evoUrl || !evoKey) {
+      return res.status(400).json({ ok: false, error: 'Evolution API não configurada' });
+    }
+
+    const queryEvo = async (endpoint) => {
+      try {
+        const resp = await fetchImpl(`${evoUrl}${endpoint}`, {
+          headers: {
+            'Accept': 'application/json',
+            apikey: evoKey,
+          }
+        });
+        const ct = resp.headers.get('content-type') || '';
+        const text = await resp.text();
+        let data = null;
+        try { data = JSON.parse(text); } catch {}
+        return { status: resp.status, data: data || text.slice(0, 300) };
+      } catch (err) {
+        return { error: err.message };
+      }
+    };
+
+    const [groupsDino, groupsDefault, stateDino, instances] = await Promise.all([
+      queryEvo(`/group/fetchAllGroups/${encodeURIComponent(evoInstance)}?getParticipants=true`),
+      queryEvo(`/group/fetchAllGroups/default?getParticipants=true`),
+      queryEvo(`/instance/connectionState/${encodeURIComponent(evoInstance)}`),
+      queryEvo(`/instance/fetchInstances`),
+    ]);
+
+    res.json({
+      ok: true,
+      evoUrl: evoUrl.replace(/:[^:]+@/, ':***@'),
+      evoInstance,
+      stateDino,
+      instances,
+      groupsDino,
+      groupsDefault,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.get('/api/public/dino/debug-waha-full', async (req, res) => {
   try {
     const baseUrl = process.env.WAHA_CONTROL_URL || 'https://waha.kytto.com.br';
