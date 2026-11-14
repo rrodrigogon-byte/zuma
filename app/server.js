@@ -104,6 +104,13 @@ import {
   enviarValidacaoEstrategicaWhatsApp,
   registrarOptOut,
 } from './core/dino-recuperacao-ativa.js';
+import {
+  calcularPacotesMensais,
+  gerarScriptVendaPacotes,
+  gerarMensagemAniversariante,
+  extrairSocialCrm,
+  salvarSocialCrmNoCliente,
+} from './core/dino-trex-sales-engine.js';
 import { startDinoDailyReportWorker, enviarReportGraficosDino, compilarMetricasReportGrafico, GUARDRAILS_META_INFO } from './core/dino-daily-report-graph.js';
 import { kyttoEventBus, TOPICOS_KYTTO } from './core/kytto-event-bus.js';
 import { armazenarCopiaSegura, listarArquivosSeguros, obterEstatisticasArmazenamento } from './core/armazenamento-seguro.js';
@@ -508,6 +515,56 @@ app.post('/api/public/dino/recuperacao-ativa/validar-whatsapp', async (req, res)
   try {
     const { telefone = '5514997462929' } = req.body || {};
     const resultado = await enviarValidacaoEstrategicaWhatsApp({ telefoneDestino: telefone });
+    res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Rotas Oficiais de Vendas & Pacotes Mensais do T-Rex (Motor KyttoIA 2.5 Flash)
+app.get('/api/admin/dino/trex/simulador-pacotes', (req, res) => {
+  try {
+    const profissionalNome = req.query.profissional || 'Nati';
+    const valorServico = Number(req.query.valor || 100.0);
+    const servicoNome = req.query.servico || 'Corte Premium';
+    const frequenciaDias = Number(req.query.frequencia || 15);
+    const clienteNome = req.query.cliente || 'Cliente VIP';
+
+    const calculo = calcularPacotesMensais({ profissionalNome, valorServico, servicoNome });
+    const script = gerarScriptVendaPacotes({ clienteNome, frequenciaDias, profissionalNome, valorServico, servicoNome });
+
+    res.json({ ok: true, ...calculo, script });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/dino/trex/extrair-social-crm', (req, res) => {
+  try {
+    const { texto = '' } = req.body || {};
+    const extraido = extrairSocialCrm(texto);
+    res.json({ ok: true, extraido });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/admin/dino/trex/mensagem-aniversario', (req, res) => {
+  try {
+    const clienteNome = req.query.nome || 'Amigo';
+    const profissionalFavorito = req.query.profissional || 'Nati ou Bruno';
+    const mensagem = gerarMensagemAniversariante({ clienteNome, profissionalFavorito });
+    res.json({ ok: true, ...mensagem });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/dino/trex/salvar-social-crm', async (req, res) => {
+  try {
+    const { empresaId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6', telefone, dados } = req.body || {};
+    if (!telefone || !dados) return res.status(400).json({ ok: false, error: 'telefone e dados são obrigatórios' });
+    const resultado = await salvarSocialCrmNoCliente(empresaId, telefone, dados);
     res.json({ ok: true, ...resultado });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
