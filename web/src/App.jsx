@@ -209,6 +209,7 @@ const ConcretoUsinaERP = lazyWithRetry(() => import("./pages/admin/ConcretoUsina
 const ConcretoPwaAssinatura = lazyWithRetry(() => import("./pages/public/ConcretoPwaAssinatura"))
 const ConcretoPortalCliente = lazyWithRetry(() => import("./pages/public/ConcretoPortalCliente"))
 const BalancaRodoviariaCockpit = lazyWithRetry(() => import("./pages/admin/concreto/BalancaRodoviariaCockpit"))
+const CockpitExecutivo360 = lazyWithRetry(() => import("./pages/admin/CockpitExecutivo360"))
 const DinoLTKStorefront = lazyWithRetry(() => import("./pages/public/DinoLTKStorefront"))
 const BarbeariaERP    = lazyWithRetry(() => import("./pages/admin/BarbeariaERP"))
 const SorteiosCampanhas = lazyWithRetry(() => import('./pages/admin/SorteiosCampanhas'))
@@ -433,6 +434,8 @@ export default function App() {
           <Route path="/admin/concreto" element={<Layout><ConcretoUsinaERP /></Layout>} />
           <Route path="/admin/usina-concreto" element={<Layout><ConcretoUsinaERP /></Layout>} />
           <Route path="/admin/balanca" element={<Layout><BalancaRodoviariaCockpit /></Layout>} />
+          <Route path="/admin/cockpit-360" element={<Layout><CockpitExecutivo360 /></Layout>} />
+          <Route path="/admin/dashboard-360" element={<Layout><CockpitExecutivo360 /></Layout>} />
           <Route path="/admin/sorteios" element={<Layout><SorteiosCampanhas /></Layout>} />
           <Route path="/admin/sorteio" element={<Layout><SorteiosCampanhas /></Layout>} />
           <Route path="/admin/barbearia-erp"   element={<Layout><BarbeariaERP /></Layout>} />
