@@ -5409,6 +5409,53 @@ app.post('/api/public/dino/report-grafico/disparar', async (req, res) => {
   }
 });
 
+app.get('/api/public/dino/debug-waha-full', async (req, res) => {
+  try {
+    const baseUrl = process.env.WAHA_CONTROL_URL || 'https://waha.kytto.com.br';
+    const secret = process.env.WAHA_CONTROL_BRIDGE_SECRET || '';
+    const apiKey = process.env.WAHA_API_KEY || secret;
+    const fetchImpl = globalThis.fetch;
+
+    const testUrl = async (path, extraHeaders = {}) => {
+      try {
+        const r = await fetchImpl(`${baseUrl}${path}`, {
+          headers: {
+            'Accept': 'application/json',
+            'X-Api-Key': apiKey,
+            'X-Kytto-Waha-Bridge-Secret': secret,
+            ...extraHeaders
+          }
+        });
+        const ct = r.headers.get('content-type') || '';
+        const text = await r.text();
+        let parsed = null;
+        try { parsed = JSON.parse(text); } catch {}
+        return { status: r.status, contentType: ct, data: parsed || text.slice(0, 300) };
+      } catch (e) {
+        return { error: e.message };
+      }
+    };
+
+    const results = {
+      root: await testUrl('/'),
+      apiSessions: await testUrl('/api/sessions'),
+      v1Sessions: await testUrl('/v1/sessions'),
+      swagger: await testUrl('/api/docs/swagger.json'),
+      apiDocs: await testUrl('/api/docs'),
+      defaultChats: await testUrl('/api/default/chats'),
+      defaultGroups: await testUrl('/api/default/groups'),
+      dinoChats: await testUrl('/api/dino/chats'),
+      dinoGroups: await testUrl('/api/dino/groups'),
+      barbeariaDinoChats: await testUrl('/api/barbearia-dino-gestao/chats'),
+      barbeariaDinoGroups: await testUrl('/api/barbearia-dino-gestao/groups'),
+    };
+
+    res.json({ ok: true, baseUrl, hasSecret: Boolean(secret), hasApiKey: Boolean(process.env.WAHA_API_KEY), results });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.get('/api/public/dino/descobrir-grupo', async (req, res) => {
   try {
     const { chatbotBackendConfig } = await import('./core/whatsapp-provider.js');
