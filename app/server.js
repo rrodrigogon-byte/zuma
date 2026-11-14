@@ -404,6 +404,10 @@ app.get('/api/admin/sincronizacao-ultra-nossa-gente/eventos', (req, res) => {
     const { empresaId, tipo, origem, limite } = req.query;
     const eventos = kyttoEventBus.listarEventos({ empresaId, tipo, origem, limite });
     res.json({ ok: true, total: eventos.length, eventos });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
 
 app.get('/api/admin/dino/recuperacao-ativa/report-20h/preview', async (req, res) => {
   try {
