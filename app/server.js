@@ -94,6 +94,7 @@ import { startWhatsappAiWorker } from './workers/whatsapp-ai-worker.js';
 import { startIsaPollWorker } from './core/whatsapp-isa-poll.js';
 import { startDinoDailyConfirmationWorker } from './core/dino-confirmacao-diaria.js';
 import { startDinoDailyBriefingWorker } from './core/dino-daily-briefing.js';
+import { startDinoRecuperacaoAtivaWorker, executarRecuperacaoAtivaDiaria, listarClientesElegiveisRecuperacao } from './core/dino-recuperacao-ativa.js';
 import { configuracaoResumo, configuracaoResumoPublica, diaLocal as diaLocalResumo, enviarResumo, lojaDoCanal as lojaDoCanalResumo, montarResumoDiario, startResumoDiarioWorker } from './core/dino-resumo-diario.js';
 import { startPendingFollowUpWorker } from './core/whatsapp-ai-followup.js';
 import { db as commerceDb, getPool as getCommercePool } from './core/database.js';
@@ -363,6 +364,27 @@ app.get('/install.sh', (req, res) => {
 
 let cachedCommerceSchemaReadiness = null;
 let lastCommerceSchemaCheckAt = 0;
+
+// Rotas oficiais de Recuperação Ativa Diária de Clientes Inativos da Barbearia Dino (> 60 dias)
+app.post('/api/admin/dino/recuperacao-ativa', async (req, res) => {
+  try {
+    const simular = req.query.simular === 'true';
+    const limite = Math.min(50, Math.max(1, Number(req.query.limite || 10)));
+    const relatorio = await executarRecuperacaoAtivaDiaria(req.tenant || {}, { limite, simular });
+    res.json({ ok: true, ...relatorio });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/admin/dino/recuperacao-ativa/status', async (req, res) => {
+  try {
+    const elegiveis = await listarClientesElegiveisRecuperacao({ diasInativo: 60, limite: 30 });
+    res.json({ ok: true, total_elegiveis: elegiveis.length, elegiveis });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
 
 app.get('/health', async (req, res) => {
   const persistencia = protecaoDados.situacao().status;
@@ -12398,6 +12420,7 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
   }
   startDinoDailyConfirmationWorker();
   startDinoDailyBriefingWorker();
+  startDinoRecuperacaoAtivaWorker();
   startAiBrainSchedulers();
   // Cobranças da barbearia: sinal vencido libera o horário (e avisa a lista de
   // espera); a cobrança do clube é gerada e enviada uma vez por hora.

@@ -2021,7 +2021,7 @@ export async function confirmNextAppointment(context, userText = '') {
         const primeiroNome = context.customerName ? `, ${context.customerName.split(' ')[0]}` : '';
         const servicoComProf = serviceWithProfessional(especifico.servico?.nome || 'Seu horário', especifico.profissional?.nome || 'a equipe');
         return {
-          text: `Confirmado${primeiroNome}! ${servicoComProf}, ${quando}. Te esperamos na Dino Barbearia! 💈`,
+          text: `Confirmado${primeiroNome}! ${servicoComProf}, ${quando}. Te esperamos na Dino Barbearia! 💈\n\n💡 *Dica do Dino:* Deseja que eu já deixe separada sua *Pomada Modeladora Efeito Matte Dino (R$ 45,00)* ou o *Óleo Hidratante de Barba (R$ 38,00)* para você retirar no atendimento? É só me avisar!`,
           kind: 'presence_confirmed',
         };
       }
@@ -2103,7 +2103,7 @@ export async function confirmNextAppointment(context, userText = '') {
     const quando = new Date(proximo.dataHora).toLocaleString('pt-BR', { timeZone: 'America/Cuiaba', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const servicoComProf = serviceWithProfessional(proximo.servico?.nome || 'Seu horário', proximo.profissional?.nome || 'a equipe');
     return {
-      text: `Confirmado${primeiroNome}! ${servicoComProf}, ${quando}. Te esperamos na Dino Barbearia! 💈`,
+      text: `Confirmado${primeiroNome}! ${servicoComProf}, ${quando}. Te esperamos na Dino Barbearia! 💈\n\n💡 *Dica do Dino:* Deseja que eu já deixe separada sua *Pomada Modeladora Efeito Matte Dino (R$ 45,00)* ou o *Óleo Hidratante de Barba (R$ 38,00)* para você retirar no atendimento? É só me avisar!`,
       kind: 'presence_confirmed',
     };
   }
@@ -2116,7 +2116,7 @@ export async function confirmNextAppointment(context, userText = '') {
   const diaTexto = new Date(primeiro.dataHora).toLocaleDateString('pt-BR', { timeZone: 'America/Cuiaba', weekday: 'short', day: '2-digit', month: '2-digit' });
   const profNome = primeiro.profissional?.nome || 'a equipe';
   return {
-    text: `Confirmados${primeiroNome}! Seus ${confirmados.length} horários com ${profNome}, ${diaTexto}: ${itensTexto}. Te esperamos na Dino Barbearia! 💈`,
+    text: `Confirmados${primeiroNome}! Seus ${confirmados.length} horários com ${profNome}, ${diaTexto}: ${itensTexto}. Te esperamos na Dino Barbearia! 💈\n\n💡 *Dica do Dino:* Deseja incluir a *Pomada Modeladora Matte Dino (R$ 45,00)* ou *Óleo para Barba (R$ 38,00)* para retirar no atendimento?`,
     kind: 'presence_confirmed',
   };
 }
@@ -2552,7 +2552,7 @@ async function deterministicResponseCore(task, channel, session, message) {
     const cleanClosingText = plain(message.text).replace(/[!.,;?]+/g, ' ').replace(/\s+/g, ' ').trim();
     if (!lastAssHasTimeSlots && /^(?:joia\s+combinado|combinado|beleza\s+obrigad[oa]|ok\s+obrigad[oa]|valeu\s+obrigad[oa]|show\s+obrigad[oa]|perfeito\s+obrigad[oa]|tudo\s+certo\s+obrigad[oa]|ta\s+otimo|beleza\s+entao|joia\s+valeu)$/.test(cleanClosingText)) {
       return {
-        text: 'Combinado! Qualquer coisa que precisar é só chamar por aqui. Te esperamos na Dino Barbearia! 💈',
+        text: 'Combinado! Qualquer coisa que precisar é só chamar por aqui. Mas não fica sem dar aquele talento no visual: quando você puder vir, me avisa que já reservo o seu horário! 💈 (Ou veja a agenda online: https://kytto.com.br/agendar/dino )',
         kind: 'closing_ack',
         model: 'deterministic_closing_ack',
         provider: 'system',
@@ -2873,7 +2873,7 @@ async function deterministicResponseCore(task, channel, session, message) {
     }
     if (recoverableModelFailure(safeErrorCode(error))) {
       if (!hadPendingAction) await cancelPendingAction(context);
-      return { text: 'Não consegui concluir a consulta. Nada foi confirmado. Podemos tentar por aqui de novo: qual serviço e horário você quer?', kind: 'technical_retry' };
+      return { text: 'Tive uma oscilação momentânea aqui na verificação, mas já normalizou! Me diz: qual dia e horário fica melhor pra você? (Se preferir ver a grade ao vivo: https://kytto.com.br/agendar/dino )', kind: 'technical_retry' };
     }
     await putSessionInHandoff(session, `gemini:${safeErrorCode(error)}`, 4);
     return { text: 'Não consegui concluir com segurança pelo assistente virtual. Encaminhei sua conversa para a equipe humana.', kind: 'gemini_fallback' };
