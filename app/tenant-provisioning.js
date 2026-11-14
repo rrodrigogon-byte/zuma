@@ -114,8 +114,8 @@ export async function sincronizarTenantsEquipes(commerceDb) {
           [
             config.empresaId,
             config.nome,
-            config.cnpj || '12345678000199',
-            tenantKey === 'concreto' ? 'industria' : (tenantKey === 'palatare' ? 'restaurante' : (tenantKey === 'casanova' ? 'imobiliaria' : 'comercio'))
+            String(config.cnpj || '12345678000199').replace(/\D/g, '').padEnd(14, '0').slice(0, 14),
+            tenantKey === 'palatare' ? 'restaurante' : (tenantKey === 'casanova' ? 'loja' : (tenantKey === 'supermercado' ? 'supermercado' : (tenantKey === 'barbearia' || tenantKey === 'dino' ? 'barbearia' : 'outro')))
           ]
         );
         if (config.lojaId) {
