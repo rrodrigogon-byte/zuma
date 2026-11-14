@@ -89,7 +89,7 @@ import { avecGovernanceNoStore } from './core/avec-import-http-policy.js';
 import { whatsappAiOperationalStatus } from './core/whatsapp-ai.js';
 import { legacyWppAvailable } from './core/whatsapp-legacy-scope.js';
 import { canCheckWhatsappConnection, safeWhatsappConnection } from './core/whatsapp-connection-readiness.js';
-import { getInstanceStatus } from './core/whatsapp-provider.js';
+import { getInstanceStatus, sendTextViaChatbotBackend } from './core/whatsapp-provider.js';
 import { startWhatsappAiWorker } from './workers/whatsapp-ai-worker.js';
 import { startIsaPollWorker } from './core/whatsapp-isa-poll.js';
 import { startDinoDailyConfirmationWorker } from './core/dino-confirmacao-diaria.js';
