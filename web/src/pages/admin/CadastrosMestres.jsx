@@ -90,6 +90,7 @@ export default function CadastrosMestres() {
   const [modal, setModal] = useState(null)
   const [modalEmpresa, setModalEmpresa] = useState(false)
   const [form, setForm] = useState(EMPTY.funcionarios)
+  const [selecionadoId, setSelecionadoId] = useState(null)
   const [empresaForm, setEmpresaForm] = useState({
     nome: '', nomeFantasia: '', cnpj: '', inscricaoEstadual: '', endereco: '', email: '', telefone: '',
     permitirEstoqueNegativo: false, administrador: { nome: '', email: '', senhaInicial: '' }
@@ -411,25 +412,88 @@ export default function CadastrosMestres() {
           </div>
         </div>
 
-        {/* Botões de Ação Topo */}
+        {/* Barra de Ações Rápidas & Comandos (Incluir, Modificar, Excluir, Salvar) */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button 
+            type="button"
+            className="btn btn-sm" 
+            onClick={abrirNovo} 
+            style={{ 
+              background: '#10B981', 
+              borderColor: '#10B981', 
+              color: '#fff', 
+              fontWeight: 800, 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 6,
+              boxShadow: '0 2px 4px rgba(16, 185, 129, 0.25)',
+              padding: '6px 14px'
+            }}
+          >
+            <span>➕</span> Incluir Novo {aba.singular}
+          </button>
+
+          {selecionadoId && (
+            <>
+              <button 
+                type="button"
+                className="btn btn-sm" 
+                onClick={() => {
+                  const reg = (dados[tab] || []).find(r => r.id === selecionadoId);
+                  if (reg) abrirEditar(reg);
+                }} 
+                style={{ 
+                  background: '#3B82F6', 
+                  borderColor: '#3B82F6', 
+                  color: '#fff', 
+                  fontWeight: 700, 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 6 
+                }}
+              >
+                <span>✏️</span> Modificar / Editar
+              </button>
+
+              <button 
+                type="button"
+                className="btn btn-sm" 
+                onClick={() => {
+                  const reg = (dados[tab] || []).find(r => r.id === selecionadoId);
+                  if (reg) excluir(reg);
+                }} 
+                style={{ 
+                  background: '#EF4444', 
+                  borderColor: '#EF4444', 
+                  color: '#fff', 
+                  fontWeight: 700, 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 6 
+                }}
+              >
+                <span>🗑️</span> Excluir
+              </button>
+            </>
+          )}
+
           <button className="btn btn-secondary btn-sm" onClick={() => carregar(empresaAtivaId)} disabled={loading} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span>↺</span> {loading ? 'Atualizando...' : 'Atualizar'}
           </button>
-          <button className="btn btn-secondary btn-sm" onClick={exportarCSV} title="Exportar tabela atual para CSV">
-            📥 Exportar CSV
+
+          <button className="btn btn-secondary btn-sm" onClick={exportarCSV} title="Exportar tabela atual para CSV" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span>📥</span> Exportar CSV
           </button>
+
           <Link to="/admin/empresas" className="btn btn-secondary btn-sm" style={{ textDecoration: 'none' }}>
             🏢 Todas as Empresas
           </Link>
+
           {podeGerenciarEmpresas && (
             <button className="btn btn-secondary btn-sm" onClick={() => setModalEmpresa(true)}>
               + Nova Empresa
             </button>
           )}
-          <button className="btn btn-primary btn-sm" onClick={abrirNovo} style={{ background: '#FF6B2C', borderColor: '#FF6B2C', color: '#fff', fontWeight: 600 }}>
-            + Novo {aba.singular}
-          </button>
         </div>
       </div>
 
@@ -606,7 +670,7 @@ export default function CadastrosMestres() {
                   <th style={{ padding: '12px 14px' }}>STATUS</th>
                 </>
               )}
-              <th style={{ padding: '12px 14px', textAlign: 'right' }}>AÇÕES</th>
+              <th style={{ padding: '12px 14px', textAlign: 'center', position: 'sticky', right: 0, background: '#fff', boxShadow: '-3px 0 6px rgba(0,0,0,0.06)', zIndex: 2, minWidth: 160 }}>AÇÕES (EDITAR / EXCLUIR)</th>
             </tr>
           </thead>
           <tbody>
@@ -631,8 +695,20 @@ export default function CadastrosMestres() {
             ) : (
               registrosFiltrados.map((registro) => {
                 const isAtivo = registro.status === 'ativo' || registro.status === 'ativa' || registro.ativo === true || (registro.bloqueado === false)
+                const isSelecionado = selecionadoId === registro.id;
                 return (
-                  <tr key={registro.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <tr 
+                    key={registro.id} 
+                    onDoubleClick={() => abrirEditar(registro)}
+                    onClick={() => setSelecionadoId(registro.id)}
+                    title="Clique para selecionar ou duplo clique para editar"
+                    style={{ 
+                      borderBottom: '1px solid #f1f5f9',
+                      background: isSelecionado ? 'rgba(59, 130, 246, 0.08)' : 'transparent',
+                      cursor: 'pointer',
+                      transition: 'background 0.15s ease'
+                    }}
+                  >
                     {/* Nome / Identificação */}
                     <td style={{ padding: '12px 14px' }}>
                       <strong style={{ color: '#1e293b' }}>{registro.nome || registro.nomeFantasia}</strong>
@@ -915,14 +991,61 @@ export default function CadastrosMestres() {
                       </>
                     )}
 
-                    {/* Ações (Editar e Excluir) */}
-                    <td style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      <button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(registro)} style={{ marginRight: 4 }}>
-                        ✏️ Editar
-                      </button>
-                      <button className="btn btn-ghost btn-sm" style={{ color: '#ef4444' }} onClick={() => excluir(registro)}>
-                        🗑️ Excluir
-                      </button>
+                    {/* Ações (Editar e Excluir) - Sticky Right para nunca sumir em telas menores */}
+                    <td style={{ 
+                      padding: '10px 14px', 
+                      textAlign: 'center', 
+                      whiteSpace: 'nowrap',
+                      position: 'sticky',
+                      right: 0,
+                      background: isSelecionado ? '#EBF5FF' : '#ffffff',
+                      boxShadow: '-3px 0 6px rgba(0,0,0,0.06)',
+                      zIndex: 2
+                    }}>
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                        <button 
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); abrirEditar(registro); }} 
+                          style={{ 
+                            background: '#3B82F6',
+                            color: '#ffffff',
+                            border: '1px solid #2563EB',
+                            borderRadius: 6,
+                            padding: '5px 10px',
+                            fontWeight: 700,
+                            fontSize: 12,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            boxShadow: '0 1px 2px rgba(59, 130, 246, 0.2)'
+                          }}
+                          title="Modificar / Editar este cadastro"
+                        >
+                          ✏️ Editar
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); excluir(registro); }} 
+                          style={{ 
+                            background: '#EF4444',
+                            color: '#ffffff',
+                            border: '1px solid #DC2626',
+                            borderRadius: 6,
+                            padding: '5px 10px',
+                            fontWeight: 700,
+                            fontSize: 12,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            boxShadow: '0 1px 2px rgba(239, 68, 68, 0.2)'
+                          }}
+                          title="Excluir este cadastro"
+                        >
+                          🗑️ Excluir
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )
@@ -982,11 +1105,34 @@ export default function CadastrosMestres() {
             {tab === 'formasPagamento' && <FormaPagamentoForm form={form} setForm={setForm} />}
             {tab === 'unidades' && <UnidadeForm form={form} setForm={setForm} />}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-              <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={salvar} disabled={saving} style={{ background: '#FF6B2C', borderColor: '#FF6B2C' }}>
-                {saving ? 'Salvando...' : 'Salvar Registro'}
-              </button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, paddingTop: 16, borderTop: '1px solid #e2e8f0' }}>
+              <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+                * Campos obrigatórios para salvar no banco
+              </span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>
+                  ✕ Cancelar
+                </button>
+                <button 
+                  type="button" 
+                  className="btn btn-primary" 
+                  onClick={salvar} 
+                  disabled={saving} 
+                  style={{ 
+                    background: '#10B981', 
+                    borderColor: '#10B981', 
+                    color: '#fff', 
+                    fontWeight: 800,
+                    padding: '8px 18px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    boxShadow: '0 2px 4px rgba(16, 185, 129, 0.3)'
+                  }}
+                >
+                  <span>💾</span> {saving ? 'Salvando e Sincronizando...' : `Salvar ${aba.singular}`}
+                </button>
+              </div>
             </div>
           </div>
         </Modal>
