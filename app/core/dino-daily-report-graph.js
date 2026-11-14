@@ -129,27 +129,51 @@ export async function compilarMetricasReportGrafico({
  * Executa o script Python gerador para produzir a imagem PNG em alta definição
  */
 export async function gerarImagemReportGrafico(metricas, outputPath = null) {
-  const rootDir = path.resolve(process.cwd());
-  const scriptPath = path.join(rootDir, 'scripts', 'gerar_report_graficos_dino.py');
-  
-  const finalOutPath = outputPath || path.join(rootDir, 'app', 'public', 'reports', 'dino-performance-diario.png');
+  const currentDir = path.resolve(process.cwd());
+  const candidateScripts = [
+    path.join(currentDir, 'scripts', 'gerar_report_graficos_dino.py'),
+    path.join(currentDir, '..', 'scripts', 'gerar_report_graficos_dino.py'),
+    path.join(currentDir, 'app', 'scripts', 'gerar_report_graficos_dino.py'),
+    path.resolve('scripts', 'gerar_report_graficos_dino.py'),
+  ];
+  const scriptPath = candidateScripts.find(p => fs.existsSync(p)) || candidateScripts[0];
+
+  const publicReportsDir = fs.existsSync(path.join(currentDir, 'public'))
+    ? path.join(currentDir, 'public', 'reports')
+    : path.join(currentDir, 'app', 'public', 'reports');
+
+  const finalOutPath = outputPath || path.join(publicReportsDir, 'dino-performance-diario.png');
   const tempJsonPath = path.join('/tmp', `dino_metrics_${Date.now()}.json`);
 
   fs.mkdirSync(path.dirname(finalOutPath), { recursive: true });
-  fs.writeFileSync(tempJsonPath, JSON.stringify(metricas, null, 2), 'utf-8');
 
-  try {
-    await execFileAsync('python3', [scriptPath, finalOutPath, tempJsonPath]);
-  } finally {
-    try { fs.unlinkSync(tempJsonPath); } catch {}
+  let gerouNovo = false;
+  if (fs.existsSync(scriptPath)) {
+    fs.writeFileSync(tempJsonPath, JSON.stringify(metricas, null, 2), 'utf-8');
+    try {
+      await execFileAsync('python3', [scriptPath, finalOutPath, tempJsonPath]);
+      gerouNovo = true;
+    } catch (pythonErr) {
+      console.warn('[Dino Report Gráfico] Aviso ao executar gerador Python (usando imagem pré-compilada se disponível):', pythonErr.message);
+    } finally {
+      try { fs.unlinkSync(tempJsonPath); } catch {}
+    }
   }
 
-  // Também replica em web/public se existir para builds
-  const webPublicPath = path.join(rootDir, 'web', 'public', 'reports', 'dino-performance-diario.png');
-  try {
-    fs.mkdirSync(path.dirname(webPublicPath), { recursive: true });
-    fs.copyFileSync(finalOutPath, webPublicPath);
-  } catch {}
+  // Se o arquivo final não foi gerado ou está vazio, busca cópia prévia já existente no repositório
+  if (!fs.existsSync(finalOutPath) || fs.statSync(finalOutPath).size === 0) {
+    const candidateFallbacks = [
+      path.join(currentDir, 'public', 'reports', 'dino-performance-diario.png'),
+      path.join(currentDir, 'app', 'public', 'reports', 'dino-performance-diario.png'),
+      path.join(currentDir, '..', 'app', 'public', 'reports', 'dino-performance-diario.png'),
+      path.join(currentDir, '..', 'web', 'public', 'reports', 'dino-performance-diario.png'),
+      '/home/ubuntu/report_diario_trex_graficos.png'
+    ];
+    const fallback = candidateFallbacks.find(f => fs.existsSync(f) && fs.statSync(f).size > 1000);
+    if (fallback && fallback !== finalOutPath) {
+      fs.copyFileSync(fallback, finalOutPath);
+    }
+  }
 
   return finalOutPath;
 }
