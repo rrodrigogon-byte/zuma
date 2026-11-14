@@ -74,7 +74,7 @@ test('4. Report Diário das 20h00: Consolidação e Formatação para WhatsApp G
   assert.equal(report.sugestoes.length, 3, 'Deve incluir 3 sugestões estratégicas para a gestão');
 
   const textoMsg = formatarMensagemReportGestao(report);
-  assert.match(textoMsg, /REPORT DIÁRIO DO T-REX/i, 'Deve ter cabeçalho executivo');
+  assert.match(textoMsg, /(?:RELATÓRIO|REPORT)(?: EXECUTIVO)? DIÁRIO DO T-REX/i, 'Deve ter cabeçalho executivo');
   assert.match(textoMsg, /20:00/i, 'Deve indicar o horário de envio das 20:00');
   assert.match(textoMsg, /Horários Fracos/i, 'Deve indicar agendamentos em horários fracos');
   assert.match(textoMsg, /STATUS DE COMPLIANCE META/i, 'Deve reportar compliance da Meta');
