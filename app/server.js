@@ -5414,6 +5414,7 @@ app.get('/api/public/dino/descobrir-grupo', async (req, res) => {
     const { chatbotBackendConfig } = await import('./core/whatsapp-provider.js');
     const cfg = chatbotBackendConfig();
     const fetchImpl = globalThis.fetch;
+    const qParam = req.query.q ? `&q=${encodeURIComponent(req.query.q)}` : '';
 
     let wahaResult = {};
     try {
@@ -5431,7 +5432,7 @@ app.get('/api/public/dino/descobrir-grupo', async (req, res) => {
     }
     
     // Consultar histórico de mensagens para capturar todos os chatIds (inclusive @g.us)
-    const url = `${cfg.baseUrl}${cfg.apiBase}/messages?latest=false&limit=200&instanceName=${encodeURIComponent(cfg.instance)}`;
+    const url = `${cfg.baseUrl}${cfg.apiBase}/messages?latest=false&limit=500&instanceName=${encodeURIComponent(cfg.instance)}${qParam}`;
     const resp = await fetchImpl(url, {
       headers: {
         'Accept': 'application/json',
@@ -5468,10 +5469,11 @@ app.get('/api/public/dino/descobrir-grupo', async (req, res) => {
       ok: true,
       instance: cfg.instance,
       waha: wahaResult,
+      query: req.query.q || null,
       totalChats: chatIds.size,
       allChatIds: Array.from(chatIds),
       groupChats,
-      sample: Array.isArray(data) ? data.slice(0, 5) : (data?.messages || []).slice(0, 5),
+      rawData: req.query.q ? data : undefined,
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
