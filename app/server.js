@@ -117,7 +117,8 @@ import {
   enviarParaGestaoDino,
   GRUPO_GESTAO_DINO_INFO,
   registrarNotaNpsCliente,
-  listarEstatisticasNps
+  listarEstatisticasNps,
+  configurarWhatsappGestaoDino
 } from './core/dino-whats-gestao-hub.js';
 import { kyttoEventBus, TOPICOS_KYTTO } from './core/kytto-event-bus.js';
 import { armazenarCopiaSegura, listarArquivosSeguros, obterEstatisticasArmazenamento } from './core/armazenamento-seguro.js';
@@ -5627,6 +5628,70 @@ app.post('/api/public/dino/testar-send-raw', async (req, res) => {
     let body = null;
     try { body = JSON.parse(text); } catch {}
     res.json({ ok: resp.ok, status, body: body || text });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/public/dino/gestao-conexao', async (req, res) => {
+  try {
+    const { obterConexao, visaoPublica } = await import('./whatsapp-conexao-kytto.js');
+    const { configurarWhatsappGestaoDino, GRUPO_GESTAO_DINO_INFO, NUMERO_GESTAO_OFICIAL_DINO, NUMERO_GESTAO_OFICIAL_DINO_FORMATADO } = await import('./core/dino-whats-gestao-hub.js');
+    const { db: pgDb } = await import('./core/database.js').catch(() => ({ db: null }));
+    
+    await configurarWhatsappGestaoDino({ dbPg: pgDb });
+    const empId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    const conexao = obterConexao(empId, 'gestao');
+    
+    let canalPg = null;
+    if (pgDb && typeof pgDb.query === 'function') {
+      const r = await pgDb.query(`SELECT id, empresa_id, tipo_canal, status, configuracao FROM canais_integracao WHERE tipo_canal = 'gestao' AND empresa_id = $1 LIMIT 1`, [empId]).catch(() => ({ rows: [] }));
+      canalPg = r.rows?.[0] || null;
+    }
+
+    res.json({
+      ok: true,
+      empresaId: empId,
+      canal: 'gestao',
+      numeroOficialGestor: NUMERO_GESTAO_OFICIAL_DINO_FORMATADO,
+      telefoneCanonico: NUMERO_GESTAO_OFICIAL_DINO,
+      grupoGestao: GRUPO_GESTAO_DINO_INFO,
+      conexaoKytto: visaoPublica(conexao),
+      canalBancoDados: canalPg,
+      comandosInvocacao: [
+        '!report',
+        'relatorio',
+        'enviar relatorio',
+        'trex report',
+        'manda o report no grupo'
+      ]
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/public/dino/gestao/invocar-report', async (req, res) => {
+  try {
+    const { gestorTelefone = '5565996722055', forcar = true } = req.body || {};
+    const { enviarReportGraficosDino } = await import('./core/dino-daily-report-graph.js');
+    const { NUMERO_GESTAO_OFICIAL_DINO, NUMERO_GESTAO_OFICIAL_DINO_FORMATADO } = await import('./core/dino-whats-gestao-hub.js');
+
+    const empId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    const resultado = await enviarReportGraficosDino({
+      destinatario: gestorTelefone || NUMERO_GESTAO_OFICIAL_DINO,
+      forcar: Boolean(forcar),
+      empresaId: empId,
+    });
+
+    res.json({
+      ok: resultado.ok,
+      mensagem: 'Invocação do Relatório de Performance com autorização prévia executada com sucesso!',
+      gestorAutorizador: `${NUMERO_GESTAO_OFICIAL_DINO_FORMATADO} (Guilherme Dino)`,
+      grupoDestino: 'Gestão Dino (WhatsApp)',
+      detalhesEnvio: resultado,
+      infograficoUrl: 'https://kytto.com.br/reports/dino-performance-diario.png',
+    });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -12956,6 +13021,7 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
   void inicializarBloqueiosEquipe().catch(() => null);
   setTimeout(() => {
     try { provisionarEquipeDino({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar equipe Dino:', err.message); }
+    try { configurarWhatsappGestaoDino({ dbPg: commerceDb }); } catch (err) { console.warn('Aviso ao provisionar WhatsApp Gestão Dino:', err.message); }
     try { sincronizarTenantsEquipes(commerceDb); } catch (err) { console.warn('Aviso ao sincronizar tenants:', err.message); }
     try { provisionarPalatarePizzaria({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar Palatare:', err.message); }
     try { provisionarConcretoUsina({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar Concreto:', err.message); }

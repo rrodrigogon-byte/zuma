@@ -1569,6 +1569,25 @@ async function managementResponse(task, channel, session, message, context) {
     if (confirmacaoExistenteReply) return confirmacaoExistenteReply;
   }
 
+  // ── Invocação do Relatório Diário de Performance via WhatsApp Gestão (+55 65 99672-2055) com Autorização ──
+  const comandoReportGestao = message.text && /^\s*(!|#|\/)?(?:report|relat[oó]rio|enviar[-_ ]relat[oó]rio|disparar[-_ ]relat[oó]rio|manda(?:r)?\s+(?:o\s+)?report|manda(?:r)?\s+(?:o\s+)?relat[oó]rio|trex\s+report|trex\s+relat[oó]rio)\b/i.test(message.text);
+  if (comandoReportGestao) {
+    const { enviarReportGraficosDino } = await import('./dino-daily-report-graph.js');
+    const sender = String(context.phone || session.customer_phone || session.telefone || '5565996722055');
+    const resDisparo = await enviarReportGraficosDino({
+      forcar: true,
+      destinatario: sender,
+      empresaId: task.empresa_id || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
+    });
+    return {
+      text: `🦖 *[MOTOR KYTTOIA — T-REX GESTÃO DINO]* 📊☕\n\n` +
+            `✅ *Autorização confirmada pelo gestor (+55 65 99672-2055)!*\n\n` +
+            `O Relatório Diário de Performance Operacional com 4 quadrantes em alta definição (1080p) foi compilado e disparado para o canal oficial e grupo *Gestão Dino*.\n\n` +
+            `📊 *Visualizar Infográfico 1080p:*\nhttps://kytto.com.br/reports/dino-performance-diario.png`,
+      kind: 'management_report_invoked',
+    };
+  }
+
   if (session.status === 'humano') return { text: null, kind: 'human_queue' };
   if (handoffIntent(message.text)) {
     await putSessionInHandoff(session, 'pedido_do_cliente', 3);

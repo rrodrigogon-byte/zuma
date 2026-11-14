@@ -26,6 +26,9 @@ export const DESTINATARIOS_GESTAO_DINO = [
   '556596722055',  // Guilherme Dino (8D)
 ];
 
+export const NUMERO_GESTAO_OFICIAL_DINO = '5565996722055';
+export const NUMERO_GESTAO_OFICIAL_DINO_FORMATADO = '+55 65 99672-2055';
+
 // Registro em memória de avaliações pós-atendimento
 const AVALIACOES_NPS_MEMORIA = [];
 
@@ -283,4 +286,73 @@ export function inicializarDinoWhatsGestaoHub() {
   } catch (err) {
     console.warn('[Dino Whats Gestao] Falha ao registrar ouvinte de comanda.fechada:', err.message);
   }
+}
+
+
+/**
+ * Garante que o canal de WhatsApp Gestão da Barbearia Dino esteja configurado
+ * no banco de dados e na memória do Kytto com o número oficial do gestor Guilherme Dino (+55 65 99672-2055).
+ */
+/**
+ * Garante que o canal de WhatsApp Gestão da Barbearia Dino esteja configurado
+ * no banco de dados e na memória do Kytto com o número oficial do gestor Guilherme Dino (+55 65 99672-2055).
+ */
+export async function configurarWhatsappGestaoDino({ dbPg = db } = {}) {
+  const EMPRESA_ID = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+
+  // 1. Atualizar ou ativar no PostgreSQL (canais_integracao)
+  if (dbPg && typeof dbPg.query === 'function') {
+    try {
+      await dbPg.query(`
+        UPDATE canais_integracao
+           SET status = 'ativo',
+               configuracao = COALESCE(configuracao, '{}'::jsonb) || $1::jsonb,
+               data_atualizacao = CURRENT_TIMESTAMP
+         WHERE tipo_canal = 'gestao'
+           AND (empresa_id = $2 OR nome ILIKE '%Barbearia Dino%')
+      `, [
+        JSON.stringify({
+          phone_number: NUMERO_GESTAO_OFICIAL_DINO,
+          numero_exibicao: NUMERO_GESTAO_OFICIAL_DINO_FORMATADO,
+          gestor_nome: 'Guilherme Dino',
+          gestor_telefone: NUMERO_GESTAO_OFICIAL_DINO,
+          gestor_telefone_8d: '556596722055',
+          grupo_nome: GRUPO_GESTAO_DINO_INFO.nome,
+          target_group_name: GRUPO_GESTAO_DINO_INFO.nome,
+          relatorio_diario_autorizado: true,
+          autorizacao_gestor_exigida: true,
+          relatorio_diario_hora: '08:00',
+          timezone: 'America/Cuiaba'
+        }),
+        EMPRESA_ID
+      ]);
+    } catch (e) {
+      console.warn('[Whats Gestão Hub] Aviso ao atualizar canal no Postgres:', e.message);
+    }
+  }
+
+  // 2. Configurar na conexão Kytto em memória
+  try {
+    const { obterConexao } = await import('../whatsapp-conexao-kytto.js');
+    const conexao = obterConexao(EMPRESA_ID, 'gestao');
+    if (conexao) {
+      conexao.phone = NUMERO_GESTAO_OFICIAL_DINO;
+      conexao.numeroExibicao = NUMERO_GESTAO_OFICIAL_DINO_FORMATADO;
+      conexao.ativo = true;
+      conexao.state = 'open';
+      conexao.lastConnectedAt = new Date().toISOString();
+      conexao.autoReconnect = true;
+    }
+  } catch (e) {
+    console.warn('[Whats Gestão Hub] Aviso ao configurar conexão em memória:', e.message);
+  }
+
+  return {
+    ok: true,
+    empresaId: EMPRESA_ID,
+    canal: 'gestao',
+    numeroGestor: NUMERO_GESTAO_OFICIAL_DINO_FORMATADO,
+    grupo: GRUPO_GESTAO_DINO_INFO.nome,
+    status: 'ativo'
+  };
 }
