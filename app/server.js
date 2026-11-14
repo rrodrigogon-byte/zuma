@@ -5405,6 +5405,75 @@ app.post('/api/public/dino/report-grafico/disparar', async (req, res) => {
   }
 });
 
+app.get('/api/public/dino/descobrir-grupo', async (req, res) => {
+  try {
+    const { chatbotBackendConfig } = await import('./core/whatsapp-provider.js');
+    const cfg = chatbotBackendConfig();
+    const fetchImpl = globalThis.fetch;
+
+    let wahaResult = {};
+    try {
+      const { listWahaGroups, wahaControlConfigured } = await import('./core/whatsapp-waha.js');
+      if (wahaControlConfigured()) {
+        const g1 = await listWahaGroups('barbearia-dino-gestao').catch((e) => ({ error: e.message }));
+        const g2 = await listWahaGroups('dino').catch((e) => ({ error: e.message }));
+        const g3 = await listWahaGroups('default').catch((e) => ({ error: e.message }));
+        wahaResult = { configured: true, barbeariaDinoGestao: g1, dino: g2, default: g3 };
+      } else {
+        wahaResult = { configured: false, envUrl: Boolean(process.env.WAHA_CONTROL_URL), envSecret: Boolean(process.env.WAHA_CONTROL_BRIDGE_SECRET) };
+      }
+    } catch (wErr) {
+      wahaResult = { error: wErr.message };
+    }
+    
+    // Consultar histórico de mensagens para capturar todos os chatIds (inclusive @g.us)
+    const url = `${cfg.baseUrl}${cfg.apiBase}/messages?latest=false&limit=200&instanceName=${encodeURIComponent(cfg.instance)}`;
+    const resp = await fetchImpl(url, {
+      headers: {
+        'Accept': 'application/json',
+        'X-API-KEY': cfg.key,
+        'apikey': cfg.key,
+        'authorization': `Bearer ${cfg.key}`,
+      }
+    });
+    const data = await resp.json().catch(() => ({}));
+
+    const chatIds = new Set();
+    const groupChats = [];
+    const scan = (item) => {
+      if (!item) return;
+      const cid = item.chatId || item.chat_id || item.remoteJid;
+      if (cid) {
+        chatIds.add(cid);
+        if (String(cid).includes('@g.us') || String(item.content || '').toLowerCase().includes('dino')) {
+          groupChats.push(item);
+        }
+      }
+    };
+
+    if (Array.isArray(data)) data.forEach(scan);
+    if (Array.isArray(data?.messages)) data.messages.forEach(scan);
+    if (Array.isArray(data?.users)) {
+      data.users.forEach((u) => {
+        scan(u);
+        if (Array.isArray(u?.messages)) u.messages.forEach(scan);
+      });
+    }
+
+    res.json({
+      ok: true,
+      instance: cfg.instance,
+      waha: wahaResult,
+      totalChats: chatIds.size,
+      allChatIds: Array.from(chatIds),
+      groupChats,
+      sample: Array.isArray(data) ? data.slice(0, 5) : (data?.messages || []).slice(0, 5),
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // Prévia integrada de taxas/materiais: POST por ser um cálculo de payload, nunca uma mutação.
 // Não há rota de aplicar neste recorte; o plano só devolve hash, divergências e pendências.
 function temPropriedade(valor, chave) {
