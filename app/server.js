@@ -5466,6 +5466,36 @@ app.post('/api/public/dino/report-grafico/disparar', async (req, res) => {
   }
 });
 
+app.post('/api/public/dino/testar-send-raw', async (req, res) => {
+  try {
+    const { chatId = '120363028123456789@g.us', message = 'teste' } = req.body || {};
+    const { chatbotBackendConfig } = await import('./core/whatsapp-provider.js');
+    const cfg = chatbotBackendConfig();
+    const fetchImpl = globalThis.fetch;
+    const resp = await fetchImpl(`${cfg.baseUrl}${cfg.apiBase}/send`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-KEY': cfg.key,
+        'apikey': cfg.key,
+        'authorization': `Bearer ${cfg.key}`,
+      },
+      body: JSON.stringify({
+        instanceName: cfg.instance,
+        chat_id: chatId,
+        message,
+      }),
+    });
+    const status = resp.status;
+    const text = await resp.text();
+    let body = null;
+    try { body = JSON.parse(text); } catch {}
+    res.json({ ok: resp.ok, status, body: body || text });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.get('/api/public/dino/grupos-evolution', async (req, res) => {
   try {
     const evoUrl = (process.env.EVOLUTION_API_URL || '').replace(/\/+$/, '');

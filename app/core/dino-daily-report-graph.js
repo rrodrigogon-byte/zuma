@@ -246,10 +246,9 @@ export async function enviarReportGraficosDino({
   // Destino: Grupo 'Gestão Dino' ou número direto do Guilherme Dino / Reserva
   const targetGroup = process.env.WHATSAPP_GESTAO_DINO_GROUP_ID || destinatario;
   const targetNumbers = [
+    TELEFONE_RODRIGO_GESTAO,
     TELEFONE_GUILHERME_DINO,
     TELEFONE_GUILHERME_DINO_8D,
-    TELEFONE_RODRIGO_GESTAO,
-    TELEFONE_DINO_RESERVA,
   ];
   if (destinatario && !targetNumbers.includes(destinatario)) {
     targetNumbers.unshift(destinatario);
