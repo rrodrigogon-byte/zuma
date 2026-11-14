@@ -1878,7 +1878,7 @@ export default function ConcretoUsinaERP() {
                   <div>
                     <h3 style={{ margin: 0 }}>Telemetria de Bombas Lança 36m/42m & Segurança Operacional (ABNT NBR 15649)</h3>
                     <small style={{ color: 'var(--text-muted)' }}>
-                      Anemômetro ultrassônico com trava por vento crítico (> 48 km/h), pressão hidráulica e cálculo contínuo de vida útil da tubulação 5'.
+                      Anemômetro ultrassônico com trava por vento crítico (&gt; 48 km/h), pressão hidráulica e cálculo contínuo de vida útil da tubulação 5'.
                     </small>
                   </div>
                   <span className="serrano-pill serrano-p-ok" style={{ fontWeight: 800 }}>

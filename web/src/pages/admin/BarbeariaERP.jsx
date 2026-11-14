@@ -61,6 +61,9 @@ const DinoCarteiraClientesPanel = lazy(
 const DinoRecuperacaoAtivaCockpit = lazy(
   () => import("./dino/DinoRecuperacaoAtivaCockpit"),
 );
+const DinoInfluencerCockpit = lazy(
+  () => import("./dino/DinoInfluencerCockpit"),
+);
 const DinoRecuperacaoAvecPanel = lazy(
   () => import("./dino/DinoRecuperacaoAvecPanel"),
 );
@@ -109,6 +112,7 @@ import {
 } from "./dino/CaptacaoPanels";
 
 const TABS = [
+  ["Dino Influencer & Perfumaria 360°", "Cockpit diário de seguidores ganhos/perdidos, desintoxicação de following, insights diários da KyttoIA, matriz de Reels e perfumaria de luxo"],
   ["Recuperação Ativa & Pacotes (T-Rex)", "Cockpit diário de reativação de clientes > 60d e simulador comercial de pacotes"],
   ["Como Vender Mais com IA", "Indicadores de vendas, combate ao churn, upsell e motor preditivo da IA"],
   ["Gestão do Salão (IA)", "Metas, entregas por profissional, blend e IA T-Rex"],
@@ -192,6 +196,7 @@ const AREAS = [
     label: "Relacionamento",
     short: "Clientes, retorno e indicação",
     tabs: [
+      "Dino Influencer & Perfumaria 360°",
       "Recuperação Ativa & Pacotes (T-Rex)",
       "Como Vender Mais com IA",
       "Gestão do Salão (IA)",
@@ -231,6 +236,7 @@ const AREAS = [
     label: "Gestão",
     short: "Comissões, metas e regras",
     tabs: [
+      "Dino Influencer & Perfumaria 360°",
       "Como Vender Mais com IA",
       "Recuperação de clientes (Avec)",
       "Metas & Roleta",
@@ -14189,6 +14195,25 @@ export default function BarbeariaERP({ tabInicial } = {}) {
           }
         >
           <DinoRecuperacaoAtivaCockpit />
+        </Suspense>
+      );
+    }
+    if (tab === "Dino Influencer & Perfumaria 360°") {
+      return (
+        <Suspense
+          fallback={
+            <Card
+              style={{
+                padding: 40,
+                textAlign: "center",
+                color: "var(--muted)",
+              }}
+            >
+              Carregando Cockpit Dino Influencer & Perfumaria 360°...
+            </Card>
+          }
+        >
+          <DinoInfluencerCockpit />
         </Suspense>
       );
     }

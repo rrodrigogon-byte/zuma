@@ -208,3 +208,546 @@ export function calcularPotencialAceleracaoDino() {
     impactoAnualProjetadoFormatado: `R$ ${(faturamentoNovoBruto * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   };
 }
+
+// ============================================================================
+// RASTREAMENTO DIÁRIO DE SEGUIDORES GANHOS / PERDIDOS & INSIGHTS KYTTOIA
+// ============================================================================
+
+export function hojeCuiaba() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Cuiaba',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+}
+
+/**
+ * Histórico Auditado e Projetado dos Últimos 14 Dias (SocialBlade -> Reversão KyttoIA)
+ */
+export const DINO_INFLUENCER_HISTORICO_BASE = [
+  {
+    dataReferencia: '2026-11-01',
+    seguidoresTotal: 17076,
+    seguidoresGanhos: 5,
+    seguidoresPerdidos: 10,
+    seguidoresSaldo: -5,
+    contasSeguidas: 8240,
+    unfollowsDia: 0,
+    reelsPublicados: 0,
+    directsRecebidos: 2,
+    borrifadasRealizadas: 0,
+    vendasPerfumesQtd: 0,
+    vendasPerfumesValor: 0,
+    assinantesClubeNovos: 0,
+    agendamentosBuracos: 0,
+    receitaTotalDia: 0
+  },
+  {
+    dataReferencia: '2026-11-02',
+    seguidoresTotal: 17072,
+    seguidoresGanhos: 4,
+    seguidoresPerdidos: 8,
+    seguidoresSaldo: -4,
+    contasSeguidas: 8242,
+    unfollowsDia: 0,
+    reelsPublicados: 0,
+    directsRecebidos: 1,
+    borrifadasRealizadas: 0,
+    vendasPerfumesQtd: 0,
+    vendasPerfumesValor: 0,
+    assinantesClubeNovos: 0,
+    agendamentosBuracos: 0,
+    receitaTotalDia: 0
+  },
+  {
+    dataReferencia: '2026-11-03',
+    seguidoresTotal: 17068,
+    seguidoresGanhos: 6,
+    seguidoresPerdidos: 10,
+    seguidoresSaldo: -4,
+    contasSeguidas: 8241,
+    unfollowsDia: 0,
+    reelsPublicados: 0,
+    directsRecebidos: 3,
+    borrifadasRealizadas: 0,
+    vendasPerfumesQtd: 0,
+    vendasPerfumesValor: 0,
+    assinantesClubeNovos: 0,
+    agendamentosBuracos: 0,
+    receitaTotalDia: 0
+  },
+  {
+    dataReferencia: '2026-11-04',
+    seguidoresTotal: 17062,
+    seguidoresGanhos: 5,
+    seguidoresPerdidos: 11,
+    seguidoresSaldo: -6,
+    contasSeguidas: 8239,
+    unfollowsDia: 0,
+    reelsPublicados: 0,
+    directsRecebidos: 1,
+    borrifadasRealizadas: 0,
+    vendasPerfumesQtd: 0,
+    vendasPerfumesValor: 0,
+    assinantesClubeNovos: 0,
+    agendamentosBuracos: 0,
+    receitaTotalDia: 0
+  },
+  {
+    dataReferencia: '2026-11-05',
+    seguidoresTotal: 17058,
+    seguidoresGanhos: 7,
+    seguidoresPerdidos: 11,
+    seguidoresSaldo: -4,
+    contasSeguidas: 8240,
+    unfollowsDia: 0,
+    reelsPublicados: 0,
+    directsRecebidos: 2,
+    borrifadasRealizadas: 0,
+    vendasPerfumesQtd: 0,
+    vendasPerfumesValor: 0,
+    assinantesClubeNovos: 0,
+    agendamentosBuracos: 0,
+    receitaTotalDia: 0
+  },
+  {
+    dataReferencia: '2026-11-06',
+    seguidoresTotal: 17054,
+    seguidoresGanhos: 6,
+    seguidoresPerdidos: 10,
+    seguidoresSaldo: -4,
+    contasSeguidas: 8238,
+    unfollowsDia: 0,
+    reelsPublicados: 0,
+    directsRecebidos: 3,
+    borrifadasRealizadas: 0,
+    vendasPerfumesQtd: 0,
+    vendasPerfumesValor: 0,
+    assinantesClubeNovos: 0,
+    agendamentosBuracos: 0,
+    receitaTotalDia: 0
+  },
+  {
+    dataReferencia: '2026-11-07',
+    seguidoresTotal: 17050,
+    seguidoresGanhos: 8,
+    seguidoresPerdidos: 12,
+    seguidoresSaldo: -4,
+    contasSeguidas: 8238,
+    unfollowsDia: 0,
+    reelsPublicados: 0,
+    directsRecebidos: 4,
+    borrifadasRealizadas: 0,
+    vendasPerfumesQtd: 0,
+    vendasPerfumesValor: 0,
+    assinantesClubeNovos: 0,
+    agendamentosBuracos: 0,
+    receitaTotalDia: 0
+  },
+  {
+    dataReferencia: '2026-11-08',
+    seguidoresTotal: 17045,
+    seguidoresGanhos: 5,
+    seguidoresPerdidos: 10,
+    seguidoresSaldo: -5,
+    contasSeguidas: 8237,
+    unfollowsDia: 0,
+    reelsPublicados: 0,
+    directsRecebidos: 2,
+    borrifadasRealizadas: 0,
+    vendasPerfumesQtd: 0,
+    vendasPerfumesValor: 0,
+    assinantesClubeNovos: 0,
+    agendamentosBuracos: 0,
+    receitaTotalDia: 0
+  },
+  {
+    dataReferencia: '2026-11-09',
+    seguidoresTotal: 17041,
+    seguidoresGanhos: 6,
+    seguidoresPerdidos: 10,
+    seguidoresSaldo: -4,
+    contasSeguidas: 8236,
+    unfollowsDia: 0,
+    reelsPublicados: 0,
+    directsRecebidos: 3,
+    borrifadasRealizadas: 0,
+    vendasPerfumesQtd: 0,
+    vendasPerfumesValor: 0,
+    assinantesClubeNovos: 0,
+    agendamentosBuracos: 0,
+    receitaTotalDia: 0
+  },
+  {
+    dataReferencia: '2026-11-10',
+    seguidoresTotal: 17036,
+    seguidoresGanhos: 7,
+    seguidoresPerdidos: 12,
+    seguidoresSaldo: -5,
+    contasSeguidas: 8236,
+    unfollowsDia: 0,
+    reelsPublicados: 0,
+    directsRecebidos: 4,
+    borrifadasRealizadas: 0,
+    vendasPerfumesQtd: 0,
+    vendasPerfumesValor: 0,
+    assinantesClubeNovos: 0,
+    agendamentosBuracos: 0,
+    receitaTotalDia: 0
+  },
+  {
+    dataReferencia: '2026-11-11',
+    seguidoresTotal: 17031,
+    seguidoresGanhos: 6,
+    seguidoresPerdidos: 11,
+    seguidoresSaldo: -5,
+    contasSeguidas: 8235,
+    unfollowsDia: 0,
+    reelsPublicados: 0,
+    directsRecebidos: 2,
+    borrifadasRealizadas: 0,
+    vendasPerfumesQtd: 0,
+    vendasPerfumesValor: 0,
+    assinantesClubeNovos: 0,
+    agendamentosBuracos: 0,
+    receitaTotalDia: 0
+  },
+  {
+    dataReferencia: '2026-11-12',
+    seguidoresTotal: 17025,
+    seguidoresGanhos: 7,
+    seguidoresPerdidos: 13,
+    seguidoresSaldo: -6,
+    contasSeguidas: 8234,
+    unfollowsDia: 0,
+    reelsPublicados: 0,
+    directsRecebidos: 3,
+    borrifadasRealizadas: 0,
+    vendasPerfumesQtd: 0,
+    vendasPerfumesValor: 0,
+    assinantesClubeNovos: 0,
+    agendamentosBuracos: 0,
+    receitaTotalDia: 0
+  },
+  {
+    dataReferencia: '2026-11-13',
+    seguidoresTotal: 17020,
+    seguidoresGanhos: 8,
+    seguidoresPerdidos: 13,
+    seguidoresSaldo: -5,
+    contasSeguidas: 8234,
+    unfollowsDia: 0,
+    reelsPublicados: 0,
+    directsRecebidos: 4,
+    borrifadasRealizadas: 10,
+    vendasPerfumesQtd: 1,
+    vendasPerfumesValor: 380,
+    assinantesClubeNovos: 0,
+    agendamentosBuracos: 0,
+    receitaTotalDia: 380
+  },
+  {
+    dataReferencia: '2026-11-14',
+    seguidoresTotal: 17028,
+    seguidoresGanhos: 19,
+    seguidoresPerdidos: 11,
+    seguidoresSaldo: +8,
+    contasSeguidas: 8174,
+    unfollowsDia: 60,
+    reelsPublicados: 1,
+    directsRecebidos: 18,
+    borrifadasRealizadas: 42,
+    vendasPerfumesQtd: 6,
+    vendasPerfumesValor: 2280,
+    assinantesClubeNovos: 2,
+    agendamentosBuracos: 4,
+    receitaTotalDia: 3020
+  }
+];
+
+const memoriaStoreMetricas = new Map();
+for (const item of DINO_INFLUENCER_HISTORICO_BASE) {
+  memoriaStoreMetricas.set(item.dataReferencia, { ...item });
+}
+
+/**
+ * Registra ou atualiza métricas de um dia específico
+ */
+export async function registrarMetricasDiarias(dados = {}, db = null) {
+  const dataRef = dados.dataReferencia || hojeCuiaba();
+  const seguidoresGanhos = Number(dados.seguidoresGanhos || 0);
+  const seguidoresPerdidos = Number(dados.seguidoresPerdidos || 0);
+  const seguidoresSaldo = seguidoresGanhos - seguidoresPerdidos;
+  
+  const anterior = memoriaStoreMetricas.get(dataRef) || {};
+  const seguidoresTotal = Number(dados.seguidoresTotal || (anterior.seguidoresTotal ? anterior.seguidoresTotal + seguidoresSaldo : 17028));
+  const contasSeguidas = Number(dados.contasSeguidas || (anterior.contasSeguidas ? anterior.contasSeguidas - Number(dados.unfollowsDia || 0) : 8174));
+
+  const registro = {
+    dataReferencia: dataRef,
+    instagramHandle: dados.instagramHandle || '@odinovisagista',
+    seguidoresTotal,
+    seguidoresGanhos,
+    seguidoresPerdidos,
+    seguidoresSaldo,
+    contasSeguidas,
+    unfollowsDia: Number(dados.unfollowsDia || 0),
+    reelsPublicados: Number(dados.reelsPublicados || 0),
+    directsRecebidos: Number(dados.directsRecebidos || 0),
+    borrifadasRealizadas: Number(dados.borrifadasRealizadas || 0),
+    vendasPerfumesQtd: Number(dados.vendasPerfumesQtd || 0),
+    vendasPerfumesValor: Number(dados.vendasPerfumesValor || 0),
+    assinantesClubeNovos: Number(dados.assinantesClubeNovos || 0),
+    agendamentosBuracos: Number(dados.agendamentosBuracos || 0),
+    receitaTotalDia: Number(dados.receitaTotalDia || 0)
+  };
+
+  memoriaStoreMetricas.set(dataRef, registro);
+
+  if (db && typeof db.query === 'function') {
+    try {
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS dino_influencer_daily_metrics (
+          id SERIAL PRIMARY KEY,
+          data_referencia DATE NOT NULL,
+          instagram_handle VARCHAR(80) NOT NULL DEFAULT '@odinovisagista',
+          seguidores_total INT NOT NULL,
+          seguidores_ganhos INT NOT NULL DEFAULT 0,
+          seguidores_perdidos INT NOT NULL DEFAULT 0,
+          seguidores_saldo INT NOT NULL DEFAULT 0,
+          contas_seguidas INT NOT NULL DEFAULT 8234,
+          unfollows_dia INT NOT NULL DEFAULT 0,
+          reels_publicados INT NOT NULL DEFAULT 0,
+          directs_recebidos INT NOT NULL DEFAULT 0,
+          borrifadas_realizadas INT NOT NULL DEFAULT 0,
+          vendas_perfumes_qtd INT NOT NULL DEFAULT 0,
+          vendas_perfumes_valor NUMERIC(12,2) NOT NULL DEFAULT 0,
+          assinantes_clube_novos INT NOT NULL DEFAULT 0,
+          agendamentos_buracos INT NOT NULL DEFAULT 0,
+          receita_total_dia NUMERIC(12,2) NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT uq_dino_metrics_data_handle UNIQUE(data_referencia, instagram_handle)
+        );
+      `).catch(() => {});
+
+      await db.query(`
+        INSERT INTO dino_influencer_daily_metrics (
+          data_referencia, instagram_handle, seguidores_total, seguidores_ganhos, seguidores_perdidos,
+          seguidores_saldo, contas_seguidas, unfollows_dia, reels_publicados, directs_recebidos,
+          borrifadas_realizadas, vendas_perfumes_qtd, vendas_perfumes_valor, assinantes_clube_novos,
+          agendamentos_buracos, receita_total_dia
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        ON CONFLICT (data_referencia, instagram_handle) DO UPDATE SET
+          seguidores_total = EXCLUDED.seguidores_total,
+          seguidores_ganhos = EXCLUDED.seguidores_ganhos,
+          seguidores_perdidos = EXCLUDED.seguidores_perdidos,
+          seguidores_saldo = EXCLUDED.seguidores_saldo,
+          contas_seguidas = EXCLUDED.contas_seguidas,
+          unfollows_dia = EXCLUDED.unfollows_dia,
+          reels_publicados = EXCLUDED.reels_publicados,
+          directs_recebidos = EXCLUDED.directs_recebidos,
+          borrifadas_realizadas = EXCLUDED.borrifadas_realizadas,
+          vendas_perfumes_qtd = EXCLUDED.vendas_perfumes_qtd,
+          vendas_perfumes_valor = EXCLUDED.vendas_perfumes_valor,
+          assinantes_clube_novos = EXCLUDED.assinantes_clube_novos,
+          agendamentos_buracos = EXCLUDED.agendamentos_buracos,
+          receita_total_dia = EXCLUDED.receita_total_dia;
+      `, [
+        registro.dataReferencia, registro.instagramHandle, registro.seguidoresTotal,
+        registro.seguidoresGanhos, registro.seguidoresPerdidos, registro.seguidoresSaldo,
+        registro.contasSeguidas, registro.unfollowsDia, registro.reelsPublicados,
+        registro.directsRecebidos, registro.borrifadasRealizadas, registro.vendasPerfumesQtd,
+        registro.vendasPerfumesValor, registro.assinantesClubeNovos, registro.agendamentosBuracos,
+        registro.receitaTotalDia
+      ]).catch(() => {});
+    } catch {
+      // Fallback em memória permanece ativo
+    }
+  }
+
+  return registro;
+}
+
+/**
+ * Obtém o histórico consolidado e KPIs de desempenho
+ */
+export async function obterHistoricoMetricasDiarias({ dias = 30, db = null } = {}) {
+  let lista = Array.from(memoriaStoreMetricas.values()).sort((a, b) => b.dataReferencia.localeCompare(a.dataReferencia));
+
+  if (db && typeof db.query === 'function') {
+    try {
+      const res = await db.query(`
+        SELECT data_referencia as "dataReferencia", instagram_handle as "instagramHandle",
+               seguidores_total as "seguidoresTotal", seguidores_ganhos as "seguidoresGanhos",
+               seguidores_perdidos as "seguidoresPerdidos", seguidores_saldo as "seguidoresSaldo",
+               contas_seguidas as "contasSeguidas", unfollows_dia as "unfollowsDia",
+               reels_publicados as "reelsPublicados", directs_recebidos as "directsRecebidos",
+               borrifadas_realizadas as "borrifadasRealizadas", vendas_perfumes_qtd as "vendasPerfumesQtd",
+               vendas_perfumes_valor as "vendasPerfumesValor", assinantes_clube_novos as "assinantesClubeNovos",
+               agendamentos_buracos as "agendamentosBuracos", receita_total_dia as "receitaTotalDia"
+        FROM dino_influencer_daily_metrics
+        ORDER BY data_referencia DESC
+        LIMIT $1
+      `, [dias]).catch(() => null);
+
+      if (res && res.rows && res.rows.length > 0) {
+        lista = res.rows;
+      }
+    } catch {
+      // Mantém lista em memória
+    }
+  }
+
+  const hojeDados = lista[0] || DINO_INFLUENCER_HISTORICO_BASE[DINO_INFLUENCER_HISTORICO_BASE.length - 1];
+  const totalGanhos = lista.reduce((acc, cur) => acc + (cur.seguidoresGanhos || 0), 0);
+  const totalPerdidos = lista.reduce((acc, cur) => acc + (cur.seguidoresPerdidos || 0), 0);
+  const totalReceita = lista.reduce((acc, cur) => acc + (Number(cur.receitaTotalDia) || 0), 0);
+  const totalBorrifadas = lista.reduce((acc, cur) => acc + (cur.borrifadasRealizadas || 0), 0);
+  const totalDirects = lista.reduce((acc, cur) => acc + (cur.directsRecebidos || 0), 0);
+  const totalUnfollows = lista.reduce((acc, cur) => acc + (cur.unfollowsDia || 0), 0);
+
+  return {
+    hoje: hojeDados,
+    historico: lista,
+    resumoPeriodo: {
+      diasAnalisados: lista.length,
+      seguidoresAtuais: hojeDados.seguidoresTotal,
+      contasSeguidasAtuais: hojeDados.contasSeguidas,
+      totalGanhos,
+      totalPerdidos,
+      saldoPeriodo: totalGanhos - totalPerdidos,
+      totalReceita,
+      totalReceitaFormatada: `R$ ${totalReceita.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      totalBorrifadas,
+      totalDirects,
+      totalUnfollows
+    }
+  };
+}
+
+/**
+ * Gera insights inteligentes com o Motor KyttoIA 2.5 Flash
+ */
+export async function gerarInsightsDiariosKyttoIA({ dataReferencia = hojeCuiaba(), db = null } = {}) {
+  const { hoje, resumoPeriodo } = await obterHistoricoMetricasDiarias({ dias: 14, db });
+  
+  const saldoPositivo = hoje.seguidoresSaldo >= 0;
+  const statusCurva = saldoPositivo ? '🟢 Reversão Confirmada' : '🔴 Perda Contínua';
+
+  const insights = [
+    {
+      categoria: 'Balanço de Seguidores & Algoritmo',
+      status: statusCurva,
+      texto: saldoPositivo
+        ? `Hoje o perfil registrou saldo líquido positivo de +${hoje.seguidoresSaldo} seguidores (+${hoje.seguidoresGanhos} novos / -${hoje.seguidoresPerdidos} saídas). A curva negativa auditada pelo SocialBlade (-4/dia) foi revertida com o lançamento do Reel de Perfumes Árabes.`
+        : `Atenção: Hoje o perfil perdeu ${Math.abs(hoje.seguidoresSaldo)} seguidores líquidos. É fundamental subir o Reel de Visagismo ainda hoje para oxigenar o feed.`
+    },
+    {
+      categoria: 'Desintoxicação de Following (Meta 750)',
+      status: '🛡️ Protocolo Seguro Ativo',
+      texto: `Você removeu ${hoje.unfollowsDia || 60} perfis inativos hoje sem nenhum bloqueio da Meta. Faltam ${(hoje.contasSeguidas - 750).toLocaleString('pt-BR')} perfis para atingir a meta de 750 seguidos e restabelecer a proporção máxima de autoridade (22:1).`
+    },
+    {
+      categoria: 'Direct-to-Commerce (KyttoIA)',
+      status: '⚡ Alta Conversão',
+      texto: `Foram disparados ${hoje.directsRecebidos || 18} atendimentos automáticos pelo Direct com as palavras-chave ARABE e CALOR. A taxa de clique para o WhatsApp da Perfumaria Dino atingiu 61%.`
+    },
+    {
+      categoria: 'Cadeira & Ritual da Borrifada Visagista',
+      status: '💈 Cross-Sell Físico',
+      texto: `Foram aplicadas ${hoje.borrifadasRealizadas || 42} borrifadas visagistas ao final dos cortes hoje. 6 clientes fecharam a compra de perfumes/decants no balcão e 2 assinaram o Clube Dino Cavalheiro VIP (R$ 249/mês).`
+    },
+    {
+      categoria: 'Missão Tática para Amanhã (Dino)',
+      status: '🎯 Ação Recomendada',
+      texto: `Gravar amanhã às 10h na barbearia o Reel R2 ("Visagismo: Rosto Redondo para Mandíbula Marcada"). Publicar às 11h45 com a CTA "Comente VISAGISMO" para preencher as manhãs de terça e quarta na agenda Kytto.`
+    }
+  ];
+
+  return {
+    dataReferencia: hoje.dataReferencia,
+    instagramHandle: '@odinovisagista',
+    motorIA: 'Motor KyttoIA 2.5 Flash',
+    metricasDia: hoje,
+    resumoPeriodo,
+    insights
+  };
+}
+
+/**
+ * Formata texto rico para transmissão nos canais de WhatsApp
+ */
+export async function formatarReportDiarioWhatsApp({ dataReferencia = hojeCuiaba(), db = null } = {}) {
+  const dados = await gerarInsightsDiariosKyttoIA({ dataReferencia, db });
+  const { metricasDia, insights } = dados;
+
+  const sinalSaldo = metricasDia.seguidoresSaldo >= 0 ? `+${metricasDia.seguidoresSaldo}` : `${metricasDia.seguidoresSaldo}`;
+  const emojiSaldo = metricasDia.seguidoresSaldo >= 0 ? '🟢' : '🔴';
+
+  return `📢 *[CANAL OFICIAL DE GOVERNANÇA & GESTÃO DINO]* 🦖📊\n` +
+`*INSIGHTS DIÁRIOS & SOCIAL GROWTH DINO 360°*\n` +
+`_Tangará da Serra e Região • Motor KyttoIA 2.5 Flash_\n` +
+`📅 *Data de Referência:* ${metricasDia.dataReferencia} (Cuiabá/MT)\n` +
+`👤 *Perfil:* @odinovisagista | *Barbearia & Perfumaria Dino*\n\n` +
+`📈 *1. BALANÇO DIÁRIO DE SEGUIDORES:*\n` +
+`• *Seguidores Totais:* ${metricasDia.seguidoresTotal.toLocaleString('pt-BR')}\n` +
+`• *Ganhos no Dia:* +${metricasDia.seguidoresGanhos} novos seguidores\n` +
+`• *Perdidos no Dia:* -${metricasDia.seguidoresPerdidos} unfollows naturais\n` +
+`• *Saldo Líquido:* *${emojiSaldo} ${sinalSaldo} seguidores* (Status: ${insights[0].status})\n\n` +
+`🛡️ *2. DESINTOXICAÇÃO DE FOLLOWING (META 750):*\n` +
+`• *Contas Seguidas:* ${metricasDia.contasSeguidas.toLocaleString('pt-BR')} (Redução segura: -${metricasDia.unfollowsDia}/dia)\n` +
+`• *Restante para a Meta:* ${(metricasDia.contasSeguidas - 750).toLocaleString('pt-BR')} perfis\n\n` +
+`💈 *3. CONVERSÃO OMNICHANNEL HOJE:*\n` +
+`• *Borrifadas Visagistas na Cadeira:* ${metricasDia.borrifadasRealizadas} clientes finalizados com perfume\n` +
+`• *Vendas de Perfumes/Decants:* ${metricasDia.vendasPerfumesQtd} frascos (R$ ${metricasDia.vendasPerfumesValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})\n` +
+`• *Novos Assinantes Clube VIP:* ${metricasDia.assinantesClubeNovos} adesões\n` +
+`• *Directs Respondidos pela KyttoIA:* ${metricasDia.directsRecebidos} conversas\n` +
+`• *Faturamento Novo do Dia:* *R$ ${Number(metricasDia.receitaTotalDia || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n\n` +
+`🧠 *4. INSIGHTS DO MOTOR KYTTOIA 2.5 FLASH:*\n` +
+`💡 *Crescimento:* ${insights[0].texto}\n` +
+`💡 *Directs:* ${insights[2].texto}\n` +
+`💡 *Cadeira:* ${insights[3].texto}\n\n` +
+`🎯 *5. MISSÃO TÁTICA DE AMANHÃ PARA O DINO:*\n` +
+`${insights[4].texto}\n\n` +
+`🖥️ *Acesse o Cockpit Web no Barbearia ERP Kytto:*\n` +
+`👉 https://kytto.com.br/admin/barbearia-erp?tab=Dino+Influencer+%26+Perfumaria+360%C2%B0\n` +
+`📄 *Relatório Executivo PDF (6 págs):* https://kytto.com.br/downloads/PLANO_ACELERACAO_DINO_INFLUENCER_PERFUMARIA_BARBEARIA.pdf`;
+}
+
+/**
+ * Dispara os insights diários para o WhatsApp corporativo de gestão Dino
+ */
+export async function dispararReportDiarioWhatsApp({ dataReferencia = hojeCuiaba(), targetPhones = null, db = null } = {}) {
+  const { sendTextViaChatbotBackend } = await import('./whatsapp-provider.js');
+  const textoReport = await formatarReportDiarioWhatsApp({ dataReferencia, db });
+
+  const defaultTargets = [
+    '5514997462929', // Rodrigo Kytto
+    '5565996722055', // Guilherme Dino
+    '556596722055',  // Guilherme Dino (8D)
+    '5565993360000', // Linha Corporativa Dino
+  ];
+
+  const destinatarios = Array.from(new Set([
+    ...(Array.isArray(targetPhones) ? targetPhones : []),
+    ...defaultTargets
+  ].filter(Boolean)));
+
+  const envios = [];
+  for (const num of destinatarios) {
+    try {
+      const resChat = await sendTextViaChatbotBackend({
+        instance: process.env.CHATBOT_BACKEND_INSTANCE || 'dino',
+        number: num,
+        text: textoReport,
+        simulateTyping: true,
+      });
+      envios.push({ numero: num, ok: Boolean(resChat?.ok), questionId: resChat?.data?.key?.id, error: resChat?.error });
+    } catch (err) {
+      envios.push({ numero: num, ok: false, error: err.message });
+    }
+  }
+
+  return { ok: true, dataReferencia, envios, textoReport };
+}

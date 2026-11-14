@@ -127,6 +127,12 @@ import {
   processarGatilhoDirect,
   PLANOS_CLUBE_DINO_HIBRIDO,
   calcularPotencialAceleracaoDino,
+  obterHistoricoMetricasDiarias,
+  registrarMetricasDiarias,
+  gerarInsightsDiariosKyttoIA,
+  dispararReportDiarioWhatsApp,
+  formatarReportDiarioWhatsApp,
+  hojeCuiaba as hojeCuiabaInfluencer
 } from './core/dino-influencer-growth-engine.js';
 import { kyttoEventBus, TOPICOS_KYTTO } from './core/kytto-event-bus.js';
 import { armazenarCopiaSegura, listarArquivosSeguros, obterEstatisticasArmazenamento } from './core/armazenamento-seguro.js';
@@ -733,9 +739,11 @@ app.post('/api/public/dino/recuperacao-ativa/report-20h/enviar', async (req, res
 // ============================================================================
 // ROTAS DE ACELERAÇÃO DINO INFLUENCER, BARBEARIA & PERFUMARIA 360° (KYTTOIA)
 // ============================================================================
-app.get('/api/admin/dino/influencer/cockpit', (req, res) => {
+app.get('/api/admin/dino/influencer/cockpit', async (req, res) => {
   try {
     const potencial = calcularPotencialAceleracaoDino();
+    const historicoMetricas = await obterHistoricoMetricasDiarias({ dias: 14, db: commerceDb });
+    const insightsHoje = await gerarInsightsDiariosKyttoIA({ db: commerceDb });
     res.json({
       ok: true,
       perfil: PERFIL_DINO,
@@ -743,7 +751,50 @@ app.get('/api/admin/dino/influencer/cockpit', (req, res) => {
       matrizReels: MATRIZ_REELS_VIRAL,
       planosClube: PLANOS_CLUBE_DINO_HIBRIDO,
       potencialFinanceiro: potencial,
+      metricasHoje: historicoMetricas.hoje,
+      resumoPeriodo: historicoMetricas.resumoPeriodo,
+      historico: historicoMetricas.historico,
+      insightsHoje: insightsHoje.insights
     });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/admin/dino/influencer/daily-metrics', async (req, res) => {
+  try {
+    const dias = Number(req.query.dias || 30);
+    const dados = await obterHistoricoMetricasDiarias({ dias, db: commerceDb });
+    res.json({ ok: true, ...dados });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/dino/influencer/daily-metrics/registrar', async (req, res) => {
+  try {
+    const registro = await registrarMetricasDiarias(req.body || {}, commerceDb);
+    res.json({ ok: true, registro });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/admin/dino/influencer/insights-hoje', async (req, res) => {
+  try {
+    const dataRef = req.query.data || hojeCuiabaInfluencer();
+    const resultado = await gerarInsightsDiariosKyttoIA({ dataReferencia: dataRef, db: commerceDb });
+    res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/dino/influencer/disparar-insights-diarios-whatsapp', async (req, res) => {
+  try {
+    const { data = hojeCuiabaInfluencer(), telefones = null } = req.body || {};
+    const resultado = await dispararReportDiarioWhatsApp({ dataReferencia: data, targetPhones: telefones, db: commerceDb });
+    res.json({ ok: true, ...resultado });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
