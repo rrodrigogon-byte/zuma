@@ -408,7 +408,7 @@ ${snapJson}`;
 }
 
 // ============================================================================
-// DECLARAÇÃO DE FERRAMENTAS EXECUTIVAS PARA GEMINI NO WHATSAPP GESTÃO
+// DECLARAÇÃO DE FERRAMENTAS EXECUTIVAS PARA MOTOR KYTTOIA NO WHATSAPP GESTÃO
 // ============================================================================
 export const DINO_GESTAO_TOOLS = [
   {
@@ -528,6 +528,25 @@ export const DINO_GESTAO_TOOLS = [
         motivo: { type: 'STRING', description: 'Motivo da invocação (ex: solicitacao_gestor_whatsapp, autorizacao_08h, sob_demanda)' },
         destinatario: { type: 'STRING', description: 'Número do gestor autorizador (padrão: 5565996722055)' },
       },
+    },
+  },
+  {
+    name: 'consultar_fechamento_diario',
+    description: 'Consulta ou dispara o fechamento diário consolidado da Barbearia Dino (receita total, serviços, produtos, comandas pagas, ticket médio, produção por barbeiro, pagamentos e alertas de estoque). Pode enviar diretamente para o grupo Gestão Dino e Guilherme Dino (+55 65 99672-2055).',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        enviarNoGrupo: { type: 'BOOLEAN', description: 'Se verdadeiro, além de responder no chat envia o fechamento para o grupo Gestão Dino' },
+        data: { type: 'STRING', description: 'Data YYYY-MM-DD (vazio = hoje)' },
+      },
+    },
+  },
+  {
+    name: 'consultar_satisfacao_nps',
+    description: 'Consulta o ranking de satisfação dos clientes e notas de avaliação pós-atendimento (NPS de 1 a 5) da equipe de barbeiros (Dino, Bruno, Natani, João Victor) da Barbearia Dino.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {},
     },
   },
 ];
@@ -775,6 +794,39 @@ export async function executarFerramentaGestao(name, args = {}, context = {}) {
       mensagem: resDisparo.ok
         ? 'Relatório de Performance com gráficos 1080p compilado e disparado com sucesso para o canal oficial e grupo Gestão Dino!'
         : 'Relatório compilado, mas o envio encontrou instabilidade no canal de WhatsApp. A imagem 1080p está disponível no link direto.',
+    };
+  }
+
+  if (name === 'consultar_fechamento_diario') {
+    const { consolidarResumoDiario, formatarMensagemBriefingGestao } = await import('./core/automacao-resumo-gestao.js');
+    const resumo = consolidarResumoDiario(empId, args.data || null);
+    const mensagemTexto = formatarMensagemBriefingGestao(resumo);
+    if (args.enviarNoGrupo) {
+      const { dispararFechamentoGestaoDino } = await import('./core/dino-whats-gestao-hub.js');
+      await dispararFechamentoGestaoDino({ empresaId: empId, dataStr: args.data || null });
+    }
+    return {
+      data: resumo.dataBr,
+      totalFaturado: resumo.totalFaturadoFormatado,
+      totalServicos: resumo.totalServicosFormatado,
+      totalProdutos: resumo.totalProdutosFormatado,
+      clientesAtendidos: resumo.clientesAtendidos,
+      ticketMedio: resumo.ticketMedioFormatado,
+      formasPagamento: resumo.formasPagamento,
+      producaoBarbeiros: resumo.producaoBarbeiros,
+      itensAlertaEstoque: resumo.itensAlertaEstoque,
+      textoFormatado: mensagemTexto
+    };
+  }
+
+  if (name === 'consultar_satisfacao_nps') {
+    const { listarEstatisticasNps, formatarMensagemRankingNps } = await import('./core/dino-whats-gestao-hub.js');
+    const stats = listarEstatisticasNps();
+    return {
+      notaMediaGeral: stats.notaMediaGeral,
+      totalAvaliacoes: stats.totalAvaliacoes,
+      desempenhoPorBarbeiro: stats.desempenhoPorBarbeiro,
+      textoFormatado: formatarMensagemRankingNps()
     };
   }
 

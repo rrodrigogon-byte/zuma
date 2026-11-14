@@ -7,6 +7,9 @@ import {
   tratarComandaFechadaParaNps,
   registrarNotaNpsCliente,
   listarEstatisticasNps,
+  formatarMenuComandosGestao,
+  formatarMensagemRankingNps,
+  dispararFechamentoGestaoDino,
 } from './dino-whats-gestao-hub.js';
 
 test('1. Canal Oficial Gestão Dino: Nome do grupo e participantes corretos do print', () => {
@@ -66,4 +69,29 @@ test('4. Tratamento de Comanda Fechada sem Telefone: Retorna motivo seguro sem q
 
   assert.equal(resultado.ok, false);
   assert.equal(resultado.motivo, 'cliente_sem_telefone');
+});
+
+test('5. Menu de Ajuda Executivo: Contém comandos oficiais e número do gestor Guilherme Dino', () => {
+  const menu = formatarMenuComandosGestao();
+  assert.ok(menu.includes('!report'));
+  assert.ok(menu.includes('!fechamento'));
+  assert.ok(menu.includes('!nps'));
+  assert.ok(menu.includes('!equipe'));
+  assert.ok(menu.includes('+55 65 99672-2055'));
+  assert.ok(/kyttoia/i.test(menu));
+});
+
+test('6. Ranking de Satisfação NPS: Produz formato com estrelas e média geral', () => {
+  const ranking = formatarMensagemRankingNps();
+  assert.ok(ranking.includes('PAINEL DE SATISFAÇÃO'));
+  assert.ok(ranking.includes('Nota Média Geral'));
+  assert.ok(ranking.includes('Desempenho por Barbeiro'));
+});
+
+test('7. Fechamento Executivo Gestão Dino: Compila resumo diário e produz mensagem elegante', async () => {
+  const res = await dispararFechamentoGestaoDino();
+  assert.ok(res.resumo);
+  assert.ok(res.mensagem.includes('FECHAMENTO EXECUTIVO DO DIA'));
+  assert.ok(res.mensagem.includes('Barbearia Dino'));
+  assert.ok(res.mensagem.includes('Faturamento Total'));
 });

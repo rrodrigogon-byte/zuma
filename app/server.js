@@ -5847,6 +5847,54 @@ app.post('/api/public/dino/gestao/invocar-report', async (req, res) => {
   }
 });
 
+app.post('/api/public/dino/gestao/invocar-fechamento', async (req, res) => {
+  try {
+    const { data = null, dispararWhatsApp = true, gestorTelefone = '5565996722055' } = req.body || {};
+    const { dispararFechamentoGestaoDino, NUMERO_GESTAO_OFICIAL_DINO_FORMATADO } = await import('./core/dino-whats-gestao-hub.js');
+    const { consolidarResumoDiario, formatarMensagemBriefingGestao } = await import('./core/automacao-resumo-gestao.js');
+    const empId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+
+    let envio = null;
+    if (dispararWhatsApp) {
+      envio = await dispararFechamentoGestaoDino({
+        empresaId: empId,
+        dataStr: data,
+        telefoneSolicitante: gestorTelefone
+      });
+    }
+
+    const resumo = consolidarResumoDiario(empId, data);
+    const mensagemTexto = formatarMensagemBriefingGestao(resumo);
+
+    res.json({
+      ok: true,
+      mensagem: 'Fechamento diário executivo processado com sucesso!',
+      gestorAutorizador: `${NUMERO_GESTAO_OFICIAL_DINO_FORMATADO} (Guilherme Dino)`,
+      grupoDestino: 'Gestão Dino (WhatsApp)',
+      disparadoWhatsApp: Boolean(dispararWhatsApp),
+      envio,
+      resumo,
+      mensagemTexto
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/public/dino/gestao/nps', async (req, res) => {
+  try {
+    const { listarEstatisticasNps, formatarMensagemRankingNps } = await import('./core/dino-whats-gestao-hub.js');
+    const stats = listarEstatisticasNps();
+    res.json({
+      ok: true,
+      estatisticas: stats,
+      textoWhatsApp: formatarMensagemRankingNps()
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.get('/api/public/dino/grupos-evolution', async (req, res) => {
   try {
     const evoUrl = (process.env.EVOLUTION_API_URL || '').replace(/\/+$/, '');

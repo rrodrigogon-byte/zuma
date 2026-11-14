@@ -1588,6 +1588,41 @@ async function managementResponse(task, channel, session, message, context) {
     };
   }
 
+  // ── Invocação do Fechamento Executivo / DRE Diário via WhatsApp Gestão ──
+  const comandoFechamentoGestao = message.text && /^\s*(!|#|\/)?(?:fechamento|dre|caixa|resumo[-_ ]dia|fechar[-_ ]dia)\b/i.test(message.text);
+  if (comandoFechamentoGestao) {
+    const { dispararFechamentoGestaoDino } = await import("./dino-whats-gestao-hub.js");
+    const sender = String(context.phone || session.customer_phone || session.telefone || "5565996722055");
+    const resFechamento = await dispararFechamentoGestaoDino({
+      empresaId: task.empresa_id || "d0d0ac01-8e50-4b61-8c79-de4aaa916da6",
+      telefoneSolicitante: sender
+    });
+    return {
+      text: resFechamento.mensagem || "✅ Fechamento diário compilado e enviado para o grupo Gestão Dino.",
+      kind: "management_closing_invoked"
+    };
+  }
+
+  // ── Painel de Satisfação NPS e Ranking de Barbeiros ──
+  const comandoNpsGestao = message.text && /^\s*(!|#|\/)?(?:nps|avalia[çc][oõ]es|avalia[çc][aã]o|reputa[çc][aã]o|ranking|equipe)\b/i.test(message.text);
+  if (comandoNpsGestao) {
+    const { formatarMensagemRankingNps } = await import("./dino-whats-gestao-hub.js");
+    return {
+      text: formatarMensagemRankingNps(),
+      kind: "management_nps_view"
+    };
+  }
+
+  // ── Menu de Ajuda e Comandos Executivos ──
+  const comandoAjudaGestao = message.text && /^\s*(!|#|\/)?(?:ajuda|help|comandos|menu)\b/i.test(message.text);
+  if (comandoAjudaGestao) {
+    const { formatarMenuComandosGestao } = await import("./dino-whats-gestao-hub.js");
+    return {
+      text: formatarMenuComandosGestao(),
+      kind: "management_help_menu"
+    };
+  }
+
   if (session.status === 'humano') return { text: null, kind: 'human_queue' };
   if (handoffIntent(message.text)) {
     await putSessionInHandoff(session, 'pedido_do_cliente', 3);

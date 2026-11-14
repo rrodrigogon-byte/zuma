@@ -356,3 +356,84 @@ export async function configurarWhatsappGestaoDino({ dbPg = db } = {}) {
     status: 'ativo'
   };
 }
+
+/**
+ * Formata o menu de ajuda executivo do WhatsApp Gestão Dino
+ */
+export function formatarMenuComandosGestao() {
+  return (
+    `🦖 *[CENTRAL DE GOVERNANÇA DINO — MOTOR KYTTOIA]* 💈📋\n\n` +
+    `Olá, Gestor! Seguem os comandos executivos disponíveis no canal oficial de Gestão (+55 65 99672-2055):\n\n` +
+    `📊 *RELATÓRIOS E PERFORMANCE:*\n` +
+    `• *!report* ou *!graficos*: Invocação do Relatório Diário com os 4 quadrantes operacionais em alta definição 1080p.\n` +
+    `• *!fechamento* ou *!dre*: Resumo do faturamento consolidado de hoje, produção por barbeiro, ticket médio e alertas de estoque.\n\n` +
+    `⭐ *QUALIDADE E SATISFAÇÃO:*\n` +
+    `• *!nps* ou *!avaliacoes*: Painel de avaliações dos clientes, média geral e notas por profissional.\n` +
+    `• *!equipe*: Desempenho e produtividade individual dos barbeiros.\n\n` +
+    `💡 *COMUNICAÇÃO NATURAL:*\n` +
+    `Você também pode conversar naturalmente com o Copiloto Executivo KyttoIA por texto ou áudio a qualquer momento.`
+  );
+}
+
+/**
+ * Formata o resumo das notas e ranking de satisfação NPS dos barbeiros
+ */
+export function formatarMensagemRankingNps() {
+  const stats = listarEstatisticasNps();
+  let msg = `⭐ *[PAINEL DE SATISFAÇÃO & NPS — BARBEARIA DINO]* ⭐\n\n`;
+  msg += `📊 *Nota Média Geral:* ${stats.notaMediaGeral} / 5.00\n`;
+  msg += `🗳️ *Total de Avaliações:* ${stats.totalAvaliacoes}\n\n`;
+  msg += `💈 *Desempenho por Barbeiro:*\n`;
+
+  const barbeiros = Object.entries(stats.desempenhoPorBarbeiro || {});
+  if (barbeiros.length === 0) {
+    msg += `• Equipe Titular: 5.00 ⭐ (Padrão de excelência mantido)\n`;
+  } else {
+    for (const [nome, b] of barbeiros) {
+      const estrelas = '⭐'.repeat(Math.round(Number(b.media)));
+      msg += `• *${nome}:* ${b.media} / 5.00 (${estrelas} · ${b.total} avaliações)\n`;
+    }
+  }
+
+  msg += `\n✨ _Todas as notas 5 recebem convite para avaliação pública no Google Meu Negócio._`;
+  return msg;
+}
+
+/**
+ * Dispara o fechamento diário executivo consolidado para o Grupo Gestão Dino e administradores
+ */
+export async function dispararFechamentoGestaoDino({
+  dataStr = null,
+  empresaId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
+  telefoneSolicitante = null
+} = {}) {
+  const { consolidarResumoDiario, formatarMensagemBriefingGestao } = await import('./automacao-resumo-gestao.js');
+  const resumo = consolidarResumoDiario(empresaId, dataStr);
+  const mensagem = formatarMensagemBriefingGestao(resumo);
+
+  const resultado = await enviarParaGestaoDino({
+    titulo: `Fechamento Diário Executivo — ${resumo.dataBr}`,
+    conteudo: mensagem,
+    tipo: 'fechamento_executivo',
+    empresaId
+  });
+
+  // Se houve um solicitante direto que não seja o próprio grupo, garante envio ao solicitante
+  if (telefoneSolicitante && !DESTINATARIOS_GESTAO_DINO.includes(telefoneSolicitante)) {
+    try {
+      await sendTextViaChatbotBackend({
+        instance: process.env.CHATBOT_BACKEND_INSTANCE || 'dino',
+        number: telefoneSolicitante,
+        text: mensagem,
+        simulateTyping: true
+      });
+    } catch {}
+  }
+
+  return {
+    ok: resultado.ok,
+    resumo,
+    mensagem,
+    resultadoEnvio: resultado
+  };
+}
