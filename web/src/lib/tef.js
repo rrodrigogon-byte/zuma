@@ -5,12 +5,12 @@
  * (middleware SiTef/PayGo) por HTTP em localhost. A nuvem (KYTTO Clube) só recebe o
  * RESULTADO da captura (NSU/autorização) para baixar a venda.
  *
- * Sem `config.tef.agenteUrl` configurado, a operação é bloqueada. O sistema não
- * aprova transações com NSU/autorização fictícios.
+ * Suporta também o modo Kytto TEF Engine em nuvem com terminais Smart POS (Cielo LIO,
+ * Stone Smart P2 e Totem PAX S300) comunicando diretamente pela API /api/admin/tef/processar.
  */
 
 export function tefConfigurado(tef) {
-  return !!(tef && String(tef.agenteUrl || '').trim())
+  return !!(tef && (String(tef.agenteUrl || '').trim() || tef.configurado || tef.empresaId))
 }
 
 export const MODALIDADES_TEF = [
@@ -20,7 +20,7 @@ export const MODALIDADES_TEF = [
 ]
 
 /**
- * Inicia uma transação no agente TEF local e devolve o comprovante de captura.
+ * Inicia uma transação no agente TEF local ou no motor Kytto TEF Engine e devolve o comprovante.
  * @param {{valor:number, modalidade?:string, parcelas?:number, tef?:object}} opts
  * @returns {Promise<{aprovado:boolean, simulado:boolean, nsu:string, autorizacao:string,
  *   adquirente:string, bandeira:string, parcelas:number, modalidade:string,
@@ -29,33 +29,75 @@ export const MODALIDADES_TEF = [
 export async function pagarTef({ valor, modalidade = 'credito_avista', parcelas = 1, tef = {} }) {
   const url = String(tef.agenteUrl || '').trim()
 
-  // ── Modo real: agente TEF local (browser → localhost) ──
+  // 1. Agente TEF local (browser → localhost:4096 CliSiTef / PlugPag)
   if (url) {
-    const resp = await fetch(url.replace(/\/$/, '') + '/tef/pagar', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        valor, modalidade, parcelas,
-        terminal: tef.terminal, ambiente: tef.ambiente, adquirente: tef.adquirente,
-      }),
-    })
-    if (!resp.ok) {
-      const e = await resp.json().catch(() => ({}))
-      throw new Error(e.mensagem || e.error || 'Falha na comunicação com a maquininha')
-    }
-    const d = await resp.json()
-    if (!d.aprovado) throw new Error(d.mensagem || 'Transação não aprovada pela maquininha')
-    return {
-      aprovado: true, simulado: false,
-      nsu: d.nsu || '', autorizacao: d.autorizacao || '',
-      adquirente: d.adquirente || tef.adquirente || '',
-      bandeira: d.bandeira || '', parcelas: d.parcelas || parcelas, modalidade,
-      comprovanteCliente: d.comprovanteCliente || '',
-      comprovanteEstabelecimento: d.comprovanteEstabelecimento || '',
+    try {
+      const resp = await fetch(url.replace(/\/$/, '') + '/tef/pagar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          valor, modalidade, parcelas,
+          terminal: tef.terminal, ambiente: tef.ambiente, adquirente: tef.adquirente,
+        }),
+      })
+      if (resp.ok) {
+        const d = await resp.json()
+        if (d.aprovado) {
+          return {
+            aprovado: true, simulado: false,
+            nsu: d.nsu || '', autorizacao: d.autorizacao || '',
+            adquirente: d.adquirente || tef.adquirente || '',
+            bandeira: d.bandeira || '', parcelas: d.parcelas || parcelas, modalidade,
+            comprovanteCliente: d.comprovanteCliente || '',
+            comprovanteEstabelecimento: d.comprovanteEstabelecimento || '',
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[TEF] Agente local indisponível, alternando para motor central TEF...', err?.message)
     }
   }
 
-  const error = new Error('TEF não configurado: conecte o agente local da maquininha antes de cobrar')
+  // 2. Kytto TEF Engine Central (/api/admin/tef/processar)
+  const token = localStorage.getItem('token') || localStorage.getItem('kytto_token') || ''
+  const respCentral = await fetch('/api/admin/tef/processar', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    },
+    body: JSON.stringify({
+      terminalId: tef.terminalId || tef.terminal || 'term-stal-01',
+      valor,
+      modalidade,
+      parcelas,
+      bandeiraId: tef.bandeira || 'visa',
+      clienteNome: tef.clienteNome || 'Consumidor Balcão',
+      referenciaVenda: `PDV-${Date.now().toString().slice(-6)}`,
+      empresaId: tef.empresaId || undefined,
+    }),
+  }).catch(() => null)
+
+  if (respCentral && respCentral.ok) {
+    const dataCentral = await respCentral.json().catch(() => null)
+    if (dataCentral?.sucesso && dataCentral?.transacao) {
+      const tx = dataCentral.transacao
+      return {
+        aprovado: true,
+        simulado: false,
+        nsu: tx.nsu,
+        autorizacao: tx.codigoAutorizacao,
+        adquirente: tx.adquirenteId,
+        bandeira: tx.bandeiraId,
+        parcelas: tx.parcelas || parcelas,
+        modalidade: tx.modalidade || modalidade,
+        comprovanteCliente: tx.comprovanteCliente || '',
+        comprovanteEstabelecimento: tx.comprovanteEstabelecimento || '',
+      }
+    }
+  }
+
+  const error = new Error('TEF não configurado: conecte o terminal de pagamento ou verifique as credenciais da maquininha')
   error.code = 'TEF_NOT_CONFIGURED'
   throw error
 }

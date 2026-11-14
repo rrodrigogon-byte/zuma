@@ -374,6 +374,9 @@ export default function App() {
           <Route path="/admin/sped" element={<Layout><SpedFiscalPage /></Layout>} />
           <Route path="/admin/matriz-tributaria" element={<Layout><MatrizTributariaPage /></Layout>} />
           <Route path="/admin/conciliacao-tef" element={<Layout><ConciliacaoTefPage /></Layout>} />
+          <Route path="/admin/tef" element={<Navigate to="/admin/conciliacao-tef" replace />} />
+          <Route path="/admin/dfe-inbound" element={<Layout><Fiscal abaInicial="mde" /></Layout>} />
+          <Route path="/admin/mde" element={<Layout><Fiscal abaInicial="mde" /></Layout>} />
           <Route path="/admin/tesouraria" element={<Layout><TesourariaCofrePage /></Layout>} />
           <Route path="/admin/financeiro"     element={<Layout><TenantAware tenant={<FinanceiroAuto antigo={<FinanceiroEmpresa />} />} legacy={<Financeiro />} /></Layout>} />
           <Route path="/admin/whatsapp-central" element={<Layout><WhatsappControlCenter /></Layout>} />
