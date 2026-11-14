@@ -112,6 +112,13 @@ import {
   salvarSocialCrmNoCliente,
 } from './core/dino-trex-sales-engine.js';
 import { startDinoDailyReportWorker, enviarReportGraficosDino, compilarMetricasReportGrafico, GUARDRAILS_META_INFO } from './core/dino-daily-report-graph.js';
+import {
+  inicializarDinoWhatsGestaoHub,
+  enviarParaGestaoDino,
+  GRUPO_GESTAO_DINO_INFO,
+  registrarNotaNpsCliente,
+  listarEstatisticasNps
+} from './core/dino-whats-gestao-hub.js';
 import { kyttoEventBus, TOPICOS_KYTTO } from './core/kytto-event-bus.js';
 import { armazenarCopiaSegura, listarArquivosSeguros, obterEstatisticasArmazenamento } from './core/armazenamento-seguro.js';
 import { configuracaoResumo, configuracaoResumoPublica, diaLocal as diaLocalResumo, enviarResumo, lojaDoCanal as lojaDoCanalResumo, montarResumoDiario, startResumoDiarioWorker } from './core/dino-resumo-diario.js';
@@ -566,6 +573,56 @@ app.post('/api/admin/dino/trex/salvar-social-crm', async (req, res) => {
     if (!telefone || !dados) return res.status(400).json({ ok: false, error: 'telefone e dados são obrigatórios' });
     const resultado = await salvarSocialCrmNoCliente(empresaId, telefone, dados);
     res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Rotas Oficiais do Canal de Gestão Dino (WhatsApp & NPS Pós-Atendimento)
+app.get('/api/admin/dino/gestao/configuracao', (req, res) => {
+  try {
+    res.json({
+      ok: true,
+      grupo: GRUPO_GESTAO_DINO_INFO,
+      canalEgress: 'gestao',
+      status: 'ativo'
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/dino/gestao/disparo-imediato', async (req, res) => {
+  try {
+    const { titulo = 'Atualização de Performance & Metas Dino', conteudo = '', tipo = 'performance' } = req.body || {};
+    const textoMensagem = conteudo || `💈 *Status da Barbearia Dino:* Atendimentos e metas operando com 100% de ocupação!`;
+    const resultado = await enviarParaGestaoDino({
+      titulo,
+      conteudo: textoMensagem,
+      tipo,
+      tenant: req.tenant || {}
+    });
+    res.json(resultado);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/dino/nps/registrar-avaliacao', async (req, res) => {
+  try {
+    const { telefone, nota, comentario = '', clienteNome = 'Cliente', barbeiroNome = 'Equipe Titular' } = req.body || {};
+    if (!telefone || !nota) return res.status(400).json({ ok: false, error: 'telefone e nota são obrigatórios' });
+    const resultado = await registrarNotaNpsCliente({ telefone, nota, comentario, clienteNome, barbeiroNome });
+    res.json(resultado);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/admin/dino/nps/ultimas-avaliacoes', (req, res) => {
+  try {
+    const estatisticas = listarEstatisticasNps();
+    res.json({ ok: true, ...estatisticas });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -12872,6 +12929,7 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
   startDinoDailyBriefingWorker();
   startDinoRecuperacaoAtivaWorker();
   startDinoDailyReportWorker();
+  inicializarDinoWhatsGestaoHub();
   startAiBrainSchedulers();
   // Cobranças da barbearia: sinal vencido libera o horário (e avisa a lista de
   // espera); a cobrança do clube é gerada e enviada uma vez por hora.
