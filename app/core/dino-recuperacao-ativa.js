@@ -30,6 +30,12 @@ import * as barbearia from '../barbearia-erp-kytto.js';
 
 export const EMPRESA_DINO_ID = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
 
+// Destinatários Oficiais do Canal de Governança & Gestão Dino
+export const TELEFONE_RODRIGO_GESTAO = '5514997462929'; // Rodrigo Kytto (Gestão)
+export const TELEFONE_DINO_OFICIAL = '5565993360000';   // Linha Oficial Briefing/Gestão Dino
+export const TELEFONE_GUILHERME_DINO = '556596722055';  // Guilherme Cunha (Dino Barbearia - 8D)
+export const TELEFONE_GUILHERME_DINO_9D = '5565996722055'; // Guilherme Cunha (Dino Barbearia - 9D)
+
 export function extrairPrimeiroNome(nomeCompleto) {
   if (!nomeCompleto) return 'Amigo';
   const limpo = String(nomeCompleto).trim().replace(/^(Lead\s+WhatsApp|\(\d+\)|Cliente\s+WhatsApp|Sr\.?|Dr\.?)/i, '').trim();
@@ -587,9 +593,15 @@ export async function consolidarReportDiarioTrex(empresaId = EMPRESA_DINO_ID, da
  * Formata o texto do relatório diário do T-Rex para WhatsApp (Canal Gestão Dino)
  */
 export function formatarMensagemReportGestao(report) {
-  return `🦖📊 *REPORT DIÁRIO DO T-REX — ${report.dataBr} (20:00)* 💈
-*Projeto Ocupação de Agenda & Resgate de Inativos*
+  return `📢 *[CANAL OFICIAL DE GOVERNANÇA & GESTÃO DINO]* 🦖📊
+*RELATÓRIO EXECUTIVO DIÁRIO DO T-REX (20:00) — ${report.dataBr}* 💈
+*Projeto Estratégico de Ocupação da Agenda & Resgate de Inativos*
 _Barbearia Dino & Perfumaria • Motor KyttoIA 2.5 Flash_
+👥 *Destinatários:* Gestão Dino (Guilherme Dino & Rodrigo Kytto)
+
+🖼️ *PAINEL GRÁFICO VISUAL (PRINT ESTRATÉGICO 1080p):*
+👉 https://kytto.com.br/downloads/print_estrategico_gestao_dino.png
+👉 https://setpoint-tm5n.onrender.com/downloads/print_estrategico_gestao_dino.png
 
 🎯 *DESEMPENHO DO DIA:*
 • *Inativos Contatados Hoje:* ${report.totalDisparadosDia} clientes (>60d)
@@ -633,13 +645,12 @@ export async function enviarReportDiarioGestaoWhatsApp({ empresaId = EMPRESA_DIN
 
   const conexaoGestao = obterConexao(empresaId, 'gestao');
   const instance = conexaoGestao?.instance || 'barbearia-dino-gestao';
-  const telefone = telefoneDestino || conexaoGestao?.phone || '5565999990000';
   const targetNumbers = Array.from(new Set([
-    telefone,
-    '5514997462929',
-    '5565996722055',
-    '556596722055',
-    telefoneDestino
+    telefoneDestino,
+    TELEFONE_RODRIGO_GESTAO,
+    TELEFONE_DINO_OFICIAL,
+    TELEFONE_GUILHERME_DINO,
+    TELEFONE_GUILHERME_DINO_9D,
   ].filter(Boolean)));
 
   let enviado = false;
@@ -652,31 +663,33 @@ export async function enviarReportDiarioGestaoWhatsApp({ empresaId = EMPRESA_DIN
       empresa_id: empresaId,
       whatsapp_instance: instance,
       transport: conexaoGestao?.transport || 'waha'
-    }, telefone, mensagem);
-    enviado = Boolean(res?.ok);
-    if (enviado) enviosRealizados.push({ canal: 'waha', destino: telefone });
+    }, targetNumbers[0], mensagem);
+    if (res?.ok) {
+      enviado = true;
+      enviosRealizados.push({ canal: 'waha', destino: targetNumbers[0] });
+    }
   } catch (err) {
     erro = err.message;
   }
 
-  // 2. Fallback via Chatbot Backend (Cloud Run / Meta Cloud API) para garantir entrega aos gestores
-  if (!enviado || telefoneDestino) {
-    for (const num of targetNumbers) {
-      try {
-        const resChat = await sendTextViaChatbotBackend({
-          instance: process.env.CHATBOT_BACKEND_INSTANCE || 'dino',
-          number: num,
-          text: mensagem,
-          simulateTyping: true,
-        });
-        if (resChat?.ok) {
-          enviado = true;
-          enviosRealizados.push({ canal: 'chatbot_backend', destino: num, questionId: resChat.data?.key?.id });
-        }
-      } catch (chatErr) {
-        console.warn(`[RecuperacaoAtiva] Fallback chatbot backend falhou para ${num}:`, chatErr.message);
-        if (!erro) erro = chatErr.message;
+  // 2. Disparo via Chatbot Backend (Cloud Run / Meta Cloud API) para garantir entrega a todos os gestores
+  for (const num of targetNumbers) {
+    try {
+      const resChat = await sendTextViaChatbotBackend({
+        instance: process.env.CHATBOT_BACKEND_INSTANCE || 'dino',
+        number: num,
+        text: mensagem,
+        simulateTyping: true,
+      });
+      if (resChat?.ok) {
+        enviado = true;
+        enviosRealizados.push({ canal: 'chatbot_backend', destino: num, questionId: resChat.data?.key?.id });
+      } else {
+        console.warn(`[RecuperacaoAtiva] Chatbot backend retorno não-ok para ${num}:`, resChat?.error);
       }
+    } catch (chatErr) {
+      console.warn(`[RecuperacaoAtiva] Erro chatbot backend para ${num}:`, chatErr.message);
+      if (!erro) erro = chatErr.message;
     }
   }
 
@@ -738,9 +751,14 @@ export async function enviarReportDiarioGestaoWhatsApp({ empresaId = EMPRESA_DIN
  * Dispara mensagem de validação imediata do Plano Estratégico para 14-997462929 e Gestão Dino
  */
 export async function enviarValidacaoEstrategicaWhatsApp({ telefoneDestino = '5514997462929' } = {}) {
-  const textoValidacao = `🦖📋 *VALIDAÇÃO ESTRATÉGICA DE ENTRADA EM PRODUÇÃO — T-REX (KYTTOIA)* 💈⚡
+  const textoValidacao = `📢 *[CANAL OFICIAL DE GOVERNANÇA & GESTÃO DINO]* 🦖📋
+*VALIDAÇÃO ESTRATÉGICA DE ENTRADA EM PRODUÇÃO (PRD)* 💈⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Olá Rodrigo e Equipe Gestão Dino!
+Olá Rodrigo e Guilherme (Equipe Gestão Dino)!
+
+🖼️ *PAINEL GRÁFICO VISUAL (PRINT ESTRATÉGICO 1080p):*
+👉 https://kytto.com.br/downloads/print_estrategico_gestao_dino.png
+👉 https://setpoint-tm5n.onrender.com/downloads/print_estrategico_gestao_dino.png
 
 Estamos ativando oficialmente em Produção (PRD) o *Plano Estratégico de Ocupação da Agenda da Dino Barbearia & Perfumaria* através do motor KyttoIA (T-Rex).
 
@@ -763,6 +781,7 @@ Estamos ativando oficialmente em Produção (PRD) o *Plano Estratégico de Ocupa
 • *20:00 (Noite):* Report Diário de Sucesso do T-Rex com taxa de conversão, receita resgatada e 3 sugestões táticas do Motor KyttoIA.
 
 📈 *4. ACESSO AOS GRÁFICOS AUDITADOS & RELATÓRIO PDF*
+• 🖼️ Painel Visual Completo (Print 1080p): https://kytto.com.br/downloads/print_estrategico_gestao_dino.png
 • 🔥 Heatmap Geral da Agenda: https://kytto.com.br/downloads/grafico_1_heatmap_agenda.png
 • ⏰ Buracos por Faixa Horária: https://kytto.com.br/downloads/grafico_2_buracos_horarios.png
 • 📉 Comparativo Dias da Semana: https://kytto.com.br/downloads/grafico_3_ocupacao_dias_semana.png
@@ -774,9 +793,10 @@ Estamos ativando oficialmente em Produção (PRD) o *Plano Estratégico de Ocupa
 
   const targetNumbers = Array.from(new Set([
     telefoneDestino,
-    '5514997462929',
-    '5565996722055',
-    '556596722055',
+    TELEFONE_RODRIGO_GESTAO,
+    TELEFONE_DINO_OFICIAL,
+    TELEFONE_GUILHERME_DINO,
+    TELEFONE_GUILHERME_DINO_9D,
   ].filter(Boolean)));
 
   const envios = [];
