@@ -64,7 +64,8 @@ export async function acquireWhatsappAiWorkerLease({ holder = WORKER_ID, seconds
 }
 
 async function acquireWhatsappAiRetentionLease({ holder = WORKER_ID, seconds = RETENTION_INTERVAL_SECONDS } = {}) {
-  const result = await db.query(
+  try {
+    const result = await db.query(
     `INSERT INTO whatsapp_ai_worker_leases (nome, titular, expira_em)
      VALUES ('whatsapp-ai-retention', $1, CURRENT_TIMESTAMP + ($2::text || ' seconds')::interval)
      ON CONFLICT (nome) DO UPDATE SET
@@ -76,6 +77,9 @@ async function acquireWhatsappAiRetentionLease({ holder = WORKER_ID, seconds = R
     [cleanWorkerId(holder), Math.min(86400, Math.max(900, Number(seconds) || RETENTION_INTERVAL_SECONDS))],
   );
   return result.rows[0] || null;
+  } catch (err) {
+    return null;
+  }
 }
 
 async function releaseWhatsappAiWorkerLease(holder = WORKER_ID) {
