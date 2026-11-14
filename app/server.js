@@ -96,6 +96,8 @@ import { startDinoDailyConfirmationWorker } from './core/dino-confirmacao-diaria
 import { startDinoDailyBriefingWorker } from './core/dino-daily-briefing.js';
 import { startDinoRecuperacaoAtivaWorker, executarRecuperacaoAtivaDiaria, listarClientesElegiveisRecuperacao } from './core/dino-recuperacao-ativa.js';
 import { startDinoDailyReportWorker, enviarReportGraficosDino, compilarMetricasReportGrafico, GUARDRAILS_META_INFO } from './core/dino-daily-report-graph.js';
+import { kyttoEventBus, TOPICOS_KYTTO } from './core/kytto-event-bus.js';
+import { armazenarCopiaSegura, listarArquivosSeguros, obterEstatisticasArmazenamento } from './core/armazenamento-seguro.js';
 import { configuracaoResumo, configuracaoResumoPublica, diaLocal as diaLocalResumo, enviarResumo, lojaDoCanal as lojaDoCanalResumo, montarResumoDiario, startResumoDiarioWorker } from './core/dino-resumo-diario.js';
 import { startPendingFollowUpWorker } from './core/whatsapp-ai-followup.js';
 import { db as commerceDb, getPool as getCommercePool } from './core/database.js';
@@ -382,6 +384,75 @@ app.get('/api/admin/dino/recuperacao-ativa/status', async (req, res) => {
   try {
     const elegiveis = await listarClientesElegiveisRecuperacao({ diasInativo: 60, limite: 30 });
     res.json({ ok: true, total_elegiveis: elegiveis.length, elegiveis });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Rotas oficiais de Sincronização por Evento Interno (Nossa Gente × Ultra)
+app.get('/api/admin/sincronizacao-ultra-nossa-gente/eventos', (req, res) => {
+  try {
+    const { empresaId, tipo, origem, limite } = req.query;
+    const eventos = kyttoEventBus.listarEventos({ empresaId, tipo, origem, limite });
+    res.json({ ok: true, total: eventos.length, eventos });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/admin/sincronizacao-ultra-nossa-gente/metricas', (req, res) => {
+  try {
+    const metricas = kyttoEventBus.obterMetricas(req.query.empresaId);
+    res.json({ ok: true, metricas });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/sincronizacao-ultra-nossa-gente/disparar', (req, res) => {
+  try {
+    const { tipo, dados, opcoes } = req.body || {};
+    if (!tipo) return res.status(400).json({ ok: false, error: 'O campo tipo é obrigatório.' });
+    const evento = kyttoEventBus.emitir(tipo, dados || {}, opcoes || {});
+    res.json({ ok: true, evento, mensagem: 'Evento interno de sincronização despachado com sucesso.' });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Rotas de Armazenamento Seguro de Cópias de Imagens e Dados
+app.get('/api/admin/armazenamento-seguro/arquivos', (req, res) => {
+  try {
+    const arquivos = listarArquivosSeguros(req.query);
+    res.json({ ok: true, total: arquivos.length, arquivos });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/admin/armazenamento-seguro/estatisticas', (req, res) => {
+  try {
+    const estatisticas = obterEstatisticasArmazenamento();
+    res.json({ ok: true, estatisticas });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/armazenamento-seguro/armazenar', (req, res) => {
+  try {
+    const { conteudo, nomeOriginal, tipoMime, origem, destino, empresaId, entidadeId, metadados } = req.body || {};
+    if (!conteudo) return res.status(400).json({ ok: false, error: 'O campo conteudo é obrigatório.' });
+    const registro = armazenarCopiaSegura(conteudo, {
+      nomeOriginal,
+      tipoMime,
+      origem: origem || 'Ultra',
+      destino: destino || 'Nossa Gente',
+      empresaId,
+      entidadeId,
+      metadados
+    });
+    res.json({ ok: true, registro, mensagem: 'Cópia segura armazenada com hash criptográfico SHA-256 e auditoria.' });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
