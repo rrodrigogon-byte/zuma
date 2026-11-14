@@ -120,6 +120,14 @@ import {
   listarEstatisticasNps,
   configurarWhatsappGestaoDino
 } from './core/dino-whats-gestao-hub.js';
+import {
+  PERFIL_DINO,
+  PROTOCOLO_RESET_ALGORITMO,
+  MATRIZ_REELS_VIRAL,
+  processarGatilhoDirect,
+  PLANOS_CLUBE_DINO_HIBRIDO,
+  calcularPotencialAceleracaoDino,
+} from './core/dino-influencer-growth-engine.js';
 import { kyttoEventBus, TOPICOS_KYTTO } from './core/kytto-event-bus.js';
 import { armazenarCopiaSegura, listarArquivosSeguros, obterEstatisticasArmazenamento } from './core/armazenamento-seguro.js';
 import { configuracaoResumo, configuracaoResumoPublica, diaLocal as diaLocalResumo, enviarResumo, lojaDoCanal as lojaDoCanalResumo, montarResumoDiario, startResumoDiarioWorker } from './core/dino-resumo-diario.js';
@@ -717,6 +725,97 @@ app.post('/api/public/dino/recuperacao-ativa/report-20h/enviar', async (req, res
       telefoneDestino,
     });
     res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ============================================================================
+// ROTAS DE ACELERAÇÃO DINO INFLUENCER, BARBEARIA & PERFUMARIA 360° (KYTTOIA)
+// ============================================================================
+app.get('/api/admin/dino/influencer/cockpit', (req, res) => {
+  try {
+    const potencial = calcularPotencialAceleracaoDino();
+    res.json({
+      ok: true,
+      perfil: PERFIL_DINO,
+      protocoloReset: PROTOCOLO_RESET_ALGORITMO,
+      matrizReels: MATRIZ_REELS_VIRAL,
+      planosClube: PLANOS_CLUBE_DINO_HIBRIDO,
+      potencialFinanceiro: potencial,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/public/dino/influencer/direct-trigger', (req, res) => {
+  try {
+    const { palavraChave = 'ARABE', nome = 'Amigo' } = req.body || {};
+    const resposta = processarGatilhoDirect({ palavraChave, nomeSeguidor: nome });
+    res.json({ ok: true, palavraChave, resposta });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/public/dino/influencer/report-whatsapp', async (req, res) => {
+  try {
+    const { telefone = '5514997462929' } = req.body || {};
+    const potencial = calcularPotencialAceleracaoDino();
+    
+    const textoReport = `📢 *[CANAL OFICIAL DE GOVERNANÇA & GESTÃO DINO]* 🦖🚀\n` +
+`*PLANO DE ACELERAÇÃO DINO INFLUENCER, BARBEARIA & PERFUMARIA 360°*\n` +
+`_Tangará da Serra e Região • Motor KyttoIA 2.5 Flash_\n` +
+`👥 *Destinatários:* Gestão Dino (Guilherme Dino & Rodrigo Kytto)\n\n` +
+`📊 *1. AUDITORIA SOCIALBLADE (@odinovisagista):*\n` +
+`• *Seguidores:* 17.020 (Tendência: -124 nos últimos 30 dias / -4 por dia)\n` +
+`• *Seguindo:* 8.234 perfis (Proporção crítica 2:1 que destrói o algoritmo)\n` +
+`• *Diagnóstico:* Dependência excessiva de Stories que não atraem novos públicos. Zero Reels virais com ganchos de visagismo e perfumaria.\n\n` +
+`⚡ *2. O TRIÂNGULO DE OURO DINO:*\n` +
+`• *Dino Influencer:* Topo de funil, atração e autoridade regional em MT.\n` +
+`• *Barbearia Dino:* Experiência física, visagismo e preenchimento de buracos da agenda (+R$ 17.000/mês).\n` +
+`• *Perfumaria de Luxo:* Alto ticket (Creed, Parfums de Marly, Lattafa, Armaf) e escala regional para Tangará, Campo Novo, Barra e Nova Olímpia (+R$ 71.400/mês).\n\n` +
+`💈 *3. INOVAÇÃO: O RITUAL DA BORRIFADA VISAGISTA:*\n` +
+`• Todo cliente atendido na barbearia recebe a finalização olfativa com 2 borrifadas de perfume árabe/importado.\n` +
+`• T-Rex manda mensagem 2h depois no WhatsApp com cupom exclusivo de 10% a 15% OFF.\n` +
+`• Conversão estimada: 150 frascos/decants/mês (+R$ 57.000/mês).\n\n` +
+`🤖 *4. DIRECT-TO-COMMERCE NO INSTAGRAM (KYTTOIA):*\n` +
+`• Reels com CTA "Comente ARABE, VISAGISMO ou CALOR".\n` +
+`• KyttoIA responde no Direct em 3 segundos com catálogo, prévia e link WhatsApp.\n\n` +
+`💳 *5. CLUBE DINO HÍBRIDO (ASSINATURA VIP):*\n` +
+`• 2 a 4 cortes/mês + Decant mensal exclusivo de 10ml + 10% no cartão.\n` +
+`• Projeção de 80 assinantes: +R$ 19.920/mês de receita recorrente.\n\n` +
+`💰 *6. IMPACTO FINANCEIRO CONSOLIDADO:*\n` +
+`• *Novo Faturamento Projetado:* *${potencial.faturamentoNovoBrutoFormatado}/mês* (+R$ 1.299.840,00/ano!)\n\n` +
+`📄 *RELATÓRIO ESTRATÉGICO COMPLETO EM PDF (6 PÁGS):*\n` +
+`👉 https://kytto.com.br/downloads/PLANO_ACELERACAO_DINO_INFLUENCER_PERFUMARIA_BARBEARIA.pdf\n` +
+`👉 https://setpoint-tm5n.onrender.com/downloads/PLANO_ACELERACAO_DINO_INFLUENCER_PERFUMARIA_BARBEARIA.pdf`;
+
+    const targetNumbers = Array.from(new Set([
+      telefone,
+      '5514997462929',
+      '5565993360000',
+      '556596722055',
+      '5565996722055',
+    ].filter(Boolean)));
+
+    const envios = [];
+    for (const num of targetNumbers) {
+      try {
+        const resChat = await sendTextViaChatbotBackend({
+          instance: process.env.CHATBOT_BACKEND_INSTANCE || 'dino',
+          number: num,
+          text: textoReport,
+          simulateTyping: true,
+        });
+        envios.push({ numero: num, ok: Boolean(resChat?.ok), questionId: resChat?.data?.key?.id, error: resChat?.error });
+      } catch (err) {
+        envios.push({ numero: num, ok: false, error: err.message });
+      }
+    }
+
+    res.json({ ok: true, envios, textoReport });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
