@@ -1,10 +1,22 @@
 import React, { useState, useMemo } from 'react';
+import FiltroPeriodoData from '../../../components/FiltroPeriodoData';
+
 import { useToast } from '../../../hooks/useToast';
 
 export default function PalatareFinanceiroSuite() {
   const { toast } = useToast();
   const [subAba, setSubAba] = useState('receber_tef'); // 'receber_tef' | 'pagar_insumos' | 'dre' | 'fechamento_caixa' | 'planejamento'
   const [filtroStatusPagar, setFiltroStatusPagar] = useState('todos');
+  const [periodoFiltro, setPeriodoFiltro] = useState('mes_atual');
+  const [fatorFiltro, setFatorFiltro] = useState(1.0);
+  const [rotuloPeriodo, setRotuloPeriodo] = useState('Novembro/2026');
+
+  const handlePeriodoChange = (id, config) => {
+    setPeriodoFiltro(id);
+    setFatorFiltro(config.fator || 1.0);
+    setRotuloPeriodo(config.label || id);
+  };
+
 
   // Modais
   const [modalNovoPagar, setModalNovoPagar] = useState(false);
@@ -576,30 +588,30 @@ export default function PalatareFinanceiroSuite() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {[
-                { label: '(=) RECEITA BRUTA OPERACIONAL (FATURAMENTO TOTAL)', val: 320000.00, perc: '100,0%', neg: false, bold: true, bg: 'rgba(0,0,0,0.03)' },
-                { label: '   (+) Salão Gourmet & Rodízio Inteligente (Ter/Qua/Sex)', val: 195000.00, perc: '60,9%', neg: false, bold: false },
-                { label: '   (+) Delivery Multicanal (iFood · Keeta · WhatsApp Tangará)', val: 100640.00, perc: '31,5%', neg: false, bold: false },
-                { label: '   (+) Palatare Pizza Club (MRR Assinaturas Recorrentes)', val: 24360.00, perc: '7,6%', neg: false, bold: false },
-                { label: '(–) DEDUÇÕES, IMPOSTOS & TAXAS DE MEIOS DE PAGAMENTO', val: -38400.00, perc: '-12,0%', neg: true, bold: true, bg: 'rgba(239, 68, 68, 0.05)' },
-                { label: '   (–) Simples Nacional Anexo I (Alimentação - 6,84%)', val: -21888.00, perc: '-6,8%', neg: true, bold: false },
-                { label: '   (–) Comissões de Marketplaces (iFood 12% / Keeta 10%)', val: -10432.00, perc: '-3,3%', neg: true, bold: false },
-                { label: '   (–) Taxas de TEF e Cartões (Débito 0,99% / Crédito 1,89% / Pix)', val: -6080.00, perc: '-1,9%', neg: true, bold: false },
-                { label: '(=) RECEITA OPERACIONAL LÍQUIDA', val: 281600.00, perc: '88,0%', neg: false, bold: true, bg: 'rgba(59, 130, 246, 0.08)', color: '#3B82F6' },
-                { label: '(–) CUSTO DE MERCADORIAS VENDIDAS (CMV DIRETO INSUMOS)', val: -84480.00, perc: '-30,0%', neg: true, bold: true, bg: 'rgba(245, 158, 11, 0.05)' },
-                { label: '   (–) Queijos Especiais & Muçarela Scala (38%)', val: -32102.40, perc: '-11,4%', neg: true, bold: false },
-                { label: '   (–) Farinha Tipo 00 Italiana & Fermentos (17%)', val: -14361.60, perc: '-5,1%', neg: true, bold: false },
-                { label: '   (–) Charcutaria, Carnes Nobres & Recheios (25%)', val: -21120.00, perc: '-7,5%', neg: true, bold: false },
-                { label: '   (–) Molhos, Tomate San Marzano & Temperos (10%)', val: -8448.00, perc: '-3,0%', neg: true, bold: false },
-                { label: '   (–) Bebidas, Vinhos & Cervejas para Revenda (10%)', val: -8448.00, perc: '-3,0%', neg: true, bold: false },
-                { label: '(=) MARGEM DE CONTRIBUIÇÃO BRUTA', val: 197120.00, perc: '70,0%', neg: false, bold: true, bg: 'rgba(16, 185, 129, 0.08)', color: '#10B981' },
-                { label: '(–) CUSTOS FIXOS OPERACIONAIS & PESSOAL', val: -87120.00, perc: '-30,9%', neg: true, bold: true },
-                { label: '   (–) Equipe Gastronômica (Pizzaiolos, Forneiro, Garçons, Encargos)', val: -52000.00, perc: '-18,5%', neg: true, bold: false },
-                { label: '   (–) Aluguel do Ponto Salão Nobre Tangará da Serra', val: -12000.00, perc: '-4,3%', neg: true, bold: false },
-                { label: '   (–) Energia Elétrica, Gás GLP e Lenha Forno 400°C', val: -13120.00, perc: '-4,7%', neg: true, bold: false },
-                { label: '   (–) Embalagens Térmicas Kraft e Insumos de Despacho', val: -6800.00, perc: '-2,4%', neg: true, bold: false },
-                { label: '   (–) Software Kytto e Licenças Cloud', val: -3200.00, perc: '-1,1%', neg: true, bold: false },
-                { label: '(=) EBITDA OPERACIONAL DA PIZZARIA', val: 110000.00, perc: '39,1%', neg: false, bold: true, bg: 'rgba(197, 160, 89, 0.15)', color: '#C5A059' },
-                { label: '(–) Depreciação e Amortização de Forno e Mobiliário', val: -8000.00, perc: '-2,8%', neg: true, bold: false },
+                { label: '(=) RECEITA BRUTA OPERACIONAL (FATURAMENTO TOTAL)', val: 320000.00 * fatorFiltro, perc: '100,0%', neg: false, bold: true, bg: 'rgba(0,0,0,0.03)' },
+                { label: '   (+) Salão Gourmet & Rodízio Inteligente (Ter/Qua/Sex)', val: 195000.00 * fatorFiltro, perc: '60,9%', neg: false, bold: false },
+                { label: '   (+) Delivery Multicanal (iFood · Keeta · WhatsApp Tangará)', val: 100640.00 * fatorFiltro, perc: '31,5%', neg: false, bold: false },
+                { label: '   (+) Palatare Pizza Club (MRR Assinaturas Recorrentes)', val: 24360.00 * fatorFiltro, perc: '7,6%', neg: false, bold: false },
+                { label: '(–) DEDUÇÕES, IMPOSTOS & TAXAS DE MEIOS DE PAGAMENTO', val: -38400.00 * fatorFiltro, perc: '-12,0%', neg: true, bold: true, bg: 'rgba(239, 68, 68, 0.05)' },
+                { label: '   (–) Simples Nacional Anexo I (Alimentação - 6,84%)', val: -21888.00 * fatorFiltro, perc: '-6,8%', neg: true, bold: false },
+                { label: '   (–) Comissões de Marketplaces (iFood 12% / Keeta 10%)', val: -10432.00 * fatorFiltro, perc: '-3,3%', neg: true, bold: false },
+                { label: '   (–) Taxas de TEF e Cartões (Débito 0,99% / Crédito 1,89% / Pix)', val: -6080.00 * fatorFiltro, perc: '-1,9%', neg: true, bold: false },
+                { label: '(=) RECEITA OPERACIONAL LÍQUIDA', val: 281600.00 * fatorFiltro, perc: '88,0%', neg: false, bold: true, bg: 'rgba(59, 130, 246, 0.08)', color: '#3B82F6' },
+                { label: '(–) CUSTO DE MERCADORIAS VENDIDAS (CMV DIRETO INSUMOS)', val: -84480.00 * fatorFiltro, perc: '-30,0%', neg: true, bold: true, bg: 'rgba(245, 158, 11, 0.05)' },
+                { label: '   (–) Queijos Especiais & Muçarela Scala (38%)', val: -32102.40 * fatorFiltro, perc: '-11,4%', neg: true, bold: false },
+                { label: '   (–) Farinha Tipo 00 Italiana & Fermentos (17%)', val: -14361.60 * fatorFiltro, perc: '-5,1%', neg: true, bold: false },
+                { label: '   (–) Charcutaria, Carnes Nobres & Recheios (25%)', val: -21120.00 * fatorFiltro, perc: '-7,5%', neg: true, bold: false },
+                { label: '   (–) Molhos, Tomate San Marzano & Temperos (10%)', val: -8448.00 * fatorFiltro, perc: '-3,0%', neg: true, bold: false },
+                { label: '   (–) Bebidas, Vinhos & Cervejas para Revenda (10%)', val: -8448.00 * fatorFiltro, perc: '-3,0%', neg: true, bold: false },
+                { label: '(=) MARGEM DE CONTRIBUIÇÃO BRUTA', val: 197120.00 * fatorFiltro, perc: '70,0%', neg: false, bold: true, bg: 'rgba(16, 185, 129, 0.08)', color: '#10B981' },
+                { label: '(–) CUSTOS FIXOS OPERACIONAIS & PESSOAL', val: -87120.00 * fatorFiltro, perc: '-30,9%', neg: true, bold: true },
+                { label: '   (–) Equipe Gastronômica (Pizzaiolos, Forneiro, Garçons, Encargos)', val: -52000.00 * fatorFiltro, perc: '-18,5%', neg: true, bold: false },
+                { label: '   (–) Aluguel do Ponto Salão Nobre Tangará da Serra', val: -12000.00 * fatorFiltro, perc: '-4,3%', neg: true, bold: false },
+                { label: '   (–) Energia Elétrica, Gás GLP e Lenha Forno 400°C', val: -13120.00 * fatorFiltro, perc: '-4,7%', neg: true, bold: false },
+                { label: '   (–) Embalagens Térmicas Kraft e Insumos de Despacho', val: -6800.00 * fatorFiltro, perc: '-2,4%', neg: true, bold: false },
+                { label: '   (–) Software Kytto e Licenças Cloud', val: -3200.00 * fatorFiltro, perc: '-1,1%', neg: true, bold: false },
+                { label: '(=) EBITDA OPERACIONAL DA PIZZARIA', val: 110000.00 * fatorFiltro, perc: '39,1%', neg: false, bold: true, bg: 'rgba(197, 160, 89, 0.15)', color: '#C5A059' },
+                { label: '(–) Depreciação e Amortização de Forno e Mobiliário', val: -8000.00 * fatorFiltro, perc: '-2,8%', neg: true, bold: false },
                 { label: '(=) LUCRO LÍQUIDO DISPONÍVEL DA PIZZARIA', val: 102000.00, perc: '36,2%', neg: false, bold: true, bg: 'rgba(16, 185, 129, 0.18)', color: '#10B981' }
               ].map((row, idx) => (
                 <div 

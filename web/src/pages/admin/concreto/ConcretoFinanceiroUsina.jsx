@@ -1,4 +1,6 @@
 import React, { useState, useMemo } from 'react';
+import FiltroPeriodoData from '../../../components/FiltroPeriodoData';
+
 import { useToast } from '../../../hooks/useToast';
 
 export default function ConcretoFinanceiroUsina({ cargas = [] }) {
@@ -7,6 +9,16 @@ export default function ConcretoFinanceiroUsina({ cargas = [] }) {
   const [filtroStatusReceber, setFiltroStatusReceber] = useState('todos');
   const [filtroStatusPagar, setFiltroStatusPagar] = useState('todos');
   const [busca, setBusca] = useState('');
+  const [periodoFiltro, setPeriodoFiltro] = useState('mes_atual');
+  const [fatorFiltro, setFatorFiltro] = useState(1.0);
+  const [rotuloPeriodo, setRotuloPeriodo] = useState('Novembro/2026');
+
+  const handlePeriodoChange = (id, config) => {
+    setPeriodoFiltro(id);
+    setFatorFiltro(config.fator || 1.0);
+    setRotuloPeriodo(config.label || id);
+  };
+
 
   // Modais
   const [modalNovaMedicao, setModalNovaMedicao] = useState(false);
@@ -895,32 +907,37 @@ export default function ConcretoFinanceiroUsina({ cargas = [] }) {
               <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 900 }}>
                 DRE Gerencial Consolidada · Serrano Concreto Usinado & Mineração
               </h3>
-              <span style={{ fontSize: '0.84rem', color: 'var(--muted)' }}>Competência: Novembro/2026 (1.830 m³ faturados)</span>
+              <span style={{ fontSize: '0.84rem', color: 'var(--muted)' }}>Competência: {rotuloPeriodo} ({Math.round(1830 * fatorFiltro)} m³ faturados)</span>
             </div>
+            <FiltroPeriodoData
+              periodoSelecionado={periodoFiltro}
+              onPeriodoChange={handlePeriodoChange}
+              titulo="Período DRE Usina"
+            />
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {[
-                { label: '(=) RECEITA BRUTA DE VENDAS & SERVIÇOS', val: 850000.00, perc: '100,0%', neg: false, bold: true, bg: 'rgba(0,0,0,0.03)' },
-                { label: '   (–) Concreto Usinado FCK 20 a 40 MPa (1.830 m³)', val: 785000.00, perc: '92,4%', neg: false, bold: false },
-                { label: '   (–) Serviços de Bombeamento com Bomba-Lança 32m', val: 65000.00, perc: '7,6%', neg: false, bold: false },
-                { label: '(–) DEDUÇÕES E TRIBUTOS SOBRE FATURAMENTO', val: -42500.00, perc: '-5,0%', neg: true, bold: true, bg: 'rgba(239, 68, 68, 0.05)' },
-                { label: '   (–) ISSQN Serviços de Concretagem (3,0% Tangará)', val: -25500.00, perc: '-3,0%', neg: true, bold: false },
-                { label: '   (–) CFEM Mineração e Extração de Agregados (1,5%)', val: -4250.00, perc: '-0,5%', neg: true, bold: false },
-                { label: '   (–) Simples Nacional / Tributos Federais Unificados', val: -12750.00, perc: '-1,5%', neg: true, bold: false },
-                { label: '(=) RECEITA OPERACIONAL LÍQUIDA', val: 807500.00, perc: '95,0%', neg: false, bold: true, bg: 'rgba(59, 130, 246, 0.08)', color: '#3B82F6' },
-                { label: '(–) CUSTO DOS PRODUTOS & INSUMOS VENDIDOS (CPV)', val: -498000.00, perc: '-61,7%', neg: true, bold: true, bg: 'rgba(245, 158, 11, 0.05)' },
-                { label: '   (–) Cimento Portland a Granel CP II-F-32 (Votoran)', val: -238000.00, perc: '-29,5%', neg: true, bold: false },
-                { label: '   (–) Agregados da Mineração (Areia Lavada + Britas 0 e 1)', val: -136000.00, perc: '-16,8%', neg: true, bold: false },
-                { label: '   (–) Aditivos Químicos Superplastificantes (BASF)', val: -39000.00, perc: '-4,8%', neg: true, bold: false },
-                { label: '   (–) Combustível Diesel S10 da Frota e Pás Carregadeiras', val: -85000.00, perc: '-10,5%', neg: true, bold: false },
-                { label: '(=) MARGEM DE CONTRIBUIÇÃO BRUTA', val: 309500.00, perc: '38,3%', neg: false, bold: true, bg: 'rgba(16, 185, 129, 0.08)', color: '#10B981' },
-                { label: '(–) DESPESAS OPERACIONAIS & ADMINISTRATIVAS', val: -83500.00, perc: '-10,3%', neg: true, bold: true },
-                { label: '   (–) Folha de Pagamento Usina (Operadores, Laboratório, Motoristas)', val: -68200.00, perc: '-8,4%', neg: true, bold: false },
-                { label: '   (–) Energia Elétrica Trifásica Usina 380V (Energisa MT)', val: -14300.00, perc: '-1,8%', neg: true, bold: false },
-                { label: '   (–) Softwares Kytto, Comunicação e Despesas Gerais', val: -1000.00, perc: '-0,1%', neg: true, bold: false },
-                { label: '(=) EBITDA OPERACIONAL DA USINA', val: 226000.00, perc: '28,0%', neg: false, bold: true, bg: 'rgba(197, 160, 89, 0.15)', color: '#C5A059' },
-                { label: '(–) Depreciação de Equipamentos, Betoneiras e Usina', val: -22000.00, perc: '-2,7%', neg: true, bold: false },
-                { label: '(=) LUCRO LÍQUIDO OPERACIONAL DA USINA', val: 204000.00, perc: '25,3%', neg: false, bold: true, bg: 'rgba(16, 185, 129, 0.18)', color: '#10B981' }
+                { label: '(=) RECEITA BRUTA DE VENDAS & SERVIÇOS', val: 850000.00 * fatorFiltro, perc: '100,0%', neg: false, bold: true, bg: 'rgba(0,0,0,0.03)' },
+                { label: '   (–) Concreto Usinado FCK 20 a 40 MPa (1.830 m³)', val: 785000.00 * fatorFiltro, perc: '92,4%', neg: false, bold: false },
+                { label: '   (–) Serviços de Bombeamento com Bomba-Lança 32m', val: 65000.00 * fatorFiltro, perc: '7,6%', neg: false, bold: false },
+                { label: '(–) DEDUÇÕES E TRIBUTOS SOBRE FATURAMENTO', val: -42500.00 * fatorFiltro, perc: '-5,0%', neg: true, bold: true, bg: 'rgba(239, 68, 68, 0.05)' },
+                { label: '   (–) ISSQN Serviços de Concretagem (3,0% Tangará)', val: -25500.00 * fatorFiltro, perc: '-3,0%', neg: true, bold: false },
+                { label: '   (–) CFEM Mineração e Extração de Agregados (1,5%)', val: -4250.00 * fatorFiltro, perc: '-0,5%', neg: true, bold: false },
+                { label: '   (–) Simples Nacional / Tributos Federais Unificados', val: -12750.00 * fatorFiltro, perc: '-1,5%', neg: true, bold: false },
+                { label: '(=) RECEITA OPERACIONAL LÍQUIDA', val: 807500.00 * fatorFiltro, perc: '95,0%', neg: false, bold: true, bg: 'rgba(59, 130, 246, 0.08)', color: '#3B82F6' },
+                { label: '(–) CUSTO DOS PRODUTOS & INSUMOS VENDIDOS (CPV)', val: -498000.00 * fatorFiltro, perc: '-61,7%', neg: true, bold: true, bg: 'rgba(245, 158, 11, 0.05)' },
+                { label: '   (–) Cimento Portland a Granel CP II-F-32 (Votoran)', val: -238000.00 * fatorFiltro, perc: '-29,5%', neg: true, bold: false },
+                { label: '   (–) Agregados da Mineração (Areia Lavada + Britas 0 e 1)', val: -136000.00 * fatorFiltro, perc: '-16,8%', neg: true, bold: false },
+                { label: '   (–) Aditivos Químicos Superplastificantes (BASF)', val: -39000.00 * fatorFiltro, perc: '-4,8%', neg: true, bold: false },
+                { label: '   (–) Combustível Diesel S10 da Frota e Pás Carregadeiras', val: -85000.00 * fatorFiltro, perc: '-10,5%', neg: true, bold: false },
+                { label: '(=) MARGEM DE CONTRIBUIÇÃO BRUTA', val: 309500.00 * fatorFiltro, perc: '38,3%', neg: false, bold: true, bg: 'rgba(16, 185, 129, 0.08)', color: '#10B981' },
+                { label: '(–) DESPESAS OPERACIONAIS & ADMINISTRATIVAS', val: -83500.00 * fatorFiltro, perc: '-10,3%', neg: true, bold: true },
+                { label: '   (–) Folha de Pagamento Usina (Operadores, Laboratório, Motoristas)', val: -68200.00 * fatorFiltro, perc: '-8,4%', neg: true, bold: false },
+                { label: '   (–) Energia Elétrica Trifásica Usina 380V (Energisa MT)', val: -14300.00 * fatorFiltro, perc: '-1,8%', neg: true, bold: false },
+                { label: '   (–) Softwares Kytto, Comunicação e Despesas Gerais', val: -1000.00 * fatorFiltro, perc: '-0,1%', neg: true, bold: false },
+                { label: '(=) EBITDA OPERACIONAL DA USINA', val: 226000.00 * fatorFiltro, perc: '28,0%', neg: false, bold: true, bg: 'rgba(197, 160, 89, 0.15)', color: '#C5A059' },
+                { label: '(–) Depreciação de Equipamentos, Betoneiras e Usina', val: -22000.00 * fatorFiltro, perc: '-2,7%', neg: true, bold: false },
+                { label: '(=) LUCRO LÍQUIDO OPERACIONAL DA USINA', val: 204000.00 * fatorFiltro, perc: '25,3%', neg: false, bold: true, bg: 'rgba(16, 185, 129, 0.18)', color: '#10B981' }
               ].map((row, idx) => (
                 <div 
                   key={idx}

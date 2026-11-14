@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
+import FiltroPeriodoData from '../../../components/FiltroPeriodoData';
+
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../lib/auth';
 import {
@@ -20,6 +22,34 @@ export default function HoldingGrupoPalatare({ setSecaoAtiva }) {
   const [voucherGerado, setVoucherGerado] = useState(null);
   const [copiadoVoucher, setCopiadoVoucher] = useState(false);
   const [cenarioSimulador, setCenarioSimulador] = useState('betoneira_extra');
+  const [periodoFiltro, setPeriodoFiltro] = useState('mes_atual');
+  const [fatorFiltro, setFatorFiltro] = useState(1.0);
+  const [rotuloPeriodo, setRotuloPeriodo] = useState('Novembro/2026');
+
+  const handlePeriodoChange = (id, config) => {
+    setPeriodoFiltro(id);
+    setFatorFiltro(config.fator || 1.0);
+    setRotuloPeriodo(config.label || id);
+  };
+
+  const exportarDreHolding = () => {
+    const csvContent = "data:text/csv;charset=utf-8," + 
+      "DRE CONSOLIDADA - HOLDING GRUPO PALATARE\n" +
+      `Competencia:;${rotuloPeriodo}\n\n` +
+      "Operacao;Receita Bruta;Tributos;Custos Diretos (CPV/CMV);Despesas Fixas;EBITDA;Margem EBITDA\n" +
+      `Serrano Concreto & Mineracao;R$ ${(1120000 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2})};R$ ${(114000 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2})};R$ ${(460000 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2})};R$ ${(228000 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2})};R$ ${(318000 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2})};28,4%\n` +
+      `Palatare Pizzaria & Forneria;R$ ${(285000 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2})};R$ ${(24400 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2})};R$ ${(102000 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2})};R$ ${(90600 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2})};R$ ${(68000 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2})};23,8%\n` +
+      `CONSOLIDADO HOLDING;R$ ${(1405000 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2})};R$ ${(138400 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2})};R$ ${(562000 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2})};R$ ${(318600 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2})};R$ ${(386000 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2})};27,5%\n`;
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `DRE_Consolidada_Grupo_Palatare_${periodoFiltro}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
 
   const dadosHolding = {
     nomeGrupo: "Grupo Palatare",
@@ -1012,12 +1042,20 @@ export default function HoldingGrupoPalatare({ setSecaoAtiva }) {
             <div>
               <h3>DRE Consolidada &amp; Gestão de Cash Pooling · Grupo Palatare</h3>
               <small style={{ color: 'var(--text-muted)' }}>
-                Demonstração contábil unificada intercompany de receitas, custos diretos e EBITDA das operações
+                Demonstração contábil unificada intercompany de receitas, custos diretos e EBITDA das operações · Período: <strong style={{ color: '#FF7A00' }}>{rotuloPeriodo}</strong>
               </small>
             </div>
             <span className="holding-gold-badge" style={{ marginLeft: 'auto' }}>
               Margem EBITDA: 27,5%
             </span>
+          </div>
+          <div style={{ padding: '0 24px', paddingTop: 16 }}>
+            <FiltroPeriodoData
+              periodoSelecionado={periodoFiltro}
+              onPeriodoChange={handlePeriodoChange}
+              onExportar={exportarDreHolding}
+              titulo="Período DRE Holding"
+            />
           </div>
 
           <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -1038,23 +1076,23 @@ export default function HoldingGrupoPalatare({ setSecaoAtiva }) {
                 <div style={{ display: 'grid', gap: 6, fontSize: 12.5 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--text-muted)' }}>Receita Bruta (2.800 m³):</span>
-                    <strong style={{ color: 'var(--text-main)' }}>R$ 1.120.000,00</strong>
+                    <strong style={{ color: 'var(--text-main)' }}>{`R$ ${(1120000 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}</strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--text-muted)' }}>Tributos &amp; Deduções (10,1%):</span>
-                    <span style={{ color: '#EF4444' }}>- R$ 114.000,00</span>
+                    <span style={{ color: '#EF4444' }}>{`- R$ ${(114000 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--text-muted)' }}>Custos CPV (Cimento/Areia/Brita):</span>
-                    <span style={{ color: '#EF4444' }}>- R$ 460.000,00</span>
+                    <span style={{ color: '#EF4444' }}>{`- R$ ${(460000 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--text-muted)' }}>Despesas Fixas &amp; Folha (32 col.):</span>
-                    <span style={{ color: '#EF4444' }}>- R$ 228.000,00</span>
+                    <span style={{ color: '#EF4444' }}>{`- R$ ${(228000 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}</span>
                   </div>
                   <div style={{ borderTop: '1px solid var(--joint)', paddingTop: 8, marginTop: 4, display: 'flex', justifyContent: 'space-between' }}>
                     <b style={{ color: '#34D399' }}>EBITDA Operacional:</b>
-                    <b style={{ color: '#34D399', fontSize: 14 }}>R$ 318.000,00 (28,4%)</b>
+                    <b style={{ color: '#34D399', fontSize: 14 }}>{`R$ ${(318000 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} (28,4%)`}</b>
                   </div>
                 </div>
               </div>
@@ -1073,23 +1111,23 @@ export default function HoldingGrupoPalatare({ setSecaoAtiva }) {
                 <div style={{ display: 'grid', gap: 6, fontSize: 12.5 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--text-muted)' }}>Receita Bruta (Salão/Rodízio/Delivery):</span>
-                    <strong style={{ color: 'var(--text-main)' }}>R$ 285.000,00</strong>
+                    <strong style={{ color: 'var(--text-main)' }}>{`R$ ${(285000 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}</strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--text-muted)' }}>Tributos Simples Nac. (8,5%):</span>
-                    <span style={{ color: '#EF4444' }}>- R$ 24.400,00</span>
+                    <span style={{ color: '#EF4444' }}>{`- R$ ${(24400 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--text-muted)' }}>CMV (Insumos/Queijos/Farinha 00):</span>
-                    <span style={{ color: '#EF4444' }}>- R$ 102.000,00</span>
+                    <span style={{ color: '#EF4444' }}>{`- R$ ${(102000 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--text-muted)' }}>Despesas Fixas &amp; Folha (20 col.):</span>
-                    <span style={{ color: '#EF4444' }}>- R$ 90.600,00</span>
+                    <span style={{ color: '#EF4444' }}>{`- R$ ${(90600 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}</span>
                   </div>
                   <div style={{ borderTop: '1px solid var(--joint)', paddingTop: 8, marginTop: 4, display: 'flex', justifyContent: 'space-between' }}>
                     <b style={{ color: '#34D399' }}>EBITDA Operacional:</b>
-                    <b style={{ color: '#34D399', fontSize: 14 }}>R$ 68.000,00 (23,8%)</b>
+                    <b style={{ color: '#34D399', fontSize: 14 }}>{`R$ ${(68000 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} (23,8%)`}</b>
                   </div>
                 </div>
               </div>
@@ -1106,23 +1144,23 @@ export default function HoldingGrupoPalatare({ setSecaoAtiva }) {
                 <div style={{ display: 'grid', gap: 6, fontSize: 12.5 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--text-muted)' }}>Faturamento Bruto Mensal:</span>
-                    <strong style={{ color: '#C5A059', fontSize: 13.5 }}>R$ 1.405.000,00</strong>
+                    <strong style={{ color: '#C5A059', fontSize: 13.5 }}>{`R$ ${(1405000 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}</strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--text-muted)' }}>Carga Tributária Consolidada:</span>
-                    <span style={{ color: '#EF4444' }}>- R$ 138.400,00 (9,8%)</span>
+                    <span style={{ color: '#EF4444' }}>{`- R$ ${(138400 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} (9,8%)`}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--text-muted)' }}>Custos Diretos (CPV + CMV):</span>
-                    <span style={{ color: '#EF4444' }}>- R$ 562.000,00</span>
+                    <span style={{ color: '#EF4444' }}>{`- R$ ${(562000 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--text-muted)' }}>Despesas Corporativas (52 colab.):</span>
-                    <span style={{ color: '#EF4444' }}>- R$ 318.600,00</span>
+                    <span style={{ color: '#EF4444' }}>{`- R$ ${(318600 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}</span>
                   </div>
                   <div style={{ borderTop: '2px solid #C5A059', paddingTop: 8, marginTop: 4, display: 'flex', justifyContent: 'space-between' }}>
                     <b style={{ color: '#FFFFFF', fontSize: 14 }}>EBITDA Consolidado:</b>
-                    <b style={{ color: '#34D399', fontSize: 16 }}>R$ 386.000,00 / mês</b>
+                    <b style={{ color: '#34D399', fontSize: 16 }}>{`R$ ${(386000 * fatorFiltro).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}</b>
                   </div>
                 </div>
               </div>
