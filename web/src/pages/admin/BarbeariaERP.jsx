@@ -58,6 +58,9 @@ const MetasComissoesPanel = lazy(() => import("./dino/MetasComissoesPanel"));
 const DinoCarteiraClientesPanel = lazy(
   () => import("./dino/DinoCarteiraClientesPanel"),
 );
+const DinoRecuperacaoAtivaCockpit = lazy(
+  () => import("./dino/DinoRecuperacaoAtivaCockpit"),
+);
 const DinoRecuperacaoAvecPanel = lazy(
   () => import("./dino/DinoRecuperacaoAvecPanel"),
 );
@@ -106,6 +109,7 @@ import {
 } from "./dino/CaptacaoPanels";
 
 const TABS = [
+  ["Recuperação Ativa & Pacotes (T-Rex)", "Cockpit diário de reativação de clientes > 60d e simulador comercial de pacotes"],
   ["Como Vender Mais com IA", "Indicadores de vendas, combate ao churn, upsell e motor preditivo da IA"],
   ["Gestão do Salão (IA)", "Metas, entregas por profissional, blend e IA T-Rex"],
   ["Visão geral", "Resumo da operação"],
@@ -188,6 +192,7 @@ const AREAS = [
     label: "Relacionamento",
     short: "Clientes, retorno e indicação",
     tabs: [
+      "Recuperação Ativa & Pacotes (T-Rex)",
       "Como Vender Mais com IA",
       "Gestão do Salão (IA)",
       "Carteira por barbeiro",
@@ -14165,6 +14170,25 @@ export default function BarbeariaERP({ tabInicial } = {}) {
               setModal("cliente");
             }}
           />
+        </Suspense>
+      );
+    }
+    if (tab === "Recuperação Ativa & Pacotes (T-Rex)") {
+      return (
+        <Suspense
+          fallback={
+            <Card
+              style={{
+                padding: 40,
+                textAlign: "center",
+                color: "var(--muted)",
+              }}
+            >
+              Carregando Cockpit T-Rex de Recuperação & Pacotes...
+            </Card>
+          }
+        >
+          <DinoRecuperacaoAtivaCockpit />
         </Suspense>
       );
     }
