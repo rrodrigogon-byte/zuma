@@ -66,7 +66,7 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
       portaHttp: 80,
       ponto: 'balanca',
       codec: 'H.265 · 30 FPS',
-      foto: '/assets/cftv/cftv_cam01_lpr_entrada.jpg',
+      foto: '/assets/cftv/cftv_real_02_balanca_80t.jpg',
       status: 'Placa: RRA-4E80 (99.6%)',
       statusCor: '#10B981'
     },
@@ -80,7 +80,7 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
       portaHttp: 80,
       ponto: 'balanca',
       codec: 'H.265 · 25 FPS (4K)',
-      foto: '/assets/cftv/cftv_cam02_plataforma_panoramica.jpg',
+      foto: '/assets/cftv/cftv_real_02_balanca_80t.jpg',
       status: 'Enquadramento 100% OK · 8 Células Toledo',
       statusCor: '#10B981'
     },
@@ -94,7 +94,7 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
       portaHttp: 80,
       ponto: 'balanca',
       codec: 'H.264 · 30 FPS',
-      foto: '/assets/cftv/cftv_cam03_cancela_saida.jpg',
+      foto: '/assets/cftv/cftv_real_02_balanca_80t.jpg',
       status: 'Cancela Fechada (Aguardando Liberação)',
       statusCor: '#EF4444'
     },
@@ -108,7 +108,7 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
       portaHttp: 80,
       ponto: 'patio',
       codec: 'H.265 · 25 FPS',
-      foto: '/assets/cftv/cftv_cam04_patio_silos.jpg',
+      foto: '/assets/cftv/cftv_real_01_central_dosadora.jpg',
       status: 'EPIs Conformes (Capacete / Colete)',
       statusCor: '#10B981'
     },
@@ -122,7 +122,7 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
       portaHttp: 80,
       ponto: 'patio',
       codec: 'H.265 · 30 FPS',
-      foto: '/assets/cftv/cftv_cam05_central_dosadora.jpg',
+      foto: '/assets/cftv/cftv_real_01_central_dosadora.jpg',
       status: 'Batelada #1042 Concluída',
       statusCor: '#38BDF8'
     },
@@ -136,7 +136,7 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
       portaHttp: 80,
       ponto: 'mineracao',
       codec: 'H.265 · 20 FPS (2K)',
-      foto: '/assets/cftv/cftv_cam06_mineracao_areia.jpg',
+      foto: '/assets/cftv/cftv_real_03_mineracao_areia.jpg',
       status: 'Draga 01 em Operação Contínua',
       statusCor: '#10B981'
     },
@@ -150,7 +150,7 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
       portaHttp: 80,
       ponto: 'balanca',
       codec: 'H.265 · 30 FPS',
-      foto: '/assets/cftv/cftv_cam07_bosch_celulas.jpg',
+      foto: '/assets/cftv/cftv_real_06_laboratorio.jpg',
       status: '8 Células Calibradas RBC / IPEM',
       statusCor: '#10B981'
     },
@@ -164,7 +164,7 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
       portaHttp: 80,
       ponto: 'balanca',
       codec: 'H.264 · 30 FPS',
-      foto: '/assets/cftv/cftv_cam09_toledo_totem.jpg',
+      foto: '/assets/cftv/cftv_real_02_balanca_80t.jpg',
       status: 'RFID & Leitor Biométrico Ativo',
       statusCor: '#10B981'
     },
@@ -178,7 +178,7 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
       portaHttp: 80,
       ponto: 'balanca',
       codec: 'H.265 · 30 FPS',
-      foto: '/assets/cftv/cftv_cam08_avigilon_traseira.jpg',
+      foto: '/assets/cftv/cftv_real_08_betoneira_rodovia.jpg',
       status: 'Enquadramento Traseiro 100% OK',
       statusCor: '#10B981'
     },
@@ -192,7 +192,7 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
       portaHttp: 80,
       ponto: 'patio',
       codec: 'Radiométrica · 30 FPS',
-      foto: '/assets/cftv/cftv_cam12_flir_termica.jpg',
+      foto: '/assets/cftv/cftv_real_01_central_dosadora.jpg',
       status: 'Gradiente Térmico Normal (61.3°C / 78.6°C)',
       statusCor: '#10B981'
     },
@@ -206,7 +206,7 @@ export default function BalancaRodoviariaCockpit({ onVoltar }) {
       portaHttp: 80,
       ponto: 'patio',
       codec: 'H.265+ · 25 FPS (2K)',
-      foto: '/assets/cftv/cftv_cam11_tplink_vigi_baias.jpg',
+      foto: '/assets/cftv/cftv_real_07_baias_agregados.jpg',
       status: 'Carregamento Moega em Andamento',
       statusCor: '#10B981'
     }

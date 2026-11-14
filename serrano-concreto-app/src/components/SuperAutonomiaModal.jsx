@@ -126,7 +126,7 @@ export default function SuperAutonomiaModal({ isOpen, onClose, initialTab = 'tra
                 </span>
               </div>
               <p className="text-xs text-stone-400 mt-0.5">
-                5 Motores Autônomos de Engenharia NBR e Telemetria CCO Superando Command Alkon, Marcotte e Sysdyne
+                5 Motores Autônomos de Engenharia NBR e Telemetria CCO Serrano Concreto &amp; Mineração Sepotuba
               </p>
             </div>
           </div>

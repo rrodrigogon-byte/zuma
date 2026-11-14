@@ -5483,7 +5483,7 @@ export function criarCameraIpConcreto(dados, empresaId = CONCRETO_EMPRESA_ID) {
     substream: Boolean(dados.substream),
     streamRtspUrl: dados.streamRtspUrl || urls.streamRtspUrl,
     snapshotHttpUrl: dados.snapshotHttpUrl || urls.snapshotHttpUrl,
-    hlsStreamUrl: dados.hlsStreamUrl || "/assets/cftv/cftv_cam01_lpr_entrada.jpg",
+    hlsStreamUrl: dados.hlsStreamUrl || "/assets/cftv/cftv_real_02_balanca_80t.jpg",
     status: "online",
     fps: Number(dados.fps) || 30,
     resolucao: dados.resolucao || "1920x1080 (Full HD)",
@@ -5599,7 +5599,7 @@ export function capturarSnapshotCameraIp(id, empresaId = CONCRETO_EMPRESA_ID) {
     ok: true,
     cameraId: camera.id,
     cameraNome: camera.nome,
-    snapshotUrl: camera.hlsStreamUrl || "/assets/cftv/cftv_cam01_lpr_entrada.jpg",
+    snapshotUrl: camera.hlsStreamUrl || "/assets/cftv/cftv_real_02_balanca_80t.jpg",
     capturadoEm: agora,
     resolucao: camera.resolucao || "1920x1080",
     formato: "image/jpeg"
@@ -5732,7 +5732,7 @@ export function analisarFrameVisionKyttoIa(id, empresaId = CONCRETO_EMPRESA_ID) 
     placaDetectada: resultadoAnalise.placaDetectada,
     confianca: resultadoAnalise.confianca,
     severidade: resultadoAnalise.severidade,
-    snapshotUrl: camera.hlsStreamUrl || "/assets/cftv/cftv_cam01_lpr_entrada.jpg",
+    snapshotUrl: camera.hlsStreamUrl || "/assets/cftv/cftv_real_02_balanca_80t.jpg",
     detalhes: resultadoAnalise.detalhes,
     dataHora: agoraFormatada,
     reconhecido: false,
@@ -5774,29 +5774,26 @@ export function reconhecerEventoVision(id, empresaId = CONCRETO_EMPRESA_ID, oper
 }
 
 export function obterSnapshotUrlParaPontoOuMarca(ponto = "", marca = "", finalIp = null) {
-  if (finalIp === 120 || ponto === "balanca_entrada_lpr") return "/assets/cftv/cftv_cam01_lpr_entrada.jpg";
-  if (finalIp === 121 || ponto === "balanca_panoramica") {
-    if (marca === "bosch" || finalIp === 130) return "/assets/cftv/cftv_cam07_bosch_celulas.jpg";
-    return "/assets/cftv/cftv_cam02_plataforma_panoramica.jpg";
-  }
-  if (finalIp === 122 || ponto === "balanca_cancela_saida") return "/assets/cftv/cftv_cam03_cancela_saida.jpg";
-  if (finalIp === 123 || ponto === "patio_betoneiras") return "/assets/cftv/cftv_cam04_patio_silos.jpg";
-  if (finalIp === 124 || ponto === "central_dosadora") return "/assets/cftv/cftv_cam05_central_dosadora.jpg";
-  if (finalIp === 125 || ponto === "mineracao_areia") return "/assets/cftv/cftv_cam06_mineracao_areia.jpg";
-  if (finalIp === 130 || marca === "bosch") return "/assets/cftv/cftv_cam07_bosch_celulas.jpg";
-  if (finalIp === 132 || marca === "avigilon") return "/assets/cftv/cftv_cam08_avigilon_traseira.jpg";
-  if (finalIp === 135 || marca === "toledo_prix_lpr") return "/assets/cftv/cftv_cam09_toledo_totem.jpg";
-  if (finalIp === 127 || marca === "uniview") return "/assets/cftv/cftv_cam10_uniview_mineracao.jpg";
-  if (finalIp === 138 || marca === "tplink_vigi") return "/assets/cftv/cftv_cam11_tplink_vigi_baias.jpg";
-  if (finalIp === 150 || marca === "flir") return "/assets/cftv/cftv_cam12_flir_termica.jpg";
-  if (finalIp === 140 || marca === "hanwha") return "/assets/cftv/cftv_cam13_hanwha_silos.jpg";
-  if (finalIp === 145 || marca === "pelco") return "/assets/cftv/cftv_cam14_pelco_lavagem.jpg";
-  if (finalIp === 142 || marca === "vivotek") return "/assets/cftv/cftv_cam15_vivotek_portao.jpg";
-  if (finalIp === 152 || marca === "geovision") return "/assets/cftv/cftv_cam16_geovision_manobras.jpg";
-  if (finalIp === 128 || marca === "giga") return "/assets/cftv/cftv_cam17_giga_almoxarifado.jpg";
-  if (finalIp === 129 || marca === "tecvoz") return "/assets/cftv/cftv_cam18_tecvoz_estacionamento.jpg";
-  if (finalIp === 160 || marca === "onvif_generica") return "/assets/cftv/cftv_cam19_onvif_perimetro.jpg";
-  return "/assets/cftv/cftv_cam01_lpr_entrada.jpg";
+  if (finalIp === 120 || ponto === "balanca_entrada_lpr") return "/assets/cftv/cftv_real_02_balanca_80t.jpg";
+  if (finalIp === 121 || ponto === "balanca_panoramica") return "/assets/cftv/cftv_real_02_balanca_80t.jpg";
+  if (finalIp === 122 || ponto === "balanca_cancela_saida") return "/assets/cftv/cftv_real_02_balanca_80t.jpg";
+  if (finalIp === 123 || ponto === "patio_betoneiras") return "/assets/cftv/cftv_real_08_betoneira_rodovia.jpg";
+  if (finalIp === 124 || ponto === "central_dosadora") return "/assets/cftv/cftv_real_01_central_dosadora.jpg";
+  if (finalIp === 125 || ponto === "mineracao_areia") return "/assets/cftv/cftv_real_03_mineracao_areia.jpg";
+  if (finalIp === 130 || marca === "bosch") return "/assets/cftv/cftv_real_06_laboratorio.jpg";
+  if (finalIp === 132 || marca === "avigilon") return "/assets/cftv/cftv_real_08_betoneira_rodovia.jpg";
+  if (finalIp === 135 || marca === "toledo_prix_lpr") return "/assets/cftv/cftv_real_02_balanca_80t.jpg";
+  if (finalIp === 127 || marca === "uniview") return "/assets/cftv/cftv_real_03_mineracao_areia.jpg";
+  if (finalIp === 138 || marca === "tplink_vigi") return "/assets/cftv/cftv_real_07_baias_agregados.jpg";
+  if (finalIp === 150 || marca === "flir") return "/assets/cftv/cftv_real_01_central_dosadora.jpg";
+  if (finalIp === 140 || marca === "hanwha") return "/assets/cftv/cftv_real_01_central_dosadora.jpg";
+  if (finalIp === 145 || marca === "pelco") return "/assets/cftv/cftv_real_05_bomba_lanca.jpg";
+  if (finalIp === 142 || marca === "vivotek") return "/assets/cftv/cftv_real_02_balanca_80t.jpg";
+  if (finalIp === 152 || marca === "geovision") return "/assets/cftv/cftv_real_08_betoneira_rodovia.jpg";
+  if (finalIp === 128 || marca === "giga") return "/assets/cftv/cftv_real_07_baias_agregados.jpg";
+  if (finalIp === 129 || marca === "tecvoz") return "/assets/cftv/cftv_real_02_balanca_80t.jpg";
+  if (finalIp === 160 || marca === "onvif_generica") return "/assets/cftv/cftv_real_01_central_dosadora.jpg";
+  return "/assets/cftv/cftv_real_01_central_dosadora.jpg";
 }
 
 export async function escanearRedeCamerasIpConcreto(opcoes = {}, empresaId = CONCRETO_EMPRESA_ID) {

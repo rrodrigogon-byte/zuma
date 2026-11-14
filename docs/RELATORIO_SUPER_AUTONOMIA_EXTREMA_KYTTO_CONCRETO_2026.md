@@ -28,7 +28,7 @@ O **Kytto Concreto CCO 360°** consolida-se como a plataforma de automação e c
 
 A tabela a seguir demonstra a superioridade funcional e normativa do Kytto Concreto frente às principais soluções do mercado nacional e internacional:
 
-| Funcionalidade / Pilar Tecnológico | Kytto Concreto CCO 360° | Command Alkon (TrackIt / COMMANDbatch) | Marcotte Control | Sysdyne (ConcreteGo) | Jonel Archer | Totvs / Concrettor |
+| Funcionalidade / Pilar Tecnológico | Kytto Concreto CCO 360° | Sistemas Tradicionais de Despacho | Automação Industrial Convencional | Sistemas em Nuvem Legados | Centrais Batching Clássicas | ERPs Genéricos de Mercado |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | **Pesagem 80t Zero-Touch (LPR + Toledo Prix 9094)** | **Nativo & 100% Autônomo** | Parcial (módulos adicionais) | Requer operador | Não integrado nativo | Requer operador | Requer operador |
 | **Malha Fechada NBR 7212 com Micro-ondas e Wattímetro** | **Nativo (ajuste a cada batelada)** | Sim (COMMANDbatch) | Sim | Parcial | Sim | Não (ajuste manual) |

@@ -42,7 +42,7 @@ const CAMERAS_SEED = [
     substream: true,
     streamRtspUrl: "rtsp://admin:****@192.168.1.120:554/cam/realmonitor?channel=1&subtype=1",
     snapshotHttpUrl: "http://admin:****@192.168.1.120/cgi-bin/snapshot.cgi?channel=1",
-    hlsStreamUrl: "/assets/cftv/cftv_cam01_lpr_entrada.jpg",
+    hlsStreamUrl: "/assets/cftv/cftv_real_02_balanca_80t.jpg",
     status: "online",
     fps: 30,
     resolucao: "1920x1080 (Full HD)",
@@ -72,7 +72,7 @@ const CAMERAS_SEED = [
     substream: true,
     streamRtspUrl: "rtsp://admin:****@192.168.1.121:554/Streaming/Channels/102",
     snapshotHttpUrl: "http://admin:****@192.168.1.121/ISAPI/Streaming/channels/101/picture",
-    hlsStreamUrl: "/assets/cftv/cftv_cam02_plataforma_panoramica.jpg",
+    hlsStreamUrl: "/assets/cftv/cftv_real_02_balanca_80t.jpg",
     status: "online",
     fps: 25,
     resolucao: "3840x2160 (4K UHD)",
@@ -102,7 +102,7 @@ const CAMERAS_SEED = [
     substream: true,
     streamRtspUrl: "rtsp://admin:****@192.168.1.122:554/cam/realmonitor?channel=1&subtype=1",
     snapshotHttpUrl: "http://admin:****@192.168.1.122/cgi-bin/snapshot.cgi?channel=1",
-    hlsStreamUrl: "/assets/cftv/cftv_cam03_cancela_saida.jpg",
+    hlsStreamUrl: "/assets/cftv/cftv_real_02_balanca_80t.jpg",
     status: "online",
     fps: 30,
     resolucao: "1920x1080 (Full HD)",
@@ -132,7 +132,8 @@ const CAMERAS_SEED = [
     substream: true,
     streamRtspUrl: "rtsp://admin:****@192.168.1.123:554/cam/realmonitor?channel=1&subtype=1",
     snapshotHttpUrl: "http://admin:****@192.168.1.123/cgi-bin/snapshot.cgi?channel=1",
-    hlsStreamUrl: "/assets/cftv/cftv_cam04_patio_silos.jpg",
+    hlsStreamUrl: "/assets/cftv/cftv_real_01_central_dosadora.jpg",
+    videoUrl: "/assets/concreto/video_usina_central_dosadora.mp4",
     status: "online",
     fps: 25,
     resolucao: "1920x1080 (Full HD)",
@@ -162,7 +163,8 @@ const CAMERAS_SEED = [
     substream: true,
     streamRtspUrl: "rtsp://root:****@192.168.1.124:554/axis-media/media.amp",
     snapshotHttpUrl: "http://root:****@192.168.1.124/axis-cgi/jpg/image.cgi",
-    hlsStreamUrl: "/assets/cftv/cftv_cam05_central_dosadora.jpg",
+    hlsStreamUrl: "/assets/cftv/cftv_real_01_central_dosadora.jpg",
+    videoUrl: "/assets/concreto/video_usina_central_dosadora.mp4",
     status: "online",
     fps: 30,
     resolucao: "1920x1080 (Full HD)",
@@ -192,7 +194,8 @@ const CAMERAS_SEED = [
     substream: true,
     streamRtspUrl: "rtsp://admin:****@192.168.1.125:554/Streaming/Channels/102",
     snapshotHttpUrl: "http://admin:****@192.168.1.125/ISAPI/Streaming/channels/101/picture",
-    hlsStreamUrl: "/assets/cftv/cftv_cam06_mineracao_areia.jpg",
+    hlsStreamUrl: "/assets/cftv/cftv_real_03_mineracao_areia.jpg",
+    videoUrl: "/assets/concreto/video_mineracao_sepotuba.mp4",
     status: "online",
     fps: 20,
     resolucao: "2560x1440 (2K QHD)",
@@ -222,7 +225,7 @@ const CAMERAS_SEED = [
     substream: true,
     streamRtspUrl: "rtsp://admin:****@192.168.1.126:554/live/ch0",
     snapshotHttpUrl: "http://admin:****@192.168.1.126/snapshot.jpg",
-    hlsStreamUrl: "/assets/cftv/cftv_cam03_cancela_saida.jpg",
+    hlsStreamUrl: "/assets/cftv/cftv_real_02_balanca_80t.jpg",
     status: "online",
     fps: 25,
     resolucao: "1920x1080 (Full HD)",
@@ -247,7 +250,7 @@ const EVENTOS_SEED = [
     descricao: "Betoneira BT-01 identificada automaticamente na 1ª pesagem. Enquadramento 100% OK.",
     confianca: 99.6,
     dataHora: new Date().toLocaleDateString("pt-BR") + " 17:42:10",
-    snapshotUrl: "/assets/cftv/cftv_cam01_lpr_entrada.jpg"
+    snapshotUrl: "/assets/cftv/cftv_real_02_balanca_80t.jpg"
   },
   {
     id: "evt-02",
@@ -258,7 +261,7 @@ const EVENTOS_SEED = [
     descricao: "Capacete e colete refletivo detectados em todos os operadores no pátio de dosagem.",
     confianca: 98.4,
     dataHora: new Date().toLocaleDateString("pt-BR") + " 17:41:50",
-    snapshotUrl: "/assets/cftv/cftv_cam04_patio_silos.jpg"
+    snapshotUrl: "/assets/cftv/cftv_real_01_central_dosadora.jpg"
   },
   {
     id: "evt-03",
@@ -269,7 +272,7 @@ const EVENTOS_SEED = [
     descricao: "Semáforo verde ativado. Ticket térmico NBR 7212 emitido com 33.480 kg brutos.",
     confianca: 99.9,
     dataHora: new Date().toLocaleDateString("pt-BR") + " 17:40:02",
-    snapshotUrl: "/assets/cftv/cftv_cam03_cancela_saida.jpg"
+    snapshotUrl: "/assets/cftv/cftv_real_02_balanca_80t.jpg"
   }
 ];
 
@@ -524,7 +527,7 @@ export default function ConcretoCamerasVisionAI({
   const handleAbrirSnapshot = (cam) => {
     setSnapshotAtivo({
       nome: cam.nome,
-      url: cam.hlsStreamUrl || "/assets/cftv/cftv_cam01_lpr_entrada.jpg",
+      url: cam.hlsStreamUrl || "/assets/cftv/cftv_real_02_balanca_80t.jpg",
       ipHost: cam.ipHost,
       ponto: cam.pontoRotulo,
       dataHora: `${new Date().toLocaleDateString("pt-BR")} ${relogio}`,
@@ -1201,11 +1204,28 @@ export default function ConcretoCamerasVisionAI({
                 style={{ position: "relative", width: "100%", aspectRatio: "16/9", background: "#000", cursor: "pointer" }}
                 onClick={() => handleAbrirSnapshot(cam)}
               >
-                <img
-                  src={cam.hlsStreamUrl || "/assets/cftv/cftv_cam01_lpr_entrada.jpg"}
-                  alt={cam.nome}
-                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                />
+                {cam.videoUrl ? (
+                  <video
+                    src={cam.videoUrl}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                  />
+                ) : (
+                  <img
+                    src={cam.hlsStreamUrl || "/assets/cftv/cftv_real_02_balanca_80t.jpg"}
+                    alt={cam.nome}
+                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                  />
+                )}
+                {cam.videoUrl && (
+                  <div style={{ position: "absolute", top: 8, right: 8, background: "rgba(220,38,38,0.85)", color: "#fff", fontSize: 9, fontWeight: 900, padding: "2px 6px", borderRadius: 4, display: "flex", alignItems: "center", gap: 4 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff" }} />
+                    LIVE VÍDEO
+                  </div>
+                )}
                 <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,0.75)", color: "#38bdf8", fontSize: 10, fontFamily: "monospace", padding: "2px 6px", borderRadius: 4 }}>
                   {cam.ipHost} · {cam.fps} FPS · {cam.codec || "H.265"}
                 </div>
@@ -1340,11 +1360,23 @@ export default function ConcretoCamerasVisionAI({
               <span style={{ fontSize: 12, color: "#10b981", fontWeight: 700 }}>● Stream Ativo 1080p 30 FPS</span>
             </div>
             <div style={{ width: "100%", aspectRatio: "16/9", background: "#000", borderRadius: 8, overflow: "hidden", position: "relative" }}>
-              <img
-                src={cameraFocada.hlsStreamUrl || "/assets/cftv/cftv_cam01_lpr_entrada.jpg"}
-                alt={cameraFocada.nome}
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-              />
+              {cameraFocada.videoUrl ? (
+                <video
+                  src={cameraFocada.videoUrl}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  controls
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              ) : (
+                <img
+                  src={cameraFocada.hlsStreamUrl || "/assets/cftv/cftv_real_02_balanca_80t.jpg"}
+                  alt={cameraFocada.nome}
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              )}
               <div style={{ position: "absolute", top: 12, left: 12, background: "rgba(0,0,0,0.8)", padding: "4px 10px", borderRadius: 6, border: "1px solid #10b981", color: "#10b981", fontSize: 12, fontFamily: "monospace", fontWeight: 700 }}>
                 LPR: {cameraFocada.ultimaLeituraPlaca} (99.6%)
               </div>
@@ -1966,7 +1998,7 @@ export default function ConcretoCamerasVisionAI({
             {/* Imagem com Bounding Boxes */}
             <div style={{ position: "relative", width: "100%", maxHeight: "55vh", overflow: "hidden", borderRadius: 8, background: "#000", border: "1px solid #1e293b" }}>
               <img
-                src={analiseResultado.camera?.hlsStreamUrl || analiseResultado.evento?.snapshotUrl || "/assets/cftv/cftv_cam01_lpr_entrada.jpg"}
+                src={analiseResultado.camera?.hlsStreamUrl || analiseResultado.evento?.snapshotUrl || "/assets/cftv/cftv_real_02_balanca_80t.jpg"}
                 alt="Frame Vision"
                 style={{ width: "100%", height: "auto", display: "block" }}
               />

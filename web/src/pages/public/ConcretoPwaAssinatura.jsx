@@ -55,30 +55,23 @@ export default function ConcretoPwaAssinatura() {
   const [analisandoSlump, setAnalisandoSlump] = useState(false);
   const [cienciaAguaObra, setCienciaAguaObra] = useState(false);
 
-  const simularSlumpDemo = () => {
-    const demoCanvas = document.createElement('canvas');
-    demoCanvas.width = 300;
-    demoCanvas.height = 200;
-    const ctx = demoCanvas.getContext('2d');
-    ctx.fillStyle = '#1E293B';
-    ctx.fillRect(0, 0, 300, 200);
-    ctx.fillStyle = '#64748B';
-    ctx.beginPath();
-    ctx.moveTo(100, 180);
-    ctx.lineTo(200, 180);
-    ctx.lineTo(170, 70);
-    ctx.lineTo(130, 70);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#38BDF8';
-    ctx.fillRect(90, 68, 120, 4);
-    const base64 = demoCanvas.toDataURL('image/png');
+    const simularSlumpDemo = () => {
     setFotoSlump({
-      tipo: 'slump',
-      base64,
-      titulo: 'Slump Test (Tronco de Cone Abrams)',
-      timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      localizacao: 'Canteiro Ed. Serra Dourada'
+      tipo: "slump",
+      base64: "/assets/cftv/cftv_real_04_slump_test.jpg",
+      titulo: "Ensaio de Abatimento Real (Tronco de Cone Abrams NBR 7212)",
+      timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+      localizacao: "Canteiro Ed. Residencial Serra Dourada · Laje 4º Pav."
+    });
+  };
+
+  const simularDescargaDemo = () => {
+    setFotoDescarga({
+      tipo: "descarga",
+      base64: "/assets/cftv/cftv_real_05_bomba_lanca.jpg",
+      titulo: "Descarga Real Bomba Lança 36m Serrano Concreto",
+      timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+      localizacao: "Canteiro Ed. Residencial Serra Dourada · Tangará da Serra"
     });
   };
 
@@ -1015,6 +1008,26 @@ export default function ConcretoPwaAssinatura() {
                         style={{ display: 'none' }}
                       />
                     </label>
+                  )}
+                  {!fotoDescarga && (
+                    <button
+                      type="button"
+                      onClick={simularDescargaDemo}
+                      style={{
+                        background: "rgba(255, 107, 44, 0.15)",
+                        border: "1px solid rgba(255, 107, 44, 0.3)",
+                        color: "#FF9E66",
+                        fontSize: 9,
+                        fontWeight: 800,
+                        padding: "4px 6px",
+                        borderRadius: 4,
+                        marginTop: 6,
+                        cursor: "pointer",
+                        width: "100%"
+                      }}
+                    >
+                      ⚡ Foto Real Bomba Lança
+                    </button>
                   )}
                 </div>
 
