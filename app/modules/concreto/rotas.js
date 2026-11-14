@@ -80,7 +80,12 @@ import {
   executarDosagemMalhaFechadaNBR7212,
   auditarInviolabilidadeAguaTrajeto,
   registrarRupturaAutomaticaPrensa,
-  gerarMedicaoPeriodicaObra
+  gerarMedicaoPeriodicaObra,
+  processarCicloTransporteGeofenceNBR7212,
+  calcularAceitacaoEstatisticaNBR12655,
+  monitorarSilosRessuprimentoAutonomo,
+  auditarTelemetriaBombaDesgasteNBR15649,
+  calcularBalancoCarbonoRecicladorESG
 } from './servico.js';
 import { CONCRETO_EMPRESA_ID } from '../../concreto-usina-seed.js';
 
@@ -992,6 +997,62 @@ router.post('/dosagem/calcular', (req, res) => {
     try {
       const empresaId = resolverEmpresa(req);
       const resultado = gerarMedicaoPeriodicaObra(req.body || {}, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // ─── MOTORES DE SUPERAÇÃO DE MERCADO & AUTONOMIA MÁXIMA CCO ───
+  
+  // 1. Ciclo de Transporte & Geofencing NBR 7212 (Virtual TrackIt)
+  router.post('/transporte/ciclo-geofence', (req, res) => {
+    try {
+      const caminhaoId = req.body?.caminhaoId || 'BT-05';
+      const resultado = processarCicloTransporteGeofenceNBR7212(caminhaoId, req.body || {});
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 2. Aceitação Estatística Rigorosa NBR 12655 (Amostragem Total e Parcial)
+  router.post('/laboratorio/aceitacao-estatistica-nbr12655', (req, res) => {
+    try {
+      const resultado = calcularAceitacaoEstatisticaNBR12655(req.body || {});
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 3. Monitoramento Preditivo de Silos e Ressuprimento Autônomo
+  router.get('/silos/ressuprimento-autonomo', (req, res) => {
+    try {
+      const resultado = monitorarSilosRessuprimentoAutonomo();
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 4. Telemetria de Bombas de Concreto, Vento e Desgaste NBR 15649
+  router.post('/bombas/auditar-desgaste', (req, res) => {
+    try {
+      const bombaId = req.body?.bombaId || 'BOMBA-01';
+      const resultado = auditarTelemetriaBombaDesgasteNBR15649(bombaId, req.body || {});
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 5. Balanço de Carbono ESG & Reciclador Ecológico (NBR ISO 14064)
+  router.post('/sustentabilidade/balanco-carbono-esg', (req, res) => {
+    try {
+      const volumeM3 = Number(req.body?.volumeM3) || 64.0;
+      const tracoFck = Number(req.body?.traçoFck || req.body?.tracoFck) || 30;
+      const resultado = calcularBalancoCarbonoRecicladorESG(volumeM3, tracoFck, req.body || {});
       return res.json(resultado);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });

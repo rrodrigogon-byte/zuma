@@ -25,6 +25,8 @@ import {
   Clock,
   Radio
 } from 'lucide-react';
+import SuperAutonomiaModal from './SuperAutonomiaModal';
+
 
 export default function DigitalTwin({ 
   unit, 
@@ -40,6 +42,8 @@ export default function DigitalTwin({
 }) {
   const [selectedStation, setSelectedStation] = useState(null);
   const [inspectedVehicle, setInspectedVehicle] = useState(null);
+  const [modalSuperAutonomia, setModalSuperAutonomia] = useState({ open: false, tab: 'trackit' });
+
 
   // Status dot legend
   const STATUS_LEGEND = [
@@ -80,6 +84,37 @@ export default function DigitalTwin({
               <span className={`w-2 h-2 rounded-full ${item.color}`} />
               <span>{item.label}</span>
             </div>
+          ))}
+        </div>
+      </div>
+
+
+      {/* BARRA DE SUPER-AUTONOMIA CCO 360° */}
+      <div className="mt-2.5 p-2 bg-stone-900 rounded-xl border border-stone-800 flex items-center justify-between flex-wrap gap-2 text-white">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-serrano-500 animate-pulse" />
+          <span className="text-xs font-black uppercase tracking-wider text-serrano-400">
+            SUPER-AUTONOMIA CCO 360°
+          </span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-stone-800 text-stone-300 font-mono">
+            Motor KyttoIA 2.5 Flash
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 overflow-x-auto">
+          {[
+            { id: 'trackit', label: '🚚 TrackIt Geofence (90min)', color: 'hover:border-amber-500' },
+            { id: 'estatistica', label: '🏛️ Aceitação NBR 12655', color: 'hover:border-emerald-500' },
+            { id: 'silos', label: '🏭 Silos Radar 80GHz', color: 'hover:border-blue-500' },
+            { id: 'bomba', label: '🚛 Bomba 36m Vento', color: 'hover:border-purple-500' },
+            { id: 'esg', label: '🌱 Balanço ESG Verde', color: 'hover:border-teal-500' },
+          ].map(btn => (
+            <button
+              key={btn.id}
+              onClick={() => setModalSuperAutonomia({ open: true, tab: btn.id })}
+              className={"text-[11px] font-bold px-2.5 py-1 rounded-lg bg-stone-800/80 hover:bg-stone-700 text-stone-200 border border-stone-700/60 transition-all cursor-pointer whitespace-nowrap " + btn.color}
+            >
+              {btn.label}
+            </button>
           ))}
         </div>
       </div>
@@ -757,6 +792,14 @@ export default function DigitalTwin({
           </div>
         </div>
       )}
+
+
+      {/* MODAL DE SUPER-AUTONOMIA MÁXIMA & SUPERAÇÃO DE MERCADO */}
+      <SuperAutonomiaModal 
+        isOpen={modalSuperAutonomia.open} 
+        onClose={() => setModalSuperAutonomia({ open: false, tab: 'trackit' })} 
+        initialTab={modalSuperAutonomia.tab} 
+      />
 
     </div>
   );
