@@ -185,10 +185,13 @@ export async function sincronizarTenantsEquipes(commerceDb) {
 
           let userId = null;
           if (userExist.rows?.[0]?.id) {
+          let targetEmpresaId = config.empresaId;
+          let userId = null;
+          if (userExist.rows?.[0]?.id) {
             userId = userExist.rows[0].id;
             const currentEmpresaId = userExist.rows[0].empresa_id;
             // Se pertencer a outra empresa com membership referenciada, preserva empresa_id para não violar FK
-            const targetEmpresaId = (currentEmpresaId && currentEmpresaId !== config.empresaId) 
+            targetEmpresaId = (currentEmpresaId && currentEmpresaId !== config.empresaId) 
               ? currentEmpresaId 
               : config.empresaId;
 
@@ -201,7 +204,6 @@ export async function sincronizarTenantsEquipes(commerceDb) {
             );
             userId = updateRes.rows?.[0]?.id || userId;
           }
-
           if (!userId) {
             const insertRes = await commerceDb.query(
               `INSERT INTO usuarios (id, email, senha_hash, nome_completo, role, empresa_id, ativo, data_criacao, data_atualizacao)
@@ -219,7 +221,7 @@ export async function sincronizarTenantsEquipes(commerceDb) {
 
             const memExist = await commerceDb.query(
               `SELECT id FROM commerce_memberships WHERE usuario_id = $1 AND empresa_id = $2 LIMIT 1`,
-              [userId, config.empresaId]
+              [userId, targetEmpresaId]
             );
             if (memExist.rows?.[0]?.id) {
               await commerceDb.query(
@@ -230,7 +232,7 @@ export async function sincronizarTenantsEquipes(commerceDb) {
               await commerceDb.query(
                 `INSERT INTO commerce_memberships (id, usuario_id, empresa_id, loja_id, role_id, ativo, criado_em, atualizado_em)
                  VALUES (gen_random_uuid(), $1, $2, $3, $4, true, NOW(), NOW())`,
-                [userId, config.empresaId, lojaId, roleId]
+                [userId, targetEmpresaId, lojaId, roleId]
               );
             }
           }
