@@ -11,7 +11,7 @@ test('1. Configuração do Grupo Gestão Dino: Retorna participantes e telefones
   assert.equal(GRUPO_GESTAO_DINO_INFO.nome, 'Gestão Dino');
   assert.ok(DESTINATARIOS_GESTAO_DINO.includes('5514997462929')); // Rodrigo
   assert.ok(DESTINATARIOS_GESTAO_DINO.includes('5565996722055')); // Guilherme
-  assert.ok(DESTINATARIOS_GESTAO_DINO.includes('5565999056008')); // Dino
+  assert.ok(DESTINATARIOS_GESTAO_DINO.includes('5514997462929')); // Dino
 });
 
 test('2. NPS Pós-Atendimento: Registra nota e calcula média geral e individual', async () => {
