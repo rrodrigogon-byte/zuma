@@ -30,9 +30,9 @@ export default function Login() {
 
   useEffect(() => {
     if (!usuarioAtual) return
-    const destinoAdmin = ['dino', 'stallone'].includes(empresaAtiva?.brandKey) ? '/admin/ecommerce' : '/admin'
+    const destinoAdmin = empresaAtiva?.brandKey === 'dino' ? '/admin/barbearia-erp' : (empresaAtiva?.brandKey === 'stallone' ? '/admin/ecommerce' : '/admin')
     if (isOrg) navigate(proximoSeguro || destinoAdmin, { replace: true })
-    else if (isStaff) navigate(proximoSeguro || '/pdv', { replace: true })
+    else if (isStaff) navigate(proximoSeguro || (empresaAtiva?.brandKey === 'dino' ? '/admin/barbearia-erp' : '/pdv'), { replace: true })
   }, [usuarioAtual, empresaAtiva?.brandKey, isOrg, isStaff, navigate, proximoSeguro])
 
   const abrirRecuperacao = () => {

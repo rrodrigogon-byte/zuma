@@ -22,7 +22,7 @@ test('2. Upsell de Balcão: Adicionar Pomada na comanda inclui item de R$ 45 e c
   const comanda = barbeariaErpKytto.criarComandaBarbearia(empresaId, {
     clienteNome: 'Cliente Teste Upsell',
     clienteTelefone: '5565999998888',
-    profissionalId: 'prof-mwf821gx-004'
+    profissionalId: (barbeariaErpKytto.listarProfissionais(empresaId).find(p => p.ativo) || {}).id || 'prof-dino'
   });
 
   assert.ok(comanda && comanda.id);
@@ -34,7 +34,7 @@ test('2. Upsell de Balcão: Adicionar Pomada na comanda inclui item de R$ 45 e c
     nome: 'Pomada Modeladora Efeito Matte Dino (150g)',
     precoUnitario: 45.0,
     quantidade: 1,
-    profissionalId: 'prof-mwf821gx-004',
+    profissionalId: (barbeariaErpKytto.listarProfissionais(empresaId).find(p => p.ativo) || {}).id || 'prof-dino',
     subtotal: 45.0,
     comissaoPercentual: 10,
     comissaoValor: 4.5

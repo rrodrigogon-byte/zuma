@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Trophy,
+  Edit3,
   Gift,
   Ticket,
   Users,
@@ -54,6 +55,10 @@ export default function SorteiosCampanhas({ embed = false }) {
   // Modais
   const [modalNovaCampanhaAberto, setModalNovaCampanhaAberto] = useState(false);
   const [salvandoCampanha, setSalvandoCampanha] = useState(false);
+  // Estados de Edição da Campanha e do Prêmio
+  const [modalEditarCampanhaAberto, setModalEditarCampanhaAberto] = useState(false);
+  const [campanhaEditando, setCampanhaEditando] = useState(null);
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false);
 
   // Formulário Nova Campanha
   const [novaCampanha, setNovaCampanha] = useState({
@@ -227,6 +232,63 @@ export default function SorteiosCampanhas({ embed = false }) {
       toast.error('Falha ao criar campanha: ' + err.message);
     } finally {
       setSalvandoCampanha(false);
+    }
+  };
+
+  // Abrir modal de edição de campanha e prêmio
+  const handleAbrirEditarCampanha = (camp) => {
+    setCampanhaEditando({
+      id: camp.id,
+      titulo: camp.titulo || '',
+      premioPrincipal: camp.premioPrincipal || '',
+      descricao: camp.descricao || '',
+      regulamento: camp.regulamento || '',
+      bannerUrl: camp.bannerUrl || '',
+      valorMinimoBilhete: camp.regras?.valorMinimoBilhete ?? 50,
+      multiplicadorPerfumaria: camp.regras?.multiplicadorPerfumaria ?? 2,
+      bonusClube: camp.regras?.bonusClube ?? 3,
+      dataSorteio: camp.dataSorteio ? camp.dataSorteio.split('T')[0] : (camp.dataFim ? camp.dataFim.split('T')[0] : ''),
+      status: camp.status || 'ativa',
+    });
+    setModalEditarCampanhaAberto(true);
+  };
+
+  // Salvar alterações de prêmio e campanha via PUT /api/admin/sorteios/:id
+  const handleSalvarEdicaoCampanha = async (e) => {
+    e.preventDefault();
+    if (!campanhaEditando?.id) return;
+    if (!campanhaEditando.premioPrincipal?.trim()) {
+      toast.warning('Informe o Prêmio Principal.');
+      return;
+    }
+    setSalvandoEdicao(true);
+    try {
+      const payload = {
+        titulo: campanhaEditando.titulo,
+        premioPrincipal: campanhaEditando.premioPrincipal,
+        descricao: campanhaEditando.descricao,
+        regulamento: campanhaEditando.regulamento,
+        bannerUrl: campanhaEditando.bannerUrl,
+        status: campanhaEditando.status,
+        dataSorteio: campanhaEditando.dataSorteio ? new Date(`${campanhaEditando.dataSorteio}T20:00:00-04:00`).toISOString() : undefined,
+        dataFim: campanhaEditando.dataSorteio ? new Date(`${campanhaEditando.dataSorteio}T23:59:59-04:00`).toISOString() : undefined,
+        regras: {
+          valorMinimoBilhete: Number(campanhaEditando.valorMinimoBilhete || 50),
+          multiplicadorPerfumaria: Number(campanhaEditando.multiplicadorPerfumaria || 2),
+          bonusClube: Number(campanhaEditando.bonusClube || 3),
+        }
+      };
+      await api.put(`/api/admin/sorteios/${campanhaEditando.id}`, payload);
+      toast.success('Prêmio e dados do sorteio atualizados com sucesso!');
+      setModalEditarCampanhaAberto(false);
+      await carregarCampanhas();
+      if (campanhaSelecionada?.id === campanhaEditando.id) {
+        setCampanhaSelecionada(prev => ({ ...prev, ...payload }));
+      }
+    } catch (err) {
+      toast.error('Erro ao atualizar sorteio: ' + err.message);
+    } finally {
+      setSalvandoEdicao(false);
     }
   };
 
@@ -625,12 +687,35 @@ export default function SorteiosCampanhas({ embed = false }) {
                         <div className="campanha-card-body">
                           <h3 className="campanha-card-title">{camp.titulo}</h3>
 
-                          <div className="campanha-premio-destaque">
-                            <span className="campanha-premio-icone">🏆</span>
-                            <div className="campanha-premio-texto">
-                              <span className="campanha-premio-label">Prêmio Principal</span>
-                              <span className="campanha-premio-nome">{camp.premioPrincipal}</span>
+                          <div className="campanha-premio-destaque" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <span className="campanha-premio-icone">🏆</span>
+                              <div className="campanha-premio-texto">
+                                <span className="campanha-premio-label">Prêmio Principal</span>
+                                <span className="campanha-premio-nome">{camp.premioPrincipal}</span>
+                              </div>
                             </div>
+                            <button
+                              type="button"
+                              onClick={() => handleAbrirEditarCampanha(camp)}
+                              title="Clique para editar o prêmio deste sorteio"
+                              style={{
+                                background: 'rgba(245, 158, 11, 0.2)',
+                                border: '1px solid #f59e0b',
+                                color: '#fbbf24',
+                                borderRadius: '6px',
+                                padding: '4px 10px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                transition: 'all 0.2s',
+                              }}
+                            >
+                              <Edit3 size={12} /> Editar Prêmio
+                            </button>
                           </div>
 
                           <div className="campanha-regras-resumo">
@@ -662,6 +747,15 @@ export default function SorteiosCampanhas({ embed = false }) {
                         </div>
 
                         <div className="campanha-card-footer">
+                          <button
+                            type="button"
+                            className="btn-outline-ouro"
+                            style={{ fontSize: '12px', padding: '6px 12px', borderColor: '#f59e0b', color: '#fbbf24' }}
+                            onClick={() => handleAbrirEditarCampanha(camp)}
+                            title="Editar Prêmio, Título, Data e Regras"
+                          >
+                            <Edit3 size={14} /> ✍️ Editar Prêmio
+                          </button>
                           <button
                             type="button"
                             className="btn-outline-ouro"
@@ -1169,6 +1263,143 @@ export default function SorteiosCampanhas({ embed = false }) {
                   disabled={salvandoCampanha}
                 >
                   {salvandoCampanha ? 'Salvando...' : 'Salvar e Publicar Campanha'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* MODAL EDITAR CAMPANHA & PRÊMIO */}
+      {modalEditarCampanhaAberto && campanhaEditando && (
+        <div className="modal-backdrop">
+          <div className="modal-card" style={{ maxWidth: '680px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #334155', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '24px' }}>✍️</span>
+                <h2 className="modal-titulo" style={{ margin: 0 }}>Editar Prêmio & Campanha do Sorteio</h2>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setModalEditarCampanhaAberto(false)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '20px', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSalvarEdicaoCampanha} className="form-grid">
+              <div className="form-group full-width" style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '12px 16px', borderRadius: '8px' }}>
+                <label style={{ color: '#fbbf24', fontWeight: 800, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  🏆 Prêmio Principal do Sorteio (O que o cliente vai ganhar) *
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  style={{ fontSize: '15px', fontWeight: 700, borderColor: '#f59e0b', color: '#fff' }}
+                  value={campanhaEditando.premioPrincipal}
+                  onChange={(e) => setCampanhaEditando({ ...campanhaEditando, premioPrincipal: e.target.value })}
+                  placeholder="Ex: Moto Honda Fan 160 0km (ou R$ 18.000 no Pix), Kit Perfumaria Importada, iPhone 16..."
+                  required
+                />
+                <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
+                  Este prêmio será exibido com destaque nos cards de sorteio, na roleta ao vivo e na consulta online dos clientes.
+                </span>
+              </div>
+
+              <div className="form-group full-width">
+                <label>Título Oficial da Campanha *</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={campanhaEditando.titulo}
+                  onChange={(e) => setCampanhaEditando({ ...campanhaEditando, titulo: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Status do Sorteio</label>
+                <select
+                  className="form-input"
+                  value={campanhaEditando.status}
+                  onChange={(e) => setCampanhaEditando({ ...campanhaEditando, status: e.target.value })}
+                >
+                  <option value="ativa">🟢 Ativa (Emitindo Bilhetes)</option>
+                  <option value="pausada">🟡 Pausada</option>
+                  <option value="sorteada">🏆 Sorteada / Concluída</option>
+                  <option value="encerrada">🔴 Encerrada</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Data Oficial da Apuração / Sorteio</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={campanhaEditando.dataSorteio}
+                  onChange={(e) => setCampanhaEditando({ ...campanhaEditando, dataSorteio: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Gasto Mínimo p/ 1 Bilhete (Serviços R$)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={campanhaEditando.valorMinimoBilhete}
+                  onChange={(e) => setCampanhaEditando({ ...campanhaEditando, valorMinimoBilhete: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Multiplicador Perfumaria / Loja</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={campanhaEditando.multiplicadorPerfumaria}
+                  onChange={(e) => setCampanhaEditando({ ...campanhaEditando, multiplicadorPerfumaria: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group full-width">
+                <label>Descrição do Sorteio & Apresentação</label>
+                <textarea
+                  className="form-input"
+                  rows={2}
+                  value={campanhaEditando.descricao}
+                  onChange={(e) => setCampanhaEditando({ ...campanhaEditando, descricao: e.target.value })}
+                  placeholder="Ex: Sorteio oficial de fim de ano para todos os clientes da Barbearia Dino e Perfumaria."
+                />
+              </div>
+
+              <div className="form-group full-width">
+                <label>Regulamento do Sorteio</label>
+                <textarea
+                  className="form-input"
+                  rows={3}
+                  value={campanhaEditando.regulamento}
+                  onChange={(e) => setCampanhaEditando({ ...campanhaEditando, regulamento: e.target.value })}
+                  placeholder="Regras de participação, prazos, formas de apuração..."
+                />
+              </div>
+
+              <div className="modal-footer full-width" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '16px' }}>
+                <button
+                  type="button"
+                  className="btn-outline-ouro"
+                  onClick={() => setModalEditarCampanhaAberto(false)}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn-ouro"
+                  disabled={salvandoEdicao}
+                  style={{ padding: '10px 22px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Edit3 size={16} />
+                  {salvandoEdicao ? 'Salvando Alterações...' : '💾 Salvar Alterações do Prêmio'}
                 </button>
               </div>
             </form>

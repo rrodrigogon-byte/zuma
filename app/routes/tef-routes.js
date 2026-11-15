@@ -23,7 +23,9 @@ import {
   excluirTransacaoTef,
   expurgarTransacoesSimuladas,
   conciliarLoteTefComExtrato,
-  resumoPrevisaoRecebiveis
+  resumoPrevisaoRecebiveis,
+  simularMelhorAdquirente,
+  gerarArquivoDimp
 } from '../core/tef-multimaquininhas-brasil.js';
 import { BANCOS_BRASIL, identificarBanco, categorizarLinhaBancaria } from '../core/bancos-brasil-catalogo.js';
 
@@ -255,6 +257,40 @@ export function createTefRouter({ obterEmpresaId }) {
       const empresaId = resolverEmpresa(req);
       const resumo = resumoPrevisaoRecebiveis(empresaId);
       res.json({ ok: true, resumo });
+    } catch (err) {
+      res.status(500).json({ ok: false, erro: err.message });
+    }
+  });
+
+  // Simulador comparativo de taxas MDR entre adquirentes
+  router.post(['/simular-taxas', '/simular-melhor-adquirente'], (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = simularMelhorAdquirente({
+        ...req.body,
+        empresaId,
+      });
+      res.json({ ok: true, ...resultado });
+    } catch (err) {
+      res.status(400).json({ ok: false, erro: err.message });
+    }
+  });
+
+  // Geração e exportação do arquivo oficial DIMP SEFAZ-MT
+  router.all(['/dimp/gerar', '/dimp/exportar'], (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const mesAno = req.query?.mesAno || req.body?.mesAno;
+      const resultado = gerarArquivoDimp({
+        empresaId,
+        mesAno,
+      });
+      if (req.query?.formato === 'txt' || req.query?.download === 'true') {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${resultado.nomeArquivo}"`);
+        return res.send(resultado.conteudoArquivo);
+      }
+      res.json({ ok: true, ...resultado });
     } catch (err) {
       res.status(500).json({ ok: false, erro: err.message });
     }

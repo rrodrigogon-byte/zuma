@@ -213,7 +213,23 @@ const BEBIDAS_PADRAO_DINO = [
   { itemId: 'beb-dose-01', nome: 'Dose Whisky / Destilado Especial', preco: 25.00, detalhe: 'Dose 50ml no copo com gelo', icone: '🥃' },
 ];
 
+const PERFUMARIA_DECANTS_PADRAO_DINO = [
+  { itemId: 'perf-dec-khamrah', nome: 'Khamrah Lattafa - Decant Oficial 10ml (~150 borrifadas)', preco: 79.00, comissaoBarbeiro: 7.90, detalhe: 'Oriental Especiado · Canela, Tâmaras e Baunilha · Sucesso em MT', icone: '✨', categoria: 'Decant 10ml' },
+  { itemId: 'perf-fras-khamrah', nome: 'Khamrah Lattafa EDP 100ml - Frasco Lacrado Original', preco: 490.00, comissaoBarbeiro: 49.00, detalhe: 'Frasco Lacrado 100ml · Selo KyttoIA Originalidade', icone: '👑', categoria: 'Frasco Lacrado' },
+  { itemId: 'perf-dec-clubnuit', nome: 'Club de Nuit Intense Man - Decant Oficial 10ml', preco: 89.00, comissaoBarbeiro: 8.90, detalhe: 'Chipre Frutado · O Rei dos Elogios em Tangará · Limão e Bétula', icone: '✨', categoria: 'Decant 10ml' },
+  { itemId: 'perf-fras-clubnuit', nome: 'Club de Nuit Intense Man EDT 105ml - Frasco Lacrado', preco: 520.00, comissaoBarbeiro: 52.00, detalhe: 'Frasco Lacrado 105ml Armaf · Projeção Marcante', icone: '👑', categoria: 'Frasco Lacrado' },
+  { itemId: 'perf-dec-asad', nome: 'Asad Lattafa - Decant Oficial 10ml (~150 borrifadas)', preco: 79.00, comissaoBarbeiro: 7.90, detalhe: 'Âmbar Especiado · Pimenta Preta, Café e Tabaco · Noites e Rodeio', icone: '✨', categoria: 'Decant 10ml' },
+  { itemId: 'perf-fras-asad', nome: 'Asad Lattafa EDP 100ml - Frasco Lacrado Original', preco: 480.00, comissaoBarbeiro: 48.00, detalhe: 'Frasco Lacrado 100ml · Clone de Luxo do Elixir', icone: '👑', categoria: 'Frasco Lacrado' },
+  { itemId: 'perf-dec-hacivat', nome: 'Nishane Hacivat Extrait - Decant Oficial 10ml', preco: 139.00, comissaoBarbeiro: 13.90, detalhe: 'Nicho Puro · Extrait de Parfum 10ml · Abacaxi, Musgo e Cedro · Fixação 14h+', icone: '🌟', categoria: 'Decant 10ml' },
+  { itemId: 'perf-fras-hacivat', nome: 'Nishane Hacivat Extrait 100ml - Frasco de Colecionador', preco: 1690.00, comissaoBarbeiro: 169.00, detalhe: 'Alta Perfumaria Turca · Joia da Coleção Dino', icone: '💎', categoria: 'Frasco Lacrado' },
+  { itemId: 'perf-dec-elysium', nome: 'Roja Elysium Parfum Cologne - Decant Oficial 10ml', preco: 139.00, comissaoBarbeiro: 13.90, detalhe: 'Alta Perfumaria Britânica · Frescor Cítrico Aristocrático para 38°C', icone: '🌟', categoria: 'Decant 10ml' },
+  { itemId: 'perf-dec-sauvage', nome: 'Dior Sauvage Elixir - Decant Oficial 10ml', preco: 129.00, comissaoBarbeiro: 12.90, detalhe: 'Concentração Máxima · Lavanda e Alcaçuz · O Ícone Masculino', icone: '🌟', categoria: 'Decant 10ml' },
+  { itemId: 'perf-dec-aventus', nome: 'Creed Aventus EDP - Decant Oficial 10ml', preco: 139.00, comissaoBarbeiro: 13.90, detalhe: 'O Rei Supremo da Perfumaria Mundial · Abacaxi Real e Bétula', icone: '👑', categoria: 'Decant 10ml' },
+  { itemId: 'perf-combo-corte-decant', nome: 'Combo Corte VIP + Decant 10ml à Escolha', preco: 135.00, comissaoBarbeiro: 15.00, detalhe: 'Corte Visagista Completo + Borrifada de Degustação + Leve 1 Decant 10ml', icone: '🔥', categoria: 'Combo Especial' }
+];
+
 const ABAS = [
+  ['perfumaria', '✨ Perfumaria & Decants LTK'],
   ['bebidas', '🍺 Bebidas & Bar'],
   ['servico', 'Serviços'],
   ['pacote', 'Pacotes e Planos'],
@@ -264,6 +280,31 @@ export function SeletorItens({ servicos, produtosRevenda, planos, catalogoPlanos
   }, [aba, termo])
 
   const resultados = useMemo(() => {
+    if (aba === 'perfumaria') {
+      const cadastradas = (produtosRevenda || []).filter((p) => {
+        if (p.ativo === false) return false;
+        const cat = String(p.categoria || '').toLowerCase();
+        const n = String(p.nome || '').toLowerCase();
+        return cat.includes('perfum') || cat.includes('decant') || cat.includes('árabe') || cat.includes('arabe') || /khamrah|club de nuit|asad|hacivat|elysium|aventus|sauvage|lattafa|armaf|nishane|creed|roja/.test(n);
+      });
+      if (cadastradas.length > 0) {
+        return filtrarCatalogo(cadastradas, termo, ['nome', 'categoria', 'sku']).map((p) => ({
+          tipo: 'produto',
+          itemId: p.id,
+          nome: p.nome,
+          preco: Number(p.precoVenda || 0),
+          detalhe: `${p.estoqueAtual !== undefined ? p.estoqueAtual : 'Livre'} em estoque · Perfumaria & Decants LTK (Comissão Barbeiro: 10%)`,
+          estoque: p.estoqueAtual !== undefined ? Number(p.estoqueAtual) : undefined,
+        }));
+      }
+      return filtrarCatalogo(PERFUMARIA_DECANTS_PADRAO_DINO, termo, ['nome', 'detalhe', 'categoria']).map((b) => ({
+        tipo: 'produto',
+        itemId: b.itemId,
+        nome: b.nome,
+        preco: b.preco,
+        detalhe: `${b.detalhe} · Comissão Barbeiro: R$ ${b.comissaoBarbeiro.toFixed(2).replace('.', ',')}`,
+      }));
+    }
     if (aba === 'bebidas') {
       const cadastradas = (produtosRevenda || []).filter((p) => {
         if (p.ativo === false) return false;
@@ -415,7 +456,9 @@ export function SeletorItens({ servicos, produtosRevenda, planos, catalogoPlanos
           <input
             className="cn-input"
             placeholder={
-              aba === 'loja'
+              aba === 'perfumaria'
+                ? 'Buscar decant, perfume árabe ou combo de cadeira...'
+                : aba === 'loja'
                 ? 'Buscar na loja por nome, SKU ou código de barras'
                 : aba === 'produto'
                 ? 'Buscar produto de revenda'

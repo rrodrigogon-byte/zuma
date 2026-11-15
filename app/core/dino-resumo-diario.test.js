@@ -86,11 +86,12 @@ test('envio: conta sucessos, mascara falhas e nunca expõe o número no painel',
   try {
     process.env.DINO_RESUMO_TELEFONES = '(65) 99999-0001, 5565999990002';
     process.env.DINO_RESUMO_HORA = '25:99';
+    process.env.DINO_RESUMO_DIARIO = 'off';
     const cfg = configuracaoResumoPublica();
     assert.deepEqual(cfg.destinatarios, ['***0001', '***0002']);
-    assert.equal(cfg.hora, '21:00', 'hora inválida cai no padrão');
-    assert.equal(cfg.ativo, false, 'desligado por padrão');
-    delete process.env.DINO_RESUMO_DIARIO;
+    assert.equal(cfg.hora, '20:00', 'hora inválida cai no padrão');
+    assert.equal(cfg.ativo, false, 'desligado quando off');
+    process.env.DINO_RESUMO_DIARIO = 'off';
     assert.deepEqual(await tickResumoDiario(), { skipped: 'desligado' });
   } finally {
     process.env = antes;

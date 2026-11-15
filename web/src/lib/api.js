@@ -78,7 +78,10 @@ async function request(path, opts = {}) {
     localStorage.removeItem('sp_loja_ativa')
     localStorage.removeItem('sp_lojas_acessiveis')
     const rotaDeLogin = /^\/api\/(?:admin\/login|auth\/login)$/.test(String(path || '').split('?')[0])
-    if (!rotaDeLogin && typeof window !== 'undefined' && window.location.pathname !== '/login') window.location.href = '/login'
+    if (!rotaDeLogin && typeof window !== 'undefined' && window.location.pathname !== '/login') {
+      const proximo = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.href = `/login?next=${proximo}`;
+    }
   }
   if (!res.ok) {
     const error = new Error(data.error || data.erro || `Erro ${res.status}`)

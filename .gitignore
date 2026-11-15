@@ -77,3 +77,4 @@ k8s/secrets/
 # Variáveis de ambiente sensíveis
 .env.*.secret
 .env.production.local
+data/

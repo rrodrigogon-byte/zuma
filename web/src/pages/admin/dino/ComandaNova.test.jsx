@@ -73,4 +73,14 @@ describe('nova comanda', () => {
     expect(onAbrirCadastroCliente).toHaveBeenCalled()
     expect(onAbrirCadastroCliente.mock.calls[0][0].id).toBe('c1')
   })
+
+  it('permite selecionar itens de Perfumaria & Decants LTK com comissão de balcão para a comanda', async () => {
+    await act(async () => {
+      renderer = create(<ComandaNova clientes={clientes} profissionais={[]} servicos={servicos} produtosRevenda={[]} onCriada={vi.fn()} toast={vi.fn()} />)
+      await tick()
+    })
+    await act(async () => { botao('Perfumaria & Decants LTK').props.onClick(); await tick() })
+    expect(texto(renderer.toJSON())).toContain('Khamrah Lattafa')
+    expect(texto(renderer.toJSON())).toContain('Comissão Barbeiro: R$ 7,90')
+  })
 })

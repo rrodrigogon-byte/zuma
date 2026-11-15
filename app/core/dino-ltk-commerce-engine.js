@@ -333,7 +333,7 @@ export const MODELO_GESTAO_INSTAGRAM = {
   // 2. Matriz RACI da Equipe Dino
   matrizRACI: [
     {
-      funcao: 'Dino (Guilherme Cunha) - Criador & Visagista',
+      funcao: 'Dino Visagista - Criador & Especialista',
       papel: 'Apresentador / Rosto da Marca / Autoridade Técnica',
       responsabilidades: [
         'Aprovação final das pautas semanais e roteiros de Reels',

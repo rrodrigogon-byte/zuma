@@ -125,20 +125,27 @@ test('Auditoria 112 Conversas Fila — 8. Remarcação adjacente no mesmo dia ig
   const empId = 'emp-teste-remarcacao-adjacente';
   barbearia.estadoEmpresa(empId, true);
   const prof = barbearia.criarProfissional(empId, { nome: 'Bruno Teste', apelido: 'Bruno', ativo: true, atendeCliente: true });
-  const srv = barbearia.criarServico(empId, { nome: 'CORTE PREMIUM', preco: 100, duracaoMinutos: 40, ativo: true, permiteAgendamentoOnline: true, profissionaisIds: [prof.id] });
+  const srvExistente = barbearia.listarServicos(empId).find((s) => /corte premium/i.test(s.nome));
+  const srv = srvExistente || barbearia.criarServico(empId, { nome: 'CORTE REMARCACAO ADJACENTE', preco: 100, duracaoMinutos: 40, ativo: true, permiteAgendamentoOnline: true, profissionaisIds: [prof.id] });
+  const estado = barbearia.estadoEmpresa(empId);
+  if (estado.servicos[srv.id]) {
+    estado.servicos[srv.id].profissionaisIds = [prof.id];
+    estado.servicos[srv.id].permiteAgendamentoOnline = true;
+  }
   assert.ok(prof && srv);
+  const dataFutura = new Date(Date.now() + 86400000 * 5).toISOString().slice(0, 10);
   const ag = barbearia.criarAgendamento(empId, {
     clienteNome: 'Yuk Andrade',
     clienteTelefone: '556599990377',
     profissionalId: prof.id,
     servicoId: srv.id,
-    dataAgenda: '2026-11-13',
+    dataAgenda: dataFutura,
     horaLocal: '16:00',
-    dataHora: '2026-11-13T16:00:00-04:00',
+    dataHora: `${dataFutura}T16:00:00-04:00`,
   });
   // Sem ignorarAgendamentoId, 16:15 conflita com o agendamento de 16:00; com ignorarAgendamentoId, fica livre!
   const livreComIgnore = barbearia.resolverProfissionalDisponivel(empId, {
-    data: '2026-11-13',
+    data: dataFutura,
     horario: '16:15',
     servicoId: srv.id,
     profissionalId: prof.id,

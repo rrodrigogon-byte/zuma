@@ -122,8 +122,39 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
   }));
   router.get('/margem/resumo', rota('catalog.read', async ({ empresaId, lojaId }) => ({ resumo: (await svc.analiseMargemCurvaABC(db, empresaId, { lojaId })).resumo })));
 
-  router.post('/emitir-nfce', rota('orders.write', async () => {
-    throw new ErroDominio('NFCE_INDISPONIVEL_NO_PDV', 'A emissão de NFC-e está indisponível neste PDV. Consulte o módulo fiscal.', 503);
+  router.post('/emitir-nfce', rota('orders.write', async ({ req, empresaId, lojaId, usuario }) => {
+    const dados = req.body || {};
+    const { emitirNotaFiscalStallone } = await import('../../core/emissao-fiscal-stallone.js');
+    const nota = await emitirNotaFiscalStallone({
+      empresaId,
+      lojaId,
+      modelo: '65',
+      origem: 'pdv_frente_caixa',
+      origemId: dados.vendaId,
+      destinatario: dados.cpf_cliente ? { cpf: dados.cpf_cliente } : null,
+      total: Number(dados.total || 0),
+      itens: Array.isArray(dados.itens) ? dados.itens : [],
+      forma_pagamento: dados.forma_pagamento || 'dinheiro',
+      usuario: usuario || 'Operador PDV'
+    });
+
+    return {
+      sucesso: true,
+      mensagem: `NFC-e nº ${nota.numero} autorizada com sucesso na SEFAZ-MT`,
+      nfce: {
+        id: nota.id,
+        numero: nota.numero,
+        serie: nota.serie,
+        chaveAcesso: nota.chaveAcesso,
+        protocolo: nota.protocolo,
+        qrCodeUrl: nota.qrCodeUrl,
+        danfeUrl: `/api/admin/fiscal-avancado/danfe/${nota.id}`,
+        xmlUrl: `/api/admin/fiscal-avancado/xml/${nota.id}`,
+        status: nota.status,
+        dataEmissao: nota.dataEmissao,
+        total: nota.total
+      }
+    };
   }));
 
   // ── Caixa e Operações de Frente de Caixa (PDV) ──
