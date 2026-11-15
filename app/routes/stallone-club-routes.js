@@ -1,3 +1,12 @@
+import {
+  EMITENTE_STALLONE,
+  emitirNotaFiscalStallone,
+  listarNotasFiscaisStallone,
+  gerarDanfeHtmlStallone,
+  gerarXmlStallone,
+  cancelarNotaFiscalStallone,
+  consultarStatusSefazMt
+} from "../core/emissao-fiscal-stallone.js";
 import { Router } from "express";
 import {
   STALLONE_EMPRESA_ID,
@@ -187,6 +196,112 @@ export function createStalloneClubRoutes() {
       return res.json(resultado);
     } catch (err) {
       return res.status(500).json({ sucesso: false, erro: err.message });
+    }
+  });
+
+  
+  // --- Módulo Fiscal Exclusivo Stallone Nutre Sport (NFC-e / NF-e) ---
+  router.get("/fiscal/status-sefaz", (_req, res) => {
+    return res.json(consultarStatusSefazMt());
+  });
+
+  router.get("/fiscal/emitente", (_req, res) => {
+    return res.json({ sucesso: true, emitente: EMITENTE_STALLONE });
+  });
+
+  router.post(["/fiscal/emitir", "/fiscal/emitir-nfce"], async (req, res) => {
+    try {
+      const dados = req.body || {};
+      const nota = await emitirNotaFiscalStallone({
+        ...dados,
+        modelo: dados.modelo || '65',
+        empresaId: STALLONE_EMPRESA_ID,
+        usuario: req.user?.nome || req.user?.email || 'Operador Stallone'
+      });
+      return res.status(201).json({
+        sucesso: true,
+        mensagem: `NFC-e nº ${nota.numero} autorizada com sucesso na SEFAZ-MT`,
+        nfce: {
+          id: nota.id,
+          numero: nota.numero,
+          serie: nota.serie,
+          chaveAcesso: nota.chaveAcesso,
+          protocolo: nota.protocolo,
+          qrCodeUrl: nota.qrCodeUrl,
+          danfeUrl: `/api/admin/fiscal-avancado/danfe/${nota.id}`,
+          xmlUrl: `/api/admin/fiscal-avancado/xml/${nota.id}`,
+          status: nota.status,
+          dataEmissao: nota.dataEmissao,
+          total: nota.total
+        },
+        nota
+      });
+    } catch (err) {
+      return res.status(400).json({ sucesso: false, erro: err.message });
+    }
+  });
+
+  router.post("/fiscal/emitir-nfe", async (req, res) => {
+    try {
+      const dados = req.body || {};
+      const nota = await emitirNotaFiscalStallone({
+        ...dados,
+        modelo: '55',
+        empresaId: STALLONE_EMPRESA_ID,
+        usuario: req.user?.nome || req.user?.email || 'Faturamento Stallone'
+      });
+      return res.status(201).json({
+        sucesso: true,
+        mensagem: `NF-e modelo 55 nº ${nota.numero} autorizada com sucesso na SEFAZ-MT`,
+        nfe: {
+          id: nota.id,
+          numero: nota.numero,
+          serie: nota.serie,
+          chaveAcesso: nota.chaveAcesso,
+          protocolo: nota.protocolo,
+          danfeUrl: `/api/admin/fiscal-avancado/danfe/${nota.id}`,
+          xmlUrl: `/api/admin/fiscal-avancado/xml/${nota.id}`,
+          status: nota.status,
+          dataEmissao: nota.dataEmissao,
+          total: nota.total
+        },
+        nota
+      });
+    } catch (err) {
+      return res.status(400).json({ sucesso: false, erro: err.message });
+    }
+  });
+
+  router.get("/fiscal/notas", (req, res) => {
+    try {
+      const { modelo, status, limit } = req.query;
+      return res.json(listarNotasFiscaisStallone({ modelo, status, limit: Number(limit) || 50 }));
+    } catch (err) {
+      return res.status(500).json({ sucesso: false, erro: err.message });
+    }
+  });
+
+  router.get("/fiscal/danfe/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const autoPrint = req.query?.print === '1' || req.query?.print === 'true';
+      const html = await gerarDanfeHtmlStallone(id, { autoPrint });
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.send(html);
+    } catch (err) {
+      return res.status(404).send(`<p style="color:red">${err.message}</p>`);
+    }
+  });
+
+  router.get("/fiscal/xml/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+      const xml = gerarXmlStallone(id);
+      res.setHeader("Content-Type", "application/xml; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="nota-stallone-${id}.xml"`);
+      return res.send(xml);
+    } catch (err) {
+      return res.status(404).json({ sucesso: false, erro: err.message });
     }
   });
 
