@@ -9,6 +9,7 @@
  * CNPJ: 56.099.531/0001-38 | Tenant ID: 31f70c83-9172-40c2-945f-9e793b5048be
  */
 import { db, save } from '../db.js';
+import * as dbPg from '../db-pg.js';
 import { kyttoEventBus, TOPICOS_KYTTO } from './kytto-event-bus.js';
 
 export const STALLONE_EMPRESA_ID = '31f70c83-9172-40c2-945f-9e793b5048be';
@@ -276,4 +277,122 @@ export function consultarAssinaturaPorCpf(empresaId = STALLONE_EMPRESA_ID, cpf) 
 export function listarTodasAssinaturas(empresaId = STALLONE_EMPRESA_ID) {
   const colecao = obterColecaoAssinaturas(empresaId);
   return colecao.assinaturas;
+}
+
+/**
+ * Lista todas as assinaturas sincronizando PostgreSQL e estado em memória
+ */
+export async function listarTodasAssinaturasAsync(empresaId = STALLONE_EMPRESA_ID) {
+  const colecao = obterColecaoAssinaturas(empresaId);
+  try {
+    const res = await dbPg.query(
+      `SELECT id, empresa_id as "empresaId", loja_id as "lojaId",
+              cliente_id as "clienteId", cliente_nome as "clienteNome",
+              cliente_telefone as "clienteTelefone", cliente_cpf as "clienteCpf",
+              plano_codigo as "planoCodigo", plano_nome as "planoNome",
+              valor_mensalidade as "valorMensalidade",
+              cashback_percentual as "cashbackPercentual",
+              cashback_saldo as "cashbackSaldo",
+              status, dia_cobranca as "diaCobranca",
+              ultimo_ciclo_pago as "ultimoCicloPago",
+              proximo_vencimento as "proximoVencimento",
+              tef_transacao_id as "tefTransacaoId",
+              adquirente_recorrente as "adquirenteRecorrente",
+              observacoes, criado_em as "criadoEm"
+       FROM stallone_club_assinaturas
+       WHERE empresa_id = \$1
+       ORDER BY criado_em DESC`,
+      [empresaId]
+    );
+    if (res && res.rows && res.rows.length > 0) {
+      // Mescla com eventuais assinaturas recentes em memória
+      const mapa = new Map();
+      for (const r of res.rows) {
+        mapa.set(String(r.id), {
+          ...r,
+          valorMensalidade: Number(r.valorMensalidade || 0),
+          saldoCashbackAcumulado: Number(r.cashbackSaldo || 0),
+          diaVencimento: r.diaCobranca || 10,
+          formaPagamento: r.adquirenteRecorrente ? `tef_${r.adquirenteRecorrente.toLowerCase()}` : 'cartao_recorrente'
+        });
+      }
+      for (const a of colecao.assinaturas) {
+        if (!mapa.has(String(a.id))) mapa.set(String(a.id), a);
+      }
+      return Array.from(mapa.values());
+    }
+  } catch (_e) {
+    // fallback para memória
+  }
+  return colecao.assinaturas;
+}
+
+/**
+ * Retorna KPIs e métricas executivas do Clube de Assinaturas
+ */
+export async function obterResumoMetricasClube(empresaId = STALLONE_EMPRESA_ID) {
+  const lista = await listarTodasAssinaturasAsync(empresaId);
+  const ativas = lista.filter(a => ['ativa', 'em_dia'].includes(a.status));
+  const mrr = ativas.reduce((acc, cur) => acc + Number(cur.valorMensalidade || 0), 0);
+  const totalCashback = lista.reduce((acc, cur) => acc + Number(cur.saldoCashbackAcumulado || cur.cashbackSaldo || 0), 0);
+  const contagemPorPlano = { starter: 0, performance: 0, elite: 0 };
+  for (const a of ativas) {
+    if (contagemPorPlano[a.planoCodigo] !== undefined) contagemPorPlano[a.planoCodigo]++;
+  }
+
+  return {
+    totalAssinantes: lista.length,
+    assinantesAtivos: ativas.length,
+    assinantesAtrasados: lista.filter(a => a.status === 'atrasada').length,
+    mrr,
+    mrrFormatado: `R\$ ${mrr.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    arrProjetado: mrr * 12,
+    arrFormatado: `R\$ ${(mrr * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    totalCashbackConcedido: totalCashback,
+    totalCashbackFormatado: `R\$ ${totalCashback.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    porPlano: contagemPorPlano
+  };
+}
+
+/**
+ * Pausa temporariamente uma assinatura ativa
+ */
+export function pausarAssinatura(empresaId = STALLONE_EMPRESA_ID, assinaturaId, motivo = 'Pausa a pedido do cliente') {
+  const colecao = obterColecaoAssinaturas(empresaId);
+  const assinatura = colecao.assinaturas.find(a => a.id === assinaturaId);
+  if (!assinatura) throw new Error('Assinatura não encontrada.');
+  assinatura.status = 'pausada';
+  assinatura.motivoPausa = motivo;
+  assinatura.atualizadoEm = new Date().toISOString();
+  save();
+  return { sucesso: true, assinatura };
+}
+
+/**
+ * Reativa uma assinatura pausada
+ */
+export function reativarAssinatura(empresaId = STALLONE_EMPRESA_ID, assinaturaId) {
+  const colecao = obterColecaoAssinaturas(empresaId);
+  const assinatura = colecao.assinaturas.find(a => a.id === assinaturaId);
+  if (!assinatura) throw new Error('Assinatura não encontrada.');
+  assinatura.status = 'ativa';
+  assinatura.motivoPausa = null;
+  assinatura.atualizadoEm = new Date().toISOString();
+  save();
+  return { sucesso: true, assinatura };
+}
+
+/**
+ * Cancela definitivamente uma assinatura
+ */
+export function cancelarAssinatura(empresaId = STALLONE_EMPRESA_ID, assinaturaId, motivo = 'Cancelamento a pedido do cliente') {
+  const colecao = obterColecaoAssinaturas(empresaId);
+  const assinatura = colecao.assinaturas.find(a => a.id === assinaturaId);
+  if (!assinatura) throw new Error('Assinatura não encontrada.');
+  assinatura.status = 'cancelada';
+  assinatura.motivoCancelamento = motivo;
+  assinatura.canceladaEm = new Date().toISOString();
+  assinatura.atualizadoEm = new Date().toISOString();
+  save();
+  return { sucesso: true, assinatura };
 }
