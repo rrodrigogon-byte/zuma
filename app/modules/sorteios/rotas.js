@@ -61,8 +61,8 @@ export function criarRotasSorteios({ legacyEmpresaId, audit } = {}) {
     }
   });
 
-  // Atualizar uma campanha
-  router.put('/:id', async (req, res) => {
+  // Atualizar uma campanha (PUT ou PATCH)
+  const handlerAtualizarCampanha = async (req, res) => {
     try {
       const empresaId = getEmpresaId(req);
       const campanha = await sorteiosServico.atualizarCampanha(empresaId, req.params.id, req.body);
@@ -73,7 +73,9 @@ export function criarRotasSorteios({ legacyEmpresaId, audit } = {}) {
     } catch (error) {
       res.status(400).json({ error: error.message });
     }
-  });
+  };
+  router.put('/:id', handlerAtualizarCampanha);
+  router.patch('/:id', handlerAtualizarCampanha);
 
   // Listar bilhetes de uma campanha com paginação e busca
   router.get('/:id/bilhetes', async (req, res) => {
