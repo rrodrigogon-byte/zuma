@@ -136,10 +136,11 @@ export function createStalloneClubRoutes() {
   });
 
   // Painel administrativo: despachar Box Mensal de suplementos
-  router.post(["/assinaturas/:id/despachar", "/admin/assinaturas/:id/despachar"], (req, res) => {
+  router.post(["/assinaturas/:id/despachar", "/admin/assinaturas/:id/despachar"], async (req, res) => {
     try {
       const { id } = req.params;
       const empresaId = req.body?.empresaId || STALLONE_EMPRESA_ID;
+      await listarTodasAssinaturasAsync(empresaId);
       const resultado = despacharBoxAssinatura(empresaId, id, req.body || {});
       return res.json(resultado);
     } catch (err) {
@@ -148,10 +149,11 @@ export function createStalloneClubRoutes() {
   });
 
   // Painel administrativo: extrato detalhado de Cashback do cliente
-  router.get(["/assinaturas/:id/extrato-cashback", "/admin/assinaturas/:id/extrato-cashback"], (req, res) => {
+  router.get(["/assinaturas/:id/extrato-cashback", "/admin/assinaturas/:id/extrato-cashback"], async (req, res) => {
     try {
       const { id } = req.params;
       const empresaId = req.query.empresaId || STALLONE_EMPRESA_ID;
+      await listarTodasAssinaturasAsync(empresaId);
       const resultado = gerarExtratoCashback(empresaId, id);
       return res.json(resultado);
     } catch (err) {
@@ -160,10 +162,11 @@ export function createStalloneClubRoutes() {
   });
 
   // Painel administrativo: gerar mensagem WhatsApp com Box Pronto
-  router.get(["/assinaturas/:id/notificar-whatsapp", "/admin/assinaturas/:id/notificar-whatsapp"], (req, res) => {
+  router.get(["/assinaturas/:id/notificar-whatsapp", "/admin/assinaturas/:id/notificar-whatsapp"], async (req, res) => {
     try {
       const { id } = req.params;
       const empresaId = req.query.empresaId || STALLONE_EMPRESA_ID;
+      await listarTodasAssinaturasAsync(empresaId);
       const resultado = gerarMensagemWhatsAppBoxPronto(empresaId, id);
       return res.json(resultado);
     } catch (err) {

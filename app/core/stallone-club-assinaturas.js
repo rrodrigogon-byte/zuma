@@ -308,13 +308,21 @@ export async function listarTodasAssinaturasAsync(empresaId = STALLONE_EMPRESA_I
       // Mescla com eventuais assinaturas recentes em memória
       const mapa = new Map();
       for (const r of res.rows) {
-        mapa.set(String(r.id), {
+        const item = {
           ...r,
+          clienteCpfLimpo: String(r.clienteCpf || '').replace(/\D/g, ''),
           valorMensalidade: Number(r.valorMensalidade || 0),
           saldoCashbackAcumulado: Number(r.cashbackSaldo || 0),
           diaVencimento: r.diaCobranca || 10,
           formaPagamento: r.adquirenteRecorrente ? `tef_${r.adquirenteRecorrente.toLowerCase()}` : 'cartao_recorrente'
-        });
+        };
+        mapa.set(String(r.id), item);
+        const idx = colecao.assinaturas.findIndex(a => String(a.id) === String(item.id));
+        if (idx >= 0) {
+          colecao.assinaturas[idx] = { ...item, ...colecao.assinaturas[idx] };
+        } else {
+          colecao.assinaturas.push(item);
+        }
       }
       for (const a of colecao.assinaturas) {
         if (!mapa.has(String(a.id))) mapa.set(String(a.id), a);
