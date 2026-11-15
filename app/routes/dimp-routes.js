@@ -33,10 +33,39 @@ export function createDimpRoutes({ auth, obterEmpresaId }) {
       const documentosFiscais = [];
       const vendasSemDocumento = [];
 
-      // 1. Buscar lançamentos financeiros eletrônicos reais da empresa na competência
+      // 1. Buscar transações TEF reais multi-maquininhas na competência
+      try {
+        const tefRes = await consultar(
+          `SELECT id, terminal_id, adquirente_id, bandeira_id, modalidade, valor_bruto, nsu, codigo_autorizacao, data_transacao, status
+             FROM tef_transacoes
+            WHERE empresa_id = $1
+              AND status IN ('autorizada', 'confirmada', 'liquidada')
+              AND TO_CHAR(data_transacao, 'YYYY-MM') = $2
+            ORDER BY data_transacao DESC`,
+          [empresaId, competenciaPrefix]
+        );
+        for (const t of tefRes.rows || []) {
+          const mod = String(t.modalidade || '').toLowerCase();
+          const tipo = mod.includes('pix')
+            ? 'PIX_DINAMICO'
+            : (mod.includes('debito') ? 'CARTAO_DEBITO' : 'CARTAO_CREDITO');
+          const adquirente = (t.adquirente_id || 'SICREDI').toUpperCase();
+          transacoesMeiosPagamento.push({
+            id: String(t.id),
+            data: t.data_transacao ? new Date(t.data_transacao).toISOString().slice(0, 10) : `${competenciaPrefix}-01`,
+            adquirente,
+            tipo,
+            valor: Number(t.valor_bruto || 0),
+            nsu: t.nsu || `TEF-${String(t.id).slice(0, 8)}`,
+            descricao: `Transação TEF Maquininha (${t.bandeira_id || 'Eletrônico'})`,
+          });
+        }
+      } catch (_e) { /* tabela opcional */ }
+
+      // 1b. Buscar lançamentos financeiros eletrônicos reais da empresa na competência
       try {
         const finRes = await consultar(
-          `SELECT id, descricao, valor, forma_pagamento, data_competencia, status
+          `SELECT id, descricao, valor, COALESCE(meio_pagamento, '') AS meio_pagamento, data_competencia, status
              FROM fin_lancamentos
             WHERE empresa_id = $1
               AND tipo = 'receita'
@@ -46,7 +75,7 @@ export function createDimpRoutes({ auth, obterEmpresaId }) {
           [empresaId, competenciaPrefix]
         );
         for (const r of finRes.rows || []) {
-          const fp = String(r.forma_pagamento || '').toLowerCase();
+          const fp = String(r.meio_pagamento || '').toLowerCase();
           if (fp.includes('dinheiro') || fp.includes('especie')) continue;
           const tipo = fp.includes('pix')
             ? 'PIX_DINAMICO'
@@ -148,7 +177,7 @@ export function createDimpRoutes({ auth, obterEmpresaId }) {
       const resultado = regularizarPendenciasDimp({
         empresaId,
         itensRegularizar,
-        tpAmb: 2,
+        confirmacaoManualExplicita: true,
       });
       return res.json(resultado);
     } catch (err) {

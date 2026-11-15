@@ -222,6 +222,49 @@ function StalloneHero({ tagline, productCount, topCategories, onCategory, onTrac
         </button>
       </div>
     </div>
+    <div className="stallone-vip-club" style={{
+      background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)',
+      border: '1px solid #4338ca',
+      borderRadius: 12,
+      padding: '16px 20px',
+      margin: '18px 0',
+      color: '#fff',
+      boxShadow: '0 6px 24px rgba(67, 56, 202, 0.25)'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 20 }}>📦</span>
+          <strong style={{ fontSize: 16, letterSpacing: '-0.01em', color: '#a5b4fc' }}>Stallone VIP Club · Box Mensal Recorrente</strong>
+          <span style={{ background: '#6366f1', color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 4 }}>REPOSIÇÃO AUTOMÁTICA</span>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+        <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 8, padding: 12, border: '1px solid rgba(255,255,255,0.1)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontWeight: 700, fontSize: 14, color: '#38bdf8' }}>Plano Starter</span>
+            <span style={{ fontWeight: 800, fontSize: 14 }}>R$ 149,90<small style={{ fontSize: 10, color: '#94a3b8' }}>/mês</small></span>
+          </div>
+          <p style={{ fontSize: 11, color: '#cbd5e1', margin: '6px 0 8px' }}>Whey 100% Pure + Coqueteleira + 5% cashback em toda a loja.</p>
+          <button type="button" onClick={() => onCategory('Whey & Proteínas')} style={{ width: '100%', background: '#0284c7', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Ver Suplementos do Plano</button>
+        </div>
+        <div style={{ background: 'rgba(99, 102, 241, 0.15)', borderRadius: 8, padding: 12, border: '1px solid #6366f1' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontWeight: 700, fontSize: 14, color: '#818cf8' }}>Plano Performance ⭐</span>
+            <span style={{ fontWeight: 800, fontSize: 14 }}>R$ 279,90<small style={{ fontSize: 10, color: '#94a3b8' }}>/mês</small></span>
+          </div>
+          <p style={{ fontSize: 11, color: '#e0e7ff', margin: '6px 0 8px' }}>Whey Isolado + Creatina Creapure + Coqueteleira + 10% cashback.</p>
+          <button type="button" onClick={() => onCategory('Creatina')} style={{ width: '100%', background: '#4f46e5', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Ver Suplementos do Plano</button>
+        </div>
+        <div style={{ background: 'rgba(245, 158, 11, 0.12)', borderRadius: 8, padding: 12, border: '1px solid #f59e0b' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontWeight: 700, fontSize: 14, color: '#fbbf24' }}>Plano Elite Pro 👑</span>
+            <span style={{ fontWeight: 800, fontSize: 14 }}>R$ 449,90<small style={{ fontSize: 10, color: '#94a3b8' }}>/mês</small></span>
+          </div>
+          <p style={{ fontSize: 11, color: '#fef3c7', margin: '6px 0 8px' }}>Whey Hydro + Creatina + Pré-Treino Panic + Camiseta + KyttoIA + 15% cashback.</p>
+          <button type="button" onClick={() => onCategory('Pré-treino & Energia')} style={{ width: '100%', background: '#d97706', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Ver Suplementos do Plano</button>
+        </div>
+      </div>
+    </div>
     {topCategories.length > 0 && <nav className="stallone-hero-shelf" aria-label="Categorias com mais produtos">
       <h2>Comece por uma categoria</h2>
       <ul>
