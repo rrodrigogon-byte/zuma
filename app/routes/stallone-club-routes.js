@@ -10,6 +10,10 @@ import {
   pausarAssinatura,
   reativarAssinatura,
   cancelarAssinatura,
+  despacharBoxAssinatura,
+  gerarExtratoCashback,
+  gerarMensagemWhatsAppBoxPronto,
+  exportarAssinaturasCsv,
 } from "../core/stallone-club-assinaturas.js";
 
 export function createStalloneClubRoutes() {
@@ -128,6 +132,58 @@ export function createStalloneClubRoutes() {
       return res.json(resultado);
     } catch (err) {
       return res.status(400).json({ sucesso: false, erro: err.message });
+    }
+  });
+
+  // Painel administrativo: despachar Box Mensal de suplementos
+  router.post(["/assinaturas/:id/despachar", "/admin/assinaturas/:id/despachar"], (req, res) => {
+    try {
+      const { id } = req.params;
+      const empresaId = req.body?.empresaId || STALLONE_EMPRESA_ID;
+      const resultado = despacharBoxAssinatura(empresaId, id, req.body || {});
+      return res.json(resultado);
+    } catch (err) {
+      return res.status(400).json({ sucesso: false, erro: err.message });
+    }
+  });
+
+  // Painel administrativo: extrato detalhado de Cashback do cliente
+  router.get(["/assinaturas/:id/extrato-cashback", "/admin/assinaturas/:id/extrato-cashback"], (req, res) => {
+    try {
+      const { id } = req.params;
+      const empresaId = req.query.empresaId || STALLONE_EMPRESA_ID;
+      const resultado = gerarExtratoCashback(empresaId, id);
+      return res.json(resultado);
+    } catch (err) {
+      return res.status(404).json({ sucesso: false, erro: err.message });
+    }
+  });
+
+  // Painel administrativo: gerar mensagem WhatsApp com Box Pronto
+  router.get(["/assinaturas/:id/notificar-whatsapp", "/admin/assinaturas/:id/notificar-whatsapp"], (req, res) => {
+    try {
+      const { id } = req.params;
+      const empresaId = req.query.empresaId || STALLONE_EMPRESA_ID;
+      const resultado = gerarMensagemWhatsAppBoxPronto(empresaId, id);
+      return res.json(resultado);
+    } catch (err) {
+      return res.status(404).json({ sucesso: false, erro: err.message });
+    }
+  });
+
+  // Painel administrativo: exportação de assinaturas em CSV
+  router.get(["/assinaturas/exportar-csv", "/admin/assinaturas/exportar-csv"], async (req, res) => {
+    try {
+      const empresaId = req.query.empresaId || STALLONE_EMPRESA_ID;
+      const resultado = await exportarAssinaturasCsv(empresaId);
+      if (req.query.download === 'true' || req.query.formato === 'csv') {
+        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+        res.setHeader("Content-Disposition", `attachment; filename="${resultado.nomeArquivo}"`);
+        return res.send(resultado.conteudoCsv);
+      }
+      return res.json(resultado);
+    } catch (err) {
+      return res.status(500).json({ sucesso: false, erro: err.message });
     }
   });
 

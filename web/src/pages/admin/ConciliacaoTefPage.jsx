@@ -98,6 +98,26 @@ export default function ConciliacaoTefPage() {
     }
   }
 
+  async function handleExportarDimp() {
+    try {
+      const res = await api.get('/api/admin/tef/dimp/exportar');
+      if (res?.ok && res?.conteudoArquivo) {
+        const blob = new Blob([res.conteudoArquivo], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = res.nomeArquivo || 'DIMP_STALLONE_56099531000138.txt';
+        link.click();
+        URL.revokeObjectURL(url);
+        toast('Arquivo oficial DIMP COTEPE gerado e baixado com sucesso!', 'success');
+      } else {
+        toast(res?.erro || 'Erro ao gerar arquivo DIMP', 'error');
+      }
+    } catch (err) {
+      toast('Erro ao exportar DIMP: ' + err.message, 'error');
+    }
+  }
+
   async function handleTestarTerminal(terminalId) {
     try {
       const res = await api.post(`/api/admin/tef/terminais/${terminalId}/testar-conexao`, {
@@ -301,6 +321,22 @@ export default function ConciliacaoTefPage() {
               }}
             >
               🛡️ Padrão Oficial Stallone
+            </button>
+            <button
+              type="button"
+              onClick={handleExportarDimp}
+              style={{
+                background: '#0284c7',
+                color: '#ffffff',
+                border: 'none',
+                padding: '8px 14px',
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              📥 Exportar DIMP
             </button>
           </div>
         </div>

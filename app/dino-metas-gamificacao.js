@@ -139,7 +139,14 @@ export function dataIsoCuiaba(data = new Date()) {
 
 /** Calcula limites da semana (segunda a domingo) para uma data de referência */
 export function janelaSemana(dataRef = new Date()) {
-  const d = dataRef instanceof Date ? new Date(dataRef) : new Date(dataRef);
+  let d;
+  if (dataRef instanceof Date) {
+    d = new Date(dataRef);
+  } else if (typeof dataRef === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dataRef)) {
+    d = new Date(`${dataRef}T12:00:00`);
+  } else {
+    d = new Date(dataRef);
+  }
   const diaSemana = d.getDay(); // 0 = domingo, 1 = segunda, ..., 6 = sábado
   const distSegunda = diaSemana === 0 ? -6 : 1 - diaSemana;
   

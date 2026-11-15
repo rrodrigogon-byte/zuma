@@ -18,7 +18,12 @@ import {
   Search,
   Filter,
   ArrowUpRight,
-  ShieldCheck
+  ShieldCheck,
+  Download,
+  Send,
+  Truck,
+  DollarSign,
+  Calculator
 } from 'lucide-react';
 
 export default function StalloneClubAdmin() {
@@ -31,7 +36,18 @@ export default function StalloneClubAdmin() {
   const [busca, setBusca] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('todos');
   const [filtroPlano, setFiltroPlano] = useState('todos');
+
+  // Modais
   const [modalNovo, setModalNovo] = useState(false);
+  const [modalExtrato, setModalExtrato] = useState(null);
+  const [modalSimulador, setModalSimulador] = useState(false);
+
+  // Estado do Simulador de Taxas TEF
+  const [simuladorValor, setSimuladorValor] = useState(250);
+  const [simuladorModalidade, setSimuladorModalidade] = useState('credito_avista');
+  const [simuladorParcelas, setSimuladorParcelas] = useState(1);
+  const [resultadoSimulador, setResultadoSimulador] = useState(null);
+
   const [novoAssinante, setNovoAssinante] = useState({
     clienteNome: '',
     clienteCpf: '',
@@ -90,6 +106,74 @@ export default function StalloneClubAdmin() {
       toast(err.message || 'Erro na cobrança do ciclo.', 'error');
     } finally {
       setProcessando(false);
+    }
+  };
+
+  const handleDespacharBox = async (assinaturaId, clienteNome) => {
+    const modalidade = window.confirm(`Deseja despachar para Retirada no Balcão? Clique em OK para Balcão ou Cancelar para Entrega Expressa.`)
+      ? 'retirada_balcao'
+      : 'delivery_express';
+
+    setProcessando(true);
+    try {
+      const res = await api.post(`/api/stallone-club/admin/assinaturas/${assinaturaId}/despachar`, {
+        modalidade,
+        observacoes: 'Despacho registrado via Cockpit Administrativo Stallone'
+      });
+      if (res && res.sucesso) {
+        toast(res.mensagem || 'Box despachado e estoque atualizado com sucesso!', 'success');
+        carregarDados();
+      } else {
+        toast(res.erro || 'Falha ao despachar box.', 'error');
+      }
+    } catch (err) {
+      toast(err.message || 'Erro no despacho do box.', 'error');
+    } finally {
+      setProcessando(false);
+    }
+  };
+
+  const handleNotificarWhatsApp = async (assinaturaId) => {
+    try {
+      const res = await api.get(`/api/stallone-club/admin/assinaturas/${assinaturaId}/notificar-whatsapp`);
+      if (res && res.sucesso && res.mensagem) {
+        const telLimpo = String(res.telefone || '').replace(/\D/g, '');
+        const urlZap = `https://wa.me/55${telLimpo}?text=${encodeURIComponent(res.mensagem)}`;
+        window.open(urlZap, '_blank');
+        toast('Mensagem gerada e encaminhada para o WhatsApp!', 'success');
+      } else {
+        toast('Não foi possível gerar a mensagem de notificação.', 'error');
+      }
+    } catch (err) {
+      toast(err.message || 'Erro ao notificar via WhatsApp.', 'error');
+    }
+  };
+
+  const handleVerExtrato = async (assinaturaId) => {
+    try {
+      const res = await api.get(`/api/stallone-club/admin/assinaturas/${assinaturaId}/extrato-cashback`);
+      if (res && res.sucesso) {
+        setModalExtrato(res);
+      } else {
+        toast('Não foi possível carregar o extrato.', 'error');
+      }
+    } catch (err) {
+      toast(err.message || 'Erro ao consultar extrato.', 'error');
+    }
+  };
+
+  const handleExecutarSimuladorTef = async () => {
+    try {
+      const res = await api.post('/api/tef/simular-taxas', {
+        valor: simuladorValor,
+        modalidade: simuladorModalidade,
+        parcelas: simuladorParcelas
+      });
+      if (res && res.ok && res.melhorOpcao) {
+        setResultadoSimulador(res);
+      }
+    } catch (err) {
+      toast('Erro ao rodar simulação TEF.', 'error');
     }
   };
 
@@ -200,7 +284,49 @@ export default function StalloneClubAdmin() {
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => {
+              setModalSimulador(true);
+              handleExecutarSimuladorTef();
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: '#f0fdf4',
+              color: '#15803d',
+              border: '1px solid #bbf7d0',
+              padding: '8px 14px',
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >
+            <Calculator size={15} /> Simulador TEF MDR
+          </button>
+
+          <button
+            type="button"
+            onClick={() => window.open('/api/stallone-club/admin/assinaturas/exportar-csv?download=true', '_blank')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: '#f8fafc',
+              border: '1px solid #cbd5e1',
+              padding: '8px 14px',
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            <Download size={14} /> Exportar CSV
+          </button>
+
           <button
             type="button"
             onClick={carregarDados}
@@ -220,6 +346,7 @@ export default function StalloneClubAdmin() {
           >
             <RefreshCw size={14} className={carregando ? 'spin' : ''} /> Atualizar
           </button>
+
           <button
             type="button"
             onClick={() => setModalNovo(true)}
@@ -411,7 +538,7 @@ export default function StalloneClubAdmin() {
                 <th style={{ padding: '12px 16px' }}>Cashback Saldo</th>
                 <th style={{ padding: '12px 16px' }}>Vencimento</th>
                 <th style={{ padding: '12px 16px' }}>Status</th>
-                <th style={{ padding: '12px 16px', textAlign: 'right' }}>Ações de Gestão</th>
+                <th style={{ padding: '12px 16px', textAlign: 'right' }}>Ações de Gestão & Operação</th>
               </tr>
             </thead>
             <tbody>
@@ -444,9 +571,19 @@ export default function StalloneClubAdmin() {
                         {fmtMoney(a.valorMensalidade)}
                       </td>
                       <td style={{ padding: '12px 16px' }}>
-                        <span style={{ fontWeight: 700, color: '#d97706' }}>
-                          {fmtMoney(a.saldoCashbackAcumulado || a.cashbackSaldo || 0)}
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontWeight: 700, color: '#d97706' }}>
+                            {fmtMoney(a.saldoCashbackAcumulado || a.cashbackSaldo || 0)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleVerExtrato(a.id)}
+                            title="Ver extrato de cashback"
+                            style={{ background: 'none', border: 'none', color: '#0284c7', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}
+                          >
+                            extrato
+                          </button>
+                        </div>
                         <div style={{ fontSize: 10, color: '#64748b' }}>({a.cashbackPercentual}% do plano)</div>
                       </td>
                       <td style={{ padding: '12px 16px' }}>
@@ -466,26 +603,69 @@ export default function StalloneClubAdmin() {
                         </span>
                       </td>
                       <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                        <div style={{ display: 'inline-flex', gap: 6 }}>
+                        <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                           {['ativa', 'em_dia'].includes(a.status) && (
-                            <button
-                              type="button"
-                              onClick={() => handleProcessarCiclo(a.id, a.clienteNome)}
-                              disabled={processando}
-                              title="Processar ciclo mensal e liberar reposição de suplementos"
-                              style={{
-                                background: '#0284c7',
-                                color: '#fff',
-                                border: 'none',
-                                padding: '4px 10px',
-                                borderRadius: 6,
-                                fontSize: 11,
-                                fontWeight: 700,
-                                cursor: 'pointer'
-                              }}
-                            >
-                              Processar Ciclo
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleProcessarCiclo(a.id, a.clienteNome)}
+                                disabled={processando}
+                                title="Processar ciclo mensal e liberar reposição de suplementos"
+                                style={{
+                                  background: '#0284c7',
+                                  color: '#fff',
+                                  border: 'none',
+                                  padding: '4px 8px',
+                                  borderRadius: 6,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Cobrar Ciclo
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDespacharBox(a.id, a.clienteNome)}
+                                disabled={processando}
+                                title="Despachar Box e dar baixa no estoque físico"
+                                style={{
+                                  background: '#059669',
+                                  color: '#fff',
+                                  border: 'none',
+                                  padding: '4px 8px',
+                                  borderRadius: 6,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4
+                                }}
+                              >
+                                <Truck size={12} /> Despachar Box
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleNotificarWhatsApp(a.id)}
+                                title="Notificar cliente via WhatsApp institucional que o box está pronto"
+                                style={{
+                                  background: '#25D366',
+                                  color: '#fff',
+                                  border: 'none',
+                                  padding: '4px 8px',
+                                  borderRadius: 6,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4
+                                }}
+                              >
+                                <Send size={12} /> Zap
+                              </button>
+                            </>
                           )}
                           {a.status === 'pausada' ? (
                             <button
@@ -553,6 +733,239 @@ export default function StalloneClubAdmin() {
           </table>
         </div>
       </div>
+
+      {/* Modal Simulador de Taxas TEF MDR */}
+      {modalSimulador && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: 20
+        }}>
+          <div style={{
+            background: '#fff',
+            borderRadius: 14,
+            padding: 24,
+            width: '100%',
+            maxWidth: 680,
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#0f172a' }}>
+                  Simulador de Economia de Taxas MDR (Multi-Maquininhas)
+                </h3>
+                <span style={{ fontSize: 12, color: '#64748b' }}>
+                  Orienta o operador de caixa sobre qual adquirente retém menor taxa na Stallone Nutre Sport
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalSimulador(false)}
+                style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#64748b' }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 10, alignItems: 'flex-end', marginBottom: 20 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, marginBottom: 4, color: '#334155' }}>
+                  Valor da Venda (R$)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={simuladorValor}
+                  onChange={e => setSimuladorValor(Number(e.target.value))}
+                  style={{ width: '100%', padding: '8px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 13 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, marginBottom: 4, color: '#334155' }}>
+                  Modalidade
+                </label>
+                <select
+                  value={simuladorModalidade}
+                  onChange={e => setSimuladorModalidade(e.target.value)}
+                  style={{ width: '100%', padding: '8px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 13 }}
+                >
+                  <option value="debito">Débito</option>
+                  <option value="credito_avista">Crédito à Vista</option>
+                  <option value="credito_parcelado">Crédito Parcelado</option>
+                  <option value="pix">PIX no Pinpad</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, marginBottom: 4, color: '#334155' }}>
+                  Parcelas
+                </label>
+                <select
+                  disabled={simuladorModalidade !== 'credito_parcelado'}
+                  value={simuladorParcelas}
+                  onChange={e => setSimuladorParcelas(Number(e.target.value))}
+                  style={{ width: '100%', padding: '8px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 13 }}
+                >
+                  <option value={2}>2x</option>
+                  <option value={3}>3x</option>
+                  <option value={4}>4x</option>
+                  <option value={5}>5x</option>
+                  <option value={6}>6x</option>
+                  <option value={10}>10x</option>
+                  <option value={12}>12x</option>
+                </select>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleExecutarSimuladorTef}
+                style={{
+                  background: '#0284c7',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '8px 16px',
+                  borderRadius: 6,
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: 'pointer'
+                }}
+              >
+                Simular
+              </button>
+            </div>
+
+            {resultadoSimulador && (
+              <div>
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: 12, marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#166534', fontWeight: 800, fontSize: 14 }}>
+                    <ShieldCheck size={18} /> Recomendação para o Caixa: {resultadoSimulador.melhorOpcao?.adquirenteNome}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#15803d', marginTop: 4 }}>
+                    Taxa MDR de apenas <strong>{resultadoSimulador.melhorOpcao?.taxaMdrPercentual}%</strong> (retém R$ {resultadoSimulador.melhorOpcao?.valorTaxaMdr.toFixed(2)} · Líquido no Caixa: R$ {resultadoSimulador.melhorOpcao?.valorLiquido.toFixed(2)} · Prazo: {resultadoSimulador.melhorOpcao?.prazoLiquidacao}). Economia máxima de <strong>R$ {resultadoSimulador.economiaMaxima.toFixed(2)}</strong> frente à pior opção.
+                  </div>
+                </div>
+
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b', textAlign: 'left' }}>
+                        <th style={{ padding: '8px 10px' }}>Ranking</th>
+                        <th style={{ padding: '8px 10px' }}>Adquirente</th>
+                        <th style={{ padding: '8px 10px' }}>Taxa MDR</th>
+                        <th style={{ padding: '8px 10px' }}>Desconto Taxa</th>
+                        <th style={{ padding: '8px 10px' }}>Líquido Loja</th>
+                        <th style={{ padding: '8px 10px' }}>Prazo Depósito</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {resultadoSimulador.comparativo?.map((c) => (
+                        <tr key={c.adquirenteId} style={{ borderBottom: '1px solid #f1f5f9', background: c.recomendado ? '#f0fdf4' : 'transparent' }}>
+                          <td style={{ padding: '8px 10px', fontWeight: 700 }}>
+                            {c.recomendado ? '⭐ 1º' : `${c.posicaoRanking}º`}
+                          </td>
+                          <td style={{ padding: '8px 10px', fontWeight: 600 }}>{c.adquirenteNome}</td>
+                          <td style={{ padding: '8px 10px' }}>{c.taxaMdrPercentual}%</td>
+                          <td style={{ padding: '8px 10px', color: '#b91c1c' }}>- {fmtMoney(c.valorTaxaMdr)}</td>
+                          <td style={{ padding: '8px 10px', fontWeight: 700, color: '#047857' }}>{fmtMoney(c.valorLiquido)}</td>
+                          <td style={{ padding: '8px 10px' }}>{c.prazoLiquidacao}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal Extrato de Cashback */}
+      {modalExtrato && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: 20
+        }}>
+          <div style={{
+            background: '#fff',
+            borderRadius: 14,
+            padding: 24,
+            width: '100%',
+            maxWidth: 540,
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#0f172a' }}>
+                  Extrato de Cashback Kytto Pay
+                </h3>
+                <span style={{ fontSize: 12, color: '#64748b' }}>{modalExtrato.clienteNome} · CPF: {modalExtrato.clienteCpf}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalExtrato(null)}
+                style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#64748b' }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ background: '#fef3c7', borderRadius: 8, padding: 12, marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: '#92400e', fontWeight: 600, fontSize: 13 }}>Saldo Acumulado Disponível:</span>
+              <span style={{ fontSize: 20, fontWeight: 800, color: '#b45309' }}>{fmtMoney(modalExtrato.saldoAtual)}</span>
+            </div>
+
+            <div style={{ maxHeight: 280, overflowY: 'auto' }}>
+              {modalExtrato.lancamentos?.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8', fontSize: 12 }}>
+                  Nenhum lançamento de cashback registrado até o momento.
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {modalExtrato.lancamentos?.map((l) => (
+                    <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 10, borderRadius: 6, background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: 12 }}>
+                      <div>
+                        <div style={{ fontWeight: 600, color: '#1e293b' }}>{l.descricao}</div>
+                        <div style={{ fontSize: 10, color: '#64748b' }}>{fmtDate(l.data)}</div>
+                      </div>
+                      <span style={{ fontWeight: 800, color: '#15803d' }}>+ {fmtMoney(l.valor)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+              <button
+                type="button"
+                onClick={() => setModalExtrato(null)}
+                style={{ padding: '8px 16px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#fff', fontSize: 13, cursor: 'pointer' }}
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Nova Adesão no Balcão */}
       {modalNovo && (

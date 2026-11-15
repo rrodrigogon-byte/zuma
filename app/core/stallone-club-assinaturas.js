@@ -396,3 +396,112 @@ export function cancelarAssinatura(empresaId = STALLONE_EMPRESA_ID, assinaturaId
   save();
   return { sucesso: true, assinatura };
 }
+
+/**
+ * Registra o despacho ou liberação do Box Mensal de suplementos para o assinante
+ */
+export function despacharBoxAssinatura(empresaId = STALLONE_EMPRESA_ID, assinaturaId, { modalidade = 'retirada_balcao', codigoRastreio = '', observacoes = '' } = {}) {
+  const colecao = obterColecaoAssinaturas(empresaId);
+  const assinatura = colecao.assinaturas.find(a => a.id === assinaturaId);
+  if (!assinatura) throw new Error('Assinatura não encontrada.');
+
+  const plano = PLANOS_STALLONE_CLUB[assinatura.planoCodigo];
+  const agora = new Date().toISOString();
+  const protocolo = `BOX-${Date.now().toString().slice(-6)}`;
+
+  const envio = {
+    protocolo,
+    assinaturaId: assinatura.id,
+    clienteNome: assinatura.clienteNome,
+    clienteTelefone: assinatura.clienteTelefone,
+    planoNome: assinatura.planoNome,
+    modalidade: modalidade === 'delivery_express' ? 'Entrega Domiciliar Express (Tangará da Serra)' : 'Retirada no Balcão Oficial Stallone',
+    codigoRastreio: codigoRastreio || protocolo,
+    itensDespachados: plano?.itensInclusos || [],
+    statusEnvio: 'pronto_para_retirada_ou_envio',
+    despachadoEm: agora,
+    observacoes,
+  };
+
+  assinatura.ultimoDespacho = envio;
+  assinatura.atualizadoEm = agora;
+
+  if (!colecao.historicoEnvios) colecao.historicoEnvios = [];
+  colecao.historicoEnvios.push(envio);
+  save();
+
+  return {
+    sucesso: true,
+    mensagem: `Box Mensal de ${assinatura.clienteNome} preparado com sucesso (${envio.modalidade})!`,
+    envio,
+    assinatura,
+  };
+}
+
+/**
+ * Gera o extrato de lançamentos de Cashback Kytto Pay do assinante
+ */
+export function gerarExtratoCashback(empresaId = STALLONE_EMPRESA_ID, cpfOuId) {
+  const colecao = obterColecaoAssinaturas(empresaId);
+  const termo = String(cpfOuId || '').replace(/\D/g, '');
+  const assinatura = colecao.assinaturas.find(a => a.id === cpfOuId || a.clienteCpfLimpo === termo);
+  if (!assinatura) throw new Error('Assinante não encontrado.');
+
+  const ciclos = (colecao.historicoCiclos || []).filter(c => c.assinaturaId === assinatura.id);
+  const lancamentos = ciclos.map((c, idx) => ({
+    id: `ext-cbk-${idx + 1}`,
+    tipo: 'credito_mensalidade',
+    descricao: `Cashback mensalidade Stallone VIP Club (${c.planoCodigo.toUpperCase()})`,
+    valor: c.cashbackGerado,
+    data: c.dataCobranca,
+    status: 'disponivel',
+  }));
+
+  return {
+    sucesso: true,
+    clienteNome: assinatura.clienteNome,
+    clienteCpf: assinatura.clienteCpf,
+    saldoAtual: assinatura.saldoCashbackAcumulado || 0,
+    totalLancamentos: lancamentos.length,
+    lancamentos,
+  };
+}
+
+/**
+ * Gera texto oficial formatado para notificação via WhatsApp do cliente
+ */
+export function gerarMensagemWhatsAppBoxPronto(empresaId = STALLONE_EMPRESA_ID, assinaturaId) {
+  const colecao = obterColecaoAssinaturas(empresaId);
+  const assinatura = colecao.assinaturas.find(a => a.id === assinaturaId);
+  if (!assinatura) throw new Error('Assinatura não encontrada.');
+
+  const plano = PLANOS_STALLONE_CLUB[assinatura.planoCodigo];
+  const itensStr = (plano?.itensInclusos || []).map(i => `  • ${i.nome}`).join('\n');
+  const protocolo = assinatura.ultimoDespacho?.protocolo || `BOX-${Date.now().toString().slice(-6)}`;
+
+  const textoZap = `Olá, *${assinatura.clienteNome}*! 💪🏆\n\nSeu *${assinatura.planoNome}* do *Stallone VIP Club* já foi separado com sucesso!\n\n📦 *Itens inclusos neste ciclo:*\n${itensStr}\n\n💰 *Saldo de Cashback disponível no seu Kytto Pay:* R$ ${(assinatura.saldoCashbackAcumulado || 0).toFixed(2)}\n🎟️ *Protocolo de Liberação:* ${protocolo}\n\n📍 Pode retirar diretamente no balcão da *Stallone Nutre Sport* em Tangará da Serra/MT com nossa equipe de consultores.\n\n_Stallone Nutre Sport & Kytto ERP - Nutrição de Alta Performance._`;
+
+  return {
+    sucesso: true,
+    clienteNome: assinatura.clienteNome,
+    telefone: assinatura.clienteTelefone,
+    mensagem: textoZap,
+  };
+}
+
+/**
+ * Exporta todas as assinaturas em formato CSV para auditoria e controle de faturamento
+ */
+export async function exportarAssinaturasCsv(empresaId = STALLONE_EMPRESA_ID) {
+  const lista = await listarTodasAssinaturasAsync(empresaId);
+  const cabecalho = 'ID;Nome do Atleta;CPF;Telefone;Plano;Mensalidade (R$);Cashback Saldo (R$);Status;Dia Vencimento;Forma Pagamento;Data Inicio;Proxima Cobranca';
+  const linhas = lista.map(a => 
+    `${a.id};${a.clienteNome};${a.clienteCpf};${a.clienteTelefone};${a.planoNome || a.planoCodigo};${Number(a.valorMensalidade || 0).toFixed(2)};${Number(a.saldoCashbackAcumulado || a.cashbackSaldo || 0).toFixed(2)};${a.status};${a.diaVencimento || 10};${a.formaPagamento};${(a.dataInicio || '').slice(0, 10)};${a.proximaCobranca || ''}`
+  );
+  return {
+    sucesso: true,
+    totalAssinantes: lista.length,
+    nomeArquivo: `assinaturas_stallone_vip_club_${new Date().toISOString().slice(0, 10)}.csv`,
+    conteudoCsv: [cabecalho, ...linhas].join('\r\n'),
+  };
+}

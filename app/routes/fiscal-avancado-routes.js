@@ -10,6 +10,8 @@ import {
   listarNotasDestinadas,
   listarNotasDestinadasAsync,
   processarEntradaMercadoria,
+  manifestarNotasEmLote,
+  gerarLivroRegistroEntradas,
   EVENTOS_MDE,
 } from '../core/manifestacao-destinatario-mde.js';
 
@@ -103,6 +105,49 @@ export function createFiscalAvancadoRouter({ auth, obterEmpresaId }) {
       });
     } catch (err) {
       return res.status(400).json({ sucesso: false, erro: err.message });
+    }
+  });
+
+  // Manifestação de notas fiscais em lote (Ciência ou Confirmação em massa)
+  router.post('/mde/manifestar-lote', async (req, res) => {
+    try {
+      const empresaId = typeof obterEmpresaId === 'function' ? obterEmpresaId(req) : req.empresaId;
+      const resultado = await manifestarNotasEmLote({
+        ...req.body,
+        empresaId,
+        usuario: req.user?.username || req.user?.email || req.body?.usuario || 'Gestor Fiscal Stallone',
+      });
+      return res.json({
+        sucesso: true,
+        mensagem: `${resultado.sucessos} nota(s) manifestada(s) com sucesso em lote.`,
+        ...resultado,
+      });
+    } catch (err) {
+      return res.status(400).json({ sucesso: false, erro: err.message });
+    }
+  });
+
+  // Livro Registro de Entradas (Consolidação Fiscal e Exportação CSV)
+  router.get('/mde/livro-entradas', async (req, res) => {
+    try {
+      const empresaId = typeof obterEmpresaId === 'function' ? obterEmpresaId(req) : req.empresaId;
+      const { dataInicio, dataFim, formato } = req.query;
+      const resultado = await gerarLivroRegistroEntradas({
+        empresaId,
+        dataInicio,
+        dataFim,
+      });
+      if (formato === 'csv' || req.query?.download === 'true') {
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="livro_registro_entradas_stallone.csv"');
+        return res.send(resultado.conteudoCsv);
+      }
+      return res.json({
+        sucesso: true,
+        ...resultado,
+      });
+    } catch (err) {
+      return res.status(500).json({ sucesso: false, erro: err.message });
     }
   });
 

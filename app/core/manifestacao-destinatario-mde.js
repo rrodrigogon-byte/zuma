@@ -655,3 +655,116 @@ export function processarEntradaMercadoria({ estoqueAtualQtd, custoAtualUnitario
     valorTotalEstoqueFinal: Number((qtdTotalFinal * novoCustoMedio).toFixed(2)),
   };
 }
+
+/**
+ * Manifestação de Notas em Lote
+ * Permite confirmar ou dar ciência a múltiplas NF-es simultaneamente
+ */
+export async function manifestarNotasEmLote({ empresaId, chavesAcesso = [], tipoEvento = '210200', justificativa = '', usuario = '' }) {
+  if (!Array.isArray(chavesAcesso) || chavesAcesso.length === 0) {
+    throw new Error('Lista de chaves de acesso para manifestação em lote é obrigatória.');
+  }
+
+  const resultados = [];
+  let sucessos = 0;
+  let erros = 0;
+
+  for (const chave of chavesAcesso) {
+    try {
+      const evento = await manifestarNotaAsync({
+        empresaId,
+        chaveAcesso: chave,
+        tipoEvento,
+        justificativa,
+        usuario: usuario || 'Gestor Fiscal Stallone',
+      });
+      sucessos++;
+      resultados.push({ chaveAcesso: chave, sucesso: true, evento });
+    } catch (err) {
+      erros++;
+      resultados.push({ chaveAcesso: chave, sucesso: false, erro: err.message });
+    }
+  }
+
+  return {
+    sucesso: erros === 0,
+    totalProcessadas: chavesAcesso.length,
+    sucessos,
+    erros,
+    tipoEvento,
+    resultados,
+  };
+}
+
+/**
+ * Livro Registro de Entradas (Fiscal e SPED)
+ * Consolida as NF-es de entrada com CFOP, ICMS, base de cálculo e crédito tributário
+ */
+export async function gerarLivroRegistroEntradas({ empresaId, dataInicio = '', dataFim = '' } = {}) {
+  const notas = await listarNotasDestinadasAsync(empresaId);
+  const filtradas = notas.filter((n) => {
+    const data = (n.emitidaEm || '').slice(0, 10);
+    if (dataInicio && data < dataInicio) return false;
+    if (dataFim && data > dataFim) return false;
+    return true;
+  });
+
+  let totalValorContabil = 0;
+  let totalBaseIcms = 0;
+  let totalIcmsCreditado = 0;
+  let totalIsentas = 0;
+  let totalOutras = 0;
+
+  const itensLivro = filtradas.map((n, idx) => {
+    const vTotal = Number(n.valorTotal || 0);
+    // Padrão de suplementos em MT: CFOP 2102 (compra interestadual) ou 1102 (interna)
+    const ufEmitente = n.emitente?.uf || 'SP';
+    const cfop = ufEmitente === 'MT' ? '1102' : '2102';
+    const aliquotaIcms = ufEmitente === 'MT' ? 17.0 : (['SP', 'RJ', 'MG', 'PR', 'SC', 'RS'].includes(ufEmitente) ? 7.0 : 12.0);
+    
+    // Em regra, suplementos esportivos em MT gozam de aproveitamento de crédito para revenda
+    const baseIcms = vTotal;
+    const icmsCreditado = Number(((baseIcms * aliquotaIcms) / 100).toFixed(2));
+    
+    totalValorContabil += vTotal;
+    totalBaseIcms += baseIcms;
+    totalIcmsCreditado += icmsCreditado;
+
+    return {
+      ordem: idx + 1,
+      dataEntrada: (n.emitidaEm || new Date().toISOString()).slice(0, 10),
+      chaveAcesso: n.chaveAcesso,
+      numero: n.numero,
+      serie: n.serie || '1',
+      emitenteRazao: n.emitente?.razaoSocial || 'Fornecedor Cadastrado',
+      emitenteCnpj: n.emitente?.cnpj || '00.000.000/0000-00',
+      emitenteUf: ufEmitente,
+      cfop,
+      valorContabil: vTotal,
+      baseCalculoIcms: baseIcms,
+      aliquotaIcms,
+      valorIcmsCreditado: icmsCreditado,
+      isentasOuNaoTributadas: 0,
+      outras: 0,
+      statusManifestacao: n.statusManifestacao || 'Aguardando Aceite',
+    };
+  });
+
+  // Gera formato CSV para contabilidade
+  const cabecalhoCsv = 'Ordem;Data;Chave de Acesso;Numero;Serie;Emitente;CNPJ;UF;CFOP;Valor Contabil;Base ICMS;Aliq ICMS (%);ICMS Creditado;Status MDE';
+  const linhasCsv = itensLivro.map((it) => 
+    `${it.ordem};${it.dataEntrada};${it.chaveAcesso};${it.numero};${it.serie};${it.emitenteRazao};${it.emitenteCnpj};${it.emitenteUf};${it.cfop};${it.valorContabil.toFixed(2)};${it.baseCalculoIcms.toFixed(2)};${it.aliquotaIcms.toFixed(2)};${it.valorIcmsCreditado.toFixed(2)};${it.statusManifestacao}`
+  );
+  const conteudoCsv = [cabecalhoCsv, ...linhasCsv].join('\r\n');
+
+  return {
+    sucesso: true,
+    periodo: { dataInicio, dataFim },
+    totalDocumentos: itensLivro.length,
+    totalValorContabil: Number(totalValorContabil.toFixed(2)),
+    totalBaseIcms: Number(totalBaseIcms.toFixed(2)),
+    totalIcmsCreditado: Number(totalIcmsCreditado.toFixed(2)),
+    itens: itensLivro,
+    conteudoCsv,
+  };
+}
