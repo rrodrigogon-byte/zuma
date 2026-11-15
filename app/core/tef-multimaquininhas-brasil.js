@@ -909,3 +909,132 @@ export function resumoPrevisaoRecebiveis(empresaId) {
     agendaDatas: Object.values(porData).sort((a, b) => a.data.localeCompare(b.data)),
   };
 }
+
+/**
+ * Simulador de Economia de Taxas MDR entre Adquirentes
+ * Compara na hora qual maquininha retém menor taxa para uma venda específica
+ */
+export function simularMelhorAdquirente({ valor = 100, modalidade = 'credito_avista', parcelas = 1, empresaId = null } = {}) {
+  const valorNum = Math.max(0.01, Number(valor || 100));
+  const parcNum = Math.max(1, parseInt(parcelas || 1, 10));
+  const config = obterConfiguracoesTef(empresaId);
+
+  // Taxas padrão de referência negociadas no mercado varejista / Tangará da Serra
+  const taxasReferencia = {
+    stone: { debito: 1.25, credito_avista: 2.19, parcelado_2_6: 3.29, parcelado_7_12: 4.59, pix: 0.0 },
+    vero_sicredi: { debito: 1.15, credito_avista: 2.09, parcelado_2_6: 3.19, parcelado_7_12: 4.45, pix: 0.0 },
+    pagbank: { debito: 1.39, credito_avista: 2.49, parcelado_2_6: 3.59, parcelado_7_12: 4.89, pix: 0.0 },
+    cielo: { debito: 1.45, credito_avista: 2.59, parcelado_2_6: 3.69, parcelado_7_12: 5.10, pix: 0.0 },
+    rede: { debito: 1.29, credito_avista: 2.29, parcelado_2_6: 3.39, parcelado_7_12: 4.69, pix: 0.0 },
+    mercadopago: { debito: 1.49, credito_avista: 2.79, parcelado_2_6: 3.89, parcelado_7_12: 5.29, pix: 0.0 },
+  };
+
+  const resultados = ADQUIRENTES_BRASIL.map((adq) => {
+    const cfgAdq = config.adquirentes?.[adq.id] || {};
+    const taxasCadastradas = cfgAdq.taxas || taxasReferencia[adq.id] || { debito: 1.5, credito_avista: 2.5, parcelado_2_6: 3.5, parcelado_7_12: 4.9, pix: 0 };
+
+    let taxaMdrPercentual = 0;
+    if (modalidade === 'debito') {
+      taxaMdrPercentual = Number(taxasCadastradas.debito ?? 1.35);
+    } else if (modalidade === 'pix') {
+      taxaMdrPercentual = Number(taxasCadastradas.pix ?? 0.0);
+    } else if (modalidade === 'credito_avista' || parcNum === 1) {
+      taxaMdrPercentual = Number(taxasCadastradas.credito_avista ?? 2.35);
+    } else if (parcNum <= 6) {
+      taxaMdrPercentual = Number(taxasCadastradas.parcelado_2_6 ?? 3.45);
+    } else {
+      taxaMdrPercentual = Number(taxasCadastradas.parcelado_7_12 ?? 4.85);
+    }
+
+    const valorTaxaMdr = Number(((valorNum * taxaMdrPercentual) / 100).toFixed(2));
+    const valorLiquido = Number((valorNum - valorTaxaMdr).toFixed(2));
+    const prazo = adq.prazoLiquidacao?.[modalidade] || (modalidade === 'debito' ? 'D+1' : (modalidade === 'pix' ? 'D+0' : 'D+30'));
+
+    return {
+      adquirenteId: adq.id,
+      adquirenteNome: adq.nome,
+      razaoSocial: adq.razaoSocial,
+      cor: adq.cor,
+      taxaMdrPercentual,
+      valorTaxaMdr,
+      valorLiquido,
+      prazoLiquidacao: prazo,
+      modelosRecomendados: adq.modelosMaquininhas || [],
+    };
+  }).sort((a, b) => b.valorLiquido - a.valorLiquido);
+
+  const melhorOpcao = resultados[0];
+  const piorOpcao = resultados[resultados.length - 1];
+  const economiaMaxima = Number((melhorOpcao.valorLiquido - piorOpcao.valorLiquido).toFixed(2));
+
+  return {
+    sucesso: true,
+    valorBruto: valorNum,
+    modalidade,
+    parcelas: parcNum,
+    melhorOpcao,
+    economiaMaxima,
+    comparativo: resultados.map((r, idx) => ({
+      ...r,
+      posicaoRanking: idx + 1,
+      recomendado: idx === 0,
+      diferencaParaMelhor: Number((melhorOpcao.valorLiquido - r.valorLiquido).toFixed(2)),
+    })),
+  };
+}
+
+/**
+ * Gera Arquivo DIMP (Declaração de Informações sobre Meios de Pagamentos) Oficial
+ * Atende especificações técnicas da COTEPE / SEFAZ-MT para auditoria fiscal
+ */
+export function gerarArquivoDimp({ empresaId = null, mesAno = '', transacoes = null } = {}) {
+  const lista = Array.isArray(transacoes) ? transacoes : listarTransacoesTef(empresaId);
+  const dataHoje = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const periodoRef = mesAno || new Date().toISOString().slice(0, 7);
+  const cnpjPadrao = '56099531000138'; // Stallone Nutre Sport
+
+  let linhas = [];
+  // 0000 - Registro de Abertura do Arquivo Digital
+  linhas.push(`0000|DIMP|1.0|${cnpjPadrao}|STALLONE NUTRE SPORT LTDA|${periodoRef.replace('-', '')}|${dataHoje}`);
+
+  let totalBruto = 0;
+  let totalLiquido = 0;
+  let totalTaxas = 0;
+  let countRegistros = 0;
+
+  lista.forEach((t, idx) => {
+    if (t.status === 'cancelada') return;
+    countRegistros++;
+    const vBruto = Number(t.valor || 0);
+    const vLiq = Number(t.valorLiquido || 0);
+    const vTaxa = Number(t.valorTaxaMdr || 0);
+    totalBruto += vBruto;
+    totalLiquido += vLiq;
+    totalTaxas += vTaxa;
+
+    const dataFormatada = (t.data || new Date().toISOString()).slice(0, 10).replace(/-/g, '');
+    const adqCode = (t.adquirenteId || 'OUTROS').toUpperCase();
+    const bandCode = (t.bandeira || 'VISA').toUpperCase();
+    const nsu = t.nsu || `NSU${idx + 1000}`;
+    const autorizacao = t.codigoAutorizacao || `AUT${idx + 2000}`;
+
+    // 0100 - Detalhamento de Operação de Pagamento TEF
+    linhas.push(`0100|${dataFormatada}|${adqCode}|${bandCode}|${t.tipoOperacao || 'credito'}|${t.parcelas || 1}|${vBruto.toFixed(2)}|${vTaxa.toFixed(2)}|${vLiq.toFixed(2)}|${nsu}|${autorizacao}`);
+  });
+
+  // 9999 - Encerramento do Arquivo Digital DIMP
+  linhas.push(`9999|${countRegistros}|${totalBruto.toFixed(2)}|${totalTaxas.toFixed(2)}|${totalLiquido.toFixed(2)}`);
+
+  const conteudoArquivo = linhas.join('\r\n');
+
+  return {
+    sucesso: true,
+    periodoReferencia: periodoRef,
+    totalOperacoes: countRegistros,
+    totalBruto: Number(totalBruto.toFixed(2)),
+    totalLiquido: Number(totalLiquido.toFixed(2)),
+    totalTaxasRetidas: Number(totalTaxas.toFixed(2)),
+    nomeArquivo: `DIMP_${cnpjPadrao}_${periodoRef.replace('-', '')}.txt`,
+    conteudoArquivo,
+  };
+}

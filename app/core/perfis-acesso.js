@@ -41,7 +41,7 @@ export function perfilDoUsuario(usuario = {}) {
   const papel = String(usuario.role || '').trim().toLowerCase()
   if (PAPEIS_ADMIN.has(papel)) return 'admin'
   if (papel === 'operador') return 'operador'
-  if (papel === 'profissional') return 'profissional'
+  if (papel === 'profissional' || papel === 'barbeiro' || papel === 'barber') return 'profissional'
   return null
 }
 

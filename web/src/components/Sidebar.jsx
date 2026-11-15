@@ -414,6 +414,8 @@ const NAV_STALLONE_GROUPS = [
     label: 'Hoje',
     items: [
       { to: '/admin/ecommerce?tab=overview', icon: '◔', label: 'Painel da loja' },
+      { to: '/admin/stallone-club', icon: '👑', label: 'Stallone VIP Club (Assinaturas)' },
+      { to: '/admin/conciliacao-tef', icon: '💳', label: 'TEF Multi-Maquininhas' },
       { to: '/admin/inteligencia-vendas', icon: '🚀', label: 'Como Vender Mais com IA' },
       { to: '/loja-atendimento', icon: '⌂', label: 'Pedidos para separar' },
       { to: '/admin/ecommerce?tab=orders', icon: '◧', label: 'Pedidos e entregas' },
@@ -459,6 +461,8 @@ const NAV_STALLONE_GROUPS = [
     label: 'Fiscal',
     items: [
       { to: '/admin/notas', icon: '🧾', label: 'Notas fiscais' },
+      { to: '/admin/dfe-inbound', icon: '📥', label: 'DF-e Inbound MDE (Aceite NFe)' },
+      { to: '/admin/conciliacao-tef', icon: '💳', label: 'Conciliação TEF & DIMP' },
       { to: '/admin/fiscal/config', icon: '⚙️', label: 'Configuração fiscal' },
       { to: '/admin/fiscal/classificacao', icon: '🏷️', label: 'Classificação fiscal (NCM)' },
     ],

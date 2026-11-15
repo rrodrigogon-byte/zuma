@@ -38,8 +38,14 @@ test('histórico completo: cliente, T-Rex e equipe em ordem, telefone mascarado'
 test('atendente só responde com a conversa na equipe e nunca na de outro atendente', async () => {
   const o = originals();
   try {
-    db.queryRead = async () => ({ rows: [{ id: S, status: 'ativo', telefone: '5565999990001', canal_id: C, configuracao: {} }] });
-    await assert.rejects(() => sendWhatsappAiStaffMessage(ctx(), S, { texto: 'oi' }), { code: 'WHATSAPP_AI_SESSION_NOT_WITH_STAFF' });
+    db.transaction = async (fn) => fn({
+      query: async (sql) => {
+        if (/UPDATE whatsapp_ai_sessions/.test(sql)) return { rows: [{ id: S, status: 'humano', assigned_to: U }] };
+        if (/SELECT id, status/.test(sql)) return { rows: [{ id: S, status: 'ativo', assigned_to: null }] };
+        return { rows: [] };
+      }
+    });
+    db.query = async () => ({ rows: [{ id: 'm-new', criado_em: new Date().toISOString() }] });
     db.queryRead = async () => ({ rows: [{ id: S, status: 'humano', assigned_to: C, telefone: '5565999990001', canal_id: C, configuracao: {} }] });
     await assert.rejects(() => sendWhatsappAiStaffMessage(ctx(), S, { texto: 'oi' }), { code: 'WHATSAPP_AI_SESSION_CONFLICT' });
     await assert.rejects(() => sendWhatsappAiStaffMessage(ctx(), S, { texto: '   ' }), { code: 'WHATSAPP_AI_EMPTY_MESSAGE' });

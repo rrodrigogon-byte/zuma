@@ -129,6 +129,7 @@ const MatrizTributariaPage = lazy(() => import('./pages/admin/MatrizTributariaPa
 const DreEbitdaPage = lazy(() => import('./pages/admin/DreEbitdaPage'))
 const ConciliacaoTefPage = lazy(() => import('./pages/admin/ConciliacaoTefPage'))
 const TesourariaCofrePage = lazy(() => import('./pages/admin/TesourariaCofrePage'))
+const StalloneClubAdmin = lazy(() => import('./pages/admin/stallone/StalloneClubAdmin'))
 const ModificadoresCombos = lazy(() => import('./pages/admin/ModificadoresCombos'))
 const Mesas      = lazy(() => import('./pages/admin/Mesas'))
 const ReservasFilas = lazy(() => import('./pages/admin/ReservasFilas'))
@@ -375,6 +376,8 @@ export default function App() {
           <Route path="/admin/matriz-tributaria" element={<Layout><MatrizTributariaPage /></Layout>} />
           <Route path="/admin/conciliacao-tef" element={<Layout><ConciliacaoTefPage /></Layout>} />
           <Route path="/admin/tef" element={<Navigate to="/admin/conciliacao-tef" replace />} />
+          <Route path="/admin/stallone-club" element={<Layout><StalloneClubAdmin /></Layout>} />
+          <Route path="/admin/clube-stallone" element={<Navigate to="/admin/stallone-club" replace />} />
           <Route path="/admin/dfe-inbound" element={<Layout><Fiscal abaInicial="mde" /></Layout>} />
           <Route path="/admin/mde" element={<Layout><Fiscal abaInicial="mde" /></Layout>} />
           <Route path="/admin/tesouraria" element={<Layout><TesourariaCofrePage /></Layout>} />

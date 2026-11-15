@@ -26,7 +26,11 @@ test('Privacidade do Barbeiro: painelBarbeiro mascara contatos para o barbeiro e
   assert.ok(bruno, 'Bruno deve existir');
 
   const srv = barbeariaErpKytto.listarServicos(empId)[0] || barbeariaErpKytto.criarServico(empId, { nome: 'Corte Barba', preco: 60, duracaoMinutos: 30 });
-  const hoje = new Date().toISOString().slice(0, 10);
+  const dataRef = new Date();
+  while (bruno.diasTrabalho && !bruno.diasTrabalho.includes(dataRef.getDay())) {
+    dataRef.setDate(dataRef.getDate() + 1);
+  }
+  const hoje = dataRef.toISOString().slice(0, 10);
 
   // Cria um agendamento com telefone real
   const ag = barbeariaErpKytto.criarAgendamento(empId, {

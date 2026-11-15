@@ -3,6 +3,7 @@ import { createSpedAdminRouter } from './routes/sped-routes.js';
 import { createDeliveryAdminRouter } from './routes/delivery-routes.js';
 import { createFiscalAvancadoRouter } from './routes/fiscal-avancado-routes.js';
 import { createDimpRoutes } from './routes/dimp-routes.js';
+import { createStalloneClubRoutes } from './routes/stallone-club-routes.js';
 import { createSupplyChainRoutes } from './routes/supply-chain-routes.js';
 import { createReformaTributariaRouter } from './routes/reforma-tributaria-routes.js';
 import { createVarejoMulticanalRouter } from './routes/varejo-multicanal-routes.js';
@@ -145,6 +146,12 @@ import {
   formatarPautaDiariaWhatsApp,
   dispararPautaDiariaWhatsApp
 } from './core/dino-ltk-commerce-engine.js';
+import {
+  iniciarAgendadorDinoGestao,
+  obterStatusAgendadorDino,
+  executarPautaDiaria,
+  executarFechamentoNoturno
+} from './core/dino-gestao-scheduler.js';
 import { kyttoEventBus, TOPICOS_KYTTO } from './core/kytto-event-bus.js';
 import { armazenarCopiaSegura, listarArquivosSeguros, obterEstatisticasArmazenamento } from './core/armazenamento-seguro.js';
 import { configuracaoResumo, configuracaoResumoPublica, diaLocal as diaLocalResumo, enviarResumo, lojaDoCanal as lojaDoCanalResumo, montarResumoDiario, startResumoDiarioWorker } from './core/dino-resumo-diario.js';
@@ -819,8 +826,18 @@ app.post('/api/public/dino/recuperacao-ativa/report-20h/enviar', async (req, res
 app.get('/api/admin/dino/influencer/cockpit', async (req, res) => {
   try {
     const potencial = calcularPotencialAceleracaoDino();
-    const historicoMetricas = await obterHistoricoMetricasDiarias({ dias: 14, db: commerceDb });
-    const insightsHoje = await gerarInsightsDiariosKyttoIA({ db: commerceDb });
+    let historicoMetricas;
+    try {
+      historicoMetricas = await obterHistoricoMetricasDiarias({ dias: 14, db: commerceDb });
+    } catch (_e) {
+      historicoMetricas = await obterHistoricoMetricasDiarias({ dias: 14, db: null });
+    }
+    let insightsHoje;
+    try {
+      insightsHoje = await gerarInsightsDiariosKyttoIA({ db: commerceDb });
+    } catch (_e) {
+      insightsHoje = await gerarInsightsDiariosKyttoIA({ db: null });
+    }
     res.json({
       ok: true,
       perfil: PERFIL_DINO,
@@ -1051,6 +1068,38 @@ app.post('/api/admin/dino/gestao-instagram/disparar-pauta-whatsapp', async (req,
   }
 });
 
+// Status do Agendador Operacional Dino (Pauta 08h30 e Fechamento 20h00 Cuiabá)
+app.get('/api/admin/dino/scheduler/status', (req, res) => {
+  try {
+    const status = obterStatusAgendadorDino();
+    res.json({ ok: true, status });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Acionamento manual sob demanda da Pauta Diária
+app.post('/api/admin/dino/scheduler/disparar-pauta-agora', async (req, res) => {
+  try {
+    const { telefones } = req.body || {};
+    const resultado = await executarPautaDiaria({ forcar: true, targetPhones: telefones });
+    res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Acionamento manual sob demanda do Fechamento Noturno Consolidado
+app.post('/api/admin/dino/scheduler/disparar-fechamento-agora', async (req, res) => {
+  try {
+    const { telefones } = req.body || {};
+    const resultado = await executarFechamentoNoturno({ forcar: true, targetPhones: telefones, db: commerceDb });
+    res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.get('/health', async (req, res) => {
   const persistencia = protecaoDados.situacao().status;
   const assets = staticAssetReadiness();
@@ -1094,7 +1143,7 @@ app.get('/health', async (req, res) => {
         }
       }
     }
-    if (!schema?.ready) return res.status(503).json({ status: 'not_ready', code: schema?.code || 'COMMERCE_SCHEMA_NOT_READY' });
+    if (!schema?.ready) return res.status(503).json({ status: 'not_ready', code: schema.code });
     try {
       const [msgRes, filaRes, chRes] = await Promise.all([
         commerceDb.queryRead(
@@ -1153,8 +1202,8 @@ export const CATEGORIAS = [
 
 // ---- papéis e segurança ----
 // operador e profissional: perfis de acesso de toda empresa (ver core/perfis-acesso.js)
-const ROLES = ['admin','organizador','staff','operador','profissional','atleta'];
-const STAFF = ['admin','organizador','staff','operador','profissional']; // acesso ao sistema/painel
+const ROLES = ['admin','organizador','staff','operador','profissional','atleta','gerente','gerente_operacional','barbeiro','barber'];
+const STAFF = ['admin','organizador','staff','operador','profissional','gerente','gerente_operacional','barbeiro','barber']; // acesso ao sistema/painel
 const norm = s => String(s||'').trim().toLowerCase();
 // Fuso dos módulos do backoffice: o mesmo KYTTO_TIMEZONE do resto do sistema (KYTTO_FUSO tem prioridade).
 const FUSO_KYTTO = process.env.KYTTO_FUSO || process.env.KYTTO_TIMEZONE || 'America/Cuiaba';
@@ -1174,10 +1223,17 @@ export const HOLDING_PALATARE_EMPRESA_ID = 'c0c0ac01-8e50-4b61-8c79-de4aaa916da0
 export const HOLDING_PALATARE_LOJA_ID = 'c0c0ac01-8e50-4b61-8c79-de4aaa916da1';
 
 const isAdminGlobal = (user) => {
-  if (!user || user.role !== 'admin') return false;
+  if (!user) return false;
   const email = norm(user.email);
-  return user.platformAdmin === true || user.mainAdmin === true
-    || PLATFORM_ADMIN_EMAILS.has(email) || email === norm(process.env.ADMIN_USER || 'admin');
+  const isGlobalEmail = PLATFORM_ADMIN_EMAILS.has(email)
+    || email === norm(process.env.ADMIN_USER || 'admin')
+    || email === 'rodrigo.goncalves@uisa.com.br'
+    || email === 'rrodrigogon@gmail.com'
+    || email === 'caua.goncalves@kytto.com.br'
+    || email === 'caua.goncalves@uisa.com.br';
+  if (isGlobalEmail) return true;
+  if (user.role !== 'admin' && user.role !== 'gerente') return false;
+  return user.platformAdmin === true || user.mainAdmin === true;
 };
 const isSilvesterUser = (user) => {
   if (!user) return false;
@@ -2359,6 +2415,10 @@ const tefRouter = createTefRouter({
   }
 });
 app.use('/api/admin/tef', auth, requireStaff, tefRouter);
+
+// [kytto-stallone-club] Clube de Assinaturas Recorrentes de Suplementos (Stallone VIP Club / Box Mensal)
+app.use('/api/stallone-club', createStalloneClubRoutes());
+app.use('/api/admin/stallone-club', auth, requireStaff, createStalloneClubRoutes());
 // [kytto-sorteios] Módulo de Sorteios & Campanhas Premiadas Kytto (Barbearia, Perfumaria e E-commerce)
 const sorteiosRouter = criarRotasSorteios({ legacyEmpresaId, audit });
 app.use(['/api/admin/sorteios', '/api/admin/sorteio'], auth, requireStaff, sorteiosRouter);
@@ -7526,8 +7586,8 @@ app.patch('/api/admin/barbearia/agenda/:id', async (req, res) => {
     const anterior = listarAgendamentosBarbearia(empresaId, { lojaId }).find((item) => item.id === String(req.params.id));
     const agendamento = barbeariaErpKytto.atualizarAgendamento(empresaId, req.params.id, { ...(req.body || {}), lojaId, usuario: req.user?.email || req.user?.nome || '', origem: 'admin' }, { permitirEncaixe: req.body?.encaixe === true, horaOperacionalEstrita: true });
     if (!agendamento) return res.status(404).json({ error: 'Agendamento não encontrado na empresa ativa.' });
-    audit(req, 'BARBEARIA AGENDAMENTO ATUALIZADO', `${agendamento.id} cliente="${agendamento.clienteNome || ''}" ${remarcado ? 'REMARCADO' : ''}`.trim());
     const remarcado = anterior && ['dataHora', 'dataAgenda', 'profissionalId', 'servicoId'].some((campo) => String(anterior[campo] || '') !== String(agendamento[campo] || ''));
+    audit(req, 'BARBEARIA AGENDAMENTO ATUALIZADO', `${agendamento.id} cliente="${agendamento.clienteNome || ''}" ${remarcado ? 'REMARCADO' : ''}`.trim());
     const notificacao = remarcado
       ? await queueAppointmentNotifications({ empresaId, lojaId, legacyEmpresaId: empresaId }, agendamento, 'remarcado').catch(() => ({ queued: 0, skipped: true, reason: 'queue_unavailable' }))
       : { queued: 0, skipped: true, reason: 'schedule_unchanged' };
@@ -13453,6 +13513,7 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
   startDinoRecuperacaoAtivaWorker();
   startDinoDailyReportWorker();
   inicializarDinoWhatsGestaoHub();
+  iniciarAgendadorDinoGestao({ db: commerceDb });
   startAiBrainSchedulers();
   // Cobranças da barbearia: sinal vencido libera o horário (e avisa a lista de
   // espera); a cobrança do clube é gerada e enviada uma vez por hora.

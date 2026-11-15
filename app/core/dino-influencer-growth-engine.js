@@ -7,7 +7,7 @@
 export const PERFIL_DINO = {
   handle: '@odinovisagista',
   url: 'https://www.instagram.com/odinovisagista',
-  nome: 'Guilherme Cunha (Dino Visagista)',
+  nome: 'Dino Visagista (Criador & Especialista)',
   localizacao: 'Tangará da Serra - MT',
   regiaoAtendida: ['Tangará da Serra', 'Campo Novo do Parecis', 'Barra do Bugres', 'Nova Olímpia', 'Arenápolis', 'Denise', 'Cuiabá'],
   metricasSocialBlade: {

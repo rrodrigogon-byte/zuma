@@ -165,6 +165,50 @@ export default function MdeTab({ toast }) {
     downloadCsv(`dfe_inbound_stallone_${new Date().toISOString().slice(0, 10)}.csv`, rows)
   }
 
+  const baixarLivroEntradas = async () => {
+    try {
+      const res = await api.get('/api/admin/fiscal-avancado/mde/livro-entradas')
+      if (res?.sucesso && res?.livro) {
+        downloadCsv(`livro_registro_entradas_stallone_${new Date().toISOString().slice(0, 10)}.csv`, res.livro)
+        if (toast) toast('Livro de Registro de Entradas gerado com sucesso!', 'success')
+      } else {
+        if (toast) toast('Nenhum dado fiscal para exportar no período.', 'info')
+      }
+    } catch (err) {
+      if (toast) toast('Erro ao gerar Livro de Entradas: ' + err.message, 'danger')
+    }
+  }
+
+  const manifestarEmLote = async () => {
+    const pendentes = notas.filter(n => n.statusEntrada !== 'confirmada_apta_para_estoque')
+    if (pendentes.length === 0) {
+      if (toast) toast('Não há notas pendentes de manifestação no momento.', 'info')
+      return
+    }
+    if (!window.confirm(`Confirma o aceite (Confirmação da Operação 210200) em lote de ${pendentes.length} notas fiscais? Isso escriturará o estoque, contas a pagar e fiscal automaticamente.`)) {
+      return
+    }
+    setCarregando(true)
+    try {
+      const chaves = pendentes.map(n => n.chaveAcesso)
+      const res = await api.post('/api/admin/fiscal-avancado/mde/manifestar-lote', {
+        chaves,
+        tipoEvento: '210200',
+        justificativa: 'Aceite de operação automatizado via Kytto ERP PRD'
+      })
+      if (res?.sucesso) {
+        if (toast) toast(`Lote processado! ${res.totalSucesso} notas confirmadas e escrituradas no ERP.`, 'success')
+        await carregarNotas()
+      } else {
+        if (toast) toast(res?.erro || 'Erro ao processar lote', 'danger')
+      }
+    } catch (err) {
+      if (toast) toast('Erro na manifestação em lote: ' + err.message, 'danger')
+    } finally {
+      setCarregando(false)
+    }
+  }
+
   // Filtragem e busca
   const notasFiltradas = useMemo(() => {
     return notas.filter(n => {
@@ -221,6 +265,19 @@ export default function MdeTab({ toast }) {
               style={{ background: '#f8fafc', border: '1px solid #cbd5e1', padding: '8px 14px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#334155' }}
             >
               📊 Exportar CSV
+            </button>
+            <button
+              onClick={baixarLivroEntradas}
+              style={{ background: '#f8fafc', border: '1px solid #0284c7', padding: '8px 14px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#0369a1' }}
+            >
+              📖 Livro de Entradas
+            </button>
+            <button
+              onClick={manifestarEmLote}
+              disabled={carregando || notasAguardando.length === 0}
+              style={{ background: '#ea580c', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: 6, cursor: notasAguardando.length === 0 ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, opacity: notasAguardando.length === 0 ? 0.6 : 1 }}
+            >
+              ⚡ Aceite em Lote ({notasAguardando.length})
             </button>
             <button
               onClick={sincronizarSefaz}

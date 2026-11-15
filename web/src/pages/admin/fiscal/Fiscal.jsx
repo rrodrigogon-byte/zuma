@@ -16,6 +16,7 @@ import ReformaTributariaTab from './ReformaTributariaTab'
 import CteMdfeTab from './CteMdfeTab'
 import SpedFiscalBlocoKPanel from './SpedFiscalBlocoKPanel'
 import MatrizTributariaPanel from './MatrizTributariaPanel'
+import EmissaoNotasTab from './EmissaoNotasTab'
 
 // Fiscal da empresa: emitente, certificado A1, tabela IBPT, classificação dos produtos, documentos
 // (NFC-e, NF-e, NFS-e, com DANFE e contingência offline da NFC-e) e inutilização de numeração.
@@ -37,7 +38,8 @@ const ABAS = [
   ['boletos', 'Boletos & Pix Híbrido'],
   ['dimp_auditoria', 'Auditoria DIMP vs Fiscal'],
   ['reforma_tributaria', 'Reforma Tributária (IBS/CBS)'],
-  ['cte_mdfe', 'CT-e (57) & MDF-e (58)']
+  ['cte_mdfe', 'CT-e (57) & MDF-e (58)'],
+  ['emissao_direta', '⚡ Emissão de Notas (NFC-e / NF-e)']
 ]
 const STATUS = {
   rascunho: ['Rascunho', 'muted'], enviando: ['Enviando', 'info'], autorizado: ['Autorizado', 'success'], rejeitado: ['Rejeitado', 'danger'],
@@ -95,6 +97,7 @@ export default function Fiscal({ abaInicial = 'situacao' }) {
     {aba === 'dimp_auditoria' && <DimpAuditoriaTab toast={toast} />}
     {aba === 'reforma_tributaria' && <ReformaTributariaTab toast={toast} />}
     {aba === 'cte_mdfe' && <CteMdfeTab toast={toast} />}
+    {aba === 'emissao_direta' && <EmissaoNotasTab toast={toast} />}
   </div>
 }
 

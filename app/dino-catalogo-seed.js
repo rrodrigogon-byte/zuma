@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 /**
  * SEED E SINCRONIZAÇÃO AUTOMÁTICA DO CATÁLOGO DE SERVIÇOS & PERFUMARIA — BARBEARIA DINO
  * Garante que serviços (Corte, Barba, Combo) e produtos de revenda (Pomadas, Óleos, Perfumes)
@@ -6,6 +7,16 @@
 
 import { estadoEmpresa } from './barbearia-erp-kytto.js';
 import { db as getDbRoot, save } from './db.js';
+
+
+export function idParaUuid(id) {
+  if (!id) return '00000000-0000-4000-8000-000000000000';
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(id))) {
+    return String(id).toLowerCase();
+  }
+  const hash = crypto.createHash('md5').update(String(id)).digest('hex');
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+}
 
 export const DINO_EMPRESA_CANONICA = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
 
@@ -257,7 +268,7 @@ export function provisionarCatalogoDino({
                preco_venda = EXCLUDED.preco_venda,
                preco_custo = EXCLUDED.preco_custo,
                ativo = true;`,
-            [p.id, empresaId, p.nome, p.precoVenda, p.custoMedio, p.codigoInterno]
+            [idParaUuid(p.id), empresaId, p.nome, p.precoVenda, p.custoMedio, p.id || p.codigoInterno]
           ).catch(() => null);
         }
       } catch (e) {
