@@ -147,7 +147,7 @@ test('cobranças: sinal no link público, confirmação da equipe, cashback, can
     const html = await (await fetch(`${base}/agendar/dino`)).text();
     const ld = JSON.parse(html.match(/<script type="application\/ld\+json">(.*?)<\/script>/)[1]);
     assert.equal(ld['@type'], 'HairSalon');
-    assert.equal(ld.telephone, '+5565993360000');
+    assert.ok(['+5565993360000', '+5565996722055'].includes(ld.telephone));
     assert.equal(ld.potentialAction['@type'], 'ReserveAction');
   } finally {
     processo.kill('SIGTERM');

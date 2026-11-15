@@ -1571,7 +1571,7 @@ export default function DinoInfluencerCockpit() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
               {(modeloGestao?.matrizRACI || [
                 {
-                  funcao: 'Dino (Guilherme Cunha) - Criador & Visagista',
+                  funcao: 'Dino Visagista - Criador & Especialista',
                   papel: 'Apresentador / Rosto da Marca',
                   responsabilidades: [
                     'Aprovação final das pautas semanais e roteiros',

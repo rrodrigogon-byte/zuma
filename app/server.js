@@ -1132,7 +1132,7 @@ app.get('/health', async (req, res) => {
         }
       }
     }
-    if (!schema?.ready) return res.status(503).json({ status: 'not_ready', code: schema?.code || 'COMMERCE_SCHEMA_NOT_READY' });
+    if (!schema?.ready) return res.status(503).json({ status: 'not_ready', code: schema.code });
     try {
       const [msgRes, filaRes, chRes] = await Promise.all([
         commerceDb.queryRead(
@@ -7564,8 +7564,8 @@ app.patch('/api/admin/barbearia/agenda/:id', async (req, res) => {
     const anterior = listarAgendamentosBarbearia(empresaId, { lojaId }).find((item) => item.id === String(req.params.id));
     const agendamento = barbeariaErpKytto.atualizarAgendamento(empresaId, req.params.id, { ...(req.body || {}), lojaId, usuario: req.user?.email || req.user?.nome || '', origem: 'admin' }, { permitirEncaixe: req.body?.encaixe === true, horaOperacionalEstrita: true });
     if (!agendamento) return res.status(404).json({ error: 'Agendamento não encontrado na empresa ativa.' });
-    audit(req, 'BARBEARIA AGENDAMENTO ATUALIZADO', `${agendamento.id} cliente="${agendamento.clienteNome || ''}" ${remarcado ? 'REMARCADO' : ''}`.trim());
     const remarcado = anterior && ['dataHora', 'dataAgenda', 'profissionalId', 'servicoId'].some((campo) => String(anterior[campo] || '') !== String(agendamento[campo] || ''));
+    audit(req, 'BARBEARIA AGENDAMENTO ATUALIZADO', `${agendamento.id} cliente="${agendamento.clienteNome || ''}" ${remarcado ? 'REMARCADO' : ''}`.trim());
     const notificacao = remarcado
       ? await queueAppointmentNotifications({ empresaId, lojaId, legacyEmpresaId: empresaId }, agendamento, 'remarcado').catch(() => ({ queued: 0, skipped: true, reason: 'queue_unavailable' }))
       : { queued: 0, skipped: true, reason: 'schedule_unchanged' };

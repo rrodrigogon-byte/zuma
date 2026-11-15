@@ -29,7 +29,7 @@ import {
 const PERFIL_DINO_DEFAULT = {
   handle: '@odinovisagista',
   url: 'https://www.instagram.com/odinovisagista',
-  nome: 'Guilherme Cunha (Dino Visagista)',
+  nome: 'Dino Visagista (Tangará da Serra)',
   localizacao: 'Tangará da Serra - MT',
   bio: 'Visagismo Masculino de Alta Performance & Perfumaria de Luxo e Árabes. Experiência olfativa na cadeira e entrega expressa para MT.'
 }
@@ -364,7 +364,7 @@ export default function DinoLTKStorefront() {
 
           {/* Nome, Handle e Badges */}
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center justify-center gap-2">
-            Guilherme Cunha
+            Dino Visagista
             <span className="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full font-medium">
               Dino Visagista 🦖
             </span>

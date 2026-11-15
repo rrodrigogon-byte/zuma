@@ -2092,7 +2092,7 @@ export async function confirmNextAppointment(context, userText = '') {
       const primeiroNome = context.customerName ? `, ${context.customerName.split(' ')[0]}` : '';
       const servicoComProf = serviceWithProfessional(jaConfirmadoLembrado.servico?.nome || 'Atendimento', jaConfirmadoLembrado.profissional?.nome || 'a equipe');
       return {
-        text: `Perfeito${primeiroNome}! Seu horário de ${servicoComProf}, ${quando}, está confirmado com sucesso. Aguardamos você na Dino Barbearia! 💈`,
+        text: `Tudo certo${primeiroNome}! Seu horário de ${servicoComProf}, ${quando}, já está 100% confirmado. Aguardamos você na Dino Barbearia! 💈`,
         kind: 'presence_confirmed',
       };
     }
@@ -2108,7 +2108,7 @@ export async function confirmNextAppointment(context, userText = '') {
       const primeiroNome = context.customerName ? `, ${context.customerName.split(' ')[0]}` : '';
       const servicoComProf = serviceWithProfessional(jaConfirmado.servico?.nome || 'Atendimento', jaConfirmado.profissional?.nome || 'a equipe');
       return {
-        text: `Perfeito${primeiroNome}! Seu horário de ${servicoComProf}, ${quando}, está confirmado com sucesso. Aguardamos você na Dino Barbearia! 💈`,
+        text: `Tudo certo${primeiroNome}! Seu horário de ${servicoComProf}, ${quando}, já está 100% confirmado. Aguardamos você na Dino Barbearia! 💈`,
         kind: 'presence_confirmed',
       };
     }
