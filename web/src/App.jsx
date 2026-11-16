@@ -466,6 +466,8 @@ export default function App() {
           <Route path="/admin/oficina"           element={<Layout><OficinaHubPage /></Layout>} />
           <Route path="/admin/omnichannel"      element={<Layout><CanaisFidelidade /></Layout>} />
           <Route path="/admin/pdv-erp"         element={<PDVUnificado />} />
+          <Route path="/admin/pdv-unificado"   element={<PDVUnificado />} />
+          <Route path="/admin/stallone/pdv"    element={<PDVUnificado />} />
         </Route>
 
         {/* Portal do Atleta */}
@@ -516,6 +518,10 @@ export default function App() {
         <Route path="/minha/:slug" element={<MinhaConta />} />
         <Route path="/barbeiro" element={<ModoBarbeiro />} />
         <Route path="/barbeiro/:slug" element={<ModoBarbeiro />} />
+        <Route path="/pdv-erp" element={<PDVUnificado />} />
+        <Route path="/pdv-unificado" element={<PDVUnificado />} />
+        <Route path="/stallone/pdv" element={<PDVUnificado />} />
+        <Route path="/pdv/stallone" element={<PDVUnificado />} />
         <Route path="/regulamento" element={<Layout marketing><Regulamento /></Layout>} />
         <Route path="/bracket"    element={<Layout><Bracket /></Layout>} />
         <Route path="/chaves"     element={<Layout><Bracket /></Layout>} />
