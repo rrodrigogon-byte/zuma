@@ -3426,11 +3426,10 @@ const [modalEntrada, setModalEntrada] = useState(false);
               <div>
                 <label style={{ fontSize: 12, fontWeight: 700, color: '#10b981' }}>Preço de Venda (R$) *</label>
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  type="text"
+                  inputMode="decimal"
                   required
-                  placeholder="Ex: 65.00"
+                  placeholder="Ex: 65,00"
                   value={formProduto.precoVenda}
                   onChange={(e) => setFormProduto({ ...formProduto, precoVenda: e.target.value })}
                   style={{ ...styles.input, width: '100%', marginTop: 4, fontWeight: 800, fontSize: 15, color: '#10b981' }}
@@ -3439,10 +3438,9 @@ const [modalEntrada, setModalEntrada] = useState(false);
               <div>
                 <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Custo Médio / Unitário (R$)</label>
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="Ex: 25.00"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="Ex: 25,00"
                   value={formProduto.custoUnitario}
                   onChange={(e) => setFormProduto({ ...formProduto, custoUnitario: e.target.value })}
                   style={{ ...styles.input, width: '100%', marginTop: 4 }}

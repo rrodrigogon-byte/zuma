@@ -12003,9 +12003,9 @@ export default function BarbeariaERP({ tabInicial } = {}) {
               <Field label="Preço de venda (R$) *">
                 <input
                   required
-                  type="number"
-                  min="0.01"
-                  step="0.01"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="Ex: 65,00"
                   value={formProdutoRevenda.precoVenda}
                   onChange={(event) =>
                     setFormProdutoRevenda((atual) => ({
@@ -12018,9 +12018,9 @@ export default function BarbeariaERP({ tabInicial } = {}) {
               </Field>
               <Field label="Custo unitário (R$)">
                 <input
-                  type="number"
-                  min="0"
-                  step="0.01"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="Ex: 25,00"
                   value={formProdutoRevenda.custoUnitario}
                   onChange={(event) =>
                     setFormProdutoRevenda((atual) => ({
