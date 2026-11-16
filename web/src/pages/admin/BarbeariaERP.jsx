@@ -3114,33 +3114,43 @@ export default function BarbeariaERP({ tabInicial } = {}) {
 
   async function salvarProdutoRevenda(event) {
     event.preventDefault();
+    const parseNum = (v, def = 0) => {
+      if (v === undefined || v === null || v === '') return def;
+      const n = Number(String(v).replace(/\s/g, '').replace('R$', '').replace(',', '.'));
+      return Number.isFinite(n) ? n : def;
+    };
     const corpo = {
       ...formProdutoRevenda,
-      precoVenda: Number(formProdutoRevenda.precoVenda),
-      custoUnitario: Number(formProdutoRevenda.custoUnitario || 0),
-      estoqueAtual: Number(formProdutoRevenda.estoqueAtual || 0),
-      estoqueMinimo: Number(formProdutoRevenda.estoqueMinimo || 0),
-      intervaloRecompraDias: Number(
-        formProdutoRevenda.intervaloRecompraDias ?? 30,
+      nome: formProdutoRevenda.nome?.trim(),
+      precoVenda: parseNum(formProdutoRevenda.precoVenda),
+      custoUnitario: parseNum(formProdutoRevenda.custoUnitario),
+      estoqueAtual: Math.max(0, Math.round(parseNum(formProdutoRevenda.estoqueAtual))),
+      estoqueMinimo: Math.max(0, Math.round(parseNum(formProdutoRevenda.estoqueMinimo))),
+      intervaloRecompraDias: Math.max(
+        0,
+        Math.min(3650, Math.round(parseNum(formProdutoRevenda.intervaloRecompraDias, 30))),
       ),
     };
+    if (!corpo.nome) return toast("O nome do produto é obrigatório.", "error");
+    if (corpo.precoVenda < 0) return toast("Informe um preço de venda válido.", "error");
+
     if (edicaoId) {
-      // Na edição o saldo não muda: entradas e saídas passam pelos movimentos, que guardam o histórico.
-      const { estoqueAtual, statusEstoque, ...semSaldo } = corpo;
       await executar(
         () =>
           api.patch(
             `/api/admin/barbearia/estoque-revenda/${edicaoId}`,
-            semSaldo,
+            corpo,
           ),
-        "Produto de revenda atualizado.",
+        "Produto de revenda atualizado com sucesso.",
       );
+      setEdicaoId(null);
       return;
     }
     await executar(
       () => api.post("/api/admin/barbearia/estoque-revenda", corpo),
-      "Produto de revenda cadastrado.",
+      "Produto de revenda cadastrado com sucesso.",
     );
+    setEdicaoId(null);
   }
 
   async function salvarPeriodicidadeProduto(produto) {
@@ -8196,7 +8206,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
               <button
                 type="button"
                 style={styles.secondary}
-                onClick={() => setModal(null)}
+                onClick={() => { setModal(null); setEdicaoId(null); }}
               >
                 Cancelar
               </button>
@@ -12024,7 +12034,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
               <Field
                 label={
                   edicaoId
-                    ? "Saldo atual (altere por Entrada/Saída)"
+                    ? "Saldo atual em estoque (editável)"
                     : "Estoque inicial"
                 }
               >
@@ -12032,7 +12042,6 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                   type="number"
                   min="0"
                   step="1"
-                  disabled={Boolean(edicaoId)}
                   value={formProdutoRevenda.estoqueAtual}
                   onChange={(event) =>
                     setFormProdutoRevenda((atual) => ({

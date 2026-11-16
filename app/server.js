@@ -9889,12 +9889,12 @@ app.patch('/api/admin/barbearia/assinaturas/:id/status', (req, res) => {
 
 app.get('/api/admin/barbearia/estoque-revenda', (req, res) => res.json({ ok: true, produtos: barbeariaErpKytto.listarProdutosRevenda(legacyEmpresaId(req), { incluirInativos: String(req.query?.incluirInativos) === 'true', lojaId: legacyLojaId(req) }) }));
 app.post('/api/admin/barbearia/estoque-revenda', (req, res) => {
-  try { res.status(201).json({ ok: true, produto: barbeariaErpKytto.criarProdutoRevenda(legacyEmpresaId(req), { ...(req.body || {}), lojaId: legacyLojaId(req) }) }); }
+  try { res.status(201).json({ ok: true, produto: barbeariaErpKytto.criarProdutoRevenda(legacyEmpresaId(req), { ...(req.body || {}), lojaId: req.body?.lojaId || legacyLojaId(req) }) }); }
   catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.patch('/api/admin/barbearia/estoque-revenda/:id', (req, res) => {
   try {
-    const produto = barbeariaErpKytto.atualizarProdutoRevenda(legacyEmpresaId(req), req.params.id, { ...(req.body || {}), lojaId: legacyLojaId(req) });
+    const produto = barbeariaErpKytto.atualizarProdutoRevenda(legacyEmpresaId(req), req.params.id, { ...(req.body || {}), lojaId: req.body?.lojaId || legacyLojaId(req) });
     if (!produto) return res.status(404).json({ error: 'Produto de revenda não encontrado na empresa ativa.' });
     res.json({ ok: true, produto });
   } catch (error) { res.status(400).json({ error: error.message }); }
@@ -13212,13 +13212,23 @@ app.use('/assets', (req, res) => {
     const basePrefix = lastHyphen > 0 ? nameWithoutExt.slice(0, lastHyphen) : nameWithoutExt;
     try {
       const files = fs.readdirSync(assetsDir);
-      const candidato = files
+      let candidato = files
         .filter(f => f.startsWith(`${basePrefix}-`) && f.endsWith(`.${ext}`))
         .sort((a, b) => {
           const sA = fs.statSync(path.join(assetsDir, a)).mtimeMs;
           const sB = fs.statSync(path.join(assetsDir, b)).mtimeMs;
           return sB - sA;
         })[0];
+      if (!candidato && basePrefix.includes('-')) {
+        const firstPrefix = basePrefix.split('-')[0];
+        candidato = files
+          .filter(f => f.startsWith(`${firstPrefix}-`) && f.endsWith(`.${ext}`))
+          .sort((a, b) => {
+            const sA = fs.statSync(path.join(assetsDir, a)).mtimeMs;
+            const sB = fs.statSync(path.join(assetsDir, b)).mtimeMs;
+            return sB - sA;
+          })[0];
+      }
       if (candidato) {
         const filePath = path.join(assetsDir, candidato);
         res.setHeader('Content-Type', ext === 'css' ? 'text/css; charset=utf-8' : 'application/javascript; charset=utf-8');
