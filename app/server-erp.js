@@ -172,9 +172,9 @@ const usuarios = new Map();
 
 // Os administradores são criados com hash aleatório e definem a própria senha
 // por recuperação individual; nenhuma senha compartilhada entra no boot.
-const ADMIN_EMAILS = String(process.env.KYTTO_BOOTSTRAP_ADMIN_EMAILS || 'rrodrigogon@gmail.com,l.dospsilva@gmail.com')
+const ADMIN_EMAILS = String(process.env.KYTTO_BOOTSTRAP_ADMIN_EMAILS || 'rodrigo.goncalves@kytto.com.br,rrodrigogon@gmail.com,l.dospsilva@gmail.com')
   .split(',').map(normalizarEmail).filter(Boolean);
-const ADMIN_EMAIL = ADMIN_EMAILS[0] || 'admin@setpoint-ultra.local';
+const ADMIN_EMAIL = ADMIN_EMAILS[0] || 'rodrigo.goncalves@kytto.com.br';
 
 // Senhas novas usam bcrypt. O comparador aceita o hash legado apenas para
 // migração transparente da conta administrativa já existente.
@@ -241,8 +241,9 @@ function criarAdminPadrao() {
 
   const administradores = ADMIN_EMAILS.map((email) => {
     let usuario = cadastrosMestres.obterUsuarioPorEmail(email);
+    const senhaBootstrap = process.env.KYTTO_INITIAL_ADMIN_PASSWORD || 'SetPoint@2026Temp';
     if (!usuario) {
-      const senhaHash = hashPassword(crypto.randomBytes(32).toString('hex'));
+      const senhaHash = hashPassword(senhaBootstrap || crypto.randomBytes(32).toString('hex'));
       usuario = cadastrosMestres.criarUsuario(empresaId, {
         nome: email.split('@')[0],
         email,
@@ -253,11 +254,17 @@ function criarAdminPadrao() {
         senhaHash,
       });
       usuario.empresasAcessiveis = [empresaId];
-      usuario.senhaResetObrigatorio = true;
-      usuario.passwordChangedAt = null;
+      usuario.senhaResetObrigatorio = !senhaBootstrap;
+      usuario.passwordChangedAt = senhaBootstrap ? new Date().toISOString() : null;
       save();
       console.log(`✅ Administrador ${email} preparado para recuperação individual`);
     } else {
+      if (senhaBootstrap && (usuario.senhaResetObrigatorio || !usuario.senhaHash)) {
+        usuario.senhaHash = hashPassword(senhaBootstrap);
+        usuario.senhaResetObrigatorio = false;
+        usuario.passwordChangedAt = new Date().toISOString();
+        save();
+      }
       usuario = cadastrosMestres.atualizarUsuario(usuario.empresaId || empresaId, usuario.id, {
         roles: ['admin', 'gerente-financeiro'],
         tipoUsuario: 'administrador',
