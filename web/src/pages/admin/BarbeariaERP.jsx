@@ -12031,6 +12031,22 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                   style={inputStyle}
                 />
               </Field>
+              {(() => {
+                const pv = Number(String(formProdutoRevenda.precoVenda || '').replace(',', '.'));
+                const cu = Number(String(formProdutoRevenda.custoUnitario || '').replace(',', '.'));
+                if (pv > 0) {
+                  const lucro = pv - cu;
+                  const margem = Math.round((lucro / pv) * 100);
+                  const cor = margem >= 50 ? '#10b981' : margem >= 25 ? '#0284c7' : margem >= 0 ? '#f59e0b' : '#ef4444';
+                  return (
+                    <div style={{ gridColumn: 'span 2', padding: '6px 12px', background: `${cor}15`, border: `1px solid ${cor}40`, borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+                      <span style={{ color: cor, fontWeight: 700 }}>Margem Estimada: {margem}%</span>
+                      <span style={{ color: 'var(--text)' }}>Lucro Bruto: R$ {lucro.toFixed(2).replace('.', ',')} / un</span>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
               <Field
                 label={
                   edicaoId

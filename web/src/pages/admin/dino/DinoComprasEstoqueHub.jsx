@@ -889,19 +889,28 @@ const [modalEntrada, setModalEntrada] = useState(false);
 
   // Exportar CSV
   function exportarCSV() {
-    const cabecalho = ['Produto', 'SKU', 'Categoria', 'Tipo', 'Saldo Atual', 'Estoque Minimo', 'Custo Unitario (R$)', 'Preco Venda (R$)', 'Valor Total (R$)', 'Status'];
-    const linhas = produtosFiltrados.map((p) => [
-      p.nome,
-      p.sku,
-      p.categoria,
-      p.tipo,
-      p.estoqueAtual,
-      p.estoqueMinimo,
-      p.custoUnitario.toFixed(2),
-      p.precoVenda.toFixed(2),
-      (p.estoqueAtual * p.custoUnitario).toFixed(2),
-      p.statusEstoque,
-    ]);
+    const cabecalho = ['Produto', 'SKU', 'Codigo de Barras / EAN', 'Categoria', 'Unidade', 'Saldo Atual', 'Estoque Minimo', 'Custo Unitario (R$)', 'Preco Venda (R$)', 'Lucro Unitario (R$)', 'Margem Bruta (%)', 'Valor Total Estoque (R$)', 'Status'];
+    const linhas = produtosFiltrados.map((p) => {
+      const cu = Number(p.custoUnitario || 0);
+      const pv = Number(p.precoVenda || 0);
+      const lucro = pv - cu;
+      const margem = pv > 0 ? ((lucro / pv) * 100).toFixed(1) : '0.0';
+      return [
+        p.nome,
+        p.sku || '',
+        p.codigoBarras || '',
+        p.categoria,
+        p.unidade || 'un',
+        p.estoqueAtual,
+        p.estoqueMinimo,
+        cu.toFixed(2),
+        pv.toFixed(2),
+        lucro.toFixed(2),
+        `${margem}%`,
+        (p.estoqueAtual * cu).toFixed(2),
+        p.statusEstoque,
+      ];
+    });
     const csvContent = [cabecalho, ...linhas].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -3447,6 +3456,22 @@ const [modalEntrada, setModalEntrada] = useState(false);
                 />
               </div>
             </div>
+            {(() => {
+              const pv = Number(String(formProduto.precoVenda || '').replace(',', '.'));
+              const cu = Number(String(formProduto.custoUnitario || '').replace(',', '.'));
+              if (pv > 0) {
+                const lucro = pv - cu;
+                const margem = Math.round((lucro / pv) * 100);
+                const cor = margem >= 50 ? '#10b981' : margem >= 25 ? '#0284c7' : margem >= 0 ? '#f59e0b' : '#ef4444';
+                return (
+                  <div style={{ padding: '8px 12px', background: `${cor}12`, border: `1px solid ${cor}35`, borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, marginTop: -4 }}>
+                    <span style={{ color: cor, fontWeight: 800 }}>⚡ Margem de Lucro: {margem}%</span>
+                    <span style={{ color: 'var(--text)', fontWeight: 600 }}>Lucro Bruto: R$ {lucro.toFixed(2).replace('.', ',')} / un</span>
+                  </div>
+                );
+              }
+              return null;
+            })()}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 700, color: '#0284c7' }}>Saldo Atual em Estoque</label>

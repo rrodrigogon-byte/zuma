@@ -344,7 +344,7 @@ export function SeletorItens({ servicos, produtosRevenda, planos, catalogoPlanos
         profissionalId: p.profissionalId || '',
       }))
     }
-    if (aba === 'produto') return filtrarCatalogo((produtosRevenda || []).filter((p) => p.ativo !== false), termo, ['nome', 'sku', 'ean', 'categoria']).map((p) => ({ tipo: 'produto', itemId: p.id, nome: p.nome, preco: Number(p.precoVenda || 0), detalhe: Number(p.estoqueAtual || 0) > 0 ? `${p.estoqueAtual} em estoque` : 'Estoque a confirmar (0 un)', estoque: Number(p.estoqueAtual || 0) }))
+    if (aba === 'produto') return filtrarCatalogo((produtosRevenda || []).filter((p) => p.ativo !== false), termo, ['nome', 'sku', 'ean', 'codigoBarras', 'categoria']).map((p) => ({ tipo: 'produto', itemId: p.id, nome: p.nome, preco: Number(p.precoVenda || 0), detalhe: Number(p.estoqueAtual || 0) > 0 ? `${p.estoqueAtual} em estoque` : 'Estoque a confirmar (0 un)', estoque: Number(p.estoqueAtual || 0) }))
     return loja.itens.map((p) => ({ tipo: 'loja', itemId: p.variantId, nome: p.nome, preco: p.preco, detalhe: `${p.disponivel} na loja${p.sku ? ` · ${p.sku}` : ''}`, estoque: p.disponivel, imagem: p.imagem, precoCheio: p.precoCheio }))
   }, [aba, termo, servicos, produtosRevenda, listaPlanos, loja.itens])
 
