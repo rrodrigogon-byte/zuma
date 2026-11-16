@@ -179,7 +179,102 @@ export default function DinoComprasEstoqueHub({
   const [fornecedoresMestres, setFornecedoresMestres] = useState([]);
 
   // Modais de Ação Rápida
-  const [modalEntrada, setModalEntrada] = useState(false);
+    // Gestão de Cadastro, Edição e Exclusão de Produtos
+  const [modalProdutoForm, setModalProdutoForm] = useState(false);
+  const [produtoEditando, setProdutoEditando] = useState(null);
+  const [formProduto, setFormProduto] = useState({
+    nome: '',
+    categoria: 'Modelador',
+    sku: '',
+    precoVenda: '',
+    custoUnitario: '',
+    estoqueAtual: '10',
+    estoqueMinimo: '5',
+    ativo: true,
+  });
+  const [modalExcluirProduto, setModalExcluirProduto] = useState(null);
+  const [excluindoPermanente, setExcluindoPermanente] = useState(true);
+
+  const abrirModalNovoProduto = () => {
+    setProdutoEditando(null);
+    setFormProduto({
+      nome: '',
+      categoria: 'Modelador',
+      sku: '',
+      precoVenda: '',
+      custoUnitario: '',
+      estoqueAtual: '10',
+      estoqueMinimo: '5',
+      ativo: true,
+    });
+    setModalProdutoForm(true);
+  };
+
+  const abrirModalEditarProduto = (prod) => {
+    setProdutoEditando(prod);
+    setFormProduto({
+      id: prod.id,
+      nome: prod.nome || '',
+      categoria: prod.categoria || 'Modelador',
+      sku: prod.sku || '',
+      precoVenda: prod.precoVenda !== undefined ? String(prod.precoVenda) : '',
+      custoUnitario: prod.custoUnitario !== undefined ? String(prod.custoUnitario) : '',
+      estoqueAtual: prod.estoqueAtual !== undefined ? String(prod.estoqueAtual) : '',
+      estoqueMinimo: prod.estoqueMinimo !== undefined ? String(prod.estoqueMinimo) : '5',
+      ativo: prod.ativo !== false,
+    });
+    setModalProdutoForm(true);
+  };
+
+  const salvarProdutoForm = async (e) => {
+    e?.preventDefault?.();
+    if (!formProduto.nome?.trim()) return toast('O nome do produto é obrigatório.', true);
+    const preco = Number(formProduto.precoVenda);
+    if (isNaN(preco) || preco < 0) return toast('Informe um preço de venda válido.', true);
+
+    const payload = {
+      nome: formProduto.nome.trim(),
+      categoria: formProduto.categoria || 'Geral',
+      sku: formProduto.sku?.trim() || '',
+      precoVenda: preco,
+      custoUnitario: Number(formProduto.custoUnitario || 0),
+      custoMedio: Number(formProduto.custoUnitario || 0),
+      estoqueMinimo: Math.max(0, Number(formProduto.estoqueMinimo || 0)),
+      estoqueAtual: Math.max(0, Number(formProduto.estoqueAtual || 0)),
+      ativo: formProduto.ativo !== false,
+    };
+
+    try {
+      if (produtoEditando?.id) {
+        await api.patch(`/api/admin/barbearia/estoque-revenda/${produtoEditando.id}`, payload);
+        toast(`Produto "${payload.nome}" atualizado com sucesso!`);
+      } else {
+        await api.post('/api/admin/barbearia/estoque-revenda', payload);
+        toast(`Produto "${payload.nome}" cadastrado com sucesso!`);
+      }
+      setModalProdutoForm(false);
+      carregarTudo();
+      onAtualizar?.();
+    } catch (err) {
+      toast(err.message || 'Erro ao salvar produto.', true);
+    }
+  };
+
+  const confirmarExclusaoProduto = async () => {
+    if (!modalExcluirProduto) return;
+    try {
+      const q = excluindoPermanente ? '?permanente=true' : '';
+      await api.delete(`/api/admin/barbearia/estoque-revenda/${modalExcluirProduto.id}${q}`);
+      toast(`Produto "${modalExcluirProduto.nome}" excluído do catálogo com sucesso.`);
+      setModalExcluirProduto(null);
+      carregarTudo();
+      onAtualizar?.();
+    } catch (err) {
+      toast(err.message || 'Erro ao excluir produto.', true);
+    }
+  };
+
+const [modalEntrada, setModalEntrada] = useState(false);
   const [formEntrada, setFormEntrada] = useState({ produtoId: '', qtd: '', custo: '', observacao: '' });
   const [modalOcorrencia, setModalOcorrencia] = useState(false);
   const [formOcorrencia, setFormOcorrencia] = useState({ tipo: 'perda', produtoId: '', qtd: '1', motivo: '', observacao: '' });
@@ -929,6 +1024,13 @@ export default function DinoComprasEstoqueHub({
                 </select>
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  style={{ ...styles.btnPrimary, background: '#10b981', borderColor: '#10b981', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  onClick={abrirModalNovoProduto}
+                >
+                  ➕ Novo Produto
+                </button>
                 <button type="button" style={styles.btn} onClick={abrirAuditoriaCadastros}>
                   📋 Cadastros Incompletos
                 </button>
@@ -1005,7 +1107,23 @@ export default function DinoComprasEstoqueHub({
                             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                               <button
                                 type="button"
-                                style={{ ...styles.btn, fontSize: 11, padding: '4px 8px', borderColor: '#0284c7', color: '#0284c7' }}
+                                style={{ ...styles.btn, fontSize: 11, padding: '4px 8px', borderColor: '#0284c7', color: '#0284c7', fontWeight: 800, background: 'rgba(2,132,199,0.06)' }}
+                                onClick={() => abrirModalEditarProduto(p)}
+                                title="Editar e modificar dados e preços do produto"
+                              >
+                                ✏️ Editar
+                              </button>
+                              <button
+                                type="button"
+                                style={{ ...styles.btn, fontSize: 11, padding: '4px 8px', borderColor: '#ef4444', color: '#ef4444', fontWeight: 800, background: 'rgba(239,68,68,0.06)' }}
+                                onClick={() => setModalExcluirProduto(p)}
+                                title="Excluir produto do cadastro"
+                              >
+                                🗑️ Excluir
+                              </button>
+                              <button
+                                type="button"
+                                style={{ ...styles.btn, fontSize: 11, padding: '4px 8px' }}
                                 onClick={() => setModalFichaItem(p)}
                               >
                                 🔍 Ficha
@@ -3213,6 +3331,162 @@ export default function DinoComprasEstoqueHub({
           onEditarItem={(item) => setModalFichaItem(item)}
         />
       )}
+          {/* Modal de Cadastro / Edição de Produto */}
+      {modalProdutoForm && (
+        <Modal
+          open={modalProdutoForm}
+          onClose={() => setModalProdutoForm(false)}
+          title={produtoEditando ? `Editar Produto: ${produtoEditando.nome}` : 'Cadastrar Novo Produto de Revenda'}
+        >
+          <form onSubmit={salvarProdutoForm} style={{ display: 'grid', gap: 14 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Nome do Produto *</label>
+              <input
+                type="text"
+                required
+                placeholder="Ex: Pomada Modeladora Efeito Matte Dino (150g)"
+                value={formProduto.nome}
+                onChange={(e) => setFormProduto({ ...formProduto, nome: e.target.value })}
+                style={{ ...styles.input, width: '100%', marginTop: 4, fontWeight: 700 }}
+              />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Categoria</label>
+                <select
+                  value={formProduto.categoria}
+                  onChange={(e) => setFormProduto({ ...formProduto, categoria: e.target.value })}
+                  style={{ ...styles.input, width: '100%', marginTop: 4 }}
+                >
+                  <option value="Modelador">Modelador / Pomada</option>
+                  <option value="Cuidados pessoais">Cuidados Pessoais / Barba</option>
+                  <option value="Shampoo">Shampoo & Cabelo</option>
+                  <option value="Bebidas">Bebidas & Bar</option>
+                  <option value="Revenda">Revenda Geral</option>
+                  <option value="Insumo">Insumo de Bancada</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>SKU / Código</label>
+                <input
+                  type="text"
+                  placeholder="Ex: POM-MATTE-150"
+                  value={formProduto.sku}
+                  onChange={(e) => setFormProduto({ ...formProduto, sku: e.target.value })}
+                  style={{ ...styles.input, width: '100%', marginTop: 4 }}
+                />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#10b981' }}>Preço de Venda (R$) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  required
+                  placeholder="Ex: 65.00"
+                  value={formProduto.precoVenda}
+                  onChange={(e) => setFormProduto({ ...formProduto, precoVenda: e.target.value })}
+                  style={{ ...styles.input, width: '100%', marginTop: 4, fontWeight: 800, fontSize: 15, color: '#10b981' }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Custo Médio / Unitário (R$)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="Ex: 25.00"
+                  value={formProduto.custoUnitario}
+                  onChange={(e) => setFormProduto({ ...formProduto, custoUnitario: e.target.value })}
+                  style={{ ...styles.input, width: '100%', marginTop: 4 }}
+                />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#0284c7' }}>Saldo Atual em Estoque</label>
+                <input
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={formProduto.estoqueAtual}
+                  onChange={(e) => setFormProduto({ ...formProduto, estoqueAtual: e.target.value })}
+                  style={{ ...styles.input, width: '100%', marginTop: 4, fontWeight: 800 }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Estoque Mínimo</label>
+                <input
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={formProduto.estoqueMinimo}
+                  onChange={(e) => setFormProduto({ ...formProduto, estoqueMinimo: e.target.value })}
+                  style={{ ...styles.input, width: '100%', marginTop: 4 }}
+                />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 14 }}>
+              <button type="button" style={styles.btn} onClick={() => setModalProdutoForm(false)}>
+                Cancelar
+              </button>
+              <button type="submit" style={styles.btnPrimary}>
+                💾 {produtoEditando ? 'Salvar Alterações' : 'Cadastrar Produto'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Modal de Confirmação de Exclusão */}
+      {modalExcluirProduto && (
+        <Modal
+          open={Boolean(modalExcluirProduto)}
+          onClose={() => setModalExcluirProduto(null)}
+          title="Excluir Cadastro do Produto"
+        >
+          <div style={{ display: 'grid', gap: 14 }}>
+            <div style={{ padding: 14, background: 'rgba(239, 68, 68, 0.08)', borderRadius: 12, border: '1px solid rgba(239, 68, 68, 0.25)' }}>
+              <div style={{ fontWeight: 800, color: '#ef4444', fontSize: 15, marginBottom: 4 }}>
+                ⚠️ Atenção: Deseja realmente excluir este produto?
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--fg)', marginTop: 4 }}>
+                Produto: <strong>{modalExcluirProduto.nome}</strong>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                Preço: {fmtR(modalExcluirProduto.precoVenda)} | Saldo Atual: {modalExcluirProduto.estoqueAtual}
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px' }}>
+              <input
+                type="checkbox"
+                id="checkPerm"
+                checked={excluindoPermanente}
+                onChange={(e) => setExcluindoPermanente(e.target.checked)}
+                style={{ cursor: 'pointer', width: 16, height: 16 }}
+              />
+              <label htmlFor="checkPerm" style={{ fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
+                Excluir permanentemente do cadastro (produtos de demonstração ou cadastrados por engano)
+              </label>
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 10 }}>
+              <button type="button" style={styles.btn} onClick={() => setModalExcluirProduto(null)}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                style={{ ...styles.btnPrimary, background: '#ef4444', borderColor: '#ef4444' }}
+                onClick={confirmarExclusaoProduto}
+              >
+                🗑️ Confirmar Exclusão
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
     </div>
   );
 }
