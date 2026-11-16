@@ -1915,6 +1915,9 @@ export default function BarbeariaERP({ tabInicial } = {}) {
             formComanda.itemId,
           quantidade: Number(formComanda.quantidade || 1),
           profissionalId: formComanda.profissionalId,
+          preco: (formComanda.preco !== undefined && formComanda.preco !== null && formComanda.preco !== '') ? Number(formComanda.preco) : (formComanda.precoUnitario !== undefined ? Number(formComanda.precoUnitario) : undefined),
+          precoUnitario: (formComanda.preco !== undefined && formComanda.preco !== null && formComanda.preco !== '') ? Number(formComanda.preco) : (formComanda.precoUnitario !== undefined ? Number(formComanda.precoUnitario) : undefined),
+          valor: (formComanda.preco !== undefined && formComanda.preco !== null && formComanda.preco !== '') ? Number(formComanda.preco) : (formComanda.precoUnitario !== undefined ? Number(formComanda.precoUnitario) : undefined),
         },
       ],
     };
