@@ -20,6 +20,7 @@ const theme = {
 
 const SEGMENTOS = [
   { id: 'supermercado', label: 'Supermercado', icon: '🏪', cor: '#3b82f6' },
+  { id: 'stallone',     label: 'Stallone Nutre Sport', icon: '🏋️', cor: '#e11d48' },
   { id: 'loja-moda',    label: 'Loja de Moda', icon: '👗', cor: '#ec4899' },
   { id: 'barbearia',    label: 'Barbearia',    icon: '✂️', cor: '#f59e0b' },
   { id: 'varejo',       label: 'Varejo Geral', icon: '🛒', cor: '#FF6B2C' },
@@ -121,6 +122,15 @@ export default function PDVUnificado() {
     setToastPdv(msg)
     setTimeout(() => setToastPdv(''), 4500)
   }
+
+  // Estoque Multicanal Integrado (Stallone Nutre Sport & E-commerce VIP Club)
+  const [modalEstoqueMulticanal, setModalEstoqueMulticanal] = useState(false)
+  const [catalogoStallone, setCatalogoStallone] = useState([])
+  const [resumoEstoqueMulticanal, setResumoEstoqueMulticanal] = useState(null)
+  const [carregandoEstoque, setCarregandoEstoque] = useState(false)
+  const [sincronizandoEstoque, setSincronizandoEstoque] = useState(false)
+  const [modalAjusteItem, setModalAjusteItem] = useState(null) // { item, novoEstoqueFisico, motivo }
+  const [salvandoAjuste, setSalvandoAjuste] = useState(false)
 
   const abrirModalVendas = async () => {
     setModalVendas(true)
@@ -239,6 +249,33 @@ export default function PDVUnificado() {
 
   // Focar no input ao montar
   useEffect(() => { inputRef.current?.focus() }, [])
+
+  // Carregar catálogo de estoque multicanal da Stallone Nutre Sport
+  const carregarEstoqueStallone = useCallback(async () => {
+    try {
+      setCarregandoEstoque(true)
+      const [resCat, resResumo] = await Promise.all([
+        api.get('/api/stallone-club/estoque/catalogo').catch(() => null),
+        api.get('/api/stallone-club/estoque/resumo').catch(() => null)
+      ])
+      if (resCat?.produtos) {
+        setCatalogoStallone(resCat.produtos)
+      }
+      if (resResumo) {
+        setResumoEstoqueMulticanal(resResumo)
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar estoque multicanal:', err.message)
+    } finally {
+      setCarregandoEstoque(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (segmento === 'stallone') {
+      carregarEstoqueStallone()
+    }
+  }, [segmento, carregarEstoqueStallone])
 
   // Carregar atalhos rápidos e promoções do supermercado
   useEffect(() => {
@@ -511,6 +548,27 @@ export default function PDVUnificado() {
       } else if (segmento === 'loja-moda') {
         const res = await api.get(`/api/loja-moda/produtos?busca=${encodeURIComponent(termo)}&limit=8`).catch(() => null)
         setResultados(res?.produtos || [])
+      } else if (segmento === 'stallone') {
+        const res = await api.get(`/api/stallone-club/estoque/catalogo?busca=${encodeURIComponent(termo)}`).catch(() => null)
+        const prods = (res?.produtos || []).map(p => ({
+          ...p,
+          precoFinal: p.preco,
+          precoBase: p.preco,
+          unidade: 'UN',
+          pesavel: false
+        }))
+        if (prods.length === 1 && (/^\d+$/.test(termo) || termo.length >= 6 || termo.toUpperCase().startsWith('STL-'))) {
+          const p = prods[0]
+          if (p.estoque_disponivel_balcao <= 0) {
+            exibirToast(`⚠️ Atenção: ${p.nome} sem saldo livre no balcão (${p.estoque_online_reservado} un reservadas online).`)
+          }
+          adicionarItem(p, quantidadeMultiplicada)
+          setBusca('')
+          setResultados([])
+          inputRef.current?.focus()
+          return
+        }
+        setResultados(prods)
       } else {
         const res = await api.get(`/api/estoque/produtos?busca=${encodeURIComponent(termo)}&limit=8`).catch(() => null)
         setResultados(res?.produtos || [])
@@ -523,6 +581,15 @@ export default function PDVUnificado() {
     tocarBeep()
     const chave = variante ? `${produto.id}-${variante.id}` : produto.id
     const precoFinal = produto.precoFinal ?? produto.preco_final ?? produto.precoBase ?? produto.preco_venda ?? 0
+
+    if (produto.estoque_disponivel_balcao !== undefined) {
+      const itemExistente = itens.find(i => i.chave === chave || i.produto_id === produto.id)
+      const qtdAtual = itemExistente ? itemExistente.quantidade : 0
+      const qtdNova = qtdAtual + (parseFloat(quantidade) || 1)
+      if (qtdNova > produto.estoque_disponivel_balcao) {
+        exibirToast(`⚠️ Alerta Multicanal: ${produto.nome} possui apenas ${produto.estoque_disponivel_balcao} un livres no balcão (${produto.estoque_online_reservado || 0} un reservadas para Loja Online).`)
+      }
+    }
 
     setItens(prev => {
       const idx = prev.findIndex(i => i.chave === chave)
@@ -634,6 +701,17 @@ export default function PDVUnificado() {
       setDescontoManual(0)
       setTroco('')
       setCpfNota('')
+
+      if (segmento === 'stallone') {
+        for (const it of payload.itens) {
+          api.post('/api/stallone-club/estoque/baixar-pdv', {
+            itemId: it.produto_id,
+            quantidade: it.quantidade,
+            vendaId: res?.venda?.id || `VND-${Date.now()}`
+          }).catch(() => null)
+        }
+        carregarEstoqueStallone()
+      }
     } catch (err) {
       try {
         await enfileirarVendaOffline(payload)
@@ -745,6 +823,46 @@ export default function PDVUnificado() {
     }
   }
 
+  async function executarSincronizacaoEstoque() {
+    setSincronizandoEstoque(true)
+    try {
+      const res = await api.post('/api/stallone-club/estoque/sincronizar')
+      if (res?.resumo) {
+        setResumoEstoqueMulticanal(res.resumo)
+      }
+      await carregarEstoqueStallone()
+      exibirToast('✅ Estoque físico e Loja Online (Stallone VIP Club) sincronizados com sucesso!')
+    } catch (err) {
+      exibirToast('❌ Erro na sincronização: ' + (err.message || 'Falha de rede'))
+    } finally {
+      setSincronizandoEstoque(false)
+    }
+  }
+
+  async function salvarAjusteEstoque() {
+    if (!modalAjusteItem) return
+    setSalvandoAjuste(true)
+    try {
+      const { item, novoEstoqueFisico, motivo } = modalAjusteItem
+      const res = await api.post('/api/stallone-club/estoque/ajustar', {
+        itemId: item.id || item.sku,
+        novoEstoqueFisico: Number(novoEstoqueFisico),
+        motivo: motivo || 'Ajuste manual via Frente de Caixa PDV'
+      })
+      if (res?.sucesso) {
+        exibirToast(`✅ Estoque de ${item.nome} atualizado para ${novoEstoqueFisico} un!`)
+        setModalAjusteItem(null)
+        await carregarEstoqueStallone()
+      } else {
+        alert(res?.erro || 'Erro ao ajustar estoque.')
+      }
+    } catch (err) {
+      alert('Erro ao salvar ajuste: ' + (err.message || 'Falha de conexão'))
+    } finally {
+      setSalvandoAjuste(false)
+    }
+  }
+
   function handleTouchKey(key) {
     if (key === 'C') {
       setBusca('')
@@ -853,6 +971,22 @@ export default function PDVUnificado() {
           >
             📋 Vendas & Comandas (F6)
           </button>
+
+          {/* Estoque Multicanal Integrado (Física + Loja Online) */}
+          <button
+            onClick={() => { setModalEstoqueMulticanal(true); carregarEstoqueStallone(); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              background: segmento === 'stallone' ? 'linear-gradient(135deg, #e11d48, #9f1239)' : theme.card,
+              color: '#fff', border: `1px solid ${segmento === 'stallone' ? '#f43f5e' : theme.line}`,
+              padding: '4px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700,
+              boxShadow: segmento === 'stallone' ? '0 0 10px rgba(225, 29, 72, 0.4)' : 'none'
+            }}
+            title="Gestão de Estoque Multicanal Integrado (Balcão Físico + Loja Online Stallone VIP Club)"
+          >
+            📦 Estoque Multicanal
+          </button>
+
           {/* Fechamento Cego e Redução Z */}
           {modoOperacao === 'operador' && (
             <button
@@ -1017,6 +1151,91 @@ export default function PDVUnificado() {
             </div>
           )}
 
+          {/* Atalhos Rápidos — Stallone Nutre Sport (Estoque Multicanal Integrado) */}
+          {segmento === 'stallone' && catalogoStallone.length > 0 && !busca && (
+            <div style={{ padding: '12px 16px', borderBottom: `1px solid ${theme.line}`, background: 'rgba(225, 29, 72, 0.04)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#f43f5e', textTransform: 'uppercase', letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span>🏋️</span> SUPLEMENTOS MESTRES STALLONE · ESTOQUE MULTICANAL INTEGRADO
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span style={{ fontSize: 11, color: theme.muted }}>
+                    Balcão: <strong style={{ color: theme.green }}>{resumoEstoqueMulticanal?.total_estoque_disponivel_balcao ?? 179} un</strong> · E-commerce Reservado: <strong style={{ color: '#38bdf8' }}>{resumoEstoqueMulticanal?.total_estoque_online_reservado ?? 68} un</strong>
+                  </span>
+                  <button
+                    onClick={() => { setModalEstoqueMulticanal(true); carregarEstoqueStallone(); }}
+                    style={{ padding: '4px 10px', background: 'rgba(225, 29, 72, 0.15)', border: '1px solid #e11d48', color: '#fda4af', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    📦 Ver Painel Completo
+                  </button>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 10 }}>
+                {catalogoStallone.map(p => {
+                  const esgotado = p.estoque_disponivel_balcao <= 0
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        if (esgotado) {
+                          exibirToast(`⚠️ Atenção: ${p.nome} sem estoque livre no balcão (${p.estoque_online_reservado} un reservadas online).`)
+                        }
+                        adicionarItem({
+                          ...p,
+                          precoFinal: p.preco,
+                          precoBase: p.preco,
+                          unidade: 'UN',
+                          pesavel: false
+                        }, 1)
+                      }}
+                      style={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+                        padding: '10px 12px', borderRadius: 10, border: `1px solid ${p.status_estoque === 'vermelho' ? '#ef4444' : p.status_estoque === 'amarelo' ? '#f59e0b' : theme.line}`,
+                        background: theme.card, color: theme.cream, cursor: 'pointer',
+                        textAlign: 'left', transition: 'all .15s', position: 'relative', overflow: 'hidden'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.borderColor = '#e11d48'}
+                      onMouseLeave={e => e.currentTarget.style.borderColor = p.status_estoque === 'vermelho' ? '#ef4444' : p.status_estoque === 'amarelo' ? '#f59e0b' : theme.line}
+                    >
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#f43f5e', textTransform: 'uppercase', marginBottom: 2 }}>{p.categoria}</div>
+                      <div style={{ fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', color: theme.cream }}>{p.nome}</div>
+                      <div style={{ fontSize: 10, color: theme.muted, marginTop: 2 }}>SKU: {p.sku}</div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', width: '100%', marginTop: 6 }}>
+                        <div style={{ fontSize: 13, color: theme.green, fontWeight: 900 }}>
+                          R$ {Number(p.preco || 0).toFixed(2)}
+                        </div>
+                        {p.preco_clube && (
+                          <div style={{ fontSize: 10, color: '#f59e0b', fontWeight: 700 }}>
+                            VIP R$ {Number(p.preco_clube).toFixed(2)}
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap', width: '100%' }}>
+                        <span style={{ fontSize: 9, padding: '2px 5px', borderRadius: 4, background: 'rgba(255,255,255,0.06)', color: theme.muted }}>
+                          Físico: <strong>{p.estoque_fisico}</strong>
+                        </span>
+                        <span style={{ fontSize: 9, padding: '2px 5px', borderRadius: 4, background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8' }} title="Reservado para pedidos da loja online">
+                          Online: <strong>{p.estoque_online_reservado}</strong>
+                        </span>
+                        <span style={{ fontSize: 9, padding: '2px 5px', borderRadius: 4, background: esgotado ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)', color: esgotado ? theme.red : theme.green, fontWeight: 800 }}>
+                          Balcão: <strong>{p.estoque_disponivel_balcao}</strong>
+                        </span>
+                      </div>
+
+                      {p.previsao_ruptura_dias !== null && p.previsao_ruptura_dias !== undefined && (
+                        <div style={{ fontSize: 9, color: p.previsao_ruptura_dias <= 7 ? theme.red : p.previsao_ruptura_dias <= 15 ? theme.yellow : theme.muted, marginTop: 4, fontWeight: 600 }}>
+                          ⚡ Ruptura KyttoIA: ~{p.previsao_ruptura_dias}d
+                        </div>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Resultados da busca */}
           {resultados.length > 0 && (
             <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
@@ -1053,6 +1272,15 @@ export default function PDVUnificado() {
                       {p.plu && `PLU ${p.plu} · `}
                       {p.pesavel ? 'Item Pesável (Balança)' : (p.unidade || 'UN')}
                     </div>
+                    {p.estoque_disponivel_balcao !== undefined && (
+                      <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                        <span style={{ fontSize: 10, color: theme.muted }}>Físico: <strong>{p.estoque_fisico}</strong></span>
+                        <span style={{ fontSize: 10, color: '#38bdf8' }}>Online Reservado: <strong>{p.estoque_online_reservado}</strong></span>
+                        <span style={{ fontSize: 10, color: p.estoque_disponivel_balcao > 0 ? theme.green : theme.red, fontWeight: 700 }}>
+                          Balcão Livre: <strong>{p.estoque_disponivel_balcao}</strong>
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ fontWeight: 900, color: theme.green, fontSize: 16 }}>
@@ -1911,6 +2139,276 @@ export default function PDVUnificado() {
                 style={{ padding: '10px', background: modalSenhaGerente.acao === 'reabrir' ? '#7c3aed' : theme.red, border: 'none', color: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 800, fontSize: 13 }}
               >
                 {modalSenhaGerente.acao === 'reabrir' ? '🔄 Autorizar e Reabrir' : '❌ Autorizar Cancelamento'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL GESTÃO DE ESTOQUE MULTICANAL INTEGRADO (STALLONE NUTRE SPORT) */}
+      {modalEstoqueMulticanal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+          <div style={{ background: theme.surface, border: `1px solid ${theme.line}`, borderRadius: 16, width: '100%', maxWidth: 960, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)' }}>
+            
+            {/* Header do Modal */}
+            <div style={{ padding: '16px 20px', borderBottom: `1px solid ${theme.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(90deg, rgba(225,29,72,0.1), transparent)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 26 }}>📦</span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 17, color: theme.cream, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    Estoque Multicanal Integrado — Stallone Nutre Sport
+                    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 12, background: 'rgba(225,29,72,0.2)', color: '#fda4af', border: '1px solid #e11d48', fontWeight: 700 }}>
+                      Física ⇄ Loja Online VIP
+                    </span>
+                  </h3>
+                  <p style={{ margin: '3px 0 0', fontSize: 12, color: theme.muted }}>
+                    Sincronização atômica em tempo real entre a Frente de Caixa (Balcão) e a Loja Online (Stallone VIP Club)
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setModalEstoqueMulticanal(false)} style={{ background: 'transparent', border: 'none', color: theme.muted, fontSize: 22, cursor: 'pointer' }}>✕</button>
+            </div>
+
+            {/* Faixa KyttoIA */}
+            <div style={{ background: 'linear-gradient(90deg, #1e1b4b, #31104b)', padding: '8px 20px', borderBottom: `1px solid ${theme.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#c4b5fd' }}>
+                <span>⚡</span>
+                <span><strong>Motor KyttoIA 2.5 Flash:</strong> Predição preditiva de ruptura de estoque e blindagem contra vendas concorrentes online/física.</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={carregarEstoqueStallone}
+                  disabled={carregandoEstoque}
+                  style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: 6, padding: '4px 8px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  {carregandoEstoque ? 'Atualizando...' : '🔄 Atualizar'}
+                </button>
+                <button
+                  onClick={executarSincronizacaoEstoque}
+                  disabled={sincronizandoEstoque}
+                  style={{ background: '#e11d48', border: 'none', color: '#fff', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}
+                >
+                  {sincronizandoEstoque ? 'Sincronizando...' : '⚡ Forçar Sincronização E-commerce'}
+                </button>
+              </div>
+            </div>
+
+            {/* 4 Cards de Métricas */}
+            <div style={{ padding: '16px 20px', borderBottom: `1px solid ${theme.line}`, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, background: 'rgba(0,0,0,0.2)' }}>
+              <div style={{ background: theme.card, border: `1px solid ${theme.line}`, borderRadius: 10, padding: '12px 14px' }}>
+                <div style={{ fontSize: 11, color: theme.muted, textTransform: 'uppercase', fontWeight: 700 }}>🏢 Estoque Físico Total</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: theme.cream, marginTop: 4 }}>
+                  {resumoEstoqueMulticanal?.total_estoque_fisico ?? 247} <span style={{ fontSize: 13, color: theme.muted, fontWeight: 500 }}>un</span>
+                </div>
+                <div style={{ fontSize: 11, color: theme.muted, marginTop: 2 }}>Armazém central + loja física</div>
+              </div>
+              <div style={{ background: theme.card, border: `1px solid ${theme.line}`, borderRadius: 10, padding: '12px 14px' }}>
+                <div style={{ fontSize: 11, color: '#38bdf8', textTransform: 'uppercase', fontWeight: 700 }}>🌐 Reservado Loja Online</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: '#38bdf8', marginTop: 4 }}>
+                  {resumoEstoqueMulticanal?.total_estoque_online_reservado ?? 68} <span style={{ fontSize: 13, color: theme.muted, fontWeight: 500 }}>un</span>
+                </div>
+                <div style={{ fontSize: 11, color: '#7dd3fc', marginTop: 2 }}>Pedidos em separação / envio</div>
+              </div>
+              <div style={{ background: theme.card, border: `1px solid ${theme.line}`, borderRadius: 10, padding: '12px 14px' }}>
+                <div style={{ fontSize: 11, color: theme.green, textTransform: 'uppercase', fontWeight: 700 }}>🟢 Disponível Balcão PDV</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: theme.green, marginTop: 4 }}>
+                  {resumoEstoqueMulticanal?.total_estoque_disponivel_balcao ?? 179} <span style={{ fontSize: 13, color: theme.muted, fontWeight: 500 }}>un</span>
+                </div>
+                <div style={{ fontSize: 11, color: '#6ee7b7', marginTop: 2 }}>Livre para faturamento presencial</div>
+              </div>
+              <div style={{ background: theme.card, border: `1px solid ${theme.line}`, borderRadius: 10, padding: '12px 14px' }}>
+                <div style={{ fontSize: 11, color: '#f59e0b', textTransform: 'uppercase', fontWeight: 700 }}>⚠️ Alertas Ruptura KyttoIA</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: '#f59e0b', marginTop: 4 }}>
+                  {resumoEstoqueMulticanal?.produtos_em_alerta_ruptura ?? 2} <span style={{ fontSize: 13, color: theme.muted, fontWeight: 500 }}>produtos</span>
+                </div>
+                <div style={{ fontSize: 11, color: '#fde68a', marginTop: 2 }}>Risco de esgotamento &lt; 10 dias</div>
+              </div>
+            </div>
+
+            {/* Tabela de Produtos */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px' }}>
+              {catalogoStallone.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 40, color: theme.muted }}>
+                  {carregandoEstoque ? 'Carregando catálogo de estoque...' : 'Nenhum produto cadastrado no catálogo Stallone.'}
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {catalogoStallone.map((p) => {
+                    const esgotado = p.estoque_disponivel_balcao <= 0
+                    return (
+                      <div
+                        key={p.id}
+                        style={{
+                          background: theme.card,
+                          border: `1px solid ${p.status_estoque === 'vermelho' ? 'rgba(239,68,68,0.4)' : p.status_estoque === 'amarelo' ? 'rgba(245,158,11,0.4)' : theme.line}`,
+                          borderRadius: 10,
+                          padding: '12px 16px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: 12
+                        }}
+                      >
+                        <div style={{ flex: 1.5 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 6px', borderRadius: 4, background: 'rgba(225,29,72,0.15)', color: '#fda4af' }}>
+                              {p.sku}
+                            </span>
+                            <strong style={{ fontSize: 14, color: theme.cream }}>{p.nome}</strong>
+                          </div>
+                          <div style={{ fontSize: 11, color: theme.muted, marginTop: 4 }}>
+                            Categoria: {p.categoria} · EAN: {p.ean || '7898950001018'} · NCM: {p.ncm || '2106.90.30'}
+                          </div>
+                        </div>
+
+                        <div style={{ textAlign: 'right', minWidth: 110 }}>
+                          <div style={{ fontSize: 14, fontWeight: 900, color: theme.green }}>R$ {Number(p.preco || 0).toFixed(2)}</div>
+                          {p.preco_clube && (
+                            <div style={{ fontSize: 11, color: '#f59e0b', fontWeight: 700 }}>VIP R$ {Number(p.preco_clube).toFixed(2)}</div>
+                          )}
+                        </div>
+
+                        {/* Pilha de Estoque Multicanal */}
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <div style={{ textAlign: 'center', padding: '6px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.04)', minWidth: 64 }}>
+                            <div style={{ fontSize: 9, color: theme.muted, textTransform: 'uppercase' }}>Físico</div>
+                            <div style={{ fontSize: 14, fontWeight: 800, color: theme.cream }}>{p.estoque_fisico}</div>
+                          </div>
+                          <div style={{ textAlign: 'center', padding: '6px 10px', borderRadius: 6, background: 'rgba(56, 189, 248, 0.1)', minWidth: 64 }}>
+                            <div style={{ fontSize: 9, color: '#38bdf8', textTransform: 'uppercase' }}>Online</div>
+                            <div style={{ fontSize: 14, fontWeight: 800, color: '#38bdf8' }}>{p.estoque_online_reservado}</div>
+                          </div>
+                          <div style={{ textAlign: 'center', padding: '6px 10px', borderRadius: 6, background: esgotado ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)', minWidth: 64 }}>
+                            <div style={{ fontSize: 9, color: esgotado ? theme.red : theme.green, textTransform: 'uppercase', fontWeight: 700 }}>Balcão</div>
+                            <div style={{ fontSize: 14, fontWeight: 900, color: esgotado ? theme.red : theme.green }}>{p.estoque_disponivel_balcao}</div>
+                          </div>
+                        </div>
+
+                        {/* Previsão de Ruptura KyttoIA */}
+                        <div style={{ minWidth: 120, textAlign: 'center' }}>
+                          <div style={{ fontSize: 10, color: theme.muted }}>Previsão Ruptura</div>
+                          <div style={{ fontSize: 12, fontWeight: 800, color: p.previsao_ruptura_dias <= 7 ? theme.red : p.previsao_ruptura_dias <= 15 ? theme.yellow : theme.green }}>
+                            {p.previsao_ruptura_dias !== null ? `~${p.previsao_ruptura_dias} dias` : 'Estável'}
+                          </div>
+                        </div>
+
+                        {/* Ações */}
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button
+                            onClick={() => {
+                              adicionarItem({
+                                ...p,
+                                precoFinal: p.preco,
+                                precoBase: p.preco,
+                                unidade: 'UN',
+                                pesavel: false
+                              }, 1)
+                              exibirToast(`🛒 ${p.nome} adicionado à Frente de Caixa!`)
+                            }}
+                            style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid #10b981', color: '#6ee7b7', borderRadius: 6, padding: '6px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                            title="Adicionar 1 unidade ao cupom do PDV"
+                          >
+                            +1 no PDV
+                          </button>
+                          <button
+                            onClick={() => setModalAjusteItem({ item: p, novoEstoqueFisico: p.estoque_fisico, motivo: 'Ajuste manual via Frente de Caixa' })}
+                            style={{ background: theme.surface, border: `1px solid ${theme.line}`, color: theme.cream, borderRadius: 6, padding: '6px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                            title="Ajustar saldo de estoque físico / inventário"
+                          >
+                            ⚙️ Ajustar
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Rodapé do Modal */}
+            <div style={{ padding: '12px 20px', borderTop: `1px solid ${theme.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: 12, color: theme.muted }}>
+                🔄 Sincronização por evento interno ativa: Vendas no PDV e pedidos no Stallone VIP Club atualizam os saldos em tempo real.
+              </div>
+              <button onClick={() => setModalEstoqueMulticanal(false)} style={{ background: theme.surface, border: `1px solid ${theme.line}`, color: theme.cream, borderRadius: 8, padding: '8px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE AJUSTE MANUAL DE ESTOQUE FÍSICO */}
+      {modalAjusteItem && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: 16 }}>
+          <div style={{ background: theme.surface, border: `1px solid ${theme.line}`, borderRadius: 16, width: '100%', maxWidth: 460, padding: 24, boxShadow: '0 20px 40px rgba(0,0,0,0.6)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+              <span style={{ fontSize: 26 }}>⚙️</span>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 16, color: theme.cream }}>Ajuste de Estoque Físico</h3>
+                <p style={{ margin: '2px 0 0', fontSize: 12, color: theme.muted }}>{modalAjusteItem.item?.nome}</p>
+              </div>
+            </div>
+
+            <div style={{ background: theme.card, borderRadius: 8, padding: 12, marginBottom: 16, border: `1px solid ${theme.line}`, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, textAlign: 'center' }}>
+              <div>
+                <div style={{ fontSize: 10, color: theme.muted }}>Físico Atual</div>
+                <strong style={{ fontSize: 15, color: theme.cream }}>{modalAjusteItem.item?.estoque_fisico} un</strong>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: '#38bdf8' }}>Online Reservado</div>
+                <strong style={{ fontSize: 15, color: '#38bdf8' }}>{modalAjusteItem.item?.estoque_online_reservado} un</strong>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: theme.green }}>Balcão Atual</div>
+                <strong style={{ fontSize: 15, color: theme.green }}>{modalAjusteItem.item?.estoque_disponivel_balcao} un</strong>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', fontSize: 12, color: theme.muted, marginBottom: 6 }}>
+                Novo Saldo Físico Total (unidades):
+              </label>
+              <input
+                type="number"
+                value={modalAjusteItem.novoEstoqueFisico}
+                onChange={(e) => setModalAjusteItem({ ...modalAjusteItem, novoEstoqueFisico: e.target.value })}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: theme.bg, border: `1px solid ${theme.line}`, color: '#fff', fontSize: 16, fontWeight: 800, boxSizing: 'border-box' }}
+                autoFocus
+              />
+              <div style={{ fontSize: 11, color: theme.muted, marginTop: 4 }}>
+                Novo saldo livre no balcão será: <strong>{Math.max(0, (Number(modalAjusteItem.novoEstoqueFisico) || 0) - (modalAjusteItem.item?.estoque_online_reservado || 0))} un</strong>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', fontSize: 12, color: theme.muted, marginBottom: 6 }}>
+                Motivo do Ajuste / Entrada / Inventário:
+              </label>
+              <input
+                type="text"
+                value={modalAjusteItem.motivo}
+                onChange={(e) => setModalAjusteItem({ ...modalAjusteItem, motivo: e.target.value })}
+                placeholder="Ex: Recebimento NF Fornecedor, Conferência de Inventário..."
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: theme.bg, border: `1px solid ${theme.line}`, color: '#fff', fontSize: 13, boxSizing: 'border-box' }}
+              />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setModalAjusteItem(null)}
+                style={{ padding: '10px', background: 'transparent', border: `1px solid ${theme.line}`, color: theme.muted, borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={salvarAjusteEstoque}
+                disabled={salvandoAjuste}
+                style={{ padding: '10px', background: '#e11d48', border: 'none', color: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 800, fontSize: 13 }}
+              >
+                {salvandoAjuste ? 'Gravando...' : '💾 Salvar Ajuste'}
               </button>
             </div>
           </div>
