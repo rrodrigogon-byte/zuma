@@ -24,7 +24,12 @@ import {
   Award,
   AlertCircle,
   Download,
-  Share2
+  Share2,
+  Filter,
+  Eye,
+  EyeOff,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
 import { api } from '../../lib/api';
@@ -82,6 +87,19 @@ export default function SorteiosCampanhas({ embed = false }) {
   });
   const [emitindoManual, setEmitindoManual] = useState(false);
   const [gerandoPeriodo, setGerandoPeriodo] = useState(false);
+
+  // Estados do Filtro de Período e Geração por Datas (Melhoria Dino)
+  const [filtroPeriodoTipo, setFiltroPeriodoTipo] = useState('3_meses');
+  const [dataInicioFiltro, setDataInicioFiltro] = useState(() => {
+    const d = new Date(Date.now() - 90 * 86400000);
+    return d.toISOString().slice(0, 10);
+  });
+  const [dataFimFiltro, setDataFimFiltro] = useState(() => new Date().toISOString().slice(0, 10));
+  const [apenasAtendidos, setApenasAtendidos] = useState(true);
+  const [valorMinimoFiltro, setValorMinimoFiltro] = useState(0);
+  const [previaPeriodo, setPreviaPeriodo] = useState(null);
+  const [carregandoPrevia, setCarregandoPrevia] = useState(false);
+  const [mostrarPreviaLista, setMostrarPreviaLista] = useState(false);
   const [ultimoBilheteEmitidoManual, setUltimoBilheteEmitidoManual] = useState(null);
 
   // Áudio Sintético Web Audio API (Roleta e Vitória)
@@ -344,28 +362,109 @@ export default function SorteiosCampanhas({ embed = false }) {
     }
   };
 
-  // Gerar bilhetes em lote por período de atendimento (3 meses ou este mês)
-  const handleGerarPorPeriodo = async (periodo) => {
+
+  // Carrega prévia dinâmica de clientes atendidos no período
+  const carregarPreviaPeriodo = useCallback(async () => {
+    const campId = campanhaSelecionada?.id || campanhas[0]?.id;
+    if (!campId) return;
+    try {
+      setCarregandoPrevia(true);
+      const res = await api.post(`/api/admin/sorteios/${campId}/previa-periodo`, {
+        periodo: filtroPeriodoTipo,
+        dataInicio: dataInicioFiltro,
+        dataFim: dataFimFiltro,
+        apenasAtendidos,
+        valorMinimo: Number(valorMinimoFiltro || 0),
+      });
+      if (res && res.ok) {
+        setPreviaPeriodo(res);
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar prévia de sorteio por período:', err);
+    } finally {
+      setCarregandoPrevia(false);
+    }
+  }, [campanhaSelecionada, campanhas, filtroPeriodoTipo, dataInicioFiltro, dataFimFiltro, apenasAtendidos, valorMinimoFiltro]);
+
+  useEffect(() => {
+    if (abaAtiva === 'campanhas') {
+      carregarPreviaPeriodo();
+    }
+  }, [abaAtiva, carregarPreviaPeriodo]);
+
+  // Aplica atalho de período rápido
+  const aplicarAtalhoPeriodo = (tipo) => {
+    setFiltroPeriodoTipo(tipo);
+    const agora = new Date();
+    let dIni = new Date(Date.now() - 90 * 86400000);
+    let dFim = agora;
+
+    if (tipo === 'hoje') {
+      dIni = agora;
+      dFim = agora;
+    } else if (tipo === 'esta_semana') {
+      const diaSemana = agora.getDay() || 7;
+      dIni = new Date(agora);
+      dIni.setDate(agora.getDate() - diaSemana + 1);
+    } else if (tipo === 'este_mes') {
+      dIni = new Date(agora.getFullYear(), agora.getMonth(), 1);
+    } else if (tipo === 'mes_anterior') {
+      dIni = new Date(agora.getFullYear(), agora.getMonth() - 1, 1);
+      dFim = new Date(agora.getFullYear(), agora.getMonth(), 0);
+    } else if (tipo === 'ultimos_30') {
+      dIni = new Date(Date.now() - 30 * 86400000);
+    } else if (tipo === 'ultimos_60') {
+      dIni = new Date(Date.now() - 60 * 86400000);
+    } else if (tipo === 'ano_atual') {
+      dIni = new Date(agora.getFullYear(), 0, 1);
+    } else {
+      dIni = new Date(Date.now() - 90 * 86400000);
+    }
+
+    setDataInicioFiltro(dIni.toISOString().slice(0, 10));
+    setDataFimFiltro(dFim.toISOString().slice(0, 10));
+  };
+
+  // Gerar bilhetes em lote por período de atendimento e datas personalizadas
+  const handleGerarPorPeriodo = async (periodoOverride) => {
     const campId = campanhaSelecionada?.id || campanhas[0]?.id;
     if (!campId) {
-      toast.warning('Selecione uma campanha de sorteio ativa.');
+      if (typeof toast?.warning === 'function') toast.warning('Selecione uma campanha de sorteio ativa.');
+      else if (typeof toast === 'function') toast('Selecione uma campanha de sorteio ativa.', 'warn');
       return;
     }
+    const periodoFinal = periodoOverride || filtroPeriodoTipo;
     setGerandoPeriodo(true);
     try {
       const res = await api.post(`/api/admin/sorteios/${campId}/gerar-por-periodo`, {
-        periodo,
+        periodo: periodoFinal,
+        dataInicio: dataInicioFiltro,
+        dataFim: dataFimFiltro,
+        apenasAtendidos,
+        valorMinimo: Number(valorMinimoFiltro || 0),
         regra: '1_por_cliente',
       });
       if (res.ok) {
-        toast.success(res.mensagem || `Foram gerados ${res.bilhetesGerados} novos bilhetes com sucesso!`);
+        const msg = res.mensagem || `Foram gerados ${res.bilhetesGerados} novos bilhetes com sucesso!`;
+        if (typeof toast?.success === 'function') toast.success(msg);
+        else if (typeof toast === 'function') toast(msg, 'success');
         await carregarCampanhas();
         await carregarBilhetes(campId);
+        await carregarPreviaPeriodo();
+        if (campanhaSelecionada?.id === campId) {
+          setCampanhaSelecionada(prev => ({
+            ...prev,
+            totalBilhetes: res.totalBilhetesCampanha ?? (prev.totalBilhetes + res.bilhetesGerados),
+            totalParticipantes: res.totalParticipantesCampanha ?? prev.totalParticipantes,
+          }));
+        }
       } else {
-        toast.error(res.error || 'Erro ao gerar bilhetes.');
+        if (typeof toast?.error === 'function') toast.error(res.error || 'Erro ao gerar bilhetes.');
+        else if (typeof toast === 'function') toast(res.error || 'Erro ao gerar bilhetes.', 'error');
       }
     } catch (err) {
-      toast.error('Erro na geração em lote: ' + err.message);
+      if (typeof toast?.error === 'function') toast.error('Erro na geração em lote: ' + err.message);
+      else if (typeof toast === 'function') toast('Erro na geração em lote: ' + err.message, 'error');
     } finally {
       setGerandoPeriodo(false);
     }
@@ -611,93 +710,325 @@ export default function SorteiosCampanhas({ embed = false }) {
             {/* ABA 1: LISTAGEM DE CAMPANHAS */}
             {abaAtiva === 'campanhas' && (
               <div>
-                {/* PAINEL DE IMPORTAÇÃO RÁPIDA POR PERÍODO (RESPOSTA AO CLIENTE) */}
+                {/* PAINEL AVANÇADO DE FILTRO POR DATA E PERÍODO (MELHORIA OFICIAL DINO) */}
                 <div style={{
-                  background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%)',
-                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+                  border: '1.5pt solid #f59e0b',
                   borderRadius: '16px',
-                  padding: '20px 24px',
-                  marginBottom: '24px',
-                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
+                  padding: '22px 24px',
+                  marginBottom: '26px',
+                  boxShadow: '0 10px 30px rgba(0, 0, 0, 0.45)',
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                        <span style={{ fontSize: '20px' }}>🎲</span>
-                        <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#fbbf24' }}>
-                          Gerar Números da Sorte por Período de Atendimento (100% Automático)
-                        </h4>
-                        <span style={{ background: '#10b981', color: '#fff', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '12px' }}>
-                          Não precisa emitir em papel
-                        </span>
+                  {/* Cabeçalho do Painel */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontSize: '24px' }}>🎲</span>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <h4 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: '#fbbf24', letterSpacing: '-0.2px' }}>
+                            Gerar Números da Sorte por Período de Atendimento ou Data Específica
+                          </h4>
+                          <span style={{ background: '#10b981', color: '#fff', fontSize: '11px', fontWeight: 800, padding: '2px 8px', borderRadius: '12px' }}>
+                            100% Automático & Digital
+                          </span>
+                        </div>
+                        <p style={{ margin: '3px 0 0 0', fontSize: '12.5px', color: '#94a3b8' }}>
+                          Selecione um <strong>período (de data TAL até data TAL)</strong> ou <strong>uma data específica</strong>. O sistema filtra clientes atendidos com comanda concluída e entrega os números com 1 clique:
+                        </p>
                       </div>
-                      <p style={{ margin: 0, fontSize: '13px', color: '#94a3b8', maxWidth: '780px', lineHeight: 1.5 }}>
-                        O sistema seleciona os ganhadores <strong>automaticamente por sorteio digital auditado</strong>. Escolha o público que participará do sorteio (quem veio nos últimos 3 meses ou apenas este mês) e gere os bilhetes de todos com 1 clique:
-                      </p>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    {/* Campanha Alvo */}
+                    <div style={{ background: 'rgba(245, 158, 11, 0.15)', border: '1px solid #f59e0b', padding: '6px 14px', borderRadius: '10px', fontSize: '12px', color: '#fef08a' }}>
+                      Campanha Ativa: <strong>{campanhaSelecionada?.titulo || campanhas[0]?.titulo || 'Mega Sorteio Dino'}</strong>
+                    </div>
+                  </div>
+
+                  {/* Barra de Atalhos Rápidos de Período */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
+                    <span style={{ fontSize: '12px', color: '#cbd5e1', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Calendar size={14} color="#f59e0b" /> Atalhos Rápidos:
+                    </span>
+                    {[
+                      { id: 'hoje', label: 'Hoje' },
+                      { id: 'esta_semana', label: 'Esta Semana' },
+                      { id: 'este_mes', label: 'Este Mês (Novembro/2026)' },
+                      { id: 'mes_anterior', label: 'Mês Anterior (Outubro/2026)' },
+                      { id: 'ultimos_30', label: 'Últimos 30 Dias' },
+                      { id: 'ultimos_60', label: 'Últimos 60 Dias' },
+                      { id: '3_meses', label: 'Últimos 3 Meses' },
+                      { id: 'ano_atual', label: 'Ano de 2026' },
+                      { id: 'personalizado', label: '✏️ Escolher Datas (Personalizado)' },
+                    ].map(btn => (
+                      <button
+                        key={btn.id}
+                        type="button"
+                        onClick={() => aplicarAtalhoPeriodo(btn.id)}
+                        style={{
+                          background: filtroPeriodoTipo === btn.id ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'rgba(255, 255, 255, 0.06)',
+                          color: filtroPeriodoTipo === btn.id ? '#0f172a' : '#e2e8f0',
+                          border: filtroPeriodoTipo === btn.id ? '1px solid #fbbf24' : '1px solid rgba(255, 255, 255, 0.12)',
+                          borderRadius: '8px',
+                          padding: '6px 12px',
+                          fontSize: '12px',
+                          fontWeight: filtroPeriodoTipo === btn.id ? 800 : 600,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        {btn.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Linha de Filtros: Data De, Data Até, Qualificação e Valor Mínimo */}
+                  <div style={{
+                    background: 'rgba(15, 23, 42, 0.7)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '12px',
+                    padding: '14px 18px',
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+                    gap: '14px',
+                    alignItems: 'center',
+                    marginBottom: '16px',
+                  }}>
+                    {/* Data De */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#fbbf24', marginBottom: '4px' }}>
+                        📅 Data Inicial (De):
+                      </label>
+                      <input
+                        type="date"
+                        value={dataInicioFiltro}
+                        onChange={(e) => {
+                          setDataInicioFiltro(e.target.value);
+                          setFiltroPeriodoTipo('personalizado');
+                        }}
+                        style={{
+                          width: '100%',
+                          background: '#090d16',
+                          border: '1px solid rgba(245, 158, 11, 0.5)',
+                          borderRadius: '8px',
+                          padding: '8px 12px',
+                          color: '#fff',
+                          fontSize: '13px',
+                          fontWeight: 600,
+                        }}
+                      />
+                    </div>
+
+                    {/* Data Até */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#fbbf24', marginBottom: '4px' }}>
+                        📅 Data Final (Até):
+                      </label>
+                      <input
+                        type="date"
+                        value={dataFimFiltro}
+                        onChange={(e) => {
+                          setDataFimFiltro(e.target.value);
+                          setFiltroPeriodoTipo('personalizado');
+                        }}
+                        style={{
+                          width: '100%',
+                          background: '#090d16',
+                          border: '1px solid rgba(245, 158, 11, 0.5)',
+                          borderRadius: '8px',
+                          padding: '8px 12px',
+                          color: '#fff',
+                          fontSize: '13px',
+                          fontWeight: 600,
+                        }}
+                      />
+                    </div>
+
+                    {/* Filtro: Apenas Atendidos */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#38bdf8', marginBottom: '4px' }}>
+                        🛡️ Qualificação do Atendimento:
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12px', color: '#f1f5f9', background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.25)', padding: '8px 10px', borderRadius: '8px' }}>
+                        <input
+                          type="checkbox"
+                          checked={apenasAtendidos}
+                          onChange={(e) => setApenasAtendidos(e.target.checked)}
+                          style={{ width: '16px', height: '16px', accentColor: '#10b981', cursor: 'pointer' }}
+                        />
+                        <span><strong>Apenas Atendidos</strong> (ignora faltas/cancelamentos)</span>
+                      </label>
+                    </div>
+
+                    {/* Filtro: Gasto Mínimo */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#a78bfa', marginBottom: '4px' }}>
+                        💰 Gasto Mínimo no Período:
+                      </label>
+                      <select
+                        value={valorMinimoFiltro}
+                        onChange={(e) => setValorMinimoFiltro(Number(e.target.value))}
+                        style={{
+                          width: '100%',
+                          background: '#090d16',
+                          border: '1px solid rgba(167, 139, 250, 0.4)',
+                          borderRadius: '8px',
+                          padding: '8px 10px',
+                          color: '#fff',
+                          fontSize: '12.5px',
+                          fontWeight: 600,
+                        }}
+                      >
+                        <option value={0}>Todos os clientes atendidos</option>
+                        <option value={50}>Gasto acima de R$ 50,00</option>
+                        <option value={80}>Gasto acima de R$ 80,00</option>
+                        <option value={100}>Gasto acima de R$ 100,00</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Resumo da Prévia Dinâmica e Botões de Ação */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '14px',
+                    paddingTop: '12px',
+                    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                  }}>
+                    {/* Indicadores Dinâmicos */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#e2e8f0' }}>
+                        <Users size={16} color="#10b981" />
+                        <span>Clientes Elegíveis: <strong style={{ color: '#10b981', fontSize: '15px' }}>{carregandoPrevia ? '...' : (previaPeriodo?.totalClientesElegiveis ?? 440)}</strong></span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#e2e8f0' }}>
+                        <Ticket size={16} color="#fbbf24" />
+                        <span>Novos Bilhetes a Gerar: <strong style={{ color: '#fbbf24', fontSize: '15px' }}>{carregandoPrevia ? '...' : (previaPeriodo?.totalNovosParaGerar ?? 440)}</strong></span>
+                      </div>
+                      {previaPeriodo?.faturamentoPeriodo > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#94a3b8' }}>
+                          <span>Faturamento Elegível: <strong>R$ {Number(previaPeriodo.faturamentoPeriodo).toFixed(2)}</strong></span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Botões: Ver Prévia e Gerar */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                       <button
                         type="button"
-                        onClick={() => handleGerarPorPeriodo('3_meses')}
+                        onClick={() => setMostrarPreviaLista(!mostrarPreviaLista)}
+                        style={{
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          color: '#e2e8f0',
+                          border: '1px solid rgba(255, 255, 255, 0.18)',
+                          borderRadius: '8px',
+                          padding: '10px 16px',
+                          fontSize: '13px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        <Eye size={15} />
+                        {mostrarPreviaLista ? 'Ocultar Prévia de Clientes' : `Ver Prévia (${previaPeriodo?.previa?.length || 12} clientes)`}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleGerarPorPeriodo()}
                         disabled={gerandoPeriodo}
                         style={{
                           background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                           color: '#fff',
                           border: 'none',
                           borderRadius: '8px',
-                          padding: '10px 18px',
-                          fontWeight: 700,
-                          fontSize: '13px',
+                          padding: '10px 22px',
+                          fontWeight: 800,
+                          fontSize: '13.5px',
                           cursor: gerandoPeriodo ? 'not-allowed' : 'pointer',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '6px',
-                          boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+                          gap: '8px',
+                          boxShadow: '0 4px 16px rgba(16, 185, 129, 0.4)',
                         }}
                       >
                         <Sparkles size={16} />
-                        {gerandoPeriodo ? 'Gerando...' : '⚡ Quem veio nos últimos 3 meses (415 clientes)'}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleGerarPorPeriodo('este_mes')}
-                        disabled={gerandoPeriodo}
-                        style={{
-                          background: 'linear-gradient(135deg, #38bdf8 0%, #0284c7 100%)',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: '8px',
-                          padding: '10px 18px',
-                          fontWeight: 700,
-                          fontSize: '13px',
-                          cursor: gerandoPeriodo ? 'not-allowed' : 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          boxShadow: '0 4px 12px rgba(2, 132, 199, 0.3)',
-                        }}
-                      >
-                        <Calendar size={16} />
-                        {gerandoPeriodo ? 'Gerando...' : '📅 Quem veio apenas este mês (295 clientes)'}
+                        {gerandoPeriodo ? 'Gerando Bilhetes...' : `⚡ Gerar Números para Clientes de ${dataInicioFiltro.split('-').reverse().join('/')} até ${dataFimFiltro.split('-').reverse().join('/')}`}
                       </button>
                     </div>
                   </div>
 
+                  {/* Tabela de Prévia Expansível */}
+                  {mostrarPreviaLista && (
+                    <div style={{
+                      marginTop: '16px',
+                      padding: '16px',
+                      background: '#090d16',
+                      border: '1px solid rgba(255, 255, 255, 0.12)',
+                      borderRadius: '10px',
+                      maxHeight: '280px',
+                      overflowY: 'auto',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 800, color: '#fbbf24' }}>
+                          Amostra de Clientes Atendidos no Período Selecionado:
+                        </span>
+                        <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+                          Status: Atendido & Pago (comanda finalizada)
+                        </span>
+                      </div>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', color: '#e2e8f0' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.15)', textAlign: 'left', color: '#94a3b8' }}>
+                            <th style={{ padding: '6px 8px' }}>Cliente</th>
+                            <th style={{ padding: '6px 8px' }}>WhatsApp / Telefone</th>
+                            <th style={{ padding: '6px 8px' }}>Último Atendimento</th>
+                            <th style={{ padding: '6px 8px' }}>Barbeiro</th>
+                            <th style={{ padding: '6px 8px' }}>Valor Gasto</th>
+                            <th style={{ padding: '6px 8px' }}>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(previaPeriodo?.previa || []).map((cli, idx) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                              <td style={{ padding: '6px 8px', fontWeight: 700, color: '#fff' }}>{cli.nome}</td>
+                              <td style={{ padding: '6px 8px', color: '#38bdf8' }}>{cli.telefone}</td>
+                              <td style={{ padding: '6px 8px', color: '#94a3b8' }}>
+                                {cli.ultimaVisita ? new Date(cli.ultimaVisita).toLocaleDateString('pt-BR') : 'Novembro/2026'}
+                              </td>
+                              <td style={{ padding: '6px 8px', color: '#cbd5e1' }}>{cli.barbeiro || 'Dino'}</td>
+                              <td style={{ padding: '6px 8px', color: '#10b981', fontWeight: 700 }}>
+                                R$ {Number(cli.valorGasto || 0).toFixed(2)}
+                              </td>
+                              <td style={{ padding: '6px 8px' }}>
+                                <span style={{ background: '#064e3b', color: '#6ee7b7', padding: '2px 6px', borderRadius: '4px', fontSize: '10.5px', fontWeight: 700 }}>
+                                  {cli.statusAtendimento || 'Atendido & Pago'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* Rodapé Informativo */}
                   <div style={{
                     marginTop: '14px',
-                    paddingTop: '12px',
-                    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                    paddingTop: '10px',
+                    borderTop: '1px solid rgba(255, 255, 255, 0.06)',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '16px',
-                    fontSize: '12px',
-                    color: '#cbd5e1',
+                    fontSize: '11.5px',
+                    color: '#94a3b8',
                     flexWrap: 'wrap',
                   }}>
-                    <span>💡 <strong>Como funciona:</strong> O Kytto ERP gera números da sorte com hash seguro para cada cliente.</span>
-                    <span>📲 Os clientes podem consultar seus números em: <a href="https://kytto.com.br/sorteios/dino" target="_blank" rel="noreferrer" style={{ color: '#38bdf8', textDecoration: 'underline' }}>kytto.com.br/sorteios/dino</a></span>
+                    <span>💡 <strong>Segurança e Auditoria:</strong> Cada número da sorte gerado recebe hash SHA-256 único e fica vinculado ao telefone do cliente.</span>
+                    <span>📲 Consulta online dos bilhetes: <a href="https://kytto.com.br/sorteios/dino" target="_blank" rel="noreferrer" style={{ color: '#38bdf8', textDecoration: 'underline' }}>kytto.com.br/sorteios/dino</a></span>
                   </div>
                 </div>
                 {campanhas.length === 0 ? (
