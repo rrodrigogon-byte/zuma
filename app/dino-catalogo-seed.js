@@ -259,16 +259,20 @@ export function provisionarCatalogoDino({
   if (commerceDb && typeof commerceDb.query === 'function') {
     (async () => {
       try {
+        // Obter uma categoria padrão para satisfazer a constraint not-null de categoria_id
+        const catRes = await commerceDb.query(`SELECT id FROM categorias LIMIT 1`).catch(() => null);
+        const catId = catRes?.rows?.[0]?.id || null;
         for (const p of PRODUTOS_DINO_OFICIAIS) {
+          if (!catId) continue;
           await commerceDb.query(
-            `INSERT INTO produtos (id, empresa_id, nome, preco_venda, preco_custo, codigo_interno, ativo)
-             VALUES ($1, $2, $3, $4, $5, $6, true)
+            `INSERT INTO produtos (id, empresa_id, categoria_id, nome, preco_venda, preco_custo, codigo_interno, ativo)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, true)
              ON CONFLICT (id) DO UPDATE SET 
                nome = EXCLUDED.nome,
                preco_venda = EXCLUDED.preco_venda,
                preco_custo = EXCLUDED.preco_custo,
                ativo = true;`,
-            [idParaUuid(p.id), empresaId, p.nome, p.precoVenda, p.custoMedio, p.id || p.codigoInterno]
+            [idParaUuid(p.id), empresaId, catId, p.nome, p.precoVenda, p.custoMedio, p.id || p.codigoInterno]
           ).catch(() => null);
         }
       } catch (e) {
