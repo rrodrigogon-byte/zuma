@@ -218,6 +218,7 @@ const SorteiosPublico   = lazyWithRetry(() => import('./pages/public/SorteiosPub
 const ComercialPlanosTangara = lazyWithRetry(() => import('./pages/admin/comercial/ComercialPlanosTangara'))
 const AutoPecasHubPage = lazyWithRetry(() => import('./pages/admin/autopecas/AutoPecasHubPage'))
 const AutoPecasStorefront = lazyWithRetry(() => import('./pages/public/AutoPecasStorefront'))
+const IntegracoesCorporativasEventBus = lazyWithRetry(() => import('./pages/admin/integracoes/IntegracoesCorporativasEventBus'))
 const OrdemServicoAprovacaoPublico = lazyWithRetry(() => import('./pages/public/OrdemServicoAprovacaoPublico'))
 const Barbearia       = lazyWithRetry(() => import('./pages/admin/Barbearia'))
 const InteligenciaVendasPage = lazyWithRetry(() => import('./pages/admin/InteligenciaVendasPage'))
@@ -451,6 +452,10 @@ export default function App() {
           <Route path="/admin/comercial" element={<Layout><ComercialPlanosTangara /></Layout>} />
           <Route path="/admin/autopecas" element={<Layout><AutoPecasHubPage /></Layout>} />
           <Route path="/admin/pecas" element={<Layout><AutoPecasHubPage /></Layout>} />
+          <Route path="/admin/eventos" element={<Layout><IntegracoesCorporativasEventBus /></Layout>} />
+          <Route path="/admin/integracoes" element={<Layout><IntegracoesCorporativasEventBus /></Layout>} />
+          <Route path="/admin/cotacoes" element={<Layout><IntegracoesCorporativasEventBus /></Layout>} />
+          <Route path="/admin/compras-cotacoes" element={<Layout><IntegracoesCorporativasEventBus /></Layout>} />
           <Route path="/admin/sorteio" element={<Layout><SorteiosCampanhas /></Layout>} />
           <Route path="/admin/barbearia-erp"   element={<Layout><BarbeariaERP /></Layout>} />
           <Route path="/admin/barbearia"        element={<Layout><Barbearia /></Layout>} />

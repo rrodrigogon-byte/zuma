@@ -9,6 +9,7 @@ import { createReformaTributariaRouter } from './routes/reforma-tributaria-route
 import { createVarejoMulticanalRouter } from './routes/varejo-multicanal-routes.js';
 import { createOficinaAdminRouter, createOficinaPublicoRouter } from './routes/oficina-routes.js';
 import { createAutoPecasAdminRouter, createAutoPecasPublicoRouter } from './routes/autopecas-routes.js';
+import { createIntegracoesEventosRouter } from './routes/integracoes-eventos-routes.js';
 import { createAgroRouter, createAgropecuariaRouter, createCteMdfeRouter, createImplantacaoRouter } from './routes/pilares-nota-100-routes.js';
 // Primeiro import: a vigia de memória começa antes de carregar o banco (ver vigia-memoria.js).
 import { situacaoMemoria } from './vigia-memoria.js';
@@ -2104,7 +2105,7 @@ app.use('/api/admin/commerce', (req, res, next) => {
 });
 
 // Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
-const TENANT_ADMIN_MODULES = new Set(['contas-receber', 'alertas-vencimento', 'contas-pagar', 'dino', 'funcionarios', 'fornecedores', 'usuarios-mestres', 'servicos', 'produtos', 'formas-pagamento', 'empresas-plataforma', 'empresa-ativa', 'meu-perfil', 'minha-empresa', 'fluxo-caixa', 'dre', 'conciliacao', 'tesouraria', 'sorteios', 'sorteio', 'palatare', 'pizzaria', 'concreto', 'balanca', 'balanca-rodoviaria', 'a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'empresas', 'plataforma', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'supermercado', 'pdv-offline', 'minhas-permissoes', 'cupons', 'omnichannel', 'pdv', 'dino-captacao', 'clientes-360', 'relatorios', 'estoque', 'cardapio', 'fichas-tecnicas', 'erp', 'fechamento-diario', 'compras', 'whatsapp', 'whatsapp-gestao', 'ia', 'gamificacao', 'barber', 'barbeiro', 'crm', 'financeiro', 'automacoes', 'eventos', 'licenciamento', 'ia-advisor', 'inteligencia-vendas', 'vender-mais', 'tef', 'boletos', 'fiscal-avancado', 'sped', 'delivery', 'dimp-auditoria', 'supply-chain', 'reforma-tributaria', 'varejo-multicanal', 'oficina', 'autopecas', 'pecas', 'agro', 'agropecuaria', 'cte-mdfe', 'implantacao']);
+const TENANT_ADMIN_MODULES = new Set(['contas-receber', 'alertas-vencimento', 'contas-pagar', 'dino', 'funcionarios', 'fornecedores', 'usuarios-mestres', 'servicos', 'produtos', 'formas-pagamento', 'empresas-plataforma', 'empresa-ativa', 'meu-perfil', 'minha-empresa', 'fluxo-caixa', 'dre', 'conciliacao', 'tesouraria', 'sorteios', 'sorteio', 'palatare', 'pizzaria', 'concreto', 'balanca', 'balanca-rodoviaria', 'a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'empresas', 'plataforma', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'supermercado', 'pdv-offline', 'minhas-permissoes', 'cupons', 'omnichannel', 'pdv', 'dino-captacao', 'clientes-360', 'relatorios', 'estoque', 'cardapio', 'fichas-tecnicas', 'erp', 'fechamento-diario', 'compras', 'whatsapp', 'whatsapp-gestao', 'ia', 'gamificacao', 'barber', 'barbeiro', 'crm', 'financeiro', 'automacoes', 'eventos', 'licenciamento', 'ia-advisor', 'inteligencia-vendas', 'vender-mais', 'tef', 'boletos', 'fiscal-avancado', 'sped', 'delivery', 'dimp-auditoria', 'supply-chain', 'reforma-tributaria', 'varejo-multicanal', 'oficina', 'autopecas', 'pecas', 'integracoes', 'cotacoes', 'agro', 'agropecuaria', 'cte-mdfe', 'implantacao']);
 
 // [kytto-clube] Kytto Clube & Academia (catraca, contrato digital, agenda, retenção, Wellhub/TotalPass).
 // Usa o pool do Commerce que já existe (não abre outro pool) e a mesma resolução de empresa e
@@ -3516,6 +3517,7 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   app.use(['/api/publico/oficina', '/api/publico/os'], createOficinaPublicoRouter());
   app.use(['/api/admin/autopecas', '/api/admin/pecas'], auth, createAutoPecasAdminRouter());
   app.use(['/api/publico/autopecas', '/api/publico/pecas'], createAutoPecasPublicoRouter());
+  app.use('/api/admin', auth, createIntegracoesEventosRouter());
   const resolverEmpresaPilares = (req) => {
     if (isAdminGlobal(req.user)) {
       return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
