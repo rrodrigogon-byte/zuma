@@ -237,6 +237,20 @@ export default function SorteiosCampanhas({ embed = false }) {
 
   // Abrir modal de edição de campanha e prêmio
   const handleAbrirEditarCampanha = (camp) => {
+    let dataFormatada = '';
+    const rawData = camp.dataSorteio || camp.dataFim;
+    if (rawData) {
+      if (typeof rawData === 'string' && rawData.includes('T')) {
+        dataFormatada = rawData.split('T')[0];
+      } else if (typeof rawData === 'string' && rawData.includes('/')) {
+        const partes = rawData.split('/');
+        if (partes.length === 3) {
+          dataFormatada = `${partes[2]}-${partes[1].padStart(2, '0')}-${partes[0].padStart(2, '0')}`;
+        }
+      } else {
+        dataFormatada = String(rawData).slice(0, 10);
+      }
+    }
     setCampanhaEditando({
       id: camp.id,
       titulo: camp.titulo || '',
@@ -247,7 +261,7 @@ export default function SorteiosCampanhas({ embed = false }) {
       valorMinimoBilhete: camp.regras?.valorMinimoBilhete ?? 50,
       multiplicadorPerfumaria: camp.regras?.multiplicadorPerfumaria ?? 2,
       bonusClube: camp.regras?.bonusClube ?? 3,
-      dataSorteio: camp.dataSorteio ? camp.dataSorteio.split('T')[0] : (camp.dataFim ? camp.dataFim.split('T')[0] : ''),
+      dataSorteio: dataFormatada,
       status: camp.status || 'ativa',
     });
     setModalEditarCampanhaAberto(true);
@@ -255,30 +269,59 @@ export default function SorteiosCampanhas({ embed = false }) {
 
   // Salvar alterações de prêmio e campanha via PUT /api/admin/sorteios/:id
   const handleSalvarEdicaoCampanha = async (e) => {
-    e.preventDefault();
-    if (!campanhaEditando?.id) return;
-    if (!campanhaEditando.premioPrincipal?.trim()) {
+    if (e && typeof e.preventDefault === 'function') {
+      e.preventDefault();
+    }
+    if (!campanhaEditando?.id) {
+      toast.warning('Nenhuma campanha selecionada para edição.');
+      return;
+    }
+    if (!campanhaEditando.premioPrincipal || !campanhaEditando.premioPrincipal.trim()) {
       toast.warning('Informe o Prêmio Principal.');
       return;
     }
     setSalvandoEdicao(true);
     try {
+      // Normalização robusta de data sem estourar RangeError
+      let dataIso = undefined;
+      let dataFimIso = undefined;
+      const dRaw = (campanhaEditando.dataSorteio || '').trim();
+      if (dRaw) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dRaw)) {
+          dataIso = `${dRaw}T20:00:00-04:00`;
+          dataFimIso = `${dRaw}T23:59:59-04:00`;
+        } else if (/^\d{2}\/\d{2}\/\d{4}$/.test(dRaw)) {
+          const [d, m, y] = dRaw.split('/');
+          dataIso = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}T20:00:00-04:00`;
+          dataFimIso = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}T23:59:59-04:00`;
+        } else {
+          try {
+            const parsed = new Date(dRaw);
+            if (!isNaN(parsed.getTime())) {
+              dataIso = parsed.toISOString();
+              dataFimIso = parsed.toISOString();
+            }
+          } catch (_) {}
+        }
+      }
+
       const payload = {
-        titulo: campanhaEditando.titulo,
-        premioPrincipal: campanhaEditando.premioPrincipal,
-        descricao: campanhaEditando.descricao,
-        regulamento: campanhaEditando.regulamento,
-        bannerUrl: campanhaEditando.bannerUrl,
-        status: campanhaEditando.status,
-        dataSorteio: campanhaEditando.dataSorteio ? new Date(`${campanhaEditando.dataSorteio}T20:00:00-04:00`).toISOString() : undefined,
-        dataFim: campanhaEditando.dataSorteio ? new Date(`${campanhaEditando.dataSorteio}T23:59:59-04:00`).toISOString() : undefined,
+        titulo: (campanhaEditando.titulo || '').trim(),
+        premioPrincipal: (campanhaEditando.premioPrincipal || '').trim(),
+        descricao: campanhaEditando.descricao || '',
+        regulamento: campanhaEditando.regulamento || '',
+        bannerUrl: campanhaEditando.bannerUrl || '',
+        status: campanhaEditando.status || 'ativa',
+        dataSorteio: dataIso,
+        dataFim: dataFimIso,
         regras: {
           valorMinimoBilhete: Number(campanhaEditando.valorMinimoBilhete || 50),
           multiplicadorPerfumaria: Number(campanhaEditando.multiplicadorPerfumaria || 2),
           bonusClube: Number(campanhaEditando.bonusClube || 3),
         }
       };
-      await api.put(`/api/admin/sorteios/${campanhaEditando.id}`, payload);
+
+      const res = await api.put(`/api/admin/sorteios/${campanhaEditando.id}`, payload);
       toast.success('Prêmio e dados do sorteio atualizados com sucesso!');
       setModalEditarCampanhaAberto(false);
       await carregarCampanhas();
@@ -286,7 +329,8 @@ export default function SorteiosCampanhas({ embed = false }) {
         setCampanhaSelecionada(prev => ({ ...prev, ...payload }));
       }
     } catch (err) {
-      toast.error('Erro ao atualizar sorteio: ' + err.message);
+      console.error('Erro ao salvar alterações da campanha:', err);
+      toast.error('Erro ao atualizar sorteio: ' + (err.message || 'Falha na requisição'));
     } finally {
       setSalvandoEdicao(false);
     }
@@ -1287,7 +1331,7 @@ export default function SorteiosCampanhas({ embed = false }) {
               </button>
             </div>
 
-            <form onSubmit={handleSalvarEdicaoCampanha} className="form-grid">
+            <form onSubmit={handleSalvarEdicaoCampanha} noValidate className="form-grid">
               <div className="form-group full-width" style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '12px 16px', borderRadius: '8px' }}>
                 <label style={{ color: '#fbbf24', fontWeight: 800, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   🏆 Prêmio Principal do Sorteio (O que o cliente vai ganhar) *
@@ -1393,10 +1437,11 @@ export default function SorteiosCampanhas({ embed = false }) {
                   Cancelar
                 </button>
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={handleSalvarEdicaoCampanha}
                   className="btn-ouro"
                   disabled={salvandoEdicao}
-                  style={{ padding: '10px 22px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  style={{ padding: '10px 22px', display: 'flex', alignItems: 'center', gap: '6px', cursor: salvandoEdicao ? 'not-allowed' : 'pointer' }}
                 >
                   <Edit3 size={16} />
                   {salvandoEdicao ? 'Salvando Alterações...' : '💾 Salvar Alterações do Prêmio'}
