@@ -132,6 +132,76 @@ export default function PDVUnificado() {
   const [modalAjusteItem, setModalAjusteItem] = useState(null) // { item, novoEstoqueFisico, motivo }
   const [salvandoAjuste, setSalvandoAjuste] = useState(false)
 
+  // Configuração e Gestão de Impressoras Térmicas (80mm/58mm, NFC-e e Spooler)
+  const CONFIG_IMPRESSORA_PADRAO = {
+    modelo: 'elgin-i9', // 'elgin-i9' | 'bematech-mp4200' | 'epson-tmt20x' | 'daruma-dr800' | 'generica-escpos' | 'sistema'
+    larguraPapel: '80mm', // '80mm' | '58mm' | 'a4'
+    conexao: 'navegador', // 'navegador' | 'usb_serial' | 'rede'
+    ipRede: '192.168.1.200',
+    portaRede: '9100',
+    imprimirAutomatico: true,
+    emitirNfceAutomatico: true,
+    cortarPapel: true,
+    abrirGaveta: false,
+    viasTef: 2,
+    nomeFantasia: 'STALLONE NUTRE SPORT',
+    razaoSocial: 'Stallone Nutre Sport Ltda',
+    cnpj: '56.099.531/0001-38',
+    inscricaoEstadual: '13.987.654-3',
+    cidadeUf: 'Tangará da Serra — MT',
+    telefone: '(65) 99905-6008',
+    mensagemRodape: 'Stallone Nutre Sport · Treine com os Melhores! stallone.kytto.com.br',
+  }
+
+  const [configImpressora, setConfigImpressora] = useState(() => {
+    try {
+      const salvo = localStorage.getItem('kytto_pdv_config_impressora')
+      return salvo ? { ...CONFIG_IMPRESSORA_PADRAO, ...JSON.parse(salvo) } : CONFIG_IMPRESSORA_PADRAO
+    } catch {
+      return CONFIG_IMPRESSORA_PADRAO
+    }
+  })
+  const [modalImpressora, setModalImpressora] = useState(false)
+  const [cupomTesteAtivo, setCupomTesteAtivo] = useState(false)
+  const [portaSerialAtiva, setPortaSerialAtiva] = useState(null)
+
+  const salvarConfigImpressora = (nova) => {
+    setConfigImpressora(nova)
+    try {
+      localStorage.setItem('kytto_pdv_config_impressora', JSON.stringify(nova))
+      exibirToast('💾 Configuração de impressora salva no terminal!')
+    } catch (e) {
+      console.warn('Erro ao salvar config impressora:', e)
+    }
+  }
+
+  const conectarImpressoraUsbSerial = async () => {
+    if (!('serial' in navigator)) {
+      alert('A conexão direta Web Serial API é suportada no Google Chrome e Microsoft Edge no Windows, Linux e macOS. Em outros navegadores, utilize o modo "Diálogo Rápido do Navegador / Spooler do Sistema".')
+      return
+    }
+    try {
+      const port = await navigator.serial.requestPort()
+      await port.open({ baudRate: 9600 })
+      setPortaSerialAtiva(port)
+      exibirToast('✅ Impressora USB / Porta Serial conectada com sucesso!')
+      salvarConfigImpressora({ ...configImpressora, conexao: 'usb_serial' })
+    } catch (err) {
+      if (err.name !== 'NotFoundError') {
+        alert('Erro ao conectar porta serial: ' + err.message)
+      }
+    }
+  }
+
+  const executarTesteImpressao = () => {
+    setCupomTesteAtivo(true)
+    tocarBeep()
+    setTimeout(() => {
+      window.print()
+      setTimeout(() => setCupomTesteAtivo(false), 2000)
+    }, 200)
+  }
+
   const abrirModalVendas = async () => {
     setModalVendas(true)
     setCarregandoVendas(true)
@@ -347,7 +417,7 @@ export default function PDVUnificado() {
         abrirModalVendas()
       } else if (e.key === 'F7') {
         e.preventDefault()
-        document.getElementById('pdv-desconto-input')?.focus()
+        setModalImpressora(true)
       } else if (e.key === 'F8') {
         e.preventDefault()
         setModalFechamentoCego(true)
@@ -365,6 +435,9 @@ export default function PDVUnificado() {
         setModalCaixa(null)
         setModalCamera(false)
         setModalFechamentoCego(false)
+        setModalImpressora(false)
+        setModalEstoqueMulticanal(false)
+        setModalAjusteItem(null)
         setReducaoZ(null)
         setVenda(null)
       }
@@ -723,6 +796,10 @@ export default function PDVUnificado() {
       setTroco('')
       setCpfNota('')
 
+      if (configImpressora?.imprimirAutomatico) {
+        setTimeout(() => window.print(), 350)
+      }
+
       if (segmento === 'stallone') {
         for (const it of payload.itens) {
           api.post('/api/stallone-club/estoque/baixar-pdv', {
@@ -898,6 +975,45 @@ export default function PDVUnificado() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: theme.bg, color: theme.cream, overflow: 'hidden', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
 
+      {/* ── Calibração de Impressão Térmica ESC/POS e Spooler (@media print) ── */}
+      <style>{`
+        @media print {
+          body, html {
+            background: #fff !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          body * {
+            visibility: hidden !important;
+          }
+          #cupom-pdv-print, #cupom-pdv-print *,
+          #reducao-z-print, #reducao-z-print *,
+          #cupom-teste-print, #cupom-teste-print * {
+            visibility: visible !important;
+          }
+          #cupom-pdv-print, #reducao-z-print, #cupom-teste-print {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: ${configImpressora?.larguraPapel === '58mm' ? '54mm' : configImpressora?.larguraPapel === 'a4' ? '180mm' : '76mm'} !important;
+            max-width: ${configImpressora?.larguraPapel === '58mm' ? '54mm' : configImpressora?.larguraPapel === 'a4' ? '180mm' : '76mm'} !important;
+            margin: 0 !important;
+            padding: 2mm 3mm !important;
+            color: #000 !important;
+            background: #fff !important;
+            font-family: 'Courier New', Courier, monospace !important;
+            font-size: ${configImpressora?.larguraPapel === '58mm' ? '10px' : '11.5px'} !important;
+            line-height: 1.35 !important;
+            box-shadow: none !important;
+            border: none !important;
+          }
+          @page {
+            size: ${configImpressora?.larguraPapel === '58mm' ? '58mm auto' : configImpressora?.larguraPapel === 'a4' ? 'A4 portrait' : '80mm auto'};
+            margin: 0mm;
+          }
+        }
+      `}</style>
+
       {/* Alerta de Sincronização em Background */}
       {avisoSync && (
         <div style={{ background: theme.green, color: '#fff', padding: '6px 14px', fontSize: 12, fontWeight: 800, textAlign: 'center', transition: 'all .3s' }}>
@@ -1006,6 +1122,21 @@ export default function PDVUnificado() {
             title="Gestão de Estoque Multicanal Integrado (Balcão Físico + Loja Online Stallone VIP Club)"
           >
             📦 Estoque Multicanal
+          </button>
+
+          {/* Configurações de Impressoras Térmicas (F7) */}
+          <button
+            onClick={() => setModalImpressora(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+              color: '#fff', border: '1px solid #3b82f6',
+              padding: '4px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700,
+              boxShadow: '0 0 10px rgba(37, 99, 235, 0.35)'
+            }}
+            title="Instalação e configuração de impressoras térmicas (80mm/58mm, ESC/POS, Spooler, Elgin, Bematech, Epson)"
+          >
+            🖨️ Impressoras (F7)
           </button>
 
           {/* Fechamento Cego e Redução Z */}
@@ -1911,10 +2042,20 @@ export default function PDVUnificado() {
             {/* Comprovante Térmico Formatado */}
             <div id="cupom-pdv-print" style={{ fontFamily: 'monospace', fontSize: 12, lineHeight: 1.4, borderBottom: '1px dashed #666', paddingBottom: 12, marginBottom: 14 }}>
               <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: 14, marginBottom: 4 }}>
-                KYTTO SUPERMERCADO & VAREJO
+                {segmento === 'stallone' ? (configImpressora?.nomeFantasia || 'STALLONE NUTRE SPORT') : 'KYTTO SUPERMERCADO & VAREJO'}
               </div>
               <div style={{ textAlign: 'center', fontSize: 10, color: '#444' }}>
-                Barbearia Dino Comércio e Serviços Ltda<br />
+                {segmento === 'stallone' ? (
+                  <>
+                    {configImpressora?.razaoSocial || 'STALLONE NUTRE SPORT LTDA'}<br />
+                    CNPJ: {configImpressora?.cnpj || '56.099.531/0001-38'} · IE: {configImpressora?.inscricaoEstadual || '13.987.654-3'}<br />
+                    {configImpressora?.cidadeUf || 'Tangará da Serra — MT'} · Tel: {configImpressora?.telefone || '(65) 99905-6008'}<br />
+                  </>
+                ) : (
+                  <>
+                    Barbearia Dino Comércio e Serviços Ltda<br />
+                  </>
+                )}
                 {venda.nfce ? 'DANFE NFC-e — NOTA FISCAL DE CONSUMIDOR ELETRÔNICA' : 'DOCUMENTO AUXILIAR DE VENDA (NÃO FISCAL)'}
               </div>
               <div style={{ borderBottom: '1px dashed #666', margin: '8px 0' }} />
@@ -1994,7 +2135,9 @@ export default function PDVUnificado() {
                 </div>
               ) : (
                 <div style={{ textAlign: 'center', fontSize: 10, marginTop: 14, color: '#555' }}>
-                  Obrigado pela preferência! Volte sempre!
+                  {segmento === 'stallone' && configImpressora?.mensagemRodape
+                    ? configImpressora.mensagemRodape
+                    : 'Obrigado pela preferência! Volte sempre!'}
                 </div>
               )}
             </div>
@@ -2433,6 +2576,420 @@ export default function PDVUnificado() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* MODAL DE INSTALAÇÃO & GERENCIAMENTO DE IMPRESSORAS TÉRMICAS (F7) */}
+      {modalImpressora && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: 16 }}>
+          <div style={{ background: theme.surface, border: `1px solid ${theme.line}`, borderRadius: 16, width: '100%', maxWidth: 780, maxHeight: '92vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)' }}>
+            
+            {/* Header */}
+            <div style={{ padding: '16px 20px', borderBottom: `1px solid ${theme.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(90deg, rgba(37,99,235,0.15), transparent)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 26 }}>🖨️</span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 17, color: theme.cream, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    Instalação & Configuração de Impressoras Térmicas
+                    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 12, background: 'rgba(37,99,235,0.25)', color: '#93c5fd', border: '1px solid #3b82f6', fontWeight: 700 }}>
+                      ESC/POS · 80mm · 58mm
+                    </span>
+                  </h3>
+                  <p style={{ margin: '3px 0 0', fontSize: 12, color: theme.muted }}>
+                    Configuração para impressão rápida de Cupons de Venda, DANFE NFC-e, Redução Z e Comprovantes TEF
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setModalImpressora(false)} style={{ background: 'transparent', border: 'none', color: theme.muted, fontSize: 22, cursor: 'pointer' }}>✕</button>
+            </div>
+
+            {/* Corpo com scroll */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+              
+              {/* Seção 1: Modelo / Fabricante */}
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: theme.cream, marginBottom: 8 }}>
+                  1. Fabricante & Modelo da Impressora:
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
+                  {[
+                    { id: 'elgin_i9', nome: 'Elgin i9 / i7 / Wind', sub: 'Térmica 80mm / Guilhotina' },
+                    { id: 'bematech_mp4200', nome: 'Bematech MP-4200 TH', sub: 'Térmica 80mm / ESC/Bema' },
+                    { id: 'epson_tmt20x', nome: 'Epson TM-T20X / TM-T88', sub: 'Térmica 80mm / ESC/POS' },
+                    { id: 'daruma_dr800', nome: 'Daruma DR800 / DR700', sub: 'Térmica 80mm / Alta Velocidade' },
+                    { id: 'sweda_si300', nome: 'Sweda SI-300 / SI-150', sub: 'Térmica 80mm / Varejo' },
+                    { id: 'mini_58mm', nome: 'Mini Impressora Bluetooth', sub: 'Portátil 58mm / 32 Colunas' },
+                    { id: 'spooler_sistema', nome: 'Spooler Padrão do Sistema', sub: 'Driver Windows / Mac / Linux / PDF' }
+                  ].map(mod => {
+                    const ativo = configImpressora.modelo === mod.id
+                    return (
+                      <button
+                        key={mod.id}
+                        type="button"
+                        onClick={() => {
+                          const nova = { ...configImpressora, modelo: mod.id }
+                          if (mod.id === 'mini_58mm') nova.larguraPapel = '58mm'
+                          else if (mod.id !== 'spooler_sistema') nova.larguraPapel = '80mm'
+                          salvarConfigImpressora(nova)
+                        }}
+                        style={{
+                          textAlign: 'left',
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          background: ativo ? 'rgba(37,99,235,0.2)' : theme.card,
+                          border: `1.5px solid ${ativo ? '#3b82f6' : theme.line}`,
+                          cursor: 'pointer',
+                          color: ativo ? '#93c5fd' : theme.cream,
+                          transition: 'all .15s'
+                        }}
+                      >
+                        <div style={{ fontWeight: 800, fontSize: 13 }}>{mod.nome}</div>
+                        <div style={{ fontSize: 11, color: theme.muted, marginTop: 2 }}>{mod.sub}</div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Seção 2: Largura da Bobina */}
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: theme.cream, marginBottom: 8 }}>
+                  2. Largura da Bobina de Papel:
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                  {[
+                    { id: '80mm', label: '80 mm (Padrão)', desc: '48 colunas · Supermercados e Lojas' },
+                    { id: '58mm', label: '58 mm (Estreita)', desc: '32 colunas · Mini POS / Portátil' },
+                    { id: 'a4', label: 'Folha A4 (Laser / Jato)', desc: 'DANFE Folha Completa SEFAZ' }
+                  ].map(larg => {
+                    const ativo = configImpressora.larguraPapel === larg.id
+                    return (
+                      <button
+                        key={larg.id}
+                        type="button"
+                        onClick={() => salvarConfigImpressora({ ...configImpressora, larguraPapel: larg.id })}
+                        style={{
+                          padding: '12px 10px',
+                          borderRadius: 8,
+                          textAlign: 'center',
+                          background: ativo ? 'rgba(16,185,129,0.15)' : theme.card,
+                          border: `1.5px solid ${ativo ? '#10b981' : theme.line}`,
+                          color: ativo ? '#6ee7b7' : theme.cream,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <strong style={{ fontSize: 14, display: 'block' }}>{larg.label}</strong>
+                        <span style={{ fontSize: 11, color: theme.muted, marginTop: 4, display: 'block' }}>{larg.desc}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Seção 3: Método de Comunicação */}
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: theme.cream, marginBottom: 8 }}>
+                  3. Canal de Comunicação com a Impressora:
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+                  {[
+                    { id: 'spooler', label: '🖨️ Spooler / Driver do Sistema', desc: 'Recomendado universalmente (Windows/Mac/Linux)' },
+                    { id: 'usb_serial', label: '🔌 Web Serial API Direta', desc: 'Envio direto ESC/POS sem fila do Windows' },
+                    { id: 'rede_tcp', label: '🌐 Rede Ethernet / Wi-Fi', desc: 'Impressora de rede via socket TCP/IP 9100' }
+                  ].map(com => {
+                    const ativo = configImpressora.conexao === com.id
+                    return (
+                      <button
+                        key={com.id}
+                        type="button"
+                        onClick={() => salvarConfigImpressora({ ...configImpressora, conexao: com.id })}
+                        style={{
+                          padding: '12px',
+                          borderRadius: 8,
+                          textAlign: 'left',
+                          background: ativo ? 'rgba(124,58,237,0.2)' : theme.card,
+                          border: `1.5px solid ${ativo ? '#7c3aed' : theme.line}`,
+                          color: ativo ? '#c4b5fd' : theme.cream,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <strong style={{ fontSize: 13, display: 'block' }}>{com.label}</strong>
+                        <span style={{ fontSize: 11, color: theme.muted, marginTop: 2, display: 'block' }}>{com.desc}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {configImpressora.conexao === 'usb_serial' && (
+                  <div style={{ marginTop: 10, padding: 12, borderRadius: 8, background: 'rgba(37,99,235,0.1)', border: '1px dashed #3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ fontSize: 12, color: '#93c5fd' }}>
+                      {portaSerialAtiva ? '🟢 Porta Serial USB conectada e pronta para transmissão de dados ESC/POS!' : '⚪ Nenhuma porta USB/Serial emparelhada no momento.'}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={conectarImpressoraUsbSerial}
+                      style={{ padding: '6px 14px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 800, fontSize: 12, cursor: 'pointer' }}
+                    >
+                      🔌 {portaSerialAtiva ? 'Trocar Porta USB' : 'Conectar Impressora USB'}
+                    </button>
+                  </div>
+                )}
+
+                {configImpressora.conexao === 'rede_tcp' && (
+                  <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10 }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, color: theme.muted, marginBottom: 4 }}>Endereço IP da Impressora de Rede:</label>
+                      <input
+                        type="text"
+                        value={configImpressora.ipImpressora || ''}
+                        onChange={(e) => salvarConfigImpressora({ ...configImpressora, ipImpressora: e.target.value })}
+                        placeholder="Ex: 192.168.1.200"
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: 6, background: theme.bg, border: `1px solid ${theme.line}`, color: '#fff', fontSize: 13, boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, color: theme.muted, marginBottom: 4 }}>Porta TCP RAW:</label>
+                      <input
+                        type="text"
+                        value={configImpressora.portaTcp || '9100'}
+                        onChange={(e) => salvarConfigImpressora({ ...configImpressora, portaTcp: e.target.value })}
+                        placeholder="9100"
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: 6, background: theme.bg, border: `1px solid ${theme.line}`, color: '#fff', fontSize: 13, boxSizing: 'border-box' }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Seção 4: Automações de Impressão */}
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: theme.cream, marginBottom: 8 }}>
+                  4. Automações de Frente de Caixa:
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+                  {[
+                    { key: 'imprimirAutomatico', label: '⚡ Imprimir Cupom ao Faturar', desc: 'Abre a impressão imediatamente após fechar a venda' },
+                    { key: 'emitirNfceAutomatico', label: '📑 Emitir NFC-e Automaticamente', desc: 'Transmite à SEFAZ instantaneamente no F10' },
+                    { key: 'cortarPapel', label: '✂️ Acionar Guilhotina (ESC m)', desc: 'Corta a bobina automaticamente ao final do cupom' },
+                    { key: 'abrirGaveta', label: '💵 Abrir Gaveta de Dinheiro', desc: 'Pulso no conector RJ11 (ESC p 0)' }
+                  ].map(auto => {
+                    const ligado = Boolean(configImpressora[auto.key])
+                    return (
+                      <div
+                        key={auto.key}
+                        onClick={() => salvarConfigImpressora({ ...configImpressora, [auto.key]: !ligado })}
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          background: theme.card,
+                          border: `1px solid ${ligado ? '#3b82f6' : theme.line}`,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: 10
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={ligado}
+                          onChange={() => {}}
+                          style={{ marginTop: 3, cursor: 'pointer', accentColor: '#2563eb' }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 12, color: ligado ? '#93c5fd' : theme.cream }}>{auto.label}</div>
+                          <div style={{ fontSize: 11, color: theme.muted, marginTop: 2 }}>{auto.desc}</div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Seção 5: Dados do Cabeçalho e Rodapé */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <label style={{ fontSize: 13, fontWeight: 700, color: theme.cream }}>
+                    5. Dados da Empresa no Cabeçalho & Rodapé do Cupom:
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => salvarConfigImpressora({
+                      ...configImpressora,
+                      nomeFantasia: 'STALLONE NUTRE SPORT',
+                      razaoSocial: 'STALLONE NUTRE SPORT LTDA',
+                      cnpj: '56.099.531/0001-38',
+                      inscricaoEstadual: '13.987.654-3',
+                      cidadeUf: 'Tangará da Serra — MT',
+                      telefone: '(65) 99905-6008',
+                      mensagemRodape: 'Stallone Nutre Sport · Treine com os Melhores! stallone.kytto.com.br'
+                    })}
+                    style={{ background: 'rgba(225,29,72,0.15)', border: '1px solid #e11d48', color: '#fda4af', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    ⚡ Preencher Stallone Nutre Sport
+                  </button>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, color: theme.muted, marginBottom: 4 }}>Nome Fantasia:</label>
+                    <input
+                      type="text"
+                      value={configImpressora.nomeFantasia || ''}
+                      onChange={(e) => setConfigImpressora({ ...configImpressora, nomeFantasia: e.target.value })}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 6, background: theme.bg, border: `1px solid ${theme.line}`, color: '#fff', fontSize: 13, boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, color: theme.muted, marginBottom: 4 }}>Razão Social:</label>
+                    <input
+                      type="text"
+                      value={configImpressora.razaoSocial || ''}
+                      onChange={(e) => setConfigImpressora({ ...configImpressora, razaoSocial: e.target.value })}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 6, background: theme.bg, border: `1px solid ${theme.line}`, color: '#fff', fontSize: 13, boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, color: theme.muted, marginBottom: 4 }}>CNPJ:</label>
+                    <input
+                      type="text"
+                      value={configImpressora.cnpj || ''}
+                      onChange={(e) => setConfigImpressora({ ...configImpressora, cnpj: e.target.value })}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 6, background: theme.bg, border: `1px solid ${theme.line}`, color: '#fff', fontSize: 13, boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, color: theme.muted, marginBottom: 4 }}>Inscrição Estadual (IE):</label>
+                    <input
+                      type="text"
+                      value={configImpressora.inscricaoEstadual || ''}
+                      onChange={(e) => setConfigImpressora({ ...configImpressora, inscricaoEstadual: e.target.value })}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 6, background: theme.bg, border: `1px solid ${theme.line}`, color: '#fff', fontSize: 13, boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, color: theme.muted, marginBottom: 4 }}>Cidade / UF:</label>
+                    <input
+                      type="text"
+                      value={configImpressora.cidadeUf || ''}
+                      onChange={(e) => setConfigImpressora({ ...configImpressora, cidadeUf: e.target.value })}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 6, background: theme.bg, border: `1px solid ${theme.line}`, color: '#fff', fontSize: 13, boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, color: theme.muted, marginBottom: 4 }}>Telefone / Contato:</label>
+                    <input
+                      type="text"
+                      value={configImpressora.telefone || ''}
+                      onChange={(e) => setConfigImpressora({ ...configImpressora, telefone: e.target.value })}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 6, background: theme.bg, border: `1px solid ${theme.line}`, color: '#fff', fontSize: 13, boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 10 }}>
+                  <label style={{ display: 'block', fontSize: 11, color: theme.muted, marginBottom: 4 }}>Mensagem de Rodapé do Cupom:</label>
+                  <input
+                    type="text"
+                    value={configImpressora.mensagemRodape || ''}
+                    onChange={(e) => setConfigImpressora({ ...configImpressora, mensagemRodape: e.target.value })}
+                    placeholder="Ex: Obrigado pela preferência! Volte sempre!"
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, background: theme.bg, border: `1px solid ${theme.line}`, color: '#fff', fontSize: 13, boxSizing: 'border-box' }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Rodapé com Ações */}
+            <div style={{ padding: '14px 20px', borderTop: `1px solid ${theme.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: theme.card }}>
+              <button
+                type="button"
+                onClick={executarTesteImpressao}
+                style={{ padding: '10px 16px', background: 'rgba(16,185,129,0.2)', border: '1px solid #10b981', color: '#6ee7b7', borderRadius: 8, fontWeight: 800, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                🧪 Imprimir Cupom de Teste ({configImpressora.larguraPapel})
+              </button>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setModalImpressora(false)}
+                  style={{ padding: '10px 18px', background: 'transparent', border: `1px solid ${theme.line}`, color: theme.muted, borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+                >
+                  Fechar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    salvarConfigImpressora(configImpressora)
+                    setModalImpressora(false)
+                  }}
+                  style={{ padding: '10px 20px', background: '#2563eb', border: 'none', color: '#fff', borderRadius: 8, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}
+                >
+                  💾 Salvar no Terminal
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CUPOM DE TESTE DE IMPRESSÃO (Renderizado Oculto em Tela, Ativo Apenas para @media print) */}
+      {cupomTesteAtivo && (
+        <div id="cupom-teste-print" style={{ fontFamily: 'monospace', fontSize: configImpressora.larguraPapel === '58mm' ? 10 : 12, lineHeight: 1.35, color: '#000', background: '#fff', padding: 8 }}>
+          <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: 13, marginBottom: 4 }}>
+            ====================================<br />
+            {configImpressora.nomeFantasia || 'STALLONE NUTRE SPORT'}<br />
+            KYTTO ERP · TESTE DE IMPRESSORA<br />
+            ====================================
+          </div>
+          <div style={{ fontSize: 10, textAlign: 'center', marginBottom: 6 }}>
+            {configImpressora.razaoSocial}<br />
+            CNPJ: {configImpressora.cnpj} · IE: {configImpressora.inscricaoEstadual}<br />
+            {configImpressora.cidadeUf} · Tel: {configImpressora.telefone}
+          </div>
+          <div style={{ borderBottom: '1px dashed #000', margin: '6px 0' }} />
+          <div style={{ fontSize: 10 }}>
+            <div><strong>MODELO:</strong> {configImpressora.modelo.toUpperCase()}</div>
+            <div><strong>BOBINA:</strong> {configImpressora.larguraPapel} ({configImpressora.larguraPapel === '58mm' ? '32 Colunas' : '48 Colunas'})</div>
+            <div><strong>CONEXÃO:</strong> {configImpressora.conexao.toUpperCase()}</div>
+            <div><strong>DATA:</strong> {new Date().toLocaleString('pt-BR')}</div>
+          </div>
+          <div style={{ borderBottom: '1px dashed #000', margin: '6px 0' }} />
+          <div style={{ fontWeight: 'bold', fontSize: 11, marginBottom: 4 }}>ITENS DE TESTE DE ALINHAMENTO:</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
+            <span>1. Creatina Creapure 300g (1 un)</span>
+            <span>R$ 99,00</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
+            <span>2. 100% Whey Isolate 900g (1 un)</span>
+            <span>R$ 189,90</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 'bold', marginTop: 4 }}>
+            <span>SUBTOTAL TESTE:</span>
+            <span>R$ 288,90</span>
+          </div>
+          <div style={{ borderBottom: '1px dashed #000', margin: '6px 0' }} />
+          <div style={{ textAlign: 'center', fontSize: 10 }}>
+            <div><strong>HOMOLOGAÇÃO FISCAL SEFAZ / NFC-e:</strong></div>
+            <div style={{ fontSize: 9, margin: '4px 0' }}>CHAVE TESTE: 5126 1156 0995 3100 0138 6500 1000 0010 4610</div>
+            <div style={{ margin: '6px auto', display: 'flex', justifyContent: 'center' }}>
+              <img
+                src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=https://www.sefaz.mt.gov.br/nfce/consultanfce"
+                alt="QR Code Teste"
+                style={{ width: 90, height: 90, display: 'block' }}
+              />
+            </div>
+            <div style={{ fontSize: 9 }}>STATUS: 100% OPERACIONAL / PRODUÇÃO</div>
+          </div>
+          <div style={{ borderBottom: '1px dashed #000', margin: '8px 0' }} />
+          <div style={{ textAlign: 'center', fontSize: 10 }}>
+            {configImpressora.mensagemRodape}
+          </div>
+          {configImpressora.cortarPapel && (
+            <div style={{ textAlign: 'center', fontSize: 9, color: '#333', marginTop: 10 }}>
+              - - - - - - - - - [ CORTE GUILHOTINA ] - - - - - - - - -
+            </div>
+          )}
         </div>
       )}
     </div>
