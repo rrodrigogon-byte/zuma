@@ -4,9 +4,19 @@ import * as barbeariaErpKytto from '../app/barbearia-erp-kytto.js';
 
 const EMPRESA_ID = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6'; // Barbearia Dino
 
-test('Comanda Barbearia: preserva preço customizado de serviço alterado na abertura', () => {
+function obterOuCriarServico() {
   const servicos = barbeariaErpKytto.listarServicos(EMPRESA_ID);
   const corte = servicos.find((s) => s.ativo !== false) || servicos[0];
+  if (corte) return corte;
+  return barbeariaErpKytto.criarServico(EMPRESA_ID, {
+    nome: 'Corte Cabelo e Barba Dino',
+    preco: 70,
+    duracaoMinutos: 45,
+  });
+}
+
+test('Comanda Barbearia: preserva preço customizado de serviço alterado na abertura', () => {
+  const corte = obterOuCriarServico();
   assert.ok(corte, 'Deve existir ao menos um serviço');
 
   const precoCadastro = Number(corte.preco || 0);
@@ -66,8 +76,7 @@ test('Comanda Barbearia: preserva preço customizado de produto de revenda alter
 });
 
 test('Comanda Barbearia: atualizarItemComandaBarbearia aceita valor/precoUnitario e recalcula totais', () => {
-  const servicos = barbeariaErpKytto.listarServicos(EMPRESA_ID);
-  const servico = servicos[0];
+  const servico = obterOuCriarServico();
 
   const comanda = barbeariaErpKytto.criarComandaBarbearia(EMPRESA_ID, {
     clienteNome: 'Cliente Ajuste Valor',

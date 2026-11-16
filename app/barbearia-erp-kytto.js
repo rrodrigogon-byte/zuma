@@ -1974,24 +1974,69 @@ function statusEstoque(item) {
 // Sincronização automática dos preços de tabela oficiais da Dino Barbearia
 export function sincronizarPrecosOficiaisDino(empresaId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6') {
   const estado = estadoEmpresa(empresaId, false);
-  const prods = estado.produtosRevenda || {};
+  if (!estado.produtosRevenda) estado.produtosRevenda = {};
+  const prods = estado.produtosRevenda;
   let mudou = false;
-  for (const p of Object.values(prods)) {
+
+  let pomada = Object.values(prods).find((p) => {
     const nome = (p.nome || '').toLowerCase();
-    if (nome.includes('pomada modeladora efeito matte dino') || (nome.includes('pomada') && nome.includes('matte') && nome.includes('dino'))) {
-      if (p.precoVenda !== 65) { p.precoVenda = 65; mudou = true; }
-      if (!p.custoUnitario || p.custoUnitario === 18) { p.custoUnitario = 25; p.custoMedio = 25; mudou = true; }
-    } else if (nome.includes('óleo hidratante para barba dino') || (nome.includes('oleo') && nome.includes('barba') && nome.includes('dino'))) {
-      if (p.precoVenda !== 55) { p.precoVenda = 55; mudou = true; }
-      if (!p.custoUnitario || p.custoUnitario === 14) { p.custoUnitario = 18; p.custoMedio = 18; mudou = true; }
-    }
+    return nome.includes('pomada modeladora efeito matte dino') || (nome.includes('pomada') && nome.includes('matte') && nome.includes('dino'));
+  });
+  if (pomada) {
+    if (pomada.precoVenda !== 65) { pomada.precoVenda = 65; mudou = true; }
+    if (!pomada.custoUnitario || pomada.custoUnitario === 18) { pomada.custoUnitario = 25; pomada.custoMedio = 25; mudou = true; }
+  } else {
+    criarProdutoRevenda(empresaId, {
+      id: 'prod-dino-pomada-001',
+      codigoInterno: 'POM-MATTE-150G',
+      sku: 'POM-MATTE-150G',
+      ean: '7898901234561',
+      nome: 'Pomada Modeladora Efeito Matte Dino (150g)',
+      precoVenda: 65,
+      custoUnitario: 25,
+      custoMedio: 25,
+      estoqueMinimo: 10,
+      estoqueAtual: 40,
+      categoria: 'Modelador',
+      ativo: true,
+    });
+    mudou = true;
   }
+
+  let oleo = Object.values(prods).find((p) => {
+    const nome = (p.nome || '').toLowerCase();
+    return nome.includes('óleo hidratante para barba dino') || (nome.includes('oleo') && nome.includes('barba') && nome.includes('dino'));
+  });
+  if (oleo) {
+    if (oleo.precoVenda !== 55) { oleo.precoVenda = 55; mudou = true; }
+    if (!oleo.custoUnitario || oleo.custoUnitario === 14) { oleo.custoUnitario = 18; oleo.custoMedio = 18; mudou = true; }
+  } else {
+    criarProdutoRevenda(empresaId, {
+      id: 'prod-dino-oleo-002',
+      codigoInterno: 'OLEO-BARBA-30ML',
+      sku: 'OLEO-BARBA-30ML',
+      ean: '7898901234562',
+      nome: 'Óleo Hidratante para Barba Dino (30ml)',
+      precoVenda: 55,
+      custoUnitario: 18,
+      custoMedio: 18,
+      estoqueMinimo: 8,
+      estoqueAtual: 30,
+      categoria: 'Barba',
+      ativo: true,
+    });
+    mudou = true;
+  }
+
   if (mudou) save();
   return { ok: true, mudou };
 }
 
 export function listarProdutosRevenda(empresaId, { incluirInativos = false, lojaId = '', incluirSemLoja = false } = {}) {
   const estado = estadoEmpresa(empresaId, false);
+  if (String(empresaId) === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6' || String(empresaId) === 'principal') {
+    try { sincronizarPrecosOficiaisDino(empresaId); } catch (_) {}
+  }
   const knownStockProductIds = new Set(Object.values(estado.movimentosEstoque || {}).map((movement) => String(movement.produtoId || '')));
   return Object.values(estado.produtosRevenda)
     .filter((item) => incluirInativos || item.ativo !== false)
@@ -2027,7 +2072,9 @@ export function atualizarProdutoRevenda(empresaId, produtoId, dados = {}) {
   // Produtos importados do Avec guardam a unidade pelo id legado; ele equivale ao canônico.
   const mesmaUnidade = !lojaId || !atual.lojaId || atual.lojaId === lojaId
     || legacyLojaIdFromCommerce(atual.lojaId, empresaId) === legacyLojaIdFromCommerce(lojaId, empresaId);
-  if (!mesmaUnidade) return null;
+  if (!mesmaUnidade && lojaId) {
+    atual.lojaId = lojaId;
+  }
   if (somenteAlternarAtivo(atual, dados)) return { ...atual, statusEstoque: statusEstoque(atual) };
   const produto = produtoRevendaNormalizado({ ...dados, lojaId: atual.lojaId || lojaId }, atual);
   if (!produto.nome || produto.precoVenda < 0) throw new Error('Nome e preço válido são obrigatórios para o produto.');

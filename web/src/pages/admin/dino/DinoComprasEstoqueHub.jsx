@@ -186,10 +186,13 @@ export default function DinoComprasEstoqueHub({
     nome: '',
     categoria: 'Modelador',
     sku: '',
+    ean: '',
+    unidade: 'un',
     precoVenda: '',
     custoUnitario: '',
     estoqueAtual: '10',
     estoqueMinimo: '5',
+    intervaloRecompraDias: '30',
     ativo: true,
   });
   const [modalExcluirProduto, setModalExcluirProduto] = useState(null);
@@ -201,13 +204,22 @@ export default function DinoComprasEstoqueHub({
       nome: '',
       categoria: 'Modelador',
       sku: '',
+      ean: '',
+      unidade: 'un',
       precoVenda: '',
       custoUnitario: '',
       estoqueAtual: '10',
       estoqueMinimo: '5',
+      intervaloRecompraDias: '30',
       ativo: true,
     });
     setModalProdutoForm(true);
+  };
+
+  const parseNumPtBr = (v, def = 0) => {
+    if (v === undefined || v === null || v === '') return def;
+    const n = Number(String(v).replace(/\s/g, '').replace('R$', '').replace(',', '.'));
+    return Number.isFinite(n) ? n : def;
   };
 
   const abrirModalEditarProduto = (prod) => {
@@ -217,10 +229,13 @@ export default function DinoComprasEstoqueHub({
       nome: prod.nome || '',
       categoria: prod.categoria || 'Modelador',
       sku: prod.sku || '',
+      ean: prod.ean || prod.codigoBarras || '',
+      unidade: prod.unidade || 'un',
       precoVenda: prod.precoVenda !== undefined ? String(prod.precoVenda) : '',
-      custoUnitario: prod.custoUnitario !== undefined ? String(prod.custoUnitario) : '',
+      custoUnitario: prod.custoUnitario !== undefined ? String(prod.custoUnitario) : (prod.custoMedio !== undefined ? String(prod.custoMedio) : ''),
       estoqueAtual: prod.estoqueAtual !== undefined ? String(prod.estoqueAtual) : '',
       estoqueMinimo: prod.estoqueMinimo !== undefined ? String(prod.estoqueMinimo) : '5',
+      intervaloRecompraDias: prod.intervaloRecompraDias !== undefined ? String(prod.intervaloRecompraDias) : '30',
       ativo: prod.ativo !== false,
     });
     setModalProdutoForm(true);
@@ -228,35 +243,39 @@ export default function DinoComprasEstoqueHub({
 
   const salvarProdutoForm = async (e) => {
     e?.preventDefault?.();
-    if (!formProduto.nome?.trim()) return toast('O nome do produto é obrigatório.', true);
-    const preco = Number(formProduto.precoVenda);
-    if (isNaN(preco) || preco < 0) return toast('Informe um preço de venda válido.', true);
+    if (!formProduto.nome?.trim()) return toast('O nome do produto é obrigatório.', 'error');
+    const preco = parseNumPtBr(formProduto.precoVenda, -1);
+    if (preco < 0) return toast('Informe um preço de venda válido.', 'error');
 
     const payload = {
       nome: formProduto.nome.trim(),
       categoria: formProduto.categoria || 'Geral',
       sku: formProduto.sku?.trim() || '',
+      ean: formProduto.ean ? String(formProduto.ean).replace(/\D/g, '') : '',
+      unidade: formProduto.unidade || 'un',
       precoVenda: preco,
-      custoUnitario: Number(formProduto.custoUnitario || 0),
-      custoMedio: Number(formProduto.custoUnitario || 0),
-      estoqueMinimo: Math.max(0, Number(formProduto.estoqueMinimo || 0)),
-      estoqueAtual: Math.max(0, Number(formProduto.estoqueAtual || 0)),
+      custoUnitario: parseNumPtBr(formProduto.custoUnitario, 0),
+      custoMedio: parseNumPtBr(formProduto.custoUnitario, 0),
+      estoqueMinimo: Math.max(0, Math.round(parseNumPtBr(formProduto.estoqueMinimo, 0))),
+      estoqueAtual: Math.max(0, Math.round(parseNumPtBr(formProduto.estoqueAtual, 0))),
+      intervaloRecompraDias: Math.max(0, Math.min(3650, Math.round(parseNumPtBr(formProduto.intervaloRecompraDias, 30)))),
       ativo: formProduto.ativo !== false,
     };
 
     try {
       if (produtoEditando?.id) {
         await api.patch(`/api/admin/barbearia/estoque-revenda/${produtoEditando.id}`, payload);
-        toast(`Produto "${payload.nome}" atualizado com sucesso!`);
+        toast(`Produto "${payload.nome}" atualizado com sucesso!`, 'success');
       } else {
         await api.post('/api/admin/barbearia/estoque-revenda', payload);
-        toast(`Produto "${payload.nome}" cadastrado com sucesso!`);
+        toast(`Produto "${payload.nome}" cadastrado com sucesso!`, 'success');
       }
       setModalProdutoForm(false);
+      setProdutoEditando(null);
       carregarTudo();
       onAtualizar?.();
     } catch (err) {
-      toast(err.message || 'Erro ao salvar produto.', true);
+      toast(err.message || 'Erro ao salvar produto.', 'error');
     }
   };
 
@@ -870,19 +889,28 @@ const [modalEntrada, setModalEntrada] = useState(false);
 
   // Exportar CSV
   function exportarCSV() {
-    const cabecalho = ['Produto', 'SKU', 'Categoria', 'Tipo', 'Saldo Atual', 'Estoque Minimo', 'Custo Unitario (R$)', 'Preco Venda (R$)', 'Valor Total (R$)', 'Status'];
-    const linhas = produtosFiltrados.map((p) => [
-      p.nome,
-      p.sku,
-      p.categoria,
-      p.tipo,
-      p.estoqueAtual,
-      p.estoqueMinimo,
-      p.custoUnitario.toFixed(2),
-      p.precoVenda.toFixed(2),
-      (p.estoqueAtual * p.custoUnitario).toFixed(2),
-      p.statusEstoque,
-    ]);
+    const cabecalho = ['Produto', 'SKU', 'Codigo de Barras / EAN', 'Categoria', 'Unidade', 'Saldo Atual', 'Estoque Minimo', 'Custo Unitario (R$)', 'Preco Venda (R$)', 'Lucro Unitario (R$)', 'Margem Bruta (%)', 'Valor Total Estoque (R$)', 'Status'];
+    const linhas = produtosFiltrados.map((p) => {
+      const cu = Number(p.custoUnitario || 0);
+      const pv = Number(p.precoVenda || 0);
+      const lucro = pv - cu;
+      const margem = pv > 0 ? ((lucro / pv) * 100).toFixed(1) : '0.0';
+      return [
+        p.nome,
+        p.sku || '',
+        p.codigoBarras || '',
+        p.categoria,
+        p.unidade || 'un',
+        p.estoqueAtual,
+        p.estoqueMinimo,
+        cu.toFixed(2),
+        pv.toFixed(2),
+        lucro.toFixed(2),
+        `${margem}%`,
+        (p.estoqueAtual * cu).toFixed(2),
+        p.statusEstoque,
+      ];
+    });
     const csvContent = [cabecalho, ...linhas].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -912,7 +940,7 @@ const [modalEntrada, setModalEntrada] = useState(false);
             <button type="button" style={styles.btnPrimary} onClick={() => setModalEntrada(true)}>
               + Entrada de Estoque
             </button>
-            <button type="button" style={styles.btnSuccess} onClick={onAbrirProduto || (() => toast('Cadastre pelo catálogo'))}>
+            <button type="button" style={styles.btnSuccess} onClick={abrirModalNovoProduto}>
               + Novo Produto
             </button>
           </div>
@@ -3367,7 +3395,7 @@ const [modalEntrada, setModalEntrada] = useState(false);
                 </select>
               </div>
               <div>
-                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>SKU / Código</label>
+                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>SKU / Código Interno</label>
                 <input
                   type="text"
                   placeholder="Ex: POM-MATTE-150"
@@ -3377,15 +3405,40 @@ const [modalEntrada, setModalEntrada] = useState(false);
                 />
               </div>
             </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Código de Barras (EAN-13 / GTIN)</label>
+                <input
+                  type="text"
+                  placeholder="Ex: 7898901234561 (para leitor de PDV)"
+                  value={formProduto.ean || ''}
+                  onChange={(e) => setFormProduto({ ...formProduto, ean: e.target.value })}
+                  style={{ ...styles.input, width: '100%', marginTop: 4 }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Unidade de Medida</label>
+                <select
+                  value={formProduto.unidade || 'un'}
+                  onChange={(e) => setFormProduto({ ...formProduto, unidade: e.target.value })}
+                  style={{ ...styles.input, width: '100%', marginTop: 4 }}
+                >
+                  <option value="un">Unidade (un)</option>
+                  <option value="ml">Mililitros (ml)</option>
+                  <option value="g">Gramas (g)</option>
+                  <option value="cx">Caixa (cx)</option>
+                  <option value="kit">Kit (kit)</option>
+                </select>
+              </div>
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 700, color: '#10b981' }}>Preço de Venda (R$) *</label>
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  type="text"
+                  inputMode="decimal"
                   required
-                  placeholder="Ex: 65.00"
+                  placeholder="Ex: 65,00"
                   value={formProduto.precoVenda}
                   onChange={(e) => setFormProduto({ ...formProduto, precoVenda: e.target.value })}
                   style={{ ...styles.input, width: '100%', marginTop: 4, fontWeight: 800, fontSize: 15, color: '#10b981' }}
@@ -3394,16 +3447,31 @@ const [modalEntrada, setModalEntrada] = useState(false);
               <div>
                 <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Custo Médio / Unitário (R$)</label>
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="Ex: 25.00"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="Ex: 25,00"
                   value={formProduto.custoUnitario}
                   onChange={(e) => setFormProduto({ ...formProduto, custoUnitario: e.target.value })}
                   style={{ ...styles.input, width: '100%', marginTop: 4 }}
                 />
               </div>
             </div>
+            {(() => {
+              const pv = Number(String(formProduto.precoVenda || '').replace(',', '.'));
+              const cu = Number(String(formProduto.custoUnitario || '').replace(',', '.'));
+              if (pv > 0) {
+                const lucro = pv - cu;
+                const margem = Math.round((lucro / pv) * 100);
+                const cor = margem >= 50 ? '#10b981' : margem >= 25 ? '#0284c7' : margem >= 0 ? '#f59e0b' : '#ef4444';
+                return (
+                  <div style={{ padding: '8px 12px', background: `${cor}12`, border: `1px solid ${cor}35`, borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, marginTop: -4 }}>
+                    <span style={{ color: cor, fontWeight: 800 }}>⚡ Margem de Lucro: {margem}%</span>
+                    <span style={{ color: 'var(--text)', fontWeight: 600 }}>Lucro Bruto: R$ {lucro.toFixed(2).replace('.', ',')} / un</span>
+                  </div>
+                );
+              }
+              return null;
+            })()}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 700, color: '#0284c7' }}>Saldo Atual em Estoque</label>
@@ -3415,9 +3483,10 @@ const [modalEntrada, setModalEntrada] = useState(false);
                   onChange={(e) => setFormProduto({ ...formProduto, estoqueAtual: e.target.value })}
                   style={{ ...styles.input, width: '100%', marginTop: 4, fontWeight: 800 }}
                 />
+                <small style={{ fontSize: 11, color: 'var(--muted)' }}>Ajustado automaticamente com auditoria no kardex.</small>
               </div>
               <div>
-                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Estoque Mínimo</label>
+                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Estoque Mínimo (Alerta)</label>
                 <input
                   type="number"
                   step="1"
@@ -3426,7 +3495,22 @@ const [modalEntrada, setModalEntrada] = useState(false);
                   onChange={(e) => setFormProduto({ ...formProduto, estoqueMinimo: e.target.value })}
                   style={{ ...styles.input, width: '100%', marginTop: 4 }}
                 />
+                <small style={{ fontSize: 11, color: 'var(--muted)' }}>Gera alerta de ruptura quando o saldo for menor ou igual.</small>
               </div>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Intervalo Sugerido de Recompra (dias)</label>
+              <input
+                type="number"
+                step="1"
+                min="0"
+                max="3650"
+                placeholder="Ex: 30"
+                value={formProduto.intervaloRecompraDias ?? '30'}
+                onChange={(e) => setFormProduto({ ...formProduto, intervaloRecompraDias: e.target.value })}
+                style={{ ...styles.input, width: '100%', marginTop: 4 }}
+              />
+              <small style={{ fontSize: 11, color: 'var(--muted)' }}>Usado pela KyttoIA para sugerir recompra do cliente via WhatsApp.</small>
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 14 }}>
               <button type="button" style={styles.btn} onClick={() => setModalProdutoForm(false)}>
