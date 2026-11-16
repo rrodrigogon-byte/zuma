@@ -7403,8 +7403,8 @@ app.get('/api/admin/barbearia/overview', async (req, res) => {
 app.post('/api/admin/barbearia/sanear-confirmacoes', (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
-    const resultado = try { barbeariaErpKytto.sincronizarPrecosOficiaisDino(); } catch (_) {}
-barbeariaErpKytto.sanearConfirmacoesDino(empresaId);
+    try { barbeariaErpKytto.sincronizarPrecosOficiaisDino(empresaId); } catch (_) {}
+    const resultado = barbeariaErpKytto.sanearConfirmacoesDino(empresaId);
     res.json({ ok: true, empresaId, ...resultado, mensagem: 'Agendamentos saneados e prazos destravados com sucesso.' });
   } catch (error) {
     res.status(400).json({ ok: false, error: error.message });
