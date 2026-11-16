@@ -323,6 +323,14 @@ class GerenciadorEstoqueMulticanalStallone {
 
     return {
       ...p,
+      preco: Number(p.precoVenda || p.preco || 0),
+      preco_final: Number(p.precoVenda || p.preco || 0),
+      preco_clube: Number(p.precoOnline || p.precoAtacado || p.precoVenda || 0),
+      estoque_fisico: estoqueFisico,
+      estoque_online_reservado: estoqueOnlineReservado,
+      estoque_disponivel_balcao: estoqueBalcaoDisponivel,
+      previsao_ruptura_dias: diasAteRuptura,
+      status_estoque: status === 'alerta_ruptura' ? 'amarelo' : status === 'esgotado_balcao' ? 'vermelho' : 'verde',
       estoqueFisico,
       estoqueOnlineReservado,
       estoqueBalcaoDisponivel,
@@ -574,6 +582,10 @@ class GerenciadorEstoqueMulticanalStallone {
     return {
       sucesso: true,
       empresaId: STALLONE_EMPRESA_ID,
+      total_estoque_fisico: totalItensFisicos,
+      total_estoque_online_reservado: totalItensReservadosOnline,
+      total_estoque_disponivel_balcao: totalItensDisponiveisBalcao,
+      produtos_em_alerta_ruptura: alertasRuptura.length,
       sincronizacaoStatus: '100% Sincronizado em Tempo Real (Física ↔ E-commerce)',
       atualizadoEm: new Date().toISOString(),
       metricas: {

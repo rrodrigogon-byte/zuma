@@ -259,10 +259,31 @@ export default function PDVUnificado() {
         api.get('/api/stallone-club/estoque/resumo').catch(() => null)
       ])
       if (resCat?.produtos) {
-        setCatalogoStallone(resCat.produtos)
+        const prods = (resCat.produtos || []).map(p => ({
+          ...p,
+          preco: Number(p.preco ?? p.precoVenda ?? 0),
+          precoFinal: Number(p.precoFinal ?? p.precoVenda ?? p.preco ?? 0),
+          precoBase: Number(p.precoBase ?? p.precoVenda ?? p.preco ?? 0),
+          preco_clube: p.preco_clube ?? p.precoOnline ?? p.precoAtacado ?? null,
+          estoque_fisico: Number(p.estoque_fisico ?? p.estoqueFisico ?? 0),
+          estoque_online_reservado: Number(p.estoque_online_reservado ?? p.estoqueOnlineReservado ?? 0),
+          estoque_disponivel_balcao: Number(p.estoque_disponivel_balcao ?? p.estoqueBalcaoDisponivel ?? 0),
+          previsao_ruptura_dias: p.previsao_ruptura_dias ?? p.diasAteRuptura ?? null,
+          status_estoque: p.status_estoque ?? p.statusEstoque ?? 'verde',
+          unidade: p.unidade || 'UN',
+          pesavel: false
+        }))
+        setCatalogoStallone(prods)
       }
       if (resResumo) {
-        setResumoEstoqueMulticanal(resResumo)
+        const m = resResumo.metricas || {}
+        setResumoEstoqueMulticanal({
+          ...resResumo,
+          total_estoque_fisico: resResumo.total_estoque_fisico ?? m.totalItensFisicos ?? 0,
+          total_estoque_online_reservado: resResumo.total_estoque_online_reservado ?? m.totalItensReservadosOnline ?? 0,
+          total_estoque_disponivel_balcao: resResumo.total_estoque_disponivel_balcao ?? m.totalItensDisponiveisBalcao ?? 0,
+          produtos_em_alerta_ruptura: resResumo.produtos_em_alerta_ruptura ?? m.qtdAlertasRuptura ?? 0,
+        })
       }
     } catch (err) {
       console.warn('Erro ao carregar estoque multicanal:', err.message)
