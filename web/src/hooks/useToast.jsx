@@ -43,6 +43,11 @@ export function useToast() {
   return useMemo(() => {
     const fn = (msg, kind) => toast?.(msg, kind)
     fn.toast = toast
+    fn.success = (msg) => toast?.(msg, 'success')
+    fn.error = (msg) => toast?.(msg, 'error')
+    fn.warn = (msg) => toast?.(msg, 'warn')
+    fn.warning = (msg) => toast?.(msg, 'warning')
+    fn.info = (msg) => toast?.(msg, 'info')
     return fn
   }, [toast])
 }
