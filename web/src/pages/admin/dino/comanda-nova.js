@@ -93,19 +93,23 @@ export function totaisCarrinho(carrinho, { desconto = 0, gorjeta = 0 } = {}) {
 /** Corpo dos itens para a API (o servidor confere preço, estoque e plano). */
 export function itensParaApi(carrinho, profissionalPadrao = '') {
   return (carrinho || []).map((linha) => {
+    const valorItem = linha.preco !== undefined && linha.preco !== null && !isNaN(Number(linha.preco))
+      ? Number(linha.preco)
+      : (linha.precoUnitario !== undefined && linha.precoUnitario !== null && !isNaN(Number(linha.precoUnitario)) ? Number(linha.precoUnitario) : undefined);
     const base = {
       tipo: linha.tipo,
       quantidade: Number(linha.quantidade || 1),
       profissionalId: linha.profissionalId || profissionalPadrao || undefined,
       ...(linha.agendamentoId ? { agendamentoId: linha.agendamentoId } : {}),
+      ...(valorItem !== undefined ? { preco: valorItem, precoUnitario: valorItem, valor: valorItem } : {}),
     }
     if (linha.tipo === 'servico') return { ...base, servicoId: linha.itemId, usarPlano: linha.usarPlano !== false }
     if (linha.tipo === 'produto') return { ...base, produtoId: linha.itemId }
     if (linha.tipo === 'bebida' || linha.tipo === 'bar') {
-      return { ...base, tipo: 'bebida', produtoId: linha.itemId, itemId: linha.itemId, nome: linha.nome, preco: Number(linha.preco || 0) }
+      return { ...base, tipo: 'bebida', produtoId: linha.itemId, itemId: linha.itemId, nome: linha.nome }
     }
-    if (linha.tipo === 'pacote' || linha.tipo === 'plano') return { ...base, planoId: linha.itemId || linha.planoId, itemId: linha.itemId, nome: linha.nome, ...(linha.preco !== undefined ? { preco: Number(linha.preco || 0) } : {}) }
-    if (linha.tipo === 'outro') return { ...base, nome: linha.nome, preco: Number(linha.preco || 0), ...(linha.obs || linha.detalhe ? { obs: linha.obs || linha.detalhe } : {}) }
+    if (linha.tipo === 'pacote' || linha.tipo === 'plano') return { ...base, planoId: linha.itemId || linha.planoId, itemId: linha.itemId, nome: linha.nome }
+    if (linha.tipo === 'outro') return { ...base, nome: linha.nome, ...(linha.obs || linha.detalhe ? { obs: linha.obs || linha.detalhe } : {}) }
     return { ...base, variantId: linha.itemId }
   })
 }

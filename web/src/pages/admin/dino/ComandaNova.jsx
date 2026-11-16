@@ -583,9 +583,13 @@ export default function ComandaNova({ clientes, profissionais, servicos, produto
   // Vindo de um agendamento, o serviço agendado já entra na comanda.
   const [carrinho, setCarrinho] = useState(() => {
     const itens = [];
+    const agendamentoAtual = agendamentoId ? (agendamentos || []).find((a) => a.id === agendamentoId) : null;
     const servico = agendamentoId && servicoInicialId ? (servicos || []).find((s) => s.id === servicoInicialId) : null;
     if (servico) {
-      itens.push({ chave: `servico-${servico.id}-${agendamentoId}-inicial`, tipo: 'servico', itemId: servico.id, nome: servico.nome, preco: Number(servico.preco || 0), quantidade: 1, usarPlano: true, profissionalId: profissionalInicial, agendamentoId });
+      const precoInicialEfetivo = agendamentoAtual?.valor !== undefined && agendamentoAtual?.valor !== null && !isNaN(Number(agendamentoAtual.valor))
+        ? Number(agendamentoAtual.valor)
+        : Number(servico.preco || 0);
+      itens.push({ chave: `servico-${servico.id}-${agendamentoId}-inicial`, tipo: 'servico', itemId: servico.id, nome: servico.nome, preco: precoInicialEfetivo, precoEditado: precoInicialEfetivo, quantidade: 1, usarPlano: true, profissionalId: profissionalInicial || agendamentoAtual?.profissionalId, agendamentoId });
     }
     if (clienteInicial && agendamentos?.length) {
       const outros = agendamentos.filter((a) => a.clienteId === clienteInicial && a.id !== agendamentoId && ['pendente', 'atrasado', 'em_atendimento'].includes(a.status));

@@ -2496,7 +2496,11 @@ function itemComandaBarbeariaNormalizado(estado, comanda, dados = {}) {
     }
     if (!p || p.ativo === false) throw new Error('Profissional responsável não encontrado ou inativo.');
   }
-  const precoUnitario = dinheiro(tipo === 'servico' ? cadastro.preco : cadastro.precoVenda);
+  const precoPadrao = tipo === 'servico' ? cadastro.preco : cadastro.precoVenda;
+  const precoInformado = dados.preco !== undefined ? dados.preco : (dados.precoUnitario !== undefined ? dados.precoUnitario : (dados.valor !== undefined ? dados.valor : dados.precoCustomizado));
+  const precoUnitario = precoInformado !== undefined && precoInformado !== null && String(precoInformado).trim() !== '' && !isNaN(Number(precoInformado))
+    ? dinheiro(precoInformado)
+    : dinheiro(precoPadrao);
   if (precoUnitario < 0) throw new Error('O item não pode ter preço negativo.');
   if (tipo === 'produto' && Number(cadastro.estoqueAtual || 0) < quantidade && cadastro.bloquearSemEstoque === true) {
     throw new Error(`Estoque insuficiente para ${cadastro.nome} (disponível: ${cadastro.estoqueAtual || 0}).`);
@@ -2974,7 +2978,7 @@ export function atualizarItemComandaBarbearia(empresaId, comandaId, itemId, dado
     const produto = estado.produtosRevenda[atual.produtoId];
     if (!produto || Number(produto.estoqueAtual || 0) < quantidade) throw new Error(`Estoque insuficiente para ${atual.nome}.`);
   }
-  const precoUnitario = (dados.preco !== undefined || dados.precoUnitario !== undefined) ? dinheiro(dados.preco ?? dados.precoUnitario) : atual.precoUnitario;
+  const precoUnitario = (dados.preco !== undefined || dados.precoUnitario !== undefined || dados.valor !== undefined) ? dinheiro(dados.preco ?? dados.precoUnitario ?? dados.valor) : atual.precoUnitario;
   const subtotalAtual = Number((comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0).toFixed(2));
   const subtotalNovo = Number((subtotalAtual - Number(atual.subtotal || 0) + (atual.coberturaPlano ? 0 : dinheiro(precoUnitario * quantidade))).toFixed(2));
   const desconto = Number(Math.min(subtotalNovo, Math.max(0, Number(comanda.desconto || 0))).toFixed(2));
