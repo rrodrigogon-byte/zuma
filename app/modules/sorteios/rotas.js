@@ -118,19 +118,42 @@ export function criarRotasSorteios({ legacyEmpresaId, audit } = {}) {
     }
   });
 
-  // Gerar bilhetes em lote para clientes que vieram no período (3 meses ou este mês)
+  // Obter prévia dinâmica de clientes elegíveis no período sem emitir bilhetes
+  router.post('/:id/previa-periodo', async (req, res) => {
+    try {
+      const empresaId = getEmpresaId(req);
+      const resultado = await sorteiosServico.obterPreviaPeriodo({
+        empresaId,
+        campanhaId: req.params.id,
+        dataInicio: req.body.dataInicio || null,
+        dataFim: req.body.dataFim || null,
+        periodo: req.body.periodo || '3_meses',
+        apenasAtendidos: req.body.apenasAtendidos !== false,
+        valorMinimo: Number(req.body.valorMinimo || 0),
+      });
+      res.json(resultado);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  // Gerar bilhetes em lote para clientes atendidos no período selecionado
   router.post('/:id/gerar-por-periodo', async (req, res) => {
     try {
       const empresaId = getEmpresaId(req);
       const resultado = await sorteiosServico.gerarBilhetesPorPeriodo({
         empresaId,
         campanhaId: req.params.id,
+        dataInicio: req.body.dataInicio || null,
+        dataFim: req.body.dataFim || null,
         periodo: req.body.periodo || '3_meses',
+        apenasAtendidos: req.body.apenasAtendidos !== false,
+        valorMinimo: Number(req.body.valorMinimo || 0),
         regra: req.body.regra || '1_por_cliente',
         emitidoPor: req.user?.nome || req.user?.email || 'Gerência Dino Barbearia',
       });
       if (typeof audit === 'function') {
-        audit(req, 'SORTEIO BILHETES EM LOTE POR PERIODO', `Campanha ${req.params.id} periodo=${req.body.periodo} total=${resultado.bilhetesGerados}`);
+        audit(req, 'SORTEIO BILHETES EM LOTE POR PERIODO', `Campanha ${req.params.id} periodo=${req.body.periodo} de=${resultado.dataInicio} ate=${resultado.dataFim} total=${resultado.bilhetesGerados}`);
       }
       res.json(resultado);
     } catch (error) {
