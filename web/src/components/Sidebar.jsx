@@ -120,6 +120,8 @@ const NAV_ADMIN_GROUPS = [
       { to: '/admin/notas',    icon: '🧾', label: 'Notas Fiscais' },
       { to: '/admin/cadastros-mestres', icon: '🗂️', label: 'Cadastros Mestres' },
       { to: '/admin/empresas', icon: '🏢', label: 'Minha Empresa' },
+      { to: '/admin/planos', icon: '💼', label: 'Planos & Comercial Tangará' },
+      { to: '/admin/oficina', icon: '🚗', label: 'Oficina & OS WhatsApp' },
       { to: '/admin/clientes', icon: '👥', label: 'Clientes & Contas' },
       { to: '/admin/contas-receber', icon: '💰', label: 'Contas a Receber' },
       { to: '/admin/fechamento-diario', icon: '🔐', label: 'Fechamento Diário' },

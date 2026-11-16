@@ -7,7 +7,7 @@ import { createStalloneClubRoutes } from './routes/stallone-club-routes.js';
 import { createSupplyChainRoutes } from './routes/supply-chain-routes.js';
 import { createReformaTributariaRouter } from './routes/reforma-tributaria-routes.js';
 import { createVarejoMulticanalRouter } from './routes/varejo-multicanal-routes.js';
-import { createOficinaAdminRouter } from './routes/oficina-routes.js';
+import { createOficinaAdminRouter, createOficinaPublicoRouter } from './routes/oficina-routes.js';
 import { createAgroRouter, createAgropecuariaRouter, createCteMdfeRouter, createImplantacaoRouter } from './routes/pilares-nota-100-routes.js';
 // Primeiro import: a vigia de memória começa antes de carregar o banco (ver vigia-memoria.js).
 import { situacaoMemoria } from './vigia-memoria.js';
@@ -3510,6 +3510,7 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   app.use('/api/admin/varejo', auth, requireStaff, createVarejoMulticanalRouter());
   app.use('/api/admin/oficina', auth, requireStaff, createOficinaAdminRouter());
   app.use('/api/v1/oficina', auth, requireStaff, createOficinaAdminRouter());
+  app.use(['/api/publico/oficina', '/api/publico/os'], createOficinaPublicoRouter());
   const resolverEmpresaPilares = (req) => {
     if (isAdminGlobal(req.user)) {
       return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
