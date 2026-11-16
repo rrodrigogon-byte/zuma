@@ -322,15 +322,23 @@ export default function SorteiosCampanhas({ embed = false }) {
       };
 
       const res = await api.put(`/api/admin/sorteios/${campanhaEditando.id}`, payload);
-      toast.success('Prêmio e dados do sorteio atualizados com sucesso!');
       setModalEditarCampanhaAberto(false);
+      if (typeof toast?.success === 'function') {
+        toast.success('Prêmio e dados do sorteio atualizados com sucesso!');
+      } else if (typeof toast === 'function') {
+        toast('Prêmio e dados do sorteio atualizados com sucesso!', 'success');
+      }
       await carregarCampanhas();
       if (campanhaSelecionada?.id === campanhaEditando.id) {
         setCampanhaSelecionada(prev => ({ ...prev, ...payload }));
       }
     } catch (err) {
       console.error('Erro ao salvar alterações da campanha:', err);
-      toast.error('Erro ao atualizar sorteio: ' + (err.message || 'Falha na requisição'));
+      if (typeof toast?.error === 'function') {
+        toast.error('Erro ao atualizar sorteio: ' + (err.message || 'Falha na requisição'));
+      } else if (typeof toast === 'function') {
+        toast('Erro ao atualizar sorteio: ' + (err.message || 'Falha na requisição'), 'error');
+      }
     } finally {
       setSalvandoEdicao(false);
     }
