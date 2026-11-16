@@ -221,8 +221,20 @@ export async function atualizarCampanha(empresaId, campanhaId, payload = {}) {
   if (payload.titulo !== undefined) atual.titulo = texto(payload.titulo, 220);
   if (payload.descricao !== undefined) atual.descricao = texto(payload.descricao, 2000);
   if (payload.regulamento !== undefined) atual.regulamento = texto(payload.regulamento, 5000);
-  if (payload.premioPrincipal !== undefined) atual.premioPrincipal = texto(payload.premioPrincipal, 255);
-  if (Array.isArray(payload.premios)) atual.premios = payload.premios;
+  if (payload.premioPrincipal !== undefined) {
+    atual.premioPrincipal = texto(payload.premioPrincipal, 255);
+    if (Array.isArray(atual.premios) && atual.premios.length > 0) {
+      atual.premios[0].nome = atual.premioPrincipal;
+    } else {
+      atual.premios = [{ posicao: 1, nome: atual.premioPrincipal, icone: '🏆' }];
+    }
+  }
+  if (Array.isArray(payload.premios) && payload.premios.length > 0) {
+    atual.premios = payload.premios;
+    if (atual.premios[0]?.nome) {
+      atual.premioPrincipal = atual.premios[0].nome;
+    }
+  }
   if (payload.bannerUrl !== undefined) atual.bannerUrl = texto(payload.bannerUrl, 500);
   if (payload.dataInicio) atual.dataInicio = payload.dataInicio;
   if (payload.dataFim) atual.dataFim = payload.dataFim;
