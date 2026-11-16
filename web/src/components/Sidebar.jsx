@@ -149,6 +149,7 @@ const NAV_ADMIN_GROUPS = [
       { to: '/admin/barbearia-erp', icon: '✂️', label: 'Barbearia ERP' },
       { to: '/admin/sorteios', icon: '🎁', label: 'Sorteios & Prêmios' },
       { to: '/admin/oficina',       icon: '🔧', label: 'Oficina Mecânica' },
+      { to: '/admin/autopecas',     icon: '🚗', label: 'Auto Peças & E-com' },
       { to: '/admin/agropecuaria',  icon: '🌾', label: 'Agropecuária & Pet' },
       { to: '/admin/varejo',        icon: '🛒', label: 'Varejo Geral' },
       { to: '/admin/compras',       icon: '📦', label: 'Compras & Fornec.' },

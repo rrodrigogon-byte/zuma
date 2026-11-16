@@ -216,6 +216,8 @@ const BarbeariaERP    = lazyWithRetry(() => import("./pages/admin/BarbeariaERP")
 const SorteiosCampanhas = lazyWithRetry(() => import('./pages/admin/SorteiosCampanhas'))
 const SorteiosPublico   = lazyWithRetry(() => import('./pages/public/SorteiosPublico'))
 const ComercialPlanosTangara = lazyWithRetry(() => import('./pages/admin/comercial/ComercialPlanosTangara'))
+const AutoPecasHubPage = lazyWithRetry(() => import('./pages/admin/autopecas/AutoPecasHubPage'))
+const AutoPecasStorefront = lazyWithRetry(() => import('./pages/public/AutoPecasStorefront'))
 const OrdemServicoAprovacaoPublico = lazyWithRetry(() => import('./pages/public/OrdemServicoAprovacaoPublico'))
 const Barbearia       = lazyWithRetry(() => import('./pages/admin/Barbearia'))
 const InteligenciaVendasPage = lazyWithRetry(() => import('./pages/admin/InteligenciaVendasPage'))
@@ -447,6 +449,8 @@ export default function App() {
           <Route path="/admin/sorteios" element={<Layout><SorteiosCampanhas /></Layout>} />
           <Route path="/admin/planos" element={<Layout><ComercialPlanosTangara /></Layout>} />
           <Route path="/admin/comercial" element={<Layout><ComercialPlanosTangara /></Layout>} />
+          <Route path="/admin/autopecas" element={<Layout><AutoPecasHubPage /></Layout>} />
+          <Route path="/admin/pecas" element={<Layout><AutoPecasHubPage /></Layout>} />
           <Route path="/admin/sorteio" element={<Layout><SorteiosCampanhas /></Layout>} />
           <Route path="/admin/barbearia-erp"   element={<Layout><BarbeariaERP /></Layout>} />
           <Route path="/admin/barbearia"        element={<Layout><Barbearia /></Layout>} />
@@ -515,6 +519,8 @@ export default function App() {
         <Route path="/os-aprovacao/:id" element={<OrdemServicoAprovacaoPublico />} />
         <Route path="/os-aprovacao" element={<OrdemServicoAprovacaoPublico />} />
         <Route path="/planos" element={<ComercialPlanosTangara />} />
+        <Route path="/loja-autopecas" element={<AutoPecasStorefront />} />
+        <Route path="/autopecas" element={<AutoPecasStorefront />} />
         <Route path="/sorteios/:slug" element={<SorteiosPublico />} />
         <Route path="/sorteios" element={<SorteiosPublico />} />
         <Route path="/sorteio/:slug" element={<SorteiosPublico />} />
