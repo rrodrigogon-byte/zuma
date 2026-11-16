@@ -100,6 +100,15 @@ export default function SorteiosCampanhas({ embed = false }) {
   const [previaPeriodo, setPreviaPeriodo] = useState(null);
   const [carregandoPrevia, setCarregandoPrevia] = useState(false);
   const [mostrarPreviaLista, setMostrarPreviaLista] = useState(false);
+
+  // Estados da Notificação T-Rex Anti-Bloqueio Meta
+  const [modalNotificarTrexAberto, setModalNotificarTrexAberto] = useState(false);
+  const [campanhaNotificando, setCampanhaNotificando] = useState(null);
+  const [mensagemTrexGerada, setMensagemTrexGerada] = useState('');
+  const [destinatarioTrex, setDestinatarioTrex] = useState({ nome: '', telefone: '' });
+  const [enviandoTrex, setEnviandoTrex] = useState(false);
+  const [linkWhatsappWebTrex, setLinkWhatsappWebTrex] = useState('');
+  const [hashAntiSpamTrex, setHashAntiSpamTrex] = useState('');
   const [ultimoBilheteEmitidoManual, setUltimoBilheteEmitidoManual] = useState(null);
 
   // Áudio Sintético Web Audio API (Roleta e Vitória)
@@ -425,6 +434,99 @@ export default function SorteiosCampanhas({ embed = false }) {
     setDataFimFiltro(dFim.toISOString().slice(0, 10));
   };
 
+  // Abre modal e gera mensagem polimórfica KyttoIA Anti-Bloqueio
+  const abrirModalNotificarTrex = async (camp, customDestinatario = null) => {
+    const alvo = camp || campanhaSelecionada || campanhas[0];
+    if (!alvo) {
+      if (typeof toast?.warning === 'function') toast.warning('Selecione uma campanha.');
+      return;
+    }
+    setCampanhaNotificando(alvo);
+    const ganhador = customDestinatario || alvo.ganhadores?.[0] || {
+      nome: alvo.ganhadorNome || 'Rodrigo Gonçalves',
+      telefone: alvo.ganhadorTelefone || '65999056008',
+    };
+    setDestinatarioTrex(ganhador);
+    setEnviandoTrex(true);
+    try {
+      const res = await api.post(`/api/admin/sorteios/${alvo.id}/notificar-ganhador-trex`, {
+        nome: ganhador.nome || ganhador.clienteNome,
+        telefone: ganhador.telefone || ganhador.clienteTelefone,
+        enviarWhatsapp: false, // apenas gera prévia polimórfica
+      });
+      if (res && res.ok) {
+        setMensagemTrexGerada(res.mensagemGerada);
+        setHashAntiSpamTrex(res.hashAntiSpam);
+        setLinkWhatsappWebTrex(res.linkWhatsappWeb);
+        setModalNotificarTrexAberto(true);
+      }
+    } catch (err) {
+      if (typeof toast?.error === 'function') toast.error('Erro ao gerar mensagem: ' + err.message);
+    } finally {
+      setEnviandoTrex(false);
+    }
+  };
+
+  // Dispara envio real via T-Rex com proteção Anti-Bloqueio
+  const handleDispararEnvioTrex = async () => {
+    if (!campanhaNotificando) return;
+    setEnviandoTrex(true);
+    try {
+      const res = await api.post(`/api/admin/sorteios/${campanhaNotificando.id}/notificar-ganhador-trex`, {
+        nome: destinatarioTrex.nome,
+        telefone: destinatarioTrex.telefone,
+        enviarWhatsapp: true,
+      });
+      if (res && res.ok) {
+        if (typeof toast?.success === 'function') {
+          toast.success(`Parabéns enviados com sucesso via T-Rex para ${destinatarioTrex.nome}!`);
+        }
+        setModalNotificarTrexAberto(false);
+        await carregarCampanhas();
+      } else {
+        if (typeof toast?.error === 'function') toast.error(res?.error || 'Erro no envio WhatsApp.');
+      }
+    } catch (err) {
+      if (typeof toast?.error === 'function') toast.error('Falha no envio T-Rex: ' + err.message);
+    } finally {
+      setEnviandoTrex(false);
+    }
+  };
+
+  // Disparo direto de exemplo para Rodrigo Gonçalves
+  const handleEnviarExemploRodrigo = async () => {
+    const alvo = campanhaSelecionada || campanhas.find(c => c.status === 'sorteada') || campanhas[0];
+    if (!alvo) {
+      if (typeof toast?.warning === 'function') toast.warning('Selecione uma campanha.');
+      return;
+    }
+    setEnviandoTrex(true);
+    try {
+      const res = await api.post(`/api/admin/sorteios/enviar-exemplo-rodrigo`, {
+        nome: 'Rodrigo Gonçalves',
+        telefone: '65999056008',
+      });
+      if (res && res.ok) {
+        if (typeof toast?.success === 'function') {
+          toast.success('Exemplo de parabéns do sorteio enviado com sucesso para Rodrigo Gonçalves!');
+        }
+        // Abre o modal para exibir a mensagem e hash gerados
+        setCampanhaNotificando(alvo);
+        setDestinatarioTrex({ nome: 'Rodrigo Gonçalves', telefone: '65999056008' });
+        setMensagemTrexGerada(res.detalhes?.mensagemGerada || '');
+        setHashAntiSpamTrex(res.detalhes?.hashAntiSpam || '');
+        setLinkWhatsappWebTrex(res.detalhes?.linkWhatsappWeb || '');
+        setModalNotificarTrexAberto(true);
+      } else {
+        if (typeof toast?.error === 'function') toast.error(res?.error || 'Erro ao enviar exemplo.');
+      }
+    } catch (err) {
+      if (typeof toast?.error === 'function') toast.error('Erro ao enviar exemplo: ' + err.message);
+    } finally {
+      setEnviandoTrex(false);
+    }
+  };
+
   // Gerar bilhetes em lote por período de atendimento e datas personalizadas
   const handleGerarPorPeriodo = async (periodoOverride) => {
     const campId = campanhaSelecionada?.id || campanhas[0]?.id;
@@ -738,9 +840,33 @@ export default function SorteiosCampanhas({ embed = false }) {
                       </div>
                     </div>
 
-                    {/* Campanha Alvo */}
-                    <div style={{ background: 'rgba(245, 158, 11, 0.15)', border: '1px solid #f59e0b', padding: '6px 14px', borderRadius: '10px', fontSize: '12px', color: '#fef08a' }}>
-                      Campanha Ativa: <strong>{campanhaSelecionada?.titulo || campanhas[0]?.titulo || 'Mega Sorteio Dino'}</strong>
+                    {/* Campanha Alvo e Botão de Teste Exemplo T-Rex */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                      <div style={{ background: 'rgba(245, 158, 11, 0.15)', border: '1px solid #f59e0b', padding: '6px 14px', borderRadius: '10px', fontSize: '12px', color: '#fef08a' }}>
+                        Campanha Ativa: <strong>{campanhaSelecionada?.titulo || campanhas[0]?.titulo || 'Mega Sorteio Dino'}</strong>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleEnviarExemploRodrigo}
+                        disabled={enviandoTrex}
+                        style={{
+                          background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '8px',
+                          padding: '6px 14px',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          cursor: enviandoTrex ? 'not-allowed' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 4px 12px rgba(109, 40, 217, 0.35)',
+                        }}
+                      >
+                        <Send size={13} />
+                        {enviandoTrex ? 'Enviando...' : '🦖 Enviar Exemplo para Rodrigo Gonçalves'}
+                      </button>
                     </div>
                   </div>
 
@@ -1161,6 +1287,27 @@ export default function SorteiosCampanhas({ embed = false }) {
                           >
                             <Sparkles size={14} /> Ir para Roleta
                           </button>
+                          {camp.status === 'sorteada' && (
+                            <button
+                              type="button"
+                              style={{
+                                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '8px',
+                                padding: '6px 12px',
+                                fontSize: '12px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                              }}
+                              onClick={() => abrirModalNotificarTrex(camp)}
+                            >
+                              <Send size={13} /> 🦖 Notificar Ganhador
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1563,6 +1710,160 @@ export default function SorteiosCampanhas({ embed = false }) {
       </div>
 
       {/* MODAL NOVA CAMPANHA */}
+      
+      {/* MODAL NOTIFICAÇÃO DE PARABÉNS VIA T-REX (ANTI-BLOQUEIO META) */}
+      {modalNotificarTrexAberto && (
+        <div className="modal-overlay" onClick={() => setModalNotificarTrexAberto(false)}>
+          <div className="modal-card" style={{ maxWidth: '640px', background: '#0f172a', border: '1.5pt solid #10b981' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '22px' }}>🦖</span>
+                <div>
+                  <h3 style={{ margin: 0, color: '#10b981', fontSize: '17px', fontWeight: 800 }}>
+                    Notificação de Parabéns via T-Rex (WhatsApp AI)
+                  </h3>
+                  <span style={{ fontSize: '11.5px', color: '#94a3b8' }}>
+                    Motor KyttoIA com Proteção Ativa Anti-Bloqueio Meta (Polimorfismo & Hash Único)
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalNotificarTrexAberto(false)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '20px', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Informações do Destinatário */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', background: 'rgba(255, 255, 255, 0.04)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', fontWeight: 700 }}>Destinatário:</label>
+                  <input
+                    type="text"
+                    value={destinatarioTrex.nome}
+                    onChange={e => setDestinatarioTrex({ ...destinatarioTrex, nome: e.target.value })}
+                    style={{ width: '100%', background: '#090d16', border: '1px solid rgba(255, 255, 255, 0.2)', borderRadius: '6px', padding: '6px 10px', color: '#fff', fontSize: '12.5px', marginTop: '3px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', fontWeight: 700 }}>WhatsApp / Telefone:</label>
+                  <input
+                    type="text"
+                    value={destinatarioTrex.telefone}
+                    onChange={e => setDestinatarioTrex({ ...destinatarioTrex, telefone: e.target.value })}
+                    style={{ width: '100%', background: '#090d16', border: '1px solid rgba(255, 255, 255, 0.2)', borderRadius: '6px', padding: '6px 10px', color: '#38bdf8', fontSize: '12.5px', fontWeight: 700, marginTop: '3px' }}
+                  />
+                </div>
+              </div>
+
+              {/* Mensagem Gerada pelo Motor KyttoIA */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 800, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Sparkles size={14} /> Mensagem Humanizada Gerada (Exclusiva):
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => abrirModalNotificarTrex(campanhaNotificando, destinatarioTrex)}
+                    disabled={enviandoTrex}
+                    style={{ background: 'transparent', border: 'none', color: '#38bdf8', fontSize: '11.5px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', textDecoration: 'underline' }}
+                  >
+                    <RotateCw size={12} /> Gerar Outra Variação (KyttoIA)
+                  </button>
+                </div>
+                <textarea
+                  readOnly
+                  rows={8}
+                  value={mensagemTrexGerada}
+                  style={{
+                    width: '100%',
+                    background: '#090d16',
+                    border: '1px solid rgba(16, 185, 129, 0.4)',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    color: '#e2e8f0',
+                    fontSize: '12px',
+                    lineHeight: 1.5,
+                    fontFamily: 'monospace',
+                  }}
+                />
+              </div>
+
+              {/* Badges de Auditoria Anti-Spam */}
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', fontSize: '11.5px', color: '#94a3b8' }}>
+                <span style={{ background: '#064e3b', color: '#6ee7b7', padding: '3px 8px', borderRadius: '4px', fontWeight: 700 }}>
+                  🛡️ Anti-Bloqueio Meta: Ativo
+                </span>
+                <span style={{ background: 'rgba(255, 255, 255, 0.08)', color: '#cbd5e1', padding: '3px 8px', borderRadius: '4px' }}>
+                  Hash Criptográfico: #{hashAntiSpamTrex}
+                </span>
+                <span style={{ background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', padding: '3px 8px', borderRadius: '4px' }}>
+                  Engajamento: CTA Interativo
+                </span>
+              </div>
+            </div>
+
+            {/* Rodapé de Ações */}
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '18px', paddingTop: '12px', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+              <button
+                type="button"
+                className="btn-outline-ouro"
+                onClick={() => setModalNotificarTrexAberto(false)}
+              >
+                Fechar
+              </button>
+              {linkWhatsappWebTrex && (
+                <a
+                  href={linkWhatsappWebTrex}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    background: 'rgba(37, 211, 102, 0.15)',
+                    color: '#25d366',
+                    border: '1px solid #25d366',
+                    borderRadius: '8px',
+                    padding: '9px 14px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    textDecoration: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <ExternalLink size={14} /> Abrir WhatsApp Web
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={handleDispararEnvioTrex}
+                disabled={enviandoTrex}
+                style={{
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '9px 20px',
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  cursor: enviandoTrex ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)',
+                }}
+              >
+                <Send size={14} />
+                {enviandoTrex ? 'Enviando...' : '🚀 Disparar via T-Rex Agora'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {modalNovaCampanhaAberto && (
         <div className="modal-backdrop">
           <div className="modal-card">

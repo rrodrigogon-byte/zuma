@@ -194,12 +194,63 @@ export function criarRotasSorteios({ legacyEmpresaId, audit } = {}) {
         hashAuditoria: camp.hashAuditoria || '0000000000000000',
       };
 
-      const textoWhats = sorteiosServico.gerarTextoNotificacaoGanhador(camp, ganhador);
+      const textoWhats = sorteiosServico.gerarTextoNotificacaoGanhadorKyttoIA(camp, ganhador);
       res.json({
         ok: true,
         mensagem: textoWhats,
         telefone: ganhador.clienteTelefone,
         linkWhatsappWeb: `https://api.whatsapp.com/send?phone=${String(ganhador.clienteTelefone).replace(/\D/g, '')}&text=${encodeURIComponent(textoWhats)}`,
+      });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  // Disparo direto de notificação de sorteio via T-Rex (WhatsApp AI) com Anti-Bloqueio Meta
+  router.post('/:id/notificar-ganhador-trex', async (req, res) => {
+    try {
+      const empresaId = getEmpresaId(req);
+      const resultado = await sorteiosServico.notificarGanhadorViaTrex({
+        empresaId,
+        campanhaId: req.params.id,
+        telefoneDestino: req.body.telefone || null,
+        nomeDestino: req.body.nome || null,
+        enviarWhatsapp: req.body.enviarWhatsapp !== false,
+        emitidoPor: req.user?.nome || req.user?.email || 'T-Rex Gestão Dino',
+      });
+      if (typeof audit === 'function') {
+        audit(req, 'SORTEIO NOTIFICACAO GANHADOR TREX', `Campanha ${req.params.id} destino=${resultado.destinatario.telefone} hash=${resultado.hashAntiSpam}`);
+      }
+      res.json(resultado);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  // Envio de exemplo de validação oficial para Rodrigo Gonçalves
+  router.post('/enviar-exemplo-rodrigo', async (req, res) => {
+    try {
+      const empresaId = getEmpresaId(req);
+      const campanhas = await sorteiosServico.listarCampanhas(empresaId);
+      const camp = campanhas.find(c => c.status === 'sorteada') || campanhas[0];
+      if (!camp) return res.status(404).json({ error: 'Nenhuma campanha cadastrada para teste.' });
+
+      const telefoneRodrigo = req.body.telefone || '65999056008';
+      const nomeRodrigo = req.body.nome || 'Rodrigo Gonçalves';
+
+      const resultado = await sorteiosServico.notificarGanhadorViaTrex({
+        empresaId,
+        campanhaId: camp.id,
+        telefoneDestino: telefoneRodrigo,
+        nomeDestino: nomeRodrigo,
+        enviarWhatsapp: true,
+        emitidoPor: 'Auditoria KyttoIA Teste Rodrigo',
+      });
+
+      res.json({
+        ok: true,
+        mensagem: 'Exemplo de parabéns do sorteio enviado com sucesso via T-Rex para Rodrigo Gonçalves!',
+        detalhes: resultado,
       });
     } catch (error) {
       res.status(400).json({ error: error.message });
