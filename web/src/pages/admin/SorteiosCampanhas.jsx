@@ -240,7 +240,7 @@ export default function SorteiosCampanhas({ embed = false }) {
     setCampanhaEditando({
       id: camp.id,
       titulo: camp.titulo || '',
-      premioPrincipal: camp.premioPrincipal || '',
+      premioPrincipal: camp.premioPrincipal || camp.premio_principal || (Array.isArray(camp.premios) && camp.premios[0]?.nome) || 'Moto Honda Fan 160 0km (ou R$ 18.000 no Pix direto)',
       descricao: camp.descricao || '',
       regulamento: camp.regulamento || '',
       bannerUrl: camp.bannerUrl || '',
@@ -1295,7 +1295,7 @@ export default function SorteiosCampanhas({ embed = false }) {
                 <input
                   type="text"
                   className="form-input"
-                  style={{ fontSize: '15px', fontWeight: 700, borderColor: '#f59e0b', color: '#fff' }}
+                  style={{ fontSize: '15px', fontWeight: 700, borderColor: '#f59e0b', background: '#0f172a', color: '#fbbf24', padding: '10px 14px' }}
                   value={campanhaEditando.premioPrincipal}
                   onChange={(e) => setCampanhaEditando({ ...campanhaEditando, premioPrincipal: e.target.value })}
                   placeholder="Ex: Moto Honda Fan 160 0km (ou R$ 18.000 no Pix), Kit Perfumaria Importada, iPhone 16..."
