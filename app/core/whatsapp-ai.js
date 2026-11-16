@@ -32,6 +32,23 @@ import { cleanCustomerDisplayName } from './whatsapp-ai-normalize.js';
 import * as barbearia from '../barbearia-erp-kytto.js';
 import { getDynamicLearnedGuidance } from './trex-auto-learner.js';
 
+function formatarDicaDinoUpsell(empresaId) {
+  try {
+    const eid = empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    const prods = barbearia.listarProdutosRevenda?.(eid, { incluirInativos: false }) || [];
+    const pomada = prods.find(p => p.ativo !== false && p.nome?.toLowerCase().includes('pomada') && p.nome?.toLowerCase().includes('matte'))
+      || prods.find(p => p.ativo !== false && p.nome?.toLowerCase().includes('pomada'))
+      || { nome: 'Pomada Modeladora Efeito Matte Dino (150g)', precoVenda: 65 };
+    const oleo = prods.find(p => p.ativo !== false && (p.nome?.toLowerCase().includes('oleo') || p.nome?.toLowerCase().includes('óleo')) && p.nome?.toLowerCase().includes('barba'))
+      || prods.find(p => p.ativo !== false && (p.nome?.toLowerCase().includes('oleo') || p.nome?.toLowerCase().includes('óleo')))
+      || { nome: 'Óleo Hidratante de Barba', precoVenda: 55 };
+    const fmt = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    return `💡 *Dica do Dino:* Deseja que eu já deixe separada sua *${pomada.nome} (${fmt(pomada.precoVenda)})* ou o *${oleo.nome} (${fmt(oleo.precoVenda)})* para você retirar no atendimento? É só me avisar!`;
+  } catch {
+    return '💡 *Dica do Dino:* Deseja que eu já deixe separada sua *Pomada Modeladora Efeito Matte Dino (R$ 65,00)* ou o *Óleo Hidratante de Barba (R$ 55,00)* para você retirar no atendimento? É só me avisar!';
+  }
+}
+
 export function resolverNomeCliente(empresaId, telefone, fallbackName = '') {
   let nomeLimpo = cleanCustomerDisplayName(fallbackName);
   if (nomeLimpo) return nomeLimpo;
@@ -2083,7 +2100,7 @@ export async function confirmNextAppointment(context, userText = '') {
         const primeiroNome = context.customerName ? `, ${context.customerName.split(' ')[0]}` : '';
         const servicoComProf = serviceWithProfessional(especifico.servico?.nome || 'Seu horário', especifico.profissional?.nome || 'a equipe');
         return {
-          text: `Confirmado${primeiroNome}! ${servicoComProf}, ${quando}. Te esperamos na Dino Barbearia! 💈\n\n💡 *Dica do Dino:* Deseja que eu já deixe separada sua *Pomada Modeladora Efeito Matte Dino (R$ 45,00)* ou o *Óleo Hidratante de Barba (R$ 38,00)* para você retirar no atendimento? É só me avisar!`,
+          text: `Confirmado${primeiroNome}! ${servicoComProf}, ${quando}. Te esperamos na Dino Barbearia! 💈\n\n${formatarDicaDinoUpsell(context?.empresaId)}`,
           kind: 'presence_confirmed',
         };
       }
@@ -2165,7 +2182,7 @@ export async function confirmNextAppointment(context, userText = '') {
     const quando = new Date(proximo.dataHora).toLocaleString('pt-BR', { timeZone: 'America/Cuiaba', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const servicoComProf = serviceWithProfessional(proximo.servico?.nome || 'Seu horário', proximo.profissional?.nome || 'a equipe');
     return {
-      text: `Confirmado${primeiroNome}! ${servicoComProf}, ${quando}. Te esperamos na Dino Barbearia! 💈\n\n💡 *Dica do Dino:* Deseja que eu já deixe separada sua *Pomada Modeladora Efeito Matte Dino (R$ 45,00)* ou o *Óleo Hidratante de Barba (R$ 38,00)* para você retirar no atendimento? É só me avisar!`,
+      text: `Confirmado${primeiroNome}! ${servicoComProf}, ${quando}. Te esperamos na Dino Barbearia! 💈\n\n${formatarDicaDinoUpsell(context?.empresaId)}`,
       kind: 'presence_confirmed',
     };
   }
@@ -2178,7 +2195,7 @@ export async function confirmNextAppointment(context, userText = '') {
   const diaTexto = new Date(primeiro.dataHora).toLocaleDateString('pt-BR', { timeZone: 'America/Cuiaba', weekday: 'short', day: '2-digit', month: '2-digit' });
   const profNome = primeiro.profissional?.nome || 'a equipe';
   return {
-    text: `Confirmados${primeiroNome}! Seus ${confirmados.length} horários com ${profNome}, ${diaTexto}: ${itensTexto}. Te esperamos na Dino Barbearia! 💈\n\n💡 *Dica do Dino:* Deseja incluir a *Pomada Modeladora Matte Dino (R$ 45,00)* ou *Óleo para Barba (R$ 38,00)* para retirar no atendimento?`,
+    text: `Confirmados${primeiroNome}! Seus ${confirmados.length} horários com ${profNome}, ${diaTexto}: ${itensTexto}. Te esperamos na Dino Barbearia! 💈\n\n${formatarDicaDinoUpsell(context?.empresaId)}`,
     kind: 'presence_confirmed',
   };
 }

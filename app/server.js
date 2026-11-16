@@ -7403,7 +7403,8 @@ app.get('/api/admin/barbearia/overview', async (req, res) => {
 app.post('/api/admin/barbearia/sanear-confirmacoes', (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
-    const resultado = barbeariaErpKytto.sanearConfirmacoesDino(empresaId);
+    const resultado = try { barbeariaErpKytto.sincronizarPrecosOficiaisDino(); } catch (_) {}
+barbeariaErpKytto.sanearConfirmacoesDino(empresaId);
     res.json({ ok: true, empresaId, ...resultado, mensagem: 'Agendamentos saneados e prazos destravados com sucesso.' });
   } catch (error) {
     res.status(400).json({ ok: false, error: error.message });
@@ -9900,9 +9901,10 @@ app.patch('/api/admin/barbearia/estoque-revenda/:id', (req, res) => {
 // Exclusão lógica: vendas, movimentos de estoque e comissões do produto continuam no histórico.
 app.delete('/api/admin/barbearia/estoque-revenda/:id', (req, res) => {
   try {
-    const produto = barbeariaErpKytto.excluirProdutoRevenda(legacyEmpresaId(req), req.params.id);
+    const permanente = req.query?.permanente === 'true' || req.body?.permanente === true;
+    const produto = barbeariaErpKytto.excluirProdutoRevenda(legacyEmpresaId(req), req.params.id, { permanente });
     if (!produto) return res.status(404).json({ error: 'Produto de revenda não encontrado na empresa ativa.' });
-    res.json({ ok: true, produto, exclusao: 'logica' });
+    res.json({ ok: true, produto, exclusao: permanente ? 'permanente' : 'logica' });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 

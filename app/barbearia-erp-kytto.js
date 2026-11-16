@@ -1232,7 +1232,16 @@ export function excluirPlano(empresaId, planoId) {
   return arquivarCadastro(empresaId, 'planos', planoId);
 }
 
-export function excluirProdutoRevenda(empresaId, produtoId) {
+export function excluirProdutoRevenda(empresaId, produtoId, { permanente = false } = {}) {
+  const estado = estadoEmpresa(empresaId);
+  const atual = estado.produtosRevenda?.[String(produtoId)];
+  if (!atual || atual.empresaId !== String(empresaId)) return null;
+  if (permanente) {
+    const clone = { ...atual };
+    delete estado.produtosRevenda[String(produtoId)];
+    save();
+    return { ...clone, excluido: true, permanente: true };
+  }
   return arquivarCadastro(empresaId, 'produtosRevenda', produtoId);
 }
 
@@ -1962,6 +1971,25 @@ function statusEstoque(item) {
   return 'ok';
 }
 
+// Sincronização automática dos preços de tabela oficiais da Dino Barbearia
+export function sincronizarPrecosOficiaisDino(empresaId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6') {
+  const estado = estadoEmpresa(empresaId, false);
+  const prods = estado.produtosRevenda || {};
+  let mudou = false;
+  for (const p of Object.values(prods)) {
+    const nome = (p.nome || '').toLowerCase();
+    if (nome.includes('pomada modeladora efeito matte dino') || (nome.includes('pomada') && nome.includes('matte') && nome.includes('dino'))) {
+      if (p.precoVenda !== 65) { p.precoVenda = 65; mudou = true; }
+      if (!p.custoUnitario || p.custoUnitario === 18) { p.custoUnitario = 25; p.custoMedio = 25; mudou = true; }
+    } else if (nome.includes('óleo hidratante para barba dino') || (nome.includes('oleo') && nome.includes('barba') && nome.includes('dino'))) {
+      if (p.precoVenda !== 55) { p.precoVenda = 55; mudou = true; }
+      if (!p.custoUnitario || p.custoUnitario === 14) { p.custoUnitario = 18; p.custoMedio = 18; mudou = true; }
+    }
+  }
+  if (mudou) save();
+  return { ok: true, mudou };
+}
+
 export function listarProdutosRevenda(empresaId, { incluirInativos = false, lojaId = '', incluirSemLoja = false } = {}) {
   const estado = estadoEmpresa(empresaId, false);
   const knownStockProductIds = new Set(Object.values(estado.movimentosEstoque || {}).map((movement) => String(movement.produtoId || '')));
@@ -2003,7 +2031,26 @@ export function atualizarProdutoRevenda(empresaId, produtoId, dados = {}) {
   if (somenteAlternarAtivo(atual, dados)) return { ...atual, statusEstoque: statusEstoque(atual) };
   const produto = produtoRevendaNormalizado({ ...dados, lojaId: atual.lojaId || lojaId }, atual);
   if (!produto.nome || produto.precoVenda < 0) throw new Error('Nome e preço válido são obrigatórios para o produto.');
-  if (produto.estoqueAtual !== atual.estoqueAtual) throw new Error('Use o endpoint de ajuste para alterar estoque e manter o histórico.');
+  if (dados.estoqueAtual !== undefined && Number(dados.estoqueAtual) !== Number(atual.estoqueAtual)) {
+    const novoEstoque = Math.max(0, Math.round(Number(dados.estoqueAtual)));
+    const anterior = Number(atual.estoqueAtual || 0);
+    const agora = dataAtual();
+    const movimentoId = novoId('mov', estado.movimentosEstoque);
+    estado.movimentosEstoque[movimentoId] = {
+      id: movimentoId,
+      empresaId: String(empresaId),
+      lojaId: atual.lojaId || null,
+      produtoId: atual.id,
+      tipo: 'ajuste',
+      quantidade: Math.abs(novoEstoque - anterior),
+      estoqueAnterior: anterior,
+      estoquePosterior: novoEstoque,
+      observacao: 'Ajuste de saldo na edição de cadastro do produto.',
+      criadoEm: agora
+    };
+    atual.estoqueAtual = novoEstoque;
+    atual.estoqueInformado = true;
+  }
   Object.assign(atual, produto, { atualizadoEm: dataAtual() });
   restaurarSeReativado(atual, dados);
   save();
