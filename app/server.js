@@ -2419,6 +2419,8 @@ app.use('/api/admin/tef', auth, requireStaff, tefRouter);
 // [kytto-stallone-club] Clube de Assinaturas Recorrentes de Suplementos (Stallone VIP Club / Box Mensal)
 app.use('/api/stallone-club', createStalloneClubRoutes());
 app.use('/api/admin/stallone-club', auth, requireStaff, createStalloneClubRoutes());
+app.get(['/api/fiscal/danfe/:id', '/danfe/:id', '/api/fiscal-danfe/:id'], (req, res) => res.redirect(302, `/api/stallone-club/fiscal/danfe/${encodeURIComponent(req.params.id)}`));
+app.get(['/api/fiscal/xml/:id', '/xml/:id', '/api/fiscal-xml/:id'], (req, res) => res.redirect(302, `/api/stallone-club/fiscal/xml/${encodeURIComponent(req.params.id)}`));
 // [kytto-sorteios] Módulo de Sorteios & Campanhas Premiadas Kytto (Barbearia, Perfumaria e E-commerce)
 const sorteiosRouter = criarRotasSorteios({ legacyEmpresaId, audit });
 app.use(['/api/admin/sorteios', '/api/admin/sorteio'], auth, requireStaff, sorteiosRouter);
