@@ -1129,7 +1129,7 @@ app.get('/health', async (req, res) => {
     let schema = cachedCommerceSchemaReadiness;
     if (!schema || Date.now() - lastCommerceSchemaCheckAt > 60000) {
       try {
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500));
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 800));
         const check = await Promise.race([checkCommerceSchemaReadiness(commerceDb), timeoutPromise]);
         if (check?.ready) {
           cachedCommerceSchemaReadiness = check;
@@ -1148,7 +1148,8 @@ app.get('/health', async (req, res) => {
     }
     if (!schema?.ready) return res.status(503).json({ status: 'not_ready', code: schema.code });
     try {
-      const [msgRes, filaRes, chRes] = await Promise.all([
+      const telemetryTimeout = new Promise(resolve => setTimeout(() => resolve(null), 400));
+      const telemetryPromise = Promise.all([
         commerceDb.queryRead(
           `SELECT
              MAX(criado_em) FILTER (WHERE direcao = 'saida') AS ultimo_envio,
@@ -1168,13 +1169,17 @@ app.get('/health', async (req, res) => {
             LIMIT 1`
         ),
       ]);
-      ultimoEnvio = msgRes.rows?.[0]?.ultimo_envio || null;
-      ultimaMensagemRecebida = msgRes.rows?.[0]?.ultima_recebida || null;
-      tamanhoFila = Number(filaRes.rows?.[0]?.pendentes || 0);
-      const ch = chRes.rows?.[0];
-      if (ch) {
-        const transp = String(ch.configuracao?.transporte || ch.configuracao?.provider || '').toLowerCase();
-        canalAtivo = transp === 'evolution' ? 'evolution' : 'meta_cloud_api';
+      const telemetryRes = await Promise.race([telemetryPromise, telemetryTimeout]);
+      if (telemetryRes) {
+        const [msgRes, filaRes, chRes] = telemetryRes;
+        ultimoEnvio = msgRes?.rows?.[0]?.ultimo_envio || null;
+        ultimaMensagemRecebida = msgRes?.rows?.[0]?.ultima_recebida || null;
+        tamanhoFila = Number(filaRes?.rows?.[0]?.pendentes || 0);
+        const ch = chRes?.rows?.[0];
+        if (ch) {
+          const transp = String(ch.configuracao?.transporte || ch.configuracao?.provider || '').toLowerCase();
+          canalAtivo = transp === 'evolution' ? 'evolution' : 'meta_cloud_api';
+        }
       }
     } catch (_e) { /* telemetria opcional */ }
     return res.status(200).json({
