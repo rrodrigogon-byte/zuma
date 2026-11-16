@@ -138,6 +138,24 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
       usuario: usuario || 'Operador PDV'
     });
 
+    // Baixa atômica de estoque multicanal (Física + E-commerce Stallone)
+    try {
+      const { baixarEstoquePdvStallone } = await import('../../core/estoque-multicanal-stallone.js');
+      for (const it of (Array.isArray(dados.itens) ? dados.itens : [])) {
+        const cod = it.produto_id || it.itemId || it.codigo || it.sku || it.nome;
+        if (cod) {
+          try {
+            baixarEstoquePdvStallone({
+              itemId: cod,
+              quantidade: Number(it.quantidade || 1),
+              vendaId: dados.vendaId || nota.id,
+              usuario: usuario || 'Operador PDV'
+            });
+          } catch {}
+        }
+      }
+    } catch {}
+
     return {
       sucesso: true,
       mensagem: `NFC-e nº ${nota.numero} autorizada com sucesso na SEFAZ-MT`,

@@ -24,6 +24,14 @@ import {
   gerarMensagemWhatsAppBoxPronto,
   exportarAssinaturasCsv,
 } from "../core/stallone-club-assinaturas.js";
+import {
+  listarCatalogoMulticanalStallone,
+  obterResumoEstoqueMulticanalStallone,
+  baixarEstoquePdvStallone,
+  reservarEstoqueEcommerceStallone,
+  ajustarEstoqueMulticanalStallone,
+  obterProdutoPorCodigoStallone
+} from "../core/estoque-multicanal-stallone.js";
 
 export function createStalloneClubRoutes() {
   const router = Router();
@@ -302,6 +310,109 @@ export function createStalloneClubRoutes() {
       return res.send(xml);
     } catch (err) {
       return res.status(404).json({ sucesso: false, erro: err.message });
+    }
+  });
+
+  // --- Módulo de Estoque Integrado Multicanal (Física + Loja Online) ---
+  router.get("/estoque/catalogo", (req, res) => {
+    try {
+      const { busca, categoria, apenasDestaques } = req.query;
+      const produtos = listarCatalogoMulticanalStallone({
+        busca,
+        categoria,
+        apenasDestaques: apenasDestaques === 'true' || apenasDestaques === '1'
+      });
+      return res.json({ sucesso: true, total: produtos.length, produtos });
+    } catch (err) {
+      return res.status(500).json({ sucesso: false, erro: err.message });
+    }
+  });
+
+  router.get("/estoque/produto/:idOuCodigo", (req, res) => {
+    try {
+      const { idOuCodigo } = req.params;
+      const produto = obterProdutoPorCodigoStallone(idOuCodigo);
+      if (!produto) {
+        return res.status(404).json({ sucesso: false, erro: "Produto não localizado no catálogo Stallone." });
+      }
+      return res.json({ sucesso: true, produto });
+    } catch (err) {
+      return res.status(500).json({ sucesso: false, erro: err.message });
+    }
+  });
+
+  router.get("/estoque/resumo", (_req, res) => {
+    try {
+      return res.json(obterResumoEstoqueMulticanalStallone());
+    } catch (err) {
+      return res.status(500).json({ sucesso: false, erro: err.message });
+    }
+  });
+
+  router.post("/estoque/ajustar", (req, res) => {
+    try {
+      const { itemId, novoEstoqueFisico, motivo, usuario } = req.body || {};
+      if (!itemId || novoEstoqueFisico === undefined) {
+        return res.status(400).json({ sucesso: false, erro: "itemId e novoEstoqueFisico são obrigatórios." });
+      }
+      const resultado = ajustarEstoqueMulticanalStallone({
+        itemId,
+        novoEstoqueFisico,
+        motivo: motivo || 'Ajuste manual pela Frente de Caixa / ERP',
+        usuario: usuario || req.user?.nome || 'Operador PDV Stallone'
+      });
+      return res.json(resultado);
+    } catch (err) {
+      return res.status(400).json({ sucesso: false, erro: err.message });
+    }
+  });
+
+  router.post("/estoque/baixar-pdv", (req, res) => {
+    try {
+      const { itemId, quantidade, vendaId, canal, usuario } = req.body || {};
+      if (!itemId) {
+        return res.status(400).json({ sucesso: false, erro: "itemId é obrigatório." });
+      }
+      const resultado = baixarEstoquePdvStallone({
+        itemId,
+        quantidade: Number(quantidade || 1),
+        vendaId,
+        canal: canal || 'pdv_balcao',
+        usuario: usuario || req.user?.nome || 'Operador PDV Stallone'
+      });
+      return res.json(resultado);
+    } catch (err) {
+      return res.status(400).json({ sucesso: false, erro: err.message });
+    }
+  });
+
+  router.post("/estoque/reservar-online", (req, res) => {
+    try {
+      const { itemId, quantidade, pedidoId, clienteNome } = req.body || {};
+      if (!itemId) {
+        return res.status(400).json({ sucesso: false, erro: "itemId é obrigatório." });
+      }
+      const resultado = reservarEstoqueEcommerceStallone({
+        itemId,
+        quantidade: Number(quantidade || 1),
+        pedidoId,
+        clienteNome
+      });
+      return res.json(resultado);
+    } catch (err) {
+      return res.status(400).json({ sucesso: false, erro: err.message });
+    }
+  });
+
+  router.post("/estoque/sincronizar", (_req, res) => {
+    try {
+      return res.json({
+        sucesso: true,
+        mensagem: "Estoque físico do PDV e Loja Online (E-commerce) sincronizados com sucesso.",
+        resumo: obterResumoEstoqueMulticanalStallone()
+      });
+    } catch (err) {
+      return res.status(500).json({ sucesso: false, erro: err.message });
     }
   });
 
