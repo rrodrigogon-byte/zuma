@@ -145,3 +145,60 @@ export function createOficinaAdminRouter() {
 
   return router;
 }
+
+// Router público para visualização e aprovação de orçamento de OS pelo cliente via link do WhatsApp
+export function createOficinaPublicoRouter() {
+  const router = express.Router();
+
+  // Consultar OS para tela pública de aprovação
+  router.get('/os/:id', (req, res) => {
+    const os = ORDENS_SERVICO_DEFAULT.find(o => o.id === req.params.id || o.numeroOs === req.params.id) || ORDENS_SERVICO_DEFAULT[0];
+    const veiculo = VEICULOS_DEFAULT.find(v => v.placa === os.placa) || {
+      placa: os.placa,
+      modelo: os.veiculoDescricao,
+      marca: 'Oficina Kytto Auto',
+      cor: 'Padrão'
+    };
+
+    res.json({
+      ok: true,
+      os: {
+        ...os,
+        veiculoDetalhes: veiculo,
+        oficinaNome: 'Kytto Auto Center & Mecânica Especializada Tangará',
+        oficinaTelefone: '+55 65 99352-2260',
+        oficinaEndereco: 'Av. Brasil, 1500 - Tangará da Serra/MT',
+        garantiaLegal: '90 dias em peças e mão de obra conforme Art. 26 do CDC'
+      }
+    });
+  });
+
+  // Aprovar OS diretamente pelo cliente (via botão no celular)
+  router.post('/os/:id/aprovar', (req, res) => {
+    const os = ORDENS_SERVICO_DEFAULT.find(o => o.id === req.params.id || o.numeroOs === req.params.id) || ORDENS_SERVICO_DEFAULT[0];
+    os.status = 'APROVADO_WHATSAPP';
+    os.aprovadoPeloWhatsApp = true;
+    os.dataAprovacaoWhatsApp = new Date().toISOString();
+    os.clienteAprovadorIp = req.ip || req.headers['x-forwarded-for'] || 'cliente-mobile';
+
+    res.json({
+      ok: true,
+      mensagem: `Orçamento da OS ${os.numeroOs} APROVADO com sucesso pelo cliente!`,
+      os
+    });
+  });
+
+  // Recusar ou solicitar contato pelo cliente
+  router.post('/os/:id/rejeitar', (req, res) => {
+    const os = ORDENS_SERVICO_DEFAULT.find(o => o.id === req.params.id || o.numeroOs === req.params.id) || ORDENS_SERVICO_DEFAULT[0];
+    os.status = 'RECUSADO_CLIENTE';
+    os.motivoRecusa = req.body?.motivo || 'Cliente solicitou revisão ou esclarecimentos via WhatsApp';
+    res.json({
+      ok: true,
+      mensagem: `A OS ${os.numeroOs} foi marcada para contato da equipe.`,
+      os
+    });
+  });
+
+  return router;
+}

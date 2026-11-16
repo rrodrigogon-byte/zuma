@@ -7,7 +7,7 @@ import { createStalloneClubRoutes } from './routes/stallone-club-routes.js';
 import { createSupplyChainRoutes } from './routes/supply-chain-routes.js';
 import { createReformaTributariaRouter } from './routes/reforma-tributaria-routes.js';
 import { createVarejoMulticanalRouter } from './routes/varejo-multicanal-routes.js';
-import { createOficinaAdminRouter } from './routes/oficina-routes.js';
+import { createOficinaAdminRouter, createOficinaPublicoRouter } from './routes/oficina-routes.js';
 import { createAgroRouter, createAgropecuariaRouter, createCteMdfeRouter, createImplantacaoRouter } from './routes/pilares-nota-100-routes.js';
 // Primeiro import: a vigia de memória começa antes de carregar o banco (ver vigia-memoria.js).
 import { situacaoMemoria } from './vigia-memoria.js';
@@ -2419,6 +2419,8 @@ app.use('/api/admin/tef', auth, requireStaff, tefRouter);
 // [kytto-stallone-club] Clube de Assinaturas Recorrentes de Suplementos (Stallone VIP Club / Box Mensal)
 app.use('/api/stallone-club', createStalloneClubRoutes());
 app.use('/api/admin/stallone-club', auth, requireStaff, createStalloneClubRoutes());
+app.get(['/api/fiscal/danfe/:id', '/danfe/:id', '/api/fiscal-danfe/:id'], (req, res) => res.redirect(302, `/api/stallone-club/fiscal/danfe/${encodeURIComponent(req.params.id)}`));
+app.get(['/api/fiscal/xml/:id', '/xml/:id', '/api/fiscal-xml/:id'], (req, res) => res.redirect(302, `/api/stallone-club/fiscal/xml/${encodeURIComponent(req.params.id)}`));
 // [kytto-sorteios] Módulo de Sorteios & Campanhas Premiadas Kytto (Barbearia, Perfumaria e E-commerce)
 const sorteiosRouter = criarRotasSorteios({ legacyEmpresaId, audit });
 app.use(['/api/admin/sorteios', '/api/admin/sorteio'], auth, requireStaff, sorteiosRouter);
@@ -3510,6 +3512,7 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   app.use('/api/admin/varejo', auth, requireStaff, createVarejoMulticanalRouter());
   app.use('/api/admin/oficina', auth, requireStaff, createOficinaAdminRouter());
   app.use('/api/v1/oficina', auth, requireStaff, createOficinaAdminRouter());
+  app.use(['/api/publico/oficina', '/api/publico/os'], createOficinaPublicoRouter());
   const resolverEmpresaPilares = (req) => {
     if (isAdminGlobal(req.user)) {
       return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';

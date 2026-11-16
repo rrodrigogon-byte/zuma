@@ -215,6 +215,8 @@ const DinoLTKStorefront = lazyWithRetry(() => import("./pages/public/DinoLTKStor
 const BarbeariaERP    = lazyWithRetry(() => import("./pages/admin/BarbeariaERP"))
 const SorteiosCampanhas = lazyWithRetry(() => import('./pages/admin/SorteiosCampanhas'))
 const SorteiosPublico   = lazyWithRetry(() => import('./pages/public/SorteiosPublico'))
+const ComercialPlanosTangara = lazyWithRetry(() => import('./pages/admin/comercial/ComercialPlanosTangara'))
+const OrdemServicoAprovacaoPublico = lazyWithRetry(() => import('./pages/public/OrdemServicoAprovacaoPublico'))
 const Barbearia       = lazyWithRetry(() => import('./pages/admin/Barbearia'))
 const InteligenciaVendasPage = lazyWithRetry(() => import('./pages/admin/InteligenciaVendasPage'))
 const Omnichannel     = lazy(() => import('./pages/admin/Omnichannel'))
@@ -443,6 +445,8 @@ export default function App() {
           <Route path="/admin/cockpit-360" element={<Layout><CockpitExecutivo360 /></Layout>} />
           <Route path="/admin/dashboard-360" element={<Layout><CockpitExecutivo360 /></Layout>} />
           <Route path="/admin/sorteios" element={<Layout><SorteiosCampanhas /></Layout>} />
+          <Route path="/admin/planos" element={<Layout><ComercialPlanosTangara /></Layout>} />
+          <Route path="/admin/comercial" element={<Layout><ComercialPlanosTangara /></Layout>} />
           <Route path="/admin/sorteio" element={<Layout><SorteiosCampanhas /></Layout>} />
           <Route path="/admin/barbearia-erp"   element={<Layout><BarbeariaERP /></Layout>} />
           <Route path="/admin/barbearia"        element={<Layout><Barbearia /></Layout>} />
@@ -466,6 +470,8 @@ export default function App() {
           <Route path="/admin/oficina"           element={<Layout><OficinaHubPage /></Layout>} />
           <Route path="/admin/omnichannel"      element={<Layout><CanaisFidelidade /></Layout>} />
           <Route path="/admin/pdv-erp"         element={<PDVUnificado />} />
+          <Route path="/admin/pdv-unificado"   element={<PDVUnificado />} />
+          <Route path="/admin/stallone/pdv"    element={<PDVUnificado />} />
         </Route>
 
         {/* Portal do Atleta */}
@@ -506,6 +512,9 @@ export default function App() {
         <Route path="/concreto/portal-cliente/:cargaId" element={<ConcretoPortalCliente />} />
         <Route path="/concreto/rastreamento" element={<ConcretoPortalCliente />} />
         <Route path="/concreto/rastreamento/:cargaId" element={<ConcretoPortalCliente />} />
+        <Route path="/os-aprovacao/:id" element={<OrdemServicoAprovacaoPublico />} />
+        <Route path="/os-aprovacao" element={<OrdemServicoAprovacaoPublico />} />
+        <Route path="/planos" element={<ComercialPlanosTangara />} />
         <Route path="/sorteios/:slug" element={<SorteiosPublico />} />
         <Route path="/sorteios" element={<SorteiosPublico />} />
         <Route path="/sorteio/:slug" element={<SorteiosPublico />} />
@@ -516,6 +525,10 @@ export default function App() {
         <Route path="/minha/:slug" element={<MinhaConta />} />
         <Route path="/barbeiro" element={<ModoBarbeiro />} />
         <Route path="/barbeiro/:slug" element={<ModoBarbeiro />} />
+        <Route path="/pdv-erp" element={<PDVUnificado />} />
+        <Route path="/pdv-unificado" element={<PDVUnificado />} />
+        <Route path="/stallone/pdv" element={<PDVUnificado />} />
+        <Route path="/pdv/stallone" element={<PDVUnificado />} />
         <Route path="/regulamento" element={<Layout marketing><Regulamento /></Layout>} />
         <Route path="/bracket"    element={<Layout><Bracket /></Layout>} />
         <Route path="/chaves"     element={<Layout><Bracket /></Layout>} />
