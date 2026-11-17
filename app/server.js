@@ -106,6 +106,7 @@ import {
   formatarMensagemReportGestao,
   enviarReportDiarioGestaoWhatsApp,
   enviarValidacaoEstrategicaWhatsApp,
+  enviarMensagemValidacaoDireta,
   registrarOptOut,
 } from './core/dino-recuperacao-ativa.js';
 import {
@@ -557,9 +558,22 @@ app.post('/api/admin/dino/recuperacao-ativa/optout', async (req, res) => {
 
 app.post('/api/public/dino/recuperacao-ativa/validar-whatsapp', async (req, res) => {
   try {
-    const { telefone = '5514997462929' } = req.body || {};
-    const resultado = await enviarValidacaoEstrategicaWhatsApp({ telefoneDestino: telefone });
+    const { telefone = '5514997462929', apenasDestino = false, mensagem = null } = req.body || {};
+    const resultado = await enviarValidacaoEstrategicaWhatsApp({
+      telefoneDestino: telefone,
+      apenasDestino: Boolean(apenasDestino),
+      mensagemCustomizada: mensagem,
+    });
     res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+app.post('/api/public/dino/whatsapp/validar-rodrigo', async (req, res) => {
+  try {
+    const { telefone = '5514997462929', mensagem = null } = req.body || {};
+    const resultado = await enviarMensagemValidacaoDireta({ telefone, mensagem });
+    res.json(resultado);
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
