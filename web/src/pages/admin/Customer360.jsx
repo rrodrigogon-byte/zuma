@@ -175,29 +175,46 @@ const load = useCallback(() => {
   return <section className="c360" aria-labelledby="c360-name">
     {modalEditar && (
       <div className="c360-dialog-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setModalEditar(null)}>
-        <form className="c360-dialog" role="dialog" aria-modal="true" style={{ maxWidth: 500 }} onSubmit={salvarEdicao}>
-          <h2>Editar Cliente</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+        <form className="c360-dialog" role="dialog" aria-modal="true" style={{ maxWidth: 560 }} onSubmit={salvarEdicao}>
+          <h2>Editar Cadastro do Cliente</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 16 }}>
             <label style={{ display: 'block', gridColumn: 'span 2' }}>
-              <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)', fontWeight: 700, marginBottom: 6 }}>Nome completo</span>
-              <input required value={formEditar.nome} onChange={(e) => setFormEditar(c => ({...c, nome: e.target.value}))} className="c360-input" />
-            </label>
-            <label style={{ display: 'block', gridColumn: 'span 2' }}>
-              <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)', fontWeight: 700, marginBottom: 6 }}>Celular</span>
-              <input required type="tel" value={formEditar.telefone} onChange={(e) => setFormEditar(c => ({...c, telefone: e.target.value}))} className="c360-input" />
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)', fontWeight: 700, marginBottom: 4 }}>Nome completo *</span>
+              <input required value={formEditar.nome || ''} onChange={(e) => setFormEditar(c => ({...c, nome: e.target.value}))} className="c360-input" />
             </label>
             <label style={{ display: 'block' }}>
-              <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)', fontWeight: 700, marginBottom: 6 }}>Limite de Crédito Mensal (R$)</span>
-              <input type="number" min="0" step="0.01" value={formEditar.limiteCreditoMensal} onChange={(e) => setFormEditar(c => ({...c, limiteCreditoMensal: e.target.value}))} className="c360-input" />
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)', fontWeight: 700, marginBottom: 4 }}>Celular / WhatsApp *</span>
+              <input required type="tel" value={formEditar.telefone || ''} onChange={(e) => setFormEditar(c => ({...c, telefone: e.target.value}))} className="c360-input" placeholder="DDD + Número" />
             </label>
             <label style={{ display: 'block' }}>
-              <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)', fontWeight: 700, marginBottom: 6 }}>Prazo Padrão (Dias)</span>
-              <input type="number" min="1" step="1" value={formEditar.diasVencimento} onChange={(e) => setFormEditar(c => ({...c, diasVencimento: e.target.value}))} className="c360-input" />
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)', fontWeight: 700, marginBottom: 4 }}>CPF / Documento</span>
+              <input value={formEditar.documento || ''} onChange={(e) => setFormEditar(c => ({...c, documento: e.target.value}))} className="c360-input" placeholder="000.000.000-00" />
+            </label>
+            <label style={{ display: 'block', gridColumn: 'span 2' }}>
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)', fontWeight: 700, marginBottom: 4 }}>E-mail</span>
+              <input type="email" value={formEditar.email || ''} onChange={(e) => setFormEditar(c => ({...c, email: e.target.value}))} className="c360-input" placeholder="cliente@exemplo.com" />
+            </label>
+            <label style={{ display: 'block' }}>
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)', fontWeight: 700, marginBottom: 4 }}>Limite de Crédito Mensal (R$)</span>
+              <input type="number" min="0" step="0.01" value={formEditar.limiteCreditoMensal || 0} onChange={(e) => setFormEditar(c => ({...c, limiteCreditoMensal: e.target.value}))} className="c360-input" />
+            </label>
+            <label style={{ display: 'block' }}>
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)', fontWeight: 700, marginBottom: 4 }}>Prazo Padrão (Dias)</span>
+              <input type="number" min="1" step="1" value={formEditar.diasVencimento || 30} onChange={(e) => setFormEditar(c => ({...c, diasVencimento: e.target.value}))} className="c360-input" />
+            </label>
+            <label style={{ display: 'block', gridColumn: 'span 2' }}>
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)', fontWeight: 700, marginBottom: 4 }}>Observações e Preferências</span>
+              <textarea rows={2} value={formEditar.observacao || ''} onChange={(e) => setFormEditar(c => ({...c, observacao: e.target.value}))} className="c360-input" style={{ width: '100%', resize: 'vertical' }} placeholder="Preferências de corte, barba ou observações internas..." />
             </label>
           </div>
-          <div className="c360-dialog-actions">
-            <button type="button" className="c360-btn ghost" onClick={() => setModalEditar(null)}>Cancelar</button>
-            <button type="submit" className="c360-btn primary" disabled={salvando}>{salvando ? 'Salvando...' : 'Salvar Cadastro'}</button>
+          <div className="c360-dialog-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <button type="button" className="c360-btn ghost" style={{ color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }} onClick={excluirCadastro} disabled={salvando} title="Inativar este cliente">
+              Excluir Cliente
+            </button>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button type="button" className="c360-btn ghost" onClick={() => setModalEditar(null)}>Cancelar</button>
+              <button type="submit" className="c360-btn primary" disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar Cadastro'}</button>
+            </div>
           </div>
         </form>
       </div>
@@ -220,8 +237,13 @@ const load = useCallback(() => {
         {data.identidade.fontes.length <= 1 && data.identidade.possivelDuplicidade && <p className="c360-link-note">Mais de um cadastro com o mesmo contato. Confira duplicidade.</p>}
       </div>
       <div className="c360-hero-actions">
+        {data.identidade?.registros?.barbearia > 1 && (
+          <button type="button" className="c360-btn primary" style={{ background: '#059669', borderColor: '#059669', color: '#fff' }} onClick={unificarCadastrosDuplicados} disabled={unificando} title="Mesclar cadastros duplicados com o mesmo telefone ou histórico">
+            {unificando ? 'Unificando…' : '🔗 Unificar Cadastros'}
+          </button>
+        )}
         {!data.anonimizado && <Link className="c360-btn primary" to={`/admin/barbearia-erp?area=operacao&tab=Agenda${data.clienteBarbeariaId ? `&agendarCliente=${encodeURIComponent(data.clienteBarbeariaId)}` : ''}`}>Agendar</Link>}
-        {!data.anonimizado && data.clienteBarbeariaId && <button type="button" className="c360-btn ghost" onClick={() => onEdit(data)}>Editar Cadastro</button>}
+        {!data.anonimizado && <button type="button" className="c360-btn ghost" onClick={() => abrirModalEditar(data)} title="Editar dados cadastrais, celular, e-mail, observações ou excluir">✏️ Editar Cadastro</button>}
         {data.permissoes?.exportar && <button type="button" className="c360-btn ghost" onClick={exportData} disabled={exporting} title="Exporta todos os dados deste titular (LGPD, art. 18)">{exporting ? 'Gerando…' : 'Exportar dados (LGPD)'}</button>}
       </div>
     </header>

@@ -6,6 +6,7 @@
 // ==========================================================================
 import { db, save } from './db.js';
 import * as barbeariaErpKytto from './barbearia-erp-kytto.js';
+import { normalizarTelefoneBR } from './barbearia-cliente-unificacao.js';
 
 const EQUIVALENCIAS_DINO = new Set([
   'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
@@ -78,6 +79,7 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
       for (const ag of agendamentos) {
         if (ag.status === 'cancelado') continue;
         const cliId = ag.clienteId || ag.clienteTelefone || ag.clienteNome;
+        const cliTelNorm = normalizarTelefoneBR(ag.clienteTelefone);
         const profId = ag.profissionalId;
         if (!cliId || !profId) continue;
 
@@ -97,6 +99,9 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
           cliProf[profId].ultimaData = dataAg;
           cliProf[profId].ultimoServico = ag.servicoNome || cliProf[profId].ultimoServico;
         }
+        if (cliTelNorm && cliTelNorm !== cliId) {
+          relacaoClienteProf.set(cliTelNorm, cliProf);
+        }
       }
     } catch {}
 
@@ -106,6 +111,7 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
       for (const cmd of comandas) {
         if (cmd.status === 'cancelada') continue;
         const cliId = cmd.clienteId || cmd.clienteTelefone || cmd.clienteNome;
+        const cliTelNorm = normalizarTelefoneBR(cmd.clienteTelefone);
         const profId = cmd.profissionalId;
         if (!cliId || !profId) continue;
 
@@ -127,6 +133,9 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
             }
           }
         }
+        if (cliTelNorm && cliTelNorm !== cliId) {
+          relacaoClienteProf.set(cliTelNorm, cliProf);
+        }
       }
     } catch {}
 
@@ -135,6 +144,7 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
       const hist = Object.values(root.barbearias?.[emp]?.historicoAtendimentos || {});
       for (const h of hist) {
         const cliId = h.clienteId || h.clienteTelefone || h.clienteNome;
+        const cliTelNorm = normalizarTelefoneBR(h.clienteTelefone);
         const profId = h.profissionalId;
         if (!cliId || !profId) continue;
 
@@ -154,18 +164,34 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
           cliProf[profId].ultimaData = dataH;
           cliProf[profId].ultimoServico = h.servicoNome || cliProf[profId].ultimoServico;
         }
+        if (cliTelNorm && cliTelNorm !== cliId) {
+          relacaoClienteProf.set(cliTelNorm, cliProf);
+        }
       }
     } catch {}
   }
 
-  // 3. Carrega clientes do cadastro
+  // 3. Carrega clientes do cadastro com deduplicação por telefone
   const clientesMap = new Map();
   for (const emp of empresas) {
     const cliStore = root.clientesKytto?.empresas?.[emp]?.clientes || {};
     for (const cli of Object.values(cliStore)) {
-      if (cli.status === 'deletado') continue;
-      if (!clientesMap.has(cli.id)) {
-        clientesMap.set(cli.id, cli);
+      if (cli.status === 'deletado' || cli.status === 'mesclado') continue;
+      const telNorm = normalizarTelefoneBR(cli.telefone);
+      const chaveAgrupamento = telNorm || cli.id;
+      if (!clientesMap.has(chaveAgrupamento)) {
+        clientesMap.set(chaveAgrupamento, { ...cli, telefone: telNorm || cli.telefone, idsAgrupados: [cli.id] });
+      } else {
+        const existente = clientesMap.get(chaveAgrupamento);
+        existente.idsAgrupados ||= [existente.id];
+        if (!existente.idsAgrupados.includes(cli.id)) existente.idsAgrupados.push(cli.id);
+        const cliNomeOk = cli.nome && !cli.nome.startsWith('Cliente Avec') && !cli.nome.startsWith('Cel:');
+        const exNomeOk = existente.nome && !existente.nome.startsWith('Cliente Avec') && !existente.nome.startsWith('Cel:');
+        if (cliNomeOk && !exNomeOk) {
+          clientesMap.set(chaveAgrupamento, { ...cli, telefone: telNorm || cli.telefone, idsAgrupados: existente.idsAgrupados });
+        } else if (!existente.email && cli.email) {
+          existente.email = cli.email;
+        }
       }
     }
   }
@@ -175,9 +201,32 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
 
   for (const [cliId, cli] of clientesMap.entries()) {
     // Identifica o histórico deste cliente
-    const historicoProfissionais = relacaoClienteProf.get(cliId) ||
+    const telNorm = normalizarTelefoneBR(cli.telefone);
+    let historicoProfissionais = relacaoClienteProf.get(cliId) ||
+      (telNorm && relacaoClienteProf.get(telNorm)) ||
       relacaoClienteProf.get(cli.telefone) ||
       relacaoClienteProf.get(cli.nome) || {};
+    if (cli.idsAgrupados && cli.idsAgrupados.length > 1) {
+      const histMesclado = { ...historicoProfissionais };
+      for (const outroId of cli.idsAgrupados) {
+        const hOutro = relacaoClienteProf.get(outroId);
+        if (hOutro) {
+          for (const [pId, dados] of Object.entries(hOutro)) {
+            if (!histMesclado[pId]) {
+              histMesclado[pId] = { ...dados, servicos: { ...(dados.servicos || {}) } };
+            } else {
+              histMesclado[pId].atendimentos += dados.atendimentos;
+              histMesclado[pId].totalGasto += dados.totalGasto;
+              if (!histMesclado[pId].ultimaData || (dados.ultimaData && dados.ultimaData > histMesclado[pId].ultimaData)) {
+                histMesclado[pId].ultimaData = dados.ultimaData;
+                histMesclado[pId].ultimoServico = dados.ultimoServico || histMesclado[pId].ultimoServico;
+              }
+            }
+          }
+        }
+      }
+      historicoProfissionais = histMesclado;
+    }
 
     // Determina o barbeiro titular:
     // 1º: Vínculo explícito no cadastro (barbeiroId ou preferencias.barbeiroId)

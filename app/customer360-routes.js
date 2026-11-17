@@ -189,10 +189,11 @@ export function registerCustomer360Routes(app, deps) {
     if (!identity) return { status: 404, body: { error: 'Cliente não encontrado nesta empresa.', code: 'CUSTOMER360_NOT_FOUND' } };
 
     const empresaId = legacyEmpresaId(req);
-    const singleLocalId = identity.local.length === 1 ? String(identity.local[0].id) : '';
-    const data = localData(req, { includeHistorical: Boolean(singleLocalId), customerId: singleLocalId });
-    const localIds = new Set(identity.local.map((item) => String(item.id)));
-    const phones = new Set(identity.phones);
+    const allLocalIds = identity.local.map((item) => String(item.id));
+    const primaryLocalId = allLocalIds[0] || '';
+    const data = localData(req, { includeHistorical: Boolean(primaryLocalId), customerId: primaryLocalId });
+    const localIds = new Set(allLocalIds);
+    const phones = new Set(identity.phones.map((p) => String(p).replace(/\D/g, '').slice(-8)));
     
     // Injeta histórico do Avec se a base JSON estiver vazia para esse cliente
     if (!data.historicalAppointments.length) {
@@ -224,7 +225,14 @@ export function registerCustomer360Routes(app, deps) {
         }
       } catch (e) { console.error('Erro ao injetar histórico Avec no C360:', e); }
     }
-    const belongs = (item) => (item.clienteId && localIds.has(String(item.clienteId))) || (!item.clienteId && item.clienteTelefone && phones.has(normalizePhone(item.clienteTelefone)));
+    const belongs = (item) => {
+      if (item.clienteId && localIds.has(String(item.clienteId))) return true;
+      if (item.clienteTelefone) {
+        const dig = String(item.clienteTelefone).replace(/\D/g, '').slice(-8);
+        if (dig && phones.has(dig)) return true;
+      }
+      return false;
+    };
     const member = data.fidelidade.membros.find((item) => localIds.has(String(item.clienteId))) || data.fidelidade.membros.find((item) => item.telefone && phones.has(normalizePhone(item.telefone))) || null;
     const planos = barbeariaErpKytto.listarPlanos(empresaId, { incluirInativos: true });
     const local = {

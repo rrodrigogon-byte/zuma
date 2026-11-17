@@ -316,9 +316,13 @@ export function buildCustomer360(identity, { local = {}, commerce = {}, now = ne
   const historicalAppointments = local.historicalAppointments || [];
   const noShows = appointments.filter((item) => ['nao_compareceu', 'faltou', 'ausente'].includes(item.status)).length;
   const historicalRevenue = historicalAppointments.reduce((sum, item) => sum + Number(item.valor || 0), 0);
+  const subscriptionRevenue = subscriptions
+    .filter((s) => s.pagamentoConfirmado || ['ativa', 'encerrada', 'concluida'].includes(s.status))
+    .reduce((sum, s) => sum + Number(s.condicoesContratadas?.preco || s.preco || s.valor || 0), 0);
   const barberRevenue = comandas.filter((item) => item.status === 'paga').reduce((sum, item) => sum + Number(item.totalPago || item.total || 0), 0)
     + retail.filter((item) => item.status === 'pago').reduce((sum, item) => sum + Number(item.total || 0), 0)
-    + historicalRevenue;
+    + historicalRevenue
+    + subscriptionRevenue;
   const paidOrders = orders.filter((item) => PAID_ORDER.has(item.status));
   const storeRevenue = paidOrders.reduce((sum, item) => sum + Number(item.total || 0), 0);
   const openReceivables = receivables.filter((item) => item.status !== 'paga');

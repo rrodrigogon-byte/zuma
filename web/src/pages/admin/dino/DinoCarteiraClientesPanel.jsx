@@ -131,6 +131,17 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
             <button
               type="button"
               className="carteira-prof-pill"
+              style={{ background: 'rgba(16, 185, 129, 0.15)', borderColor: '#10b981', color: '#10b981', fontWeight: 600 }}
+              onClick={autoUnificarDuplicados}
+              disabled={unificando}
+              title="Detectar e unificar automaticamente clientes duplicados com e sem DDI 55"
+            >
+              <Users size={14} />
+              {unificando ? 'Unificando…' : 'Unificar Duplicados'}
+            </button>
+            <button
+              type="button"
+              className="carteira-prof-pill"
               onClick={carregarDados}
               title="Recarregar dados"
             >
