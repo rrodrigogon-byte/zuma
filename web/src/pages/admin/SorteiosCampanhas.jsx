@@ -467,7 +467,7 @@ export default function SorteiosCampanhas({ embed = false }) {
     }
   };
 
-  // Dispara envio real via T-Rex com proteção Anti-Bloqueio
+  // Dispara envio real via T-Rex com proteção Anti-Bloqueio e fallback instantâneo de entrega
   const handleDispararEnvioTrex = async () => {
     if (!campanhaNotificando) return;
     setEnviandoTrex(true);
@@ -478,8 +478,18 @@ export default function SorteiosCampanhas({ embed = false }) {
         enviarWhatsapp: true,
       });
       if (res && res.ok) {
-        if (typeof toast?.success === 'function') {
-          toast.success(`Parabéns enviados com sucesso via T-Rex para ${destinatarioTrex.nome}!`);
+        const entregue = res.statusEnvio?.ok === true;
+        if (entregue) {
+          if (typeof toast?.success === 'function') {
+            toast.success(`Parabéns enviados com sucesso via T-Rex para ${destinatarioTrex.nome}!`);
+          }
+        } else {
+          if (typeof toast?.info === 'function' || typeof toast?.success === 'function') {
+            (toast.info || toast.success)(`Mensagem polimórfica anti-bloqueio gerada! Abrindo no WhatsApp para entrega garantida...`);
+          }
+          if (res.linkWhatsappWeb) {
+            window.open(res.linkWhatsappWeb, '_blank');
+          }
         }
         setModalNotificarTrexAberto(false);
         await carregarCampanhas();
@@ -664,17 +674,23 @@ export default function SorteiosCampanhas({ embed = false }) {
     }
   };
 
-  // Notificar Ganhador via WhatsApp
+  // Notificar Ganhador via WhatsApp e T-Rex
   const handleNotificarGanhador = async () => {
     if (!campanhaSelecionada?.id) return;
     try {
-      const res = await api.post(`/api/admin/sorteios/${campanhaSelecionada.id}/notificar-ganhador`);
+      const res = await api.post(`/api/admin/sorteios/${campanhaSelecionada.id}/notificar-ganhador`, {
+        nome: ganhadorSorteado?.clienteNome,
+        telefone: ganhadorSorteado?.clienteTelefone,
+        enviarWhatsapp: true,
+      });
       if (res?.linkWhatsappWeb) {
         window.open(res.linkWhatsappWeb, '_blank');
-        toast.success('Notificação aberta no WhatsApp Web!');
+        if (typeof toast?.success === 'function') {
+          toast.success(`Notificação gerada com sucesso! Abrindo conversa do ganhador no WhatsApp...`);
+        }
       }
     } catch (err) {
-      toast.error('Erro ao gerar mensagem de notificação: ' + err.message);
+      if (typeof toast?.error === 'function') toast.error('Erro ao notificar ganhador: ' + err.message);
     }
   };
 
@@ -1288,25 +1304,48 @@ export default function SorteiosCampanhas({ embed = false }) {
                             <Sparkles size={14} /> Ir para Roleta
                           </button>
                           {camp.status === 'sorteada' && (
-                            <button
-                              type="button"
-                              style={{
-                                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                                color: '#fff',
-                                border: 'none',
-                                borderRadius: '8px',
-                                padding: '6px 12px',
-                                fontSize: '12px',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '5px',
-                              }}
-                              onClick={() => abrirModalNotificarTrex(camp)}
-                            >
-                              <Send size={13} /> 🦖 Notificar Ganhador
-                            </button>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                              <button
+                                type="button"
+                                style={{
+                                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                  color: '#fff',
+                                  border: 'none',
+                                  borderRadius: '8px',
+                                  padding: '6px 12px',
+                                  fontSize: '12px',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '5px',
+                                }}
+                                onClick={() => abrirModalNotificarTrex(camp)}
+                              >
+                                <Send size={13} /> 🦖 Notificar Ganhador
+                              </button>
+                              <a
+                                href={`https://api.whatsapp.com/send?phone=${String(camp.ganhadorTelefone || camp.ganhadores?.[0]?.clienteTelefone || '65999056008').replace(/\D/g, '')}&text=${encodeURIComponent(`🏆 Parabéns, ${camp.ganhadorNome || 'Campeão'}! Seu bilhete foi o sorteado na campanha ${camp.titulo} da Barbearia Dino! Prêmio: ${camp.premioPrincipal}. Entre em contato para retirar! 🦖💈`)}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{
+                                  background: 'rgba(37, 211, 102, 0.2)',
+                                  color: '#25d366',
+                                  border: '1px solid #25d366',
+                                  borderRadius: '8px',
+                                  padding: '6px 10px',
+                                  fontSize: '12px',
+                                  fontWeight: 700,
+                                  textDecoration: 'none',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                }}
+                                title="Abrir conversa direta no WhatsApp Web"
+                              >
+                                <ExternalLink size={12} /> WhatsApp
+                              </a>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -1370,13 +1409,49 @@ export default function SorteiosCampanhas({ embed = false }) {
                           {ganhadorSorteado.clienteNome}
                         </h3>
                       </div>
-                      <button
-                        type="button"
-                        className="btn-ouro"
-                        onClick={handleNotificarGanhador}
-                      >
-                        <Send size={16} /> Notificar no WhatsApp
-                      </button>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn-ouro"
+                          style={{
+                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '10px 18px',
+                            fontSize: '13px',
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)',
+                          }}
+                          onClick={() => abrirModalNotificarTrex(campanhaSelecionada, ganhadorSorteado)}
+                        >
+                          <Send size={15} /> 🦖 Notificar via T-Rex (KyttoIA)
+                        </button>
+                        <a
+                          href={ganhadorSorteado.linkWhatsappWeb || `https://api.whatsapp.com/send?phone=${String(ganhadorSorteado.clienteTelefone || '').replace(/\D/g, '')}&text=${encodeURIComponent(ganhadorSorteado.mensagemWhatsapp || 'Parabéns pela premiação no sorteio da Barbearia Dino!')}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{
+                            background: '#25d366',
+                            color: '#fff',
+                            borderRadius: '8px',
+                            padding: '10px 16px',
+                            fontSize: '13px',
+                            fontWeight: 800,
+                            textDecoration: 'none',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            boxShadow: '0 4px 12px rgba(37, 211, 102, 0.4)',
+                          }}
+                        >
+                          <ExternalLink size={15} /> 💬 Abrir Conversa no WhatsApp
+                        </a>
+                      </div>
                     </div>
 
                     <div className="ganhador-detalhes-grid">

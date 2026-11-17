@@ -508,6 +508,25 @@ export async function executarSorteio(empresaId, campanhaId, { realizadoPor = 'A
     realizadoPor,
   });
 
+  const textoMensagemWhats = gerarTextoNotificacaoGanhadorKyttoIA(camp, registroGanhador);
+  const telefoneLimpo = String(registroGanhador.clienteTelefone || '').replace(/\D/g, '');
+  const linkWhatsappWeb = `https://api.whatsapp.com/send?phone=${telefoneLimpo}&text=${encodeURIComponent(textoMensagemWhats)}`;
+  const linkWhatsappApp = `whatsapp://send?phone=${telefoneLimpo}&text=${encodeURIComponent(textoMensagemWhats)}`;
+
+  let notificacaoStatus = null;
+  try {
+    notificacaoStatus = await notificarGanhadorViaTrex({
+      empresaId: empNorm,
+      campanhaId: camp.id,
+      telefoneDestino: registroGanhador.clienteTelefone,
+      nomeDestino: registroGanhador.clienteNome,
+      enviarWhatsapp: true,
+      emitidoPor: realizadoPor,
+    });
+  } catch (errNotif) {
+    console.warn('[sorteio] falha ao auto-notificar via T-Rex:', errNotif.message);
+  }
+
   save();
 
   return {
@@ -518,7 +537,14 @@ export async function executarSorteio(empresaId, campanhaId, { realizadoPor = 'A
       premio: premioObj.nome,
       status: camp.status,
     },
-    ganhador: registroGanhador,
+    ganhador: {
+      ...registroGanhador,
+      linkWhatsappWeb: notificacaoStatus?.linkWhatsappWeb || linkWhatsappWeb,
+      linkWhatsappApp,
+      mensagemWhatsapp: notificacaoStatus?.mensagemGerada || textoMensagemWhats,
+      hashAntiSpam: notificacaoStatus?.hashAntiSpam || hashAuditoria.slice(0, 16),
+      notificacaoStatus: notificacaoStatus?.statusEnvio || null,
+    },
     bilhete: bilheteGanhador,
     totalConcorrentes: bilhetes.length,
     certificadoAuditoria: {
@@ -528,7 +554,10 @@ export async function executarSorteio(empresaId, campanhaId, { realizadoPor = 'A
       realizadoPor,
       provaMatematicaValida: true,
     },
-    mensagemWhatsapp: gerarTextoNotificacaoGanhador(camp, registroGanhador),
+    mensagemWhatsapp: notificacaoStatus?.mensagemGerada || textoMensagemWhats,
+    linkWhatsappWeb: notificacaoStatus?.linkWhatsappWeb || linkWhatsappWeb,
+    linkWhatsappApp,
+    notificacaoTrex: notificacaoStatus,
   };
 }
 
