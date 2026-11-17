@@ -7582,7 +7582,8 @@ app.post('/api/admin/barbearia/agenda', async (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
     const lojaId = legacyLojaId(req);
-    if (req.body?.valor !== undefined) {
+    const permiteCustom = req.body?.permitirValorPersonalizado === true || req.body?.valorManual === true || (req.body?.origem === 'admin' && req.body?.permitirValorPersonalizado !== false);
+    if (req.body?.valor !== undefined && !permiteCustom) {
       const servico = barbeariaErpKytto.listarServicos(empresaId).find((item) => item.id === String(req.body?.servicoId ?? req.body?.servico_id ?? ''));
       if (!servico || Math.round(Number(req.body.valor) * 100) !== Math.round(Number(servico.preco) * 100)) {
         return res.status(409).json({ error: 'O valor do agendamento deve corresponder ao preço cadastrado do serviço.', code: 'APPOINTMENT_PRICE_MISMATCH' });
@@ -7596,7 +7597,7 @@ app.post('/api/admin/barbearia/agenda', async (req, res) => {
     if (naoAvisarCliente && !podeSilenciarAvisoAgenda(req.user)) {
       return res.status(403).json({ error: 'Só a gestão pode registrar agendamento sem avisar o cliente.', code: 'AVISO_CLIENTE_OBRIGATORIO' });
     }
-    const agendamento = enriquecerAgendamentoBarbearia(empresaId, barbeariaErpKytto.criarAgendamento(empresaId, body, { permitirEncaixe: encaixe, horaOperacionalEstrita: true }));
+    const agendamento = enriquecerAgendamentoBarbearia(empresaId, barbeariaErpKytto.criarAgendamento(empresaId, body, { permitirEncaixe: encaixe, horaOperacionalEstrita: true, permitirValorPersonalizado: permiteCustom }));
     try { captacaoKytto.marcarListaEsperaAgendada(empresaId, { telefone: agendamento.clienteTelefone, data: agendamento.dataAgenda, lojaId: agendamento.lojaId || lojaId, servicoId: agendamento.servicoId }); } catch (_) { /* não impede a criação da agenda */ }
     if (agendamento.encaixe) audit(req, 'AGENDA ENCAIXE', `${agendamento.id} profissional=${agendamento.profissionalId} ${agendamento.dataHora}`);
     let notificacao;
@@ -7615,7 +7616,8 @@ app.patch('/api/admin/barbearia/agenda/:id', async (req, res) => {
     const empresaId = legacyEmpresaId(req);
     const lojaId = legacyLojaId(req);
     const anterior = listarAgendamentosBarbearia(empresaId, { lojaId }).find((item) => item.id === String(req.params.id));
-    const agendamento = barbeariaErpKytto.atualizarAgendamento(empresaId, req.params.id, { ...(req.body || {}), lojaId, usuario: req.user?.email || req.user?.nome || '', origem: 'admin' }, { permitirEncaixe: req.body?.encaixe === true, horaOperacionalEstrita: true });
+    const permiteCustomPatch = req.body?.permitirValorPersonalizado === true || req.body?.valorManual === true || req.body?.origem === 'admin';
+    const agendamento = barbeariaErpKytto.atualizarAgendamento(empresaId, req.params.id, { ...(req.body || {}), lojaId, usuario: req.user?.email || req.user?.nome || '', origem: 'admin' }, { permitirEncaixe: req.body?.encaixe === true, horaOperacionalEstrita: true, permitirValorPersonalizado: permiteCustomPatch });
     if (!agendamento) return res.status(404).json({ error: 'Agendamento não encontrado na empresa ativa.' });
     const remarcado = anterior && ['dataHora', 'dataAgenda', 'profissionalId', 'servicoId'].some((campo) => String(anterior[campo] || '') !== String(agendamento[campo] || ''));
     audit(req, 'BARBEARIA AGENDAMENTO ATUALIZADO', `${agendamento.id} cliente="${agendamento.clienteNome || ''}" ${remarcado ? 'REMARCADO' : ''}`.trim());

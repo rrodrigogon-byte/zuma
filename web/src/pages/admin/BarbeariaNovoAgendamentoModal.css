@@ -466,31 +466,60 @@ html[data-brand] .bna-modal input[type="checkbox"] {
   font-weight: 700;
 }
 
+/* WRAPPER DO VALOR EDITÁVEL NA TABELA */
 .bna-table-val-wrap {
-  display: flex;
-  align-items: center;
-  background: #1a202c !important;
-  border: 1px solid #334155 !important;
-  border-radius: 8px;
-  padding: 0 10px;
+  display: flex !important;
+  align-items: center !important;
+  background: #0f172a !important;
+  border: 1.5px solid #3b82f6 !important;
+  border-radius: 8px !important;
+  padding: 0 8px !important;
   height: 38px;
+  min-width: 105px !important;
+  box-sizing: border-box !important;
+  transition: all 0.2s ease !important;
+  cursor: text;
 }
+.bna-table-val-wrap:hover {
+  border-color: #60a5fa !important;
+  background: #1e293b !important;
+}
+.bna-table-val-wrap:focus-within {
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25) !important;
+  background: #1e293b !important;
+}
+.bna-table-val-wrap span.bna-val-moeda,
 .bna-table-val-wrap span {
-  font-size: 12px;
-  font-weight: 700;
-  color: #64748b;
-  margin-right: 4px;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  color: #38bdf8 !important;
+  margin-right: 4px !important;
+  user-select: none !important;
+  flex-shrink: 0 !important;
 }
+.bna-table-val-wrap input.bna-input-preco-editavel,
 .bna-table-val-wrap input {
   background: transparent !important;
   border: none !important;
-  color: #34d399 !important;
-  font-size: 14px !important;
-  font-weight: 800;
-  text-align: right;
+  color: #10b981 !important;
+  font-size: 14.5px !important;
+  font-weight: 800 !important;
+  text-align: right !important;
   padding: 0 !important;
-  outline: none;
+  outline: none !important;
   width: 100% !important;
+  min-width: 50px !important;
+  font-family: inherit !important;
+}
+/* Desativa setas nativas do browser no input number de valor */
+.bna-table-val-wrap input::-webkit-outer-spin-button,
+.bna-table-val-wrap input::-webkit-inner-spin-button {
+  -webkit-appearance: none !important;
+  margin: 0 !important;
+}
+.bna-table-val-wrap input[type=number] {
+  -moz-appearance: textfield !important;
 }
 
 /* ── AÇÕES ABAIXO DA TABELA ── */

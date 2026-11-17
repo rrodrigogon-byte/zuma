@@ -2865,7 +2865,7 @@ export function criarComandaBarbearia(empresaId, dados = {}) {
     atualizadoEm: agora,
     fechadaEm: null,
   };
-  const itensIniciais = Array.isArray(dados.itens) ? dados.itens : (agendamento?.servicoId ? [{ tipo: 'servico', servicoId: agendamento.servicoId, profissionalId }] : []);
+  const itensIniciais = Array.isArray(dados.itens) ? dados.itens : (agendamento?.servicoId ? [{ tipo: 'servico', servicoId: agendamento.servicoId, profissionalId, preco: agendamento.valor }] : []);
   if (itensIniciais.length) {
     const itens = itensIniciais.map((item) => itemComandaBarbeariaNormalizado(estado, comanda, item));
     comanda.itens.push(...itens);
@@ -4533,10 +4533,15 @@ export function criarAgendamento(empresaId, dados = {}, opcoes = {}) {
     agendamento.duracaoMinutos = duracaoAtendimentoProfissional(servico, profissional, obterCalendarioLoja(estado, agendamento.lojaId));
   }
   const precoCalculado = calcularPrecoServicoHorario(servico, profissional, agendamento.horaLocal);
+  const permiteCustom = dados.permitirValorPersonalizado === true || dados.valorManual === true || opcoes.permitirValorPersonalizado === true || dados.origem === 'admin';
   if (dados.valor !== undefined && Math.round(Number(dados.valor) * 100) !== Math.round(Number(precoCalculado) * 100) && Math.round(Number(dados.valor) * 100) !== Math.round(Number(servico.preco) * 100)) {
-    throw new Error('O valor do agendamento deve corresponder ao preço cadastrado do serviço. Use a comanda para ajustes auditados.');
+    if (!permiteCustom) {
+      throw new Error('O valor do agendamento deve corresponder ao preço cadastrado do serviço. Use a comanda para ajustes auditados.');
+    }
   }
-  agendamento.valor = precoCalculado;
+  agendamento.valor = permiteCustom && dados.valor !== undefined && Number.isFinite(Number(dados.valor))
+    ? Math.max(0, Math.round(Number(dados.valor) * 100) / 100)
+    : precoCalculado;
   validarCalendarioAgendamento(estado, agendamento, profissional);
 
   // Detecção de duplicidade acidental: mesmo cliente + mesmo profissional + mesma data e horário (duplo clique da equipe)
@@ -4608,10 +4613,15 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}, opcoe
     : duracaoAtendimentoProfissional(servico, profissional, obterCalendarioLoja(estado, agendamento.lojaId));
   const precoCalculado = calcularPrecoServicoHorario(servico, profissional, agendamento.horaLocal);
   const valorEsperado = agendamento.servicoId === atual.servicoId && Number(atual.valor) > 0 ? atual.valor : precoCalculado;
+  const permiteCustom = dados.permitirValorPersonalizado === true || dados.valorManual === true || opcoes.permitirValorPersonalizado === true || dados.origem === 'admin';
   if (dados.valor !== undefined && (!Number.isFinite(Number(dados.valor)) || Math.round(Number(dados.valor) * 100) !== Math.round(valorEsperado * 100))) {
-    throw new Error('O valor do agendamento não pode ser alterado. Use a comanda para ajustes auditados.');
+    if (!permiteCustom) {
+      throw new Error('O valor do agendamento não pode ser alterado. Use a comanda para ajustes auditados.');
+    }
   }
-  agendamento.valor = valorEsperado;
+  agendamento.valor = permiteCustom && dados.valor !== undefined && Number.isFinite(Number(dados.valor))
+    ? Math.max(0, Math.round(Number(dados.valor) * 100) / 100)
+    : valorEsperado;
   const mudouHorarioOuProf = ['dataHora', 'dataAgenda', 'horaLocal', 'profissionalId'].some((campo) => String(antes[campo] || '') !== String(agendamento[campo] || ''));
   if (mudouHorarioOuProf) {
     if (atual.vagaOrigemId) agendamento.vagaOrigemId = null;
