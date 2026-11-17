@@ -642,9 +642,32 @@ export async function notificarGanhadorViaTrex({
     try {
       const { enviarMensagem } = await import('../../core/whatsapp.js');
       if (typeof enviarMensagem === 'function') {
+        let lojaId = 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8';
+        let canalId = 'ae741d39-039c-4f4b-9183-9c5f639405a0';
+        let instance = 'dino';
+        try {
+          const { db } = await import('../../core/database.js');
+          const cr = await db.queryRead(
+            `SELECT id::text as canal_id, loja_id::text, configuracao->>'instance' as instance 
+               FROM canais_integracao 
+              WHERE empresa_id = $1::uuid AND status = 'ativo' AND provedor = 'whatsapp' 
+              LIMIT 1`,
+            [empNorm]
+          );
+          if (cr.rows[0]) {
+            canalId = cr.rows[0].canal_id;
+            lojaId = cr.rows[0].loja_id;
+            instance = cr.rows[0].instance || instance;
+          }
+        } catch {
+          // fallback
+        }
         const tenantConfig = {
           empresa_id: empNorm,
-          whatsapp_instance: 'dino',
+          loja_id: lojaId,
+          canal_id: canalId,
+          whatsapp_instance: instance,
+          instance: instance,
           whatsapp_api_url: process.env.EVOLUTION_API_URL || process.env.CHATBOT_BACKEND_URL,
           whatsapp_api_key: process.env.EVOLUTION_API_KEY || process.env.CHATBOT_BACKEND_KEY,
         };
