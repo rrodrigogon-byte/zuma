@@ -19,6 +19,25 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
   const [salvandoVinculo, setSalvandoVinculo] = useState(false)
   const [unificando, setUnificando] = useState(false)
 
+  const carregarDados = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [resResumo, resLista] = await Promise.all([
+        api.get('/api/admin/barbearia/carteira-clientes/resumo'),
+        api.get(`/api/admin/barbearia/carteira-clientes?profissionalId=${encodeURIComponent(barbeiroSelecionadoId)}&filtroRetorno=${encodeURIComponent(filtroRetorno)}&busca=${encodeURIComponent(busca)}`),
+      ])
+      setResumo(resResumo)
+      setClientes(resLista.clientes || [])
+      setProfissionais(resLista.profissionais || [])
+    } catch (err) {
+      console.error('Erro ao carregar carteiras:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [barbeiroSelecionadoId, filtroRetorno, busca])
+
+
+
   const autoUnificarDuplicados = useCallback(async () => {
     const confirmou = window.confirm(
       "Deseja iniciar a varredura e unificação inteligente de cadastros duplicados da barbearia?\n\n" +
@@ -37,22 +56,6 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
     }
   }, [carregarDados])
 
-  const carregarDados = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [resResumo, resLista] = await Promise.all([
-        api.get('/api/admin/barbearia/carteira-clientes/resumo'),
-        api.get(`/api/admin/barbearia/carteira-clientes?profissionalId=${encodeURIComponent(barbeiroSelecionadoId)}&filtroRetorno=${encodeURIComponent(filtroRetorno)}&busca=${encodeURIComponent(busca)}`),
-      ])
-      setResumo(resResumo)
-      setClientes(resLista.clientes || [])
-      setProfissionais(resLista.profissionais || [])
-    } catch (err) {
-      console.error('Erro ao carregar carteiras:', err)
-    } finally {
-      setLoading(false)
-    }
-  }, [barbeiroSelecionadoId, filtroRetorno, busca])
 
   useEffect(() => {
     carregarDados()
