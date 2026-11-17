@@ -16,6 +16,7 @@ import { situacaoMemoria } from './vigia-memoria.js';
 import { registerAvecMixRoutes } from './avec-revenue-mix-routes.js';
 import { loadAvecMix } from './core/avec-revenue-mix.js';
 import * as barbeariaClienteFicha360 from './barbearia-cliente-ficha-360.js';
+import * as barbeariaClienteUnificacao from './barbearia-cliente-unificacao.js';
 import express from 'express';
 import { createPerformanceMetrics, eventLoopMetrics } from './core/performance-metrics.js';
 import { cleanCustomerDisplayName } from './core/whatsapp-ai-normalize.js';
@@ -9759,6 +9760,50 @@ app.patch('/api/admin/barbearia/clientes/:id', (req, res) => {
     const cliente = clientesKytto.atualizarCliente(legacyEmpresaId(req), req.params.id, req.body || {});
     if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado na empresa ativa.' });
     res.json({ ok: true, cliente: sanitizarClienteBarbearia(cliente) });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.put('/api/admin/barbearia/clientes/:id', (req, res) => {
+  try {
+    const cliente = clientesKytto.atualizarCliente(legacyEmpresaId(req), req.params.id, req.body || {});
+    if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado na empresa ativa.' });
+    res.json({ ok: true, cliente: sanitizarClienteBarbearia(cliente) });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.delete('/api/admin/barbearia/clientes/:id', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const resultado = barbeariaClienteUnificacao.excluirClienteBarbearia(empresaId, req.params.id, {
+      motivo: req.body?.motivo || 'Exclusão solicitada pelo usuário no painel',
+    });
+    audit(req, 'EXCLUSAO CLIENTE BARBEARIA', `${req.params.id}`);
+    res.json(resultado);
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.post('/api/admin/barbearia/clientes/unificar', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const { principalId, secundarioIds } = req.body || {};
+    if (!principalId || !secundarioIds || !secundarioIds.length) {
+      return res.status(400).json({ error: 'Informe principalId e secundarioIds para unificar.' });
+    }
+    const resultado = barbeariaClienteUnificacao.unificarClientes(empresaId, principalId, secundarioIds);
+    audit(req, 'UNIFICACAO CLIENTES BARBEARIA', `Master: ${principalId} | Mesclados: ${secundarioIds.join(', ')}`);
+    res.json(resultado);
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.get('/api/admin/barbearia/clientes/duplicados', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const duplicados = barbeariaClienteUnificacao.listarDuplicados(empresaId);
+    res.json({ ok: true, duplicados });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.post('/api/admin/barbearia/clientes/auto-unificar-duplicados', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const resultado = barbeariaClienteUnificacao.autoUnificarTodosDuplicados(empresaId);
+    audit(req, 'AUTO UNIFICACAO DUPLICADOS BARBEARIA', `Grupos: ${resultado.totalGrupos}`);
+    res.json(resultado);
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.patch('/api/admin/barbearia/clientes/:id/consentimentos', (req, res) => {
