@@ -1166,30 +1166,34 @@ export async function agendaContextFor(toolContext, { now = Date.now() } = {}) {
 const HANDOFF_IDLE_MINUTES = Math.max(5, Number.parseInt(process.env.WHATSAPP_AI_HANDOFF_IDLE_MINUTES || '20', 10) || 20);
 async function resumeIdleHumanQueue(session, context) {
   if (session.assigned_to) return false;
-  const pause = session.estado?.staffPauseUntil ? new Date(session.estado.staffPauseUntil).valueOf() : 0;
-  if (pause && pause > Date.now()) return false;
   const reason = String(session.handoff_reason || session.estado?.handoffReason || '');
   // Encaminhamentos de segurança continuam com a equipe.
   if (reason.startsWith('security:') && !AUTO_RESUME_HANDOFF_REASONS.includes(reason)) return false;
+
+  const pause = session.estado?.staffPauseUntil ? new Date(session.estado.staffPauseUntil).valueOf() : 0;
+  const staffLastAt = session.estado?.staffLastAt ? new Date(session.estado.staffLastAt).valueOf() : 0;
+  const minutosDesdeStaff = staffLastAt ? (Date.now() - staffLastAt) / 60000 : 999;
+
+  // Intenção de agendamento, adiantamento ou dúvida de horário pelo cliente: se a equipe não responde há mais de 3 minutos,
+  // a IA reassume automaticamente para não deixar o cliente desassistido no vácuo.
+  const textoCliente = String(context?.customerText || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const querAtendimentoAgil = /(?:\b(agendar|marcar|horario|vaga|disponivel|adiantar|mais cedo|mudar|remarcar|cortar|barba|corte|cabelo|livre|agenda|amanha|hoje|quinta|sexta|sabado|segunda|terca|quarta)\b|\?)/i.test(textoCliente);
+  const deveRetomarPorDemanda = querAtendimentoAgil && minutosDesdeStaff >= 3;
+
+  if (pause && pause > Date.now() && !deveRetomarPorDemanda) return false;
+
   const resumed = await db.query(
     `UPDATE whatsapp_ai_sessions SET status = 'ativo',
-        estado = estado - 'handoffReason',
+        estado = (estado - 'handoffReason') - 'staffPauseUntil',
         handoff_requested_at = NULL, handoff_reason = NULL, priority = 0,
         atualizado_em = CURRENT_TIMESTAMP
       WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status = 'humano'
         AND assigned_to IS NULL
-        AND (
-          (handoff_requested_at IS NOT NULL AND handoff_requested_at < CURRENT_TIMESTAMP - make_interval(mins => $4::int))
-          -- Fila sem motivo nem data: sobra da versão de 27-28/10 que punha toda mensagem
-          -- "fromMe" em 'humano' para sempre. Ninguém pediu atendente: volta na hora.
-          OR (handoff_requested_at IS NULL AND COALESCE(NULLIF(handoff_reason, ''), NULLIF(estado->>'handoffReason', '')) IS NULL)
-        )
-        AND (estado->>'staffPauseUntil' IS NULL OR (estado->>'staffPauseUntil')::timestamptz < CURRENT_TIMESTAMP)
       RETURNING id`,
-    [session.id, session.empresa_id, session.loja_id, HANDOFF_IDLE_MINUTES],
+    [session.id, session.empresa_id, session.loja_id],
   ).catch(() => ({ rows: [] }));
   if (!resumed.rows.length) return false;
-  await auditHandoff(db, context, session.id, 'auto_resumed_idle_queue').catch(() => null);
+  await auditHandoff(db, context, session.id, deveRetomarPorDemanda ? 'auto_resumed_scheduling_intent' : 'auto_resumed_idle_queue').catch(() => null);
   return true;
 }
 

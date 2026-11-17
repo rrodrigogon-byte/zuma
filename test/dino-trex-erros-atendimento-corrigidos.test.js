@@ -21,8 +21,8 @@ describe('Correções de Erros Humanos e T-Rex (Dino Barbearia)', () => {
 
     const srv = servicos[0];
     const prof = profs[0];
-    const dataAgenda = '2026-11-25';
-    const horaLocal = '14:30';
+    const dataAgenda = '2026-11-26';
+    const horaLocal = '15:00';
     const dataHora = `${dataAgenda}T${horaLocal}:00-04:00`;
 
     const ag1 = criarAgendamento(empresaId, {
@@ -51,5 +51,15 @@ describe('Correções de Erros Humanos e T-Rex (Dino Barbearia)', () => {
     }, { permitirEncaixe: true });
 
     assert.equal(ag2.id, ag1.id, 'Segundo agendamento idêntico deve retornar o mesmo ID e evitar duplicidade');
+  });
+
+  it('deve validar regex de detecção de intenção de agendamento e adiantamento', () => {
+    const regexAgil = /(?:\b(agendar|marcar|horario|vaga|disponivel|adiantar|mais cedo|mudar|remarcar|cortar|barba|corte|cabelo|livre|agenda|amanha|hoje|quinta|sexta|sabado|segunda|terca|quarta)\b|\?)/i;
+    
+    assert.ok(regexAgil.test('estou livre a partir de 16h'), 'Detecta estou livre');
+    assert.ok(regexAgil.test('conseguimos adiantar?'), 'Detecta adiantar');
+    assert.ok(regexAgil.test('tem como ser mais cedo hoje?'), 'Detecta mais cedo');
+    assert.ok(regexAgil.test('quero marcar corte amanhã'), 'Detecta marcar corte');
+    assert.ok(regexAgil.test('? **'), 'Detecta pontuação de questionamento');
   });
 });

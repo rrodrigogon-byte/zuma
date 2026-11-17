@@ -1212,10 +1212,14 @@ async function toolConfirmAttendance(context, args = {}) {
 async function toolDelayNotice(context, args = {}) {
   const scope = contextScope(context);
   const result = await noteDelay(scope, await resolveOwnAppointmentId(scope, cleanText(args.appointmentId, 120)), args.minutes);
+  const minutos = Number(result?.atrasoMinutos) || Number(args.minutes) || 15;
+  const orientacao = minutos <= 25
+    ? 'Acolha com cordialidade e tranquilidade: confirme que a equipe e o profissional já foram avisados do atraso e estão aguardando o cliente chegar. Diga para ele vir com segurança e calma. NUNCA pergunte dia/horário de remarcação e NUNCA envie link de agenda.'
+    : 'Aviso registrado na agenda. Se o atraso for muito grande (mais de 30 min), verifique com a equipe ou pergunte se o cliente prefere tentar um horário mais tarde no mesmo dia.';
   return {
     ok: true,
-    atraso: sanitizeToolData({ minutos: result.atrasoMinutos, servico: result.servico, profissional: result.profissional, dataHora: result.dataHora }),
-    instrucao: 'Diga que avisou a equipe na agenda. Não prometa que o horário será mantido: se o atraso for grande, ofereça remarcar. Para exceções, use solicitar_humano.',
+    atraso: sanitizeToolData({ minutos, servico: result.servico, profissional: result.profissional, dataHora: result.dataHora }),
+    instrucao: orientacao,
   };
 }
 
