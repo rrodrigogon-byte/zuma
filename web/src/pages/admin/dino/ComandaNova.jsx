@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../../lib/api'
 import {
-  aplicarPreviaPlanos, buscarClientes, filtrarCatalogo, itensParaApi, linkInstagram, nomeRelacao, planosDoServico, totaisCarrinho,
+  aplicarPreviaPlanos, buscarClientes, combinarPlanosComCarrinho, extrairPlanosEmAquisicao, filtrarCatalogo, itensParaApi, linkInstagram, nomeRelacao, planosDoServico, totaisCarrinho,
 } from './comanda-nova'
 import './comanda-nova.css'
 
@@ -167,15 +167,44 @@ export function PainelCliente({ cliente, planos, carregando, profissionais = [] 
     <div className="cn-painel-cliente">
       <div className="cn-bloco">
         <span className="cn-rotulo">Plano do cliente</span>
-        {carregando ? <small>Consultando planos…</small> : !planos.length ? <small>Sem plano ativo. Os serviços serão cobrados avulsos.</small> : planos.map((plano) => (
-          <div key={plano.assinaturaId} className={plano.utilizavel ? 'cn-plano ok' : 'cn-plano alerta'}>
-            <strong>{plano.planoNome}</strong>
-            <small>
-              {plano.utilizavel ? `${plano.sessoesRestantes} de ${plano.sessoesNoCiclo} sessão(ões) disponível(is)` : `Não cobre agora: ${plano.motivo}`}
-              {' · '}{plano.todosOsServicos ? 'qualquer serviço' : (plano.servicosNomes || []).join(', ')}
-            </small>
-          </div>
-        ))}
+        {carregando ? (
+          <small>Consultando planos…</small>
+        ) : !planos.length ? (
+          <small>Sem plano ativo. Os serviços serão cobrados avulsos.</small>
+        ) : (
+          planos.map((plano) => (
+            plano.emAquisicaoNaComanda ? (
+              <div
+                key={plano.assinaturaId}
+                className="cn-plano ok"
+                style={{
+                  border: '2px solid #16a34a',
+                  background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(22, 163, 74, 0.04))',
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  marginTop: 4,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 16 }}>📦</span>
+                  <strong style={{ color: '#15803d', fontSize: 13 }}>PACOTE EM AQUISIÇÃO: {plano.planoNome}</strong>
+                  <span style={{ background: '#16a34a', color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 10 }}>Identificado</span>
+                </div>
+                <small style={{ color: '#166534', fontWeight: 600, display: 'block', marginTop: 2 }}>
+                  ✓ {plano.sessoesNoCiclo} procedimentos inclusos · Procedimentos lançados nesta comanda já contam e saem a R$ 0,00 adicional!
+                </small>
+              </div>
+            ) : (
+              <div key={plano.assinaturaId} className={plano.utilizavel ? 'cn-plano ok' : 'cn-plano alerta'}>
+                <strong>{plano.planoNome}</strong>
+                <small>
+                  {plano.utilizavel ? `${plano.sessoesRestantes} de ${plano.sessoesNoCiclo} sessão(ões) disponível(is)` : `Não cobre agora: ${plano.motivo}`}
+                  {' · '}{plano.todosOsServicos ? 'qualquer serviço' : (plano.servicosNomes || []).join(', ')}
+                </small>
+              </div>
+            )
+          ))
+        )}
       </div>
       {(itensPref.length > 0 || (pref.tags || []).length > 0 || pref.observacoes) && (
         <div className="cn-bloco">
@@ -353,7 +382,7 @@ export function SeletorItens({ servicos, produtosRevenda, planos, catalogoPlanos
       const existente = (item.tipo !== 'servico' && item.tipo !== 'pacote' && item.tipo !== 'outro') ? atual.find((linha) => linha.tipo === item.tipo && linha.itemId === item.itemId) : null
       if (existente) {
         if (item.estoque && existente.quantidade >= item.estoque) return atual
-        return aplicarPreviaPlanos(planos, atual.map((linha) => linha === existente ? { ...linha, quantidade: linha.quantidade + 1 } : linha))
+        return aplicarPreviaPlanos(planos, atual.map((linha) => linha === existente ? { ...linha, quantidade: linha.quantidade + 1 } : linha), catalogoPlanos)
       }
       return aplicarPreviaPlanos(planos, [...atual, {
         chave: `${item.tipo}-${item.itemId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -361,7 +390,7 @@ export function SeletorItens({ servicos, produtosRevenda, planos, catalogoPlanos
         quantidade: Math.max(1, Number(item.quantidade || 1)),
         usarPlano: true,
         profissionalId: item.profissionalId || profissionalPadrao || '',
-      }])
+      }], catalogoPlanos)
     })
   }
 
@@ -533,7 +562,21 @@ export function SeletorItens({ servicos, produtosRevenda, planos, catalogoPlanos
               </div>
               <div className="cn-valor" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 {coberto ? (
-                  <><s>{moeda(linha.preco)}</s><strong>Plano</strong></>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                    <span style={{
+                      background: linha.emAquisicaoNaComanda ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                      color: linha.emAquisicaoNaComanda ? '#15803d' : '#1d4ed8',
+                      border: `1px solid ${linha.emAquisicaoNaComanda ? '#86efac' : '#93c5fd'}`,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: 6,
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {linha.emAquisicaoNaComanda ? '✓ Incluso no Pacote (R$ 0,00)' : '✓ Coberto pelo Plano'}
+                    </span>
+                    <small style={{ color: 'var(--muted)', fontSize: 10 }}>{linha.planoNome || 'Pacote'}</small>
+                  </div>
                 ) : (
                   <>
                     <span style={{ color: 'var(--muted)', fontSize: 13 }}>R$</span>
@@ -605,7 +648,14 @@ export default function ComandaNova({ clientes, profissionais, servicos, produto
   const cliente = (clientes || []).find((c) => c.id === clienteId) || null
   const { planos, carregando } = usePlanosDoCliente(clienteId)
 
-  useEffect(() => { setCarrinho((atual) => aplicarPreviaPlanos(planos, atual)) }, [planos])
+  const planosEfetivos = useMemo(
+    () => combinarPlanosComCarrinho(planos, carrinho, catalogoPlanos),
+    [planos, carrinho, catalogoPlanos]
+  )
+
+  useEffect(() => {
+    setCarrinho((atual) => aplicarPreviaPlanos(planos, atual, catalogoPlanos))
+  }, [planos, catalogoPlanos])
 
   // Sincroniza e unifica múltiplos agendamentos do mesmo cliente/família na mesma comanda
   useEffect(() => {
@@ -722,8 +772,8 @@ export default function ComandaNova({ clientes, profissionais, servicos, produto
           </select>
         </label>
       </div>
-      <PainelCliente cliente={cliente} planos={planos} carregando={carregando} profissionais={profissionais} />
-      <SeletorItens servicos={servicos} produtosRevenda={produtosRevenda} planos={planos} catalogoPlanos={catalogoPlanos} carrinho={carrinho} setCarrinho={setCarrinho} profissionais={profissionais} profissionalPadrao={profissionalId} />
+      <PainelCliente cliente={cliente} planos={planosEfetivos} carregando={carregando} profissionais={profissionais} />
+      <SeletorItens servicos={servicos} produtosRevenda={produtosRevenda} planos={planosEfetivos} catalogoPlanos={catalogoPlanos} carrinho={carrinho} setCarrinho={setCarrinho} profissionais={profissionais} profissionalPadrao={profissionalId} />
       <div className="cn-rodape">
         <div className="cn-extras">
           <label className="cn-campo"><span>Gorjeta (R$)</span><input className="cn-input" type="number" min="0" step="0.01" value={extras.gorjeta} onChange={(e) => setExtras((a) => ({ ...a, gorjeta: e.target.value }))} /></label>
@@ -767,7 +817,13 @@ export function AdicionarItensComanda({ comanda, clientes, profissionais, servic
   })
   const [salvando, setSalvando] = useState(false)
   const { planos } = usePlanosDoCliente(comanda?.clienteId || '')
-  useEffect(() => { setCarrinho((atual) => aplicarPreviaPlanos(planos, atual)) }, [planos])
+  const planosEfetivos = useMemo(
+    () => combinarPlanosComCarrinho(planos, carrinho, catalogoPlanos),
+    [planos, carrinho, catalogoPlanos]
+  )
+  useEffect(() => {
+    setCarrinho((atual) => aplicarPreviaPlanos(planos, atual, catalogoPlanos))
+  }, [planos, catalogoPlanos])
   async function salvar() {
     if (!carrinho.length) return
     setSalvando(true)
@@ -798,7 +854,7 @@ export function AdicionarItensComanda({ comanda, clientes, profissionais, servic
   }
   return (
     <div className="cn-form cn-compacto">
-      <SeletorItens servicos={servicos} produtosRevenda={produtosRevenda} planos={planos} catalogoPlanos={catalogoPlanos} carrinho={carrinho} setCarrinho={setCarrinho} profissionais={profissionais} profissionalPadrao={comanda?.profissionalId || ''} />
+      <SeletorItens servicos={servicos} produtosRevenda={produtosRevenda} planos={planosEfetivos} catalogoPlanos={catalogoPlanos} carrinho={carrinho} setCarrinho={setCarrinho} profissionais={profissionais} profissionalPadrao={comanda?.profissionalId || ''} />
       {carrinho.length > 0 && <div className="cn-acoes"><button type="button" className="cn-botao" disabled={salvando} onClick={salvar}>{salvando ? 'Adicionando…' : `Adicionar ${carrinho.length} item(ns) à comanda`}</button></div>}
     </div>
   )

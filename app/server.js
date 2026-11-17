@@ -8291,9 +8291,9 @@ async function posFaturamentoComanda(req, comanda) {
       }
     }
   }
-  const planos = comandaPlanoKytto.consumirPlanosDaComanda(empresaId, comanda);
-  // Ativação automática de pacote/plano adquirido na comanda
+  // [kytto-pacotes] 1. Ativação automática de pacote/plano adquirido na comanda PRIMEIRO
   const itensPacote = (comanda.itens || []).filter((item) => (item.tipo === 'pacote' || item.tipo === 'plano') && item.planoId);
+  const assinaturasCriadas = [];
   for (const item of itensPacote) {
     if (comanda.clienteId) {
       try {
@@ -8310,12 +8310,24 @@ async function posFaturamentoComanda(req, comanda) {
         });
         if (assinaturaCriada?.id) {
           barbeariaErpKytto.alterarStatusAssinatura(empresaId, assinaturaCriada.id, 'ativa', { confirmadoSemCobranca: true });
+          assinaturasCriadas.push(assinaturaCriada);
         }
       } catch (errAssinatura) {
         console.warn('[comanda] ativacao de pacote na comanda:', errAssinatura.message);
       }
     }
   }
+  // [kytto-pacotes] 2. Vincula a assinatura recém-criada aos itens que usaram cobertura em aquisição
+  for (const item of comanda.itens || []) {
+    if (item.coberturaPlano && (item.coberturaPlano.emAquisicaoNaComanda || String(item.coberturaPlano.assinaturaId).startsWith('aquisicao-'))) {
+      const match = assinaturasCriadas.find(a => String(a.planoId) === String(item.coberturaPlano.planoId)) || assinaturasCriadas[0];
+      if (match) {
+        item.coberturaPlano.assinaturaId = match.id;
+      }
+    }
+  }
+  // [kytto-pacotes] 3. Consome imediatamente as sessões dos serviços cobertos
+  const planos = comandaPlanoKytto.consumirPlanosDaComanda(empresaId, comanda);
   const loja = [];
   const itensLoja = (comanda.itens || []).filter((item) => item.tipo === 'loja' && item.estoqueLoja?.status !== 'baixado');
   if (itensLoja.length) {
