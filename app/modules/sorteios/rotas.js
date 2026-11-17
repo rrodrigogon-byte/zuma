@@ -178,28 +178,26 @@ export function criarRotasSorteios({ legacyEmpresaId, audit } = {}) {
     }
   });
 
-  // Gerar mensagem de notificação para WhatsApp do ganhador
+  // Gerar e disparar notificação oficial para WhatsApp do ganhador com motor KyttoIA
   router.post('/:id/notificar-ganhador', async (req, res) => {
     try {
       const empresaId = getEmpresaId(req);
-      const camp = await sorteiosServico.obterCampanha(empresaId, req.params.id);
-      if (!camp) return res.status(404).json({ error: 'Campanha não encontrada.' });
-      
-      const ganhador = camp.ganhadores?.[0] || {
-        clienteNome: camp.ganhadorNome,
-        clienteTelefone: camp.ganhadorTelefone,
-        numeroSorte: camp.numeroSorte,
-        premio: camp.premioPrincipal,
-        sorteadoEm: camp.sorteadoEm,
-        hashAuditoria: camp.hashAuditoria || '0000000000000000',
-      };
-
-      const textoWhats = sorteiosServico.gerarTextoNotificacaoGanhadorKyttoIA(camp, ganhador);
+      const resultadoTrex = await sorteiosServico.notificarGanhadorViaTrex({
+        empresaId,
+        campanhaId: req.params.id,
+        telefoneDestino: req.body.telefone || null,
+        nomeDestino: req.body.nome || null,
+        enviarWhatsapp: req.body.enviarWhatsapp !== false,
+        emitidoPor: req.user?.nome || req.user?.email || 'T-Rex Gestão Dino',
+      });
       res.json({
         ok: true,
-        mensagem: textoWhats,
-        telefone: ganhador.clienteTelefone,
-        linkWhatsappWeb: `https://api.whatsapp.com/send?phone=${String(ganhador.clienteTelefone).replace(/\D/g, '')}&text=${encodeURIComponent(textoWhats)}`,
+        mensagem: resultadoTrex.mensagemGerada,
+        telefone: resultadoTrex.destinatario.telefone,
+        linkWhatsappWeb: resultadoTrex.linkWhatsappWeb,
+        linkWhatsappApp: `whatsapp://send?phone=${String(resultadoTrex.destinatario.telefone).replace(/\D/g, '')}&text=${encodeURIComponent(resultadoTrex.mensagemGerada)}`,
+        statusEnvio: resultadoTrex.statusEnvio,
+        hashAntiSpam: resultadoTrex.hashAntiSpam,
       });
     } catch (error) {
       res.status(400).json({ error: error.message });
