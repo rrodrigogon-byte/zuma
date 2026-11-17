@@ -61,8 +61,18 @@ export function coberturasDoCliente(empresaId, clienteId, opcoes = {}) {
     .filter(Boolean);
 }
 
-function cobre(cobertura, servicoId, profissionalId = null) {
-  const servicoOk = cobertura.todosOsServicos || cobertura.servicosIds.includes(String(servicoId));
+function cobre(cobertura, servicoId, profissionalId = null, servicoNome = '') {
+  const sId = String(servicoId || '');
+  let servicoOk = cobertura.todosOsServicos || (cobertura.servicosIds || []).includes(sId) || (!cobertura.servicosIds || cobertura.servicosIds.length === 0);
+  if (!servicoOk) {
+    const sNome = String(servicoNome || '').toLowerCase();
+    const pNome = String(cobertura.planoNome || '').toLowerCase();
+    if (pNome.includes('pacote') || pNome.includes('procedimento')) {
+      if (sNome.includes('procedimento') || sNome.includes('corte') || sNome.includes('barba')) {
+        servicoOk = true;
+      }
+    }
+  }
   if (!servicoOk) return false;
   if (profissionalId) {
     const profId = String(profissionalId);
@@ -103,6 +113,41 @@ export function aplicarPlanoAosItens(empresaId, arg2 = {}, arg3 = {}) {
   const avisos = [];
   if (!clienteId) return { itens: entrada, cobertos: 0, avisos };
   const coberturas = coberturasDoCliente(empresaId, clienteId, {...opcoes,ignorarAgendamentoId:agendamentoId});
+
+  // [kytto-pacotes] Detecta pacotes sendo adquiridos nesta mesma comanda e gera cobertura virtual
+  const itensPacote = entrada.filter((item) => (
+    item.tipo === 'pacote' || item.tipo === 'plano' || item.categoria === 'Pacotes e Planos' || (item.nome && /pacote|plano/i.test(item.nome))
+  ));
+  for (const itemPacote of itensPacote) {
+    const pId = String(itemPacote.planoId || itemPacote.itemId || itemPacote.id || '');
+    let planoOriginal = null;
+    try {
+      if (barbearia.obterPlano) planoOriginal = barbearia.obterPlano(empresaId, pId);
+    } catch {}
+    const sessoes = Number(itemPacote.sessoesIncluidas || planoOriginal?.sessoesIncluidas || 4);
+    const servicosIds = (itemPacote.servicosIds || planoOriginal?.servicosIds || []).map(String);
+    const cobAquisicao = {
+      assinaturaId: `aquisicao-${pId}`,
+      planoId: pId,
+      planoNome: itemPacote.nome || planoOriginal?.nome || 'Pacote Adquirido na Comanda',
+      servicosIds,
+      servicosNomes: [],
+      todosOsServicos: servicosIds.length === 0,
+      sessoesNoCiclo: sessoes,
+      sessoesUsadas: 0,
+      sessoesReservadas: 0,
+      sessoesRestantes: sessoes,
+      utilizavel: true,
+      emAquisicaoNaComanda: true,
+      categoriaPlano: 'pacote',
+      situacaoPagamento: 'em_dia',
+      motivo: null,
+      profissionalId: itemPacote.profissionalId || planoOriginal?.profissionalId || null,
+      profissionaisIds: planoOriginal?.profissionaisIds || [],
+    };
+    coberturas.push(cobAquisicao);
+  }
+
   if (!coberturas.length) return { itens: entrada, cobertos: 0, avisos };
   const saldo = new Map(coberturas.map((c) => [c.assinaturaId, c.utilizavel ? c.sessoesRestantes : 0]));
   const saida = [];
@@ -112,12 +157,22 @@ export function aplicarPlanoAosItens(empresaId, arg2 = {}, arg3 = {}) {
     if (tipo !== 'servico' || item.usarPlano === false) { saida.push(item); continue; }
     const servicoId = String(item.servicoId || item.itemId || '');
     const itemProfId = item.profissionalId || null;
-    const candidatas = coberturas.filter((c) => cobre(c, servicoId, itemProfId));
+    const candidatas = coberturas.filter((c) => cobre(c, servicoId, itemProfId, item.nome));
     if (!candidatas.length) { saida.push(item); continue; }
     let restante = Math.max(1, Math.round(Number(item.quantidade || 1)));
     for (const cobertura of candidatas) {
       while (restante > 0 && (saldo.get(cobertura.assinaturaId) || 0) > 0) {
-        saida.push({ ...item, quantidade: 1, coberturaPlano: { verificadoPeloServidor: true, assinaturaId: cobertura.assinaturaId, planoId: cobertura.planoId, planoNome: cobertura.planoNome } });
+        saida.push({
+          ...item,
+          quantidade: 1,
+          coberturaPlano: {
+            verificadoPeloServidor: true,
+            assinaturaId: cobertura.assinaturaId,
+            planoId: cobertura.planoId,
+            planoNome: cobertura.planoNome,
+            emAquisicaoNaComanda: Boolean(cobertura.emAquisicaoNaComanda),
+          }
+        });
         saldo.set(cobertura.assinaturaId, saldo.get(cobertura.assinaturaId) - 1);
         restante -= 1;
         cobertos += 1;
@@ -140,6 +195,10 @@ export function validarCoberturasDaComanda(empresaId, comanda, opcoes = {}) {
   const porAssinatura = new Map();
   for (const item of itens) porAssinatura.set(item.coberturaPlano.assinaturaId, [...(porAssinatura.get(item.coberturaPlano.assinaturaId) || []), item]);
   for (const [assinaturaId, lista] of porAssinatura) {
+    if (String(assinaturaId).startsWith('aquisicao-') || lista.some(i => i.coberturaPlano?.emAquisicaoNaComanda)) {
+      // Pacote sendo adquirido e faturado na própria comanda: cobertura garantida pelo pagamento da comanda
+      continue;
+    }
     const cobertura = coberturas.get(assinaturaId);
     const nome = lista[0].coberturaPlano.planoNome || 'Plano';
     if (!cobertura) throw Object.assign(new Error(`O ${nome} não está mais ativo para este cliente. Remova o item coberto e lance como avulso.`), { code: 'PLANO_INDISPONIVEL' });
@@ -164,8 +223,25 @@ export function consumirPlanosDaComanda(empresaId, comanda, opcoes = {}) {
     if (!item.coberturaPlano || item.coberturaPlano.usoId) continue;
     let chave = `comanda:${comanda.id}:${item.id}`;
     if (servicoAgendado && !chaveAgendaUsada && item.servicoId === servicoAgendado) { chave = comanda.agendamentoId; chaveAgendaUsada = true; }
+    let assId = item.coberturaPlano.assinaturaId;
+    if (String(assId).startsWith('aquisicao-') || item.coberturaPlano.emAquisicaoNaComanda) {
+      try {
+        const todasAss = barbearia.listarAssinaturas(empresaId);
+        const achada = todasAss.find(a => (
+          String(a.clienteId) === String(comanda.clienteId) &&
+          (String(a.planoId) === String(item.coberturaPlano.planoId) || a.comandaId === comanda.id) &&
+          ['ativa', 'pendente_pagamento'].includes(a.status)
+        ));
+        if (achada) {
+          assId = achada.id;
+          item.coberturaPlano.assinaturaId = achada.id;
+        }
+      } catch (errAssBusca) {
+        console.warn('[comanda-plano] falha ao resolver assinatura real de aquisicao:', errAssBusca.message);
+      }
+    }
     try {
-      captacao.registrarUsoAssinatura(empresaId, item.coberturaPlano.assinaturaId, {
+      captacao.registrarUsoAssinatura(empresaId, assId, {
         servicoId: item.servicoId, agendamentoId: chave,
         profissionalId: item.profissionalId || comanda.profissionalId || null, comandaId: comanda.id,
       }, opcoes);

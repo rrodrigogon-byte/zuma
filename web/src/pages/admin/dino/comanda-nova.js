@@ -47,33 +47,96 @@ export function filtrarCatalogo(lista, termo, campos = ['nome'], limite = 12) {
   }).slice(0, limite)
 }
 
-const cobre = (plano, servicoId) => plano.todosOsServicos || (plano.servicosIds || []).includes(servicoId)
+const cobre = (plano, servicoId, servicoNome = '') => {
+  if (plano.todosOsServicos) return true
+  const ids = plano.servicosIds || []
+  if (ids.includes(servicoId)) return true
+  // Se for pacote de procedimentos e o nome do serviço for "Procedimento pacote" ou similar
+  const sNome = String(servicoNome || '').toLowerCase()
+  const pNome = String(plano.planoNome || plano.nome || '').toLowerCase()
+  if (pNome.includes('procedimento') || pNome.includes('pacote')) {
+    if (sNome.includes('procedimento') || sNome.includes('corte') || sNome.includes('barba')) return true
+  }
+  return false
+}
+
+/** Extrai coberturas virtuais de pacotes/planos que estão sendo adquiridos nesta mesma comanda */
+export function extrairPlanosEmAquisicao(carrinho = [], catalogoPlanos = []) {
+  const pacotes = (carrinho || []).filter(
+    (item) => item.tipo === 'pacote' || item.tipo === 'plano' || item.categoria === 'Pacotes e Planos' || (item.nome && /pacote|plano/i.test(item.nome))
+  )
+  return pacotes.map((item) => {
+    const planoId = String(item.planoId || item.itemId || item.id || '')
+    const planoOriginal = (catalogoPlanos || []).find((p) => String(p.id) === planoId)
+    const sessoes = Number(item.sessoesIncluidas || planoOriginal?.sessoesIncluidas || 4)
+    const servicosIds = item.servicosIds || planoOriginal?.servicosIds || []
+    return {
+      assinaturaId: `aquisicao-${planoId}`,
+      planoId,
+      planoNome: item.nome || planoOriginal?.nome || 'Pacote Adquirido na Comanda',
+      servicosIds,
+      servicosNomes: [],
+      todosOsServicos: !servicosIds || servicosIds.length === 0,
+      sessoesNoCiclo: sessoes,
+      sessoesUsadas: 0,
+      sessoesReservadas: 0,
+      sessoesRestantes: sessoes,
+      utilizavel: true,
+      emAquisicaoNaComanda: true,
+      motivo: null,
+      categoriaPlano: 'pacote',
+      profissionalId: item.profissionalId || planoOriginal?.profissionalId || null,
+      profissionaisIds: planoOriginal?.profissionaisIds || [],
+    }
+  })
+}
+
+/** Combina planos ativos já existentes do cliente com pacotes sendo adquiridos no carrinho */
+export function combinarPlanosComCarrinho(planosAtivos = [], carrinho = [], catalogoPlanos = []) {
+  const ativos = Array.isArray(planosAtivos) ? planosAtivos : []
+  const emAquisicao = extrairPlanosEmAquisicao(carrinho, catalogoPlanos)
+  if (!emAquisicao.length) return ativos
+  // Evita duplicar se o cliente já tiver a mesma assinatura
+  const idsAtivos = new Set(ativos.map((a) => String(a.planoId)))
+  const novos = emAquisicao.filter((e) => !idsAtivos.has(e.planoId))
+  return [...ativos, ...novos]
+}
 
 /** Plano que cobriria o serviço agora (prévia), considerando o que já está no carrinho. */
-export function previaCobertura(planos, carrinho, servicoId, ignorarLinha = null) {
+export function previaCobertura(planos, carrinho, servicoId, servicoNome = '', ignorarLinha = null) {
   const usados = new Map()
   for (const linha of carrinho || []) {
     if (linha === ignorarLinha || linha.tipo !== 'servico' || !linha.usarPlano || !linha.planoPrevisto) continue
     usados.set(linha.planoPrevisto, (usados.get(linha.planoPrevisto) || 0) + 1)
   }
-  return (planos || []).find((plano) => plano.utilizavel && cobre(plano, servicoId) && (plano.sessoesRestantes - (usados.get(plano.assinaturaId) || 0)) > 0) || null
+  return (planos || []).find((plano) => plano.utilizavel && cobre(plano, servicoId, servicoNome) && (plano.sessoesRestantes - (usados.get(plano.assinaturaId) || 0)) > 0) || null
 }
 
 /** Planos que cobririam o serviço, mesmo que hoje não possam ser usados (para explicar o motivo). */
-export function planosDoServico(planos, servicoId) {
-  return (planos || []).filter((plano) => cobre(plano, servicoId))
+export function planosDoServico(planos, servicoId, servicoNome = '') {
+  return (planos || []).filter((plano) => cobre(plano, servicoId, servicoNome))
 }
 
 /** Recalcula a prévia de cobertura do carrinho inteiro, linha a linha. */
-export function aplicarPreviaPlanos(planos, carrinho) {
+export function aplicarPreviaPlanos(planos, carrinho, catalogoPlanos = []) {
+  const planosEfetivos = combinarPlanosComCarrinho(planos, carrinho, catalogoPlanos)
   const resultado = []
   for (const linha of carrinho) {
     if (linha.tipo !== 'servico') { resultado.push(linha); continue }
-    const plano = linha.usarPlano !== false ? previaCobertura(planos, resultado, linha.itemId) : null
-    resultado.push({ ...linha, planoPrevisto: plano ? plano.assinaturaId : null, planoNome: plano ? plano.planoNome : null, quantidade: plano ? 1 : linha.quantidade })
+    const plano = linha.usarPlano !== false ? previaCobertura(planosEfetivos, resultado, linha.itemId, linha.nome) : null
+    resultado.push({
+      ...linha,
+      planoPrevisto: plano ? plano.assinaturaId : null,
+      planoNome: plano ? plano.planoNome : null,
+      emAquisicaoNaComanda: Boolean(plano?.emAquisicaoNaComanda),
+      quantidade: plano ? 1 : linha.quantidade,
+      preco: plano ? 0 : (linha.precoEditado !== undefined ? Number(linha.precoEditado) : linha.preco),
+      subtotal: plano ? 0 : ((linha.precoEditado !== undefined ? Number(linha.precoEditado) : Number(linha.preco || 0)) * Number(linha.quantidade || 1)),
+    })
   }
   return resultado
 }
+
 
 export function totaisCarrinho(carrinho, { desconto = 0, gorjeta = 0 } = {}) {
   let tabela = 0
@@ -103,7 +166,26 @@ export function itensParaApi(carrinho, profissionalPadrao = '') {
       ...(linha.agendamentoId ? { agendamentoId: linha.agendamentoId } : {}),
       ...(valorItem !== undefined ? { preco: valorItem, precoUnitario: valorItem, valor: valorItem } : {}),
     }
-    if (linha.tipo === 'servico') return { ...base, servicoId: linha.itemId, usarPlano: linha.usarPlano !== false }
+    if (linha.tipo === 'servico') {
+      const coberto = Boolean(linha.planoPrevisto);
+      return {
+        ...base,
+        servicoId: linha.itemId,
+        usarPlano: linha.usarPlano !== false,
+        preco: coberto ? 0 : base.preco,
+        precoUnitario: coberto ? 0 : base.precoUnitario,
+        valor: coberto ? 0 : base.valor,
+        subtotal: coberto ? 0 : (base.preco ? base.preco * Number(linha.quantidade || 1) : 0),
+        ...(coberto ? {
+          coberturaPlano: {
+            verificadoPeloServidor: true,
+            assinaturaId: linha.planoPrevisto,
+            planoNome: linha.planoNome,
+            emAquisicaoNaComanda: Boolean(linha.emAquisicaoNaComanda),
+          }
+        } : {}),
+      };
+    }
     if (linha.tipo === 'produto') return { ...base, produtoId: linha.itemId }
     if (linha.tipo === 'bebida' || linha.tipo === 'bar') {
       return { ...base, tipo: 'bebida', produtoId: linha.itemId, itemId: linha.itemId, nome: linha.nome }
