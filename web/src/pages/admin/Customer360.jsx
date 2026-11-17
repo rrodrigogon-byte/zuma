@@ -69,42 +69,105 @@ function CustomerProfile({ reference }) {
   const [modalEditar, setModalEditar] = useState(null);
   const [formEditar, setFormEditar] = useState({});
   const [salvando, setSalvando] = useState(false);
+  const [unificando, setUnificando] = useState(false);
 
   function abrirModalEditar(cliente) {
-    const barbearia = cliente.fontes?.includes('barbearia') || Boolean(cliente.clienteBarbeariaId);
+    const cliBarbeariaId = cliente.clienteBarbeariaId || (cliente.canonicalRef || cliente.ref || '').replace(/^[a-z]+:/i, '') || cliente.id;
     setFormEditar({
-      nome: cliente.nome || cliente.perfil?.nome || '',
-      telefone: cliente.telefone || cliente.perfil?.telefone || '',
-      limiteCreditoMensal: barbearia ? Number(cliente.limiteCreditoMensal || cliente.perfil?.limiteCreditoMensal || 0) : 0,
-      diasVencimento: barbearia ? Number(cliente.diasVencimento || cliente.perfil?.diasVencimento || 30) : 30,
-      clienteBarbeariaId: cliente.clienteBarbeariaId || cliente.ref || cliente.id,
+      nome: cliente.perfil?.nome || cliente.nome || '',
+      telefone: (cliente.perfil?.telefone || cliente.telefone || '').replace(/\D/g, '').slice(-11),
+      email: cliente.perfil?.email || cliente.email || '',
+      documento: cliente.perfil?.documento || cliente.documento || cliente.cpfCnpj || '',
+      observacao: cliente.perfil?.observacao || cliente.observacao || '',
+      limiteCreditoMensal: Number(cliente.indicadores?.limiteCredito || cliente.limiteCreditoMensal || 500),
+      diasVencimento: Number(cliente.diasVencimento || 30),
+      clienteBarbeariaId: cliBarbeariaId,
       original: cliente
     });
     setModalEditar(cliente);
   }
 
   async function salvarEdicao(event) {
-    event.preventDefault();
+    if (event) event.preventDefault();
     if (!formEditar.clienteBarbeariaId) {
-      alert("Edição no CRM 360 disponível apenas para clientes com cadastro na barbearia ativa.");
+      toast("Identificador de cliente inválido para edição.", "error");
       return;
     }
     setSalvando(true);
     try {
-      await api.patch(`/api/admin/barbearia/clientes/${formEditar.clienteBarbeariaId}`, {
+      await api.patch(`/api/admin/barbearia/clientes/${encodeURIComponent(formEditar.clienteBarbeariaId)}`, {
         nome: formEditar.nome,
         telefone: formEditar.telefone,
+        email: formEditar.email,
+        cpfCnpj: formEditar.documento,
+        observacao: formEditar.observacao,
         limiteCreditoMensal: Number(formEditar.limiteCreditoMensal || 0),
         diasVencimento: Number(formEditar.diasVencimento || 30)
       });
       setModalEditar(null);
-      if (typeof window !== 'undefined' && window.confirm("Cadastro salvo com sucesso. Recarregar CRM para ver alterações?")) {
-        window.location.reload();
-      }
+      toast("Cadastro atualizado com sucesso!", "success");
+      load();
     } catch (e) {
-      alert(e.response?.data?.error || e.message || "Falha ao salvar");
+      toast(e.response?.data?.error || e.message || "Falha ao salvar alterações.", "error");
     } finally {
       setSalvando(false);
+    }
+  }
+
+  async function excluirCadastro() {
+    if (!formEditar.clienteBarbeariaId) return;
+    const confirmou = window.confirm(
+      `Deseja realmente inativar o cadastro de "${formEditar.nome}"?\n\nO histórico de comandas e atendimentos será preservado de acordo com as normas fiscais.`
+    );
+    if (!confirmou) return;
+    setSalvando(true);
+    try {
+      await api.delete(`/api/admin/barbearia/clientes/${encodeURIComponent(formEditar.clienteBarbeariaId)}`);
+      setModalEditar(null);
+      toast("Cadastro inativado com sucesso.", "success");
+      setTimeout(() => {
+        window.location.href = '/admin/clientes-360';
+      }, 800);
+    } catch (e) {
+      toast(e.response?.data?.error || e.message || "Falha ao inativar cliente.", "error");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function unificarCadastrosDuplicados() {
+    if (!data) return;
+    const principalId = data.clienteBarbeariaId || (data.canonicalRef || data.ref || '').replace(/^[a-z]+:/i, '');
+    const registrosLocais = (data.registros || []).filter(r => r.fonte === 'barbearia');
+    const secundarioIds = registrosLocais
+      .map(r => r.ref.replace(/^dino:/, ''))
+      .filter(id => id && id !== principalId);
+
+    if (secundarioIds.length === 0) {
+      toast("Não há outros cadastros duplicados detectados para este contato.", "info");
+      return;
+    }
+
+    const confirmou = window.confirm(
+      `Deseja unificar os ${secundarioIds.length + 1} cadastros encontrados para este cliente?\n\n` +
+      `Principal: ${data.perfil?.nome || 'Cliente Atual'}\n` +
+      `Secundários que serão consolidados: ${secundarioIds.join(', ')}\n\n` +
+      `Todas as visitas, comandas e assinaturas serão consolidadas sob o mesmo cadastro sem perda de dados.`
+    );
+    if (!confirmou) return;
+
+    setUnificando(true);
+    try {
+      const res = await api.post('/api/admin/barbearia/clientes/unificar', {
+        principalId,
+        secundarioIds
+      });
+      toast(`Cadastros unificados com sucesso! (${res.unificados || secundarioIds.length} mesclado(s))`, "success");
+      load();
+    } catch (e) {
+      toast(e.response?.data?.error || e.message || "Falha ao unificar cadastros.", "error");
+    } finally {
+      setUnificando(false);
     }
   }
 
