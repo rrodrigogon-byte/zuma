@@ -17,6 +17,25 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
   const [busca, setBusca] = useState('')
   const [modalReatribuir, setModalReatribuir] = useState(null) // { cliente, novoBarbeiroId }
   const [salvandoVinculo, setSalvandoVinculo] = useState(false)
+  const [unificando, setUnificando] = useState(false)
+
+  const autoUnificarDuplicados = useCallback(async () => {
+    const confirmou = window.confirm(
+      "Deseja iniciar a varredura e unificação inteligente de cadastros duplicados da barbearia?\n\n" +
+      "O sistema irá localizar cadastros com o mesmo celular (com ou sem código 55), histórico comum ou nomes idênticos, consolidando comandas, assinaturas e histórico sob o cadastro principal sem perda de informações fiscais."
+    )
+    if (!confirmou) return
+    setUnificando(true)
+    try {
+      const res = await api.post('/api/admin/barbearia/clientes/auto-unificar')
+      alert(`Varredura concluída! ${res.gruposUnificados || 0} grupo(s) de clientes duplicados foram unificados com sucesso.`)
+      carregarDados()
+    } catch (err) {
+      alert(err.response?.data?.error || err.message || "Falha na unificação automática.")
+    } finally {
+      setUnificando(false)
+    }
+  }, [carregarDados])
 
   const carregarDados = useCallback(async () => {
     setLoading(true)
