@@ -4538,6 +4538,25 @@ export function criarAgendamento(empresaId, dados = {}, opcoes = {}) {
   }
   agendamento.valor = precoCalculado;
   validarCalendarioAgendamento(estado, agendamento, profissional);
+
+  // Detecção de duplicidade acidental: mesmo cliente + mesmo profissional + mesma data e horário (duplo clique da equipe)
+  const agendamentosExistentes = Object.values(estado.agendamentos || {});
+  const duplicadoExato = agendamentosExistentes.find((outro) =>
+    outro && !['cancelado', 'nao_compareceu'].includes(String(outro.status))
+    && outro.profissionalId === agendamento.profissionalId
+    && outro.dataAgenda === agendamento.dataAgenda
+    && outro.horaLocal === agendamento.horaLocal
+    && (
+      (outro.clienteId && agendamento.clienteId && outro.clienteId === agendamento.clienteId)
+      || (outro.clienteTelefone && agendamento.clienteTelefone && String(outro.clienteTelefone).replace(/\D/g, '').endsWith(String(agendamento.clienteTelefone).replace(/\D/g, '').slice(-8)))
+      || (outro.clienteNome && agendamento.clienteNome && outro.clienteNome.trim().toLowerCase() === agendamento.clienteNome.trim().toLowerCase())
+    )
+  );
+  if (duplicadoExato) {
+    // Retorna o agendamento já existente com segurança, impedindo segundo registro duplicado na mesma vaga
+    return { ...duplicadoExato, _jaExistia: true };
+  }
+
   if (verificarConflito(estado, agendamento)) {
     if (opcoes.permitirEncaixe !== true) throw new Error('Horário indisponível para o profissional selecionado.');
     agendamento.encaixe = true;

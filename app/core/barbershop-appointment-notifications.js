@@ -176,6 +176,10 @@ export async function queueAppointmentNotifications(contexto = {}, agendamento =
   if (!elegibilidade.eligible) return { queued: 0, skipped: true, reason: elegibilidade.reason };
   const dataHora = dataValida(agendamento.dataHora);
   if (!dataHora && evento !== 'cancelado') return { queued: 0, skipped: true, reason: 'schedule_invalid' };
+  if (evento === 'cancelado' && dataHora && dataHora.getTime() < Date.now() - 3600000) {
+    // NUNCA disparar cancelamento retroativo no WhatsApp para agendamentos passados (evita alarmar clientes)
+    return { queued: 0, skipped: true, reason: 'appointment_in_the_past' };
+  }
   return db.transaction(async (trx) => {
     const canal = await canalAtivo(trx, empresaId, lojaId);
     if (!canal) return { queued: 0, skipped: true, reason: 'whatsapp_channel_inactive' };
@@ -668,6 +672,10 @@ export async function processAppointmentNotificationTask(task = {}) {
   const canal = channelResult.rows[0];
   if (!canal) return { skipped: true, reason: 'whatsapp_channel_inactive' };
   if (evento === 'cancelado') {
+    const dataHoraAgendamento = dataValida(agendamento.dataHora);
+    if (dataHoraAgendamento && dataHoraAgendamento.getTime() < Date.now() - 3600000) {
+      return { skipped: true, reason: 'appointment_in_the_past' };
+    }
     const motivoLower = String(agendamento.motivoCancelamento || agendamento.observacaoCancelamento || '').toLowerCase();
     if (/\b(duplicidade|duplicad|erro_lancamento|ajuste_interno|remarcac|teste|limpeza)\b/.test(motivoLower)) {
       return { skipped: true, reason: 'internal_cancellation_reason' };

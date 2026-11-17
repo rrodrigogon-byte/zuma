@@ -33,8 +33,8 @@ export function staffTakeoverEnabled() {
 }
 
 export function staffPauseMinutes() {
-  const minutos = Number.parseInt(process.env.WHATSAPP_AI_STAFF_PAUSE_MIN || '120', 10);
-  return Math.min(720, Math.max(15, Number.isFinite(minutos) ? minutos : 120));
+  const minutos = Number.parseInt(process.env.WHATSAPP_AI_STAFF_PAUSE_MIN || '30', 10);
+  return Math.min(720, Math.max(15, Number.isFinite(minutos) ? minutos : 30));
 }
 
 /** Mensagem de saída digitada por uma pessoa (não pela API)? */
