@@ -15,16 +15,22 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
   const [barbeiroSelecionadoId, setBarbeiroSelecionadoId] = useState('') // '' = todos
   const [filtroRetorno, setFiltroRetorno] = useState('todos')
   const [busca, setBusca] = useState('')
+  const [buscaDebounced, setBuscaDebounced] = useState('')
   const [modalReatribuir, setModalReatribuir] = useState(null) // { cliente, novoBarbeiroId }
   const [salvandoVinculo, setSalvandoVinculo] = useState(false)
   const [unificando, setUnificando] = useState(false)
+
+  useEffect(() => {
+    const timer = setTimeout(() => { setBuscaDebounced(busca) }, 350)
+    return () => clearTimeout(timer)
+  }, [busca])
 
   const carregarDados = useCallback(async () => {
     setLoading(true)
     try {
       const [resResumo, resLista] = await Promise.all([
         api.get('/api/admin/barbearia/carteira-clientes/resumo'),
-        api.get(`/api/admin/barbearia/carteira-clientes?profissionalId=${encodeURIComponent(barbeiroSelecionadoId)}&filtroRetorno=${encodeURIComponent(filtroRetorno)}&busca=${encodeURIComponent(busca)}`),
+        api.get(`/api/admin/barbearia/carteira-clientes?profissionalId=${encodeURIComponent(barbeiroSelecionadoId)}&filtroRetorno=${encodeURIComponent(filtroRetorno)}&busca=${encodeURIComponent(buscaDebounced)}`),
       ])
       setResumo(resResumo)
       setClientes(resLista.clientes || [])
@@ -34,7 +40,7 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
     } finally {
       setLoading(false)
     }
-  }, [barbeiroSelecionadoId, filtroRetorno, busca])
+  }, [barbeiroSelecionadoId, filtroRetorno, buscaDebounced])
 
 
 
