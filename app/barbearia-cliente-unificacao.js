@@ -145,8 +145,9 @@ export function unificarClientes(empresaId, principalId, secundarioIds = [], opc
       }
 
       // 6. Contas a Receber
-      const contas = root.clientesKytto?.empresas?.[emp]?.contasReceber || [];
-      for (const c of contas) {
+      const contasRaw = root.clientesKytto?.empresas?.[emp]?.contasReceber || [];
+      const contasLista = Array.isArray(contasRaw) ? contasRaw : Object.values(contasRaw);
+      for (const c of contasLista) {
         if (c.clienteId === secId) {
           c.clienteId = principalId;
           c.clienteNome = principal.nome;
