@@ -45,3 +45,9 @@ test('anti-alucinacao: withPendingReminder não duplica aviso de confirmação s
   const resultado = withPendingReminder(textoComAviso, pending);
   assert.equal(resultado, textoComAviso);
 });
+
+test('anti-alucinacao: regex remove justificativas espurias de teste em agendamentos', () => {
+  const textoOriginal = 'Ah, desculpe a confusão! O agendamento que te passei foi um teste. Para o dia 26/11 às 17h30 com a Nati, quais serviços você gostaria de agendar?';
+  const sanitizado = textoOriginal.replace(/\b(o\s+agendamento\s+que\s+te\s+passei\s+foi\s+um\s+teste\.?|foi\s+(um\s+)?teste\.?|era\s+(um\s+)?teste\.?|apenas\s+um\s+teste\.?|somente\s+um\s+teste\.?)\s*/gi, '').trim();
+  assert.ok(sanitizado.includes('Para o dia 26/11 às 17h30 com a Nati'));
+});

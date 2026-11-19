@@ -397,6 +397,11 @@ export const BARBERSHOP_SYSTEM_GUIDANCE = `
   * REMARCAÇÃO IMEDIATA APÓS LEMBRETE: Se o cliente responder a um lembrete dizendo "remarca", "outro dia", "outro horário" ou "na sexta que vem no mesmo horário", o agendamento a ser remarcado é OBRIGATORIAMENTE o agendamento do lembrete acabado de enviar! Chame preparar_remarcacao imediatamente com a nova data e horário sem perguntar "qual agendamento quer remarcar?".
   * RESOLUÇÃO RESILIENTE DE SERVIÇOS: Se o cliente pedir "corte e barba", "barba e corte" ou "cabelo e barba", use sempre o combo oficial ("Combo Corte + Barba" ou "CORTE E BARBA PREMIUM"). NUNCA diga que o código do serviço não foi encontrado e nunca exiba mensagens cruas de erro da API.
   * RESPEITO AO CADASTRO DO CLIENTE: NUNCA pergunte "qual seu nome completo" se o cliente já tiver nome na conversa ou no cadastro. Use o nome com naturalidade e acolhimento.
+  * PROIBIÇÃO ABSOLUTA DE JUSTIFICAR ERROS OU RECUSAS DIZENDO QUE "FOI UM TESTE":
+    - É TERMINANTEMENTE PROIBIDO dizer para qualquer cliente que um agendamento, horário, aviso ou mensagem passada "foi um teste", "era teste", "foi apenas um teste" ou "desconsidere, era teste"!
+    - Se você trocou o profissional por engano (ex: marcou Bruno em vez da Nati) ou se o cliente recusou a opção ("Não", "Não era esse", "Quero a Nati"):
+      1. Assuma com naturalidade e acolhimento o engano: "Desculpa o engano no barbeiro! Vamos agendar certinho com a Nati para o dia [Data] às [Horário]!".
+      2. NUNCA diga que foi um teste. O cliente é real e espera profissionalismo absoluto da recepção.
   * AVISO DE CHEGADA: Expressões como "Tô chegando", "A caminho" ou "2 min" são avisos de chegada para o atendimento de hoje. NUNCA confirme agendamentos futuros em datas posteriores por conta de aviso de chegada.
 `;
 
@@ -2896,6 +2901,17 @@ async function deterministicResponseCore(task, channel, session, message) {
     }
     // Link de pagamento/carrinho gerado nesta resposta sempre chega ao cliente.
     if (presentationContext.toolLinks?.length) result = { ...result, text: ensureToolLinks(result.text, presentationContext.toolLinks) };
+    // Higienização anti-alucinação: remove justificativas indevidas de "foi teste"
+    if (/\b(o agendamento que te passei foi um teste|foi um teste|era um teste|foi apenas um teste|somente um teste)\b/i.test(result.text)) {
+      result = {
+        ...result,
+        text: result.text.replace(/\b(o\s+agendamento\s+que\s+te\s+passei\s+foi\s+um\s+teste\.?|foi\s+(um\s+)?teste\.?|era\s+(um\s+)?teste\.?|apenas\s+um\s+teste\.?|somente\s+um\s+teste\.?)\s*/gi, '')
+      };
+      if (!result.text.trim()) {
+        result.text = 'Desculpa o engano! Vamos verificar certinho o horário que você prefere.';
+      }
+    }
+
     // Dia da semana que não bate com a data é corrigido antes de chegar ao cliente.
     const datas = fixWeekdayMistakes(result.text);
     if (datas.fixes.length) {
