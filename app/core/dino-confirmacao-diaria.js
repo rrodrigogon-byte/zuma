@@ -2,6 +2,7 @@ import { db, save } from '../db.js';
 import * as cadastrosMestres from '../cadastros-mestres-kytto.js';
 import * as barbearia from '../barbearia-erp-kytto.js';
 import { queueAppointmentNotifications } from './barbershop-appointment-notifications.js';
+import { estaEmOptOut } from './whatsapp-antiban.js';
 
 export function obterEmpresasBarbearia() {
   const ids = new Set([
@@ -33,8 +34,10 @@ export async function processarConfirmacoesDiarias(options = {}) {
 
   // 1. Confirmação do dia: SEMPRE NO PERÍODO DA MANHÃ, DAS 07h00 ÀS 09h00 (horário de Cuiabá)
   const janelaManha = (horaCuiaba >= 7 && horaCuiaba <= 9) || forcar;
-  // 2. Confirmação da véspera: ENVIANDO SEMPRE UM DIA ANTES (horário comercial/tarde da véspera, das 10h00 às 20h00)
+  // 2. Confirmação da véspera (24h antes): horário comercial da véspera, das 10h00 às 20h00
   const janelaVespera = (horaCuiaba >= 10 && horaCuiaba <= 20) || forcar;
+  // 3. Janela de atendimento para lembretes de 30m antes (das 07h30 às 20h30)
+  const janelaComercial = (horaCuiaba >= 7 && horaCuiaba <= 20) || forcar;
   
   const empresasIds = obterEmpresasBarbearia();
   let totalEnviadas = 0;
@@ -53,6 +56,7 @@ export async function processarConfirmacoesDiarias(options = {}) {
         if (ag.status === 'agendado') {
           // Evita reenvio se já enviado na manhã de hoje
           if (ag.confirmacaoDiaData === hoje) continue;
+          if (ag.clienteTelefone && estaEmOptOut(empresaId, ag.clienteTelefone)) continue;
 
           const res = await queueAppointmentNotifications(
             { empresaId, legacyEmpresaId: empresaId, lojaId: ag.lojaId },
@@ -82,6 +86,7 @@ export async function processarConfirmacoesDiarias(options = {}) {
         if (ag.status === 'agendado') {
           // Evita reenvio se já enviado na véspera
           if (ag.lembreteVesperaData === hoje) continue;
+          if (ag.clienteTelefone && estaEmOptOut(empresaId, ag.clienteTelefone)) continue;
 
           const res = await queueAppointmentNotifications(
             { empresaId, legacyEmpresaId: empresaId, lojaId: ag.lojaId },
@@ -103,6 +108,43 @@ export async function processarConfirmacoesDiarias(options = {}) {
         }
       }
     }
+
+    // 3. Lembrete de 30 minutos antes do atendimento (no dia de hoje)
+    if (janelaComercial) {
+      const agendamentosHoje30m = barbearia.listarAgendamentos(empresaId, { de: hoje, ate: hoje });
+      for (const ag of agendamentosHoje30m) {
+        if (['agendado', 'confirmado'].includes(ag.status)) {
+          if (ag.lembrete30mEnviadoEm) continue;
+          const dataHora = new Date(ag.dataHora);
+          if (isNaN(dataHora.valueOf())) continue;
+          const diffMinutos = (dataHora.valueOf() - now.valueOf()) / 60000;
+          // Envia se faltar entre 20 e 45 minutos para o horário
+          if (diffMinutos >= 20 && diffMinutos <= 45) {
+            // Evita redundância se criado há menos de 45 minutos
+            const criadoEm = new Date(ag.criadoEm || ag.dataCriacao || 0).valueOf();
+            if (criadoEm && now.valueOf() - criadoEm < 45 * 60000) continue;
+
+            // Proteção Anti-Ban Meta: não envia se cliente está em Opt-Out
+            if (ag.clienteTelefone && estaEmOptOut(empresaId, ag.clienteTelefone)) continue;
+
+            const res = await queueAppointmentNotifications(
+              { empresaId, legacyEmpresaId: empresaId, lojaId: ag.lojaId },
+              ag,
+              'lembrete_30m'
+            ).catch(() => null);
+
+            if (res && res.queued > 0) {
+              totalEnviadas += res.queued;
+              const agReal = estado?.agendamentos?.[String(ag.id)];
+              if (agReal) agReal.lembrete30mEnviadoEm = now.toISOString();
+              ag.lembrete30mEnviadoEm = now.toISOString();
+              alterou = true;
+            }
+            if (aplicarDelay > 0) await new Promise((r) => setTimeout(r, aplicarDelay));
+          }
+        }
+      }
+    }
   }
   if (alterou) {
     try { save(); } catch {}
@@ -113,7 +155,7 @@ export async function processarConfirmacoesDiarias(options = {}) {
 export function startDinoDailyConfirmationWorker() {
   if (process.env.DINO_DAILY_CONFIRMATION_ENABLED === '0') return null;
 
-  console.log('[Dino Confirmacao Diaria] Inicializando agendador de confirmacoes (vespera + manha 07h-09h)');
+  console.log('[Dino Confirmacao Diaria] Inicializando agendador de confirmacoes (24h antes + manha 07h-09h + 30m antes)');
 
   // Varredura inicial 10 segundos após boot respeitando a janela horária
   setTimeout(() => {

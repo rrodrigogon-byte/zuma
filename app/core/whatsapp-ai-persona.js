@@ -634,6 +634,11 @@ export function personaAppointmentMessage(persona, { evento, nome, servico, prof
   // "Corte com Dino" + "Dino" saía "Corte com Dino com Dino" (lembrete de 15/10).
   const servicoComQuem = serviceWithProfessional(servico, profissional);
   const lojaNome = clean(loja, 120) || 'Barbearia Dino';
+  if (evento === 'lembrete_30m') {
+    const saudacoes = [`Opa, ${primeiro}!`, `Fala, ${primeiro}!`, `Tudo pronto, ${primeiro}?`];
+    const saudacao = primeiro ? saudacoes[Math.floor(Math.random() * saudacoes.length)] : 'Opa!';
+    return `${saudacao} Passando pra avisar que seu horário (${quando}, ${servicoComQuem}) é daqui a pouco! Já estamos te esperando na recepção da ${lojaNome}! 💈 ${rodape}`;
+  }
   if (evento === 'confirmacao_dia') return `${oi} Passando pra confirmar seu horário de hoje: ${quando}, ${servicoComQuem}. Responda CONFIRMO, REMARCAR ou CANCELO. Te esperamos na barbearia! ${rodape}`;
   if (evento === 'lembrete') return `${oi} Passando pra lembrar: ${quandoRelativo ? `${quandoRelativo}, ` : ''}${quando}, ${servicoComQuem}. Responda CONFIRMO, REMARCAR ou CANCELO. ${rodape}`;
   if (evento === 'remarcado') return `${oi} Seu horário mudou: ${quando}, ${servicoComQuem}. ${rodape}`;
