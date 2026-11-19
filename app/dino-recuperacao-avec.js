@@ -8,11 +8,13 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { verificarStatusBarbeiroDino } from './core/barbershop-agenda.js';
+import { db } from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const AVEC_DATA_FILE = path.join(__dirname, 'migrations', 'data', 'avec-dino-20261022', 'historico-servicos-completo.jsonl');
+const DINO_CANONICAL_EMPRESA_ID = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
 
-function normalize(str) {
+export function normalize(str) {
   return String(str || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -20,15 +22,105 @@ function normalize(str) {
     .trim();
 }
 
-function digits(str) {
+export function digits(str) {
   return String(str || '').replace(/\D/g, '');
 }
 
-function formatPhone(phone) {
-  const d = digits(phone);
+/**
+ * Normaliza telefone para formato brasileiro canônico com DDD (ex: 65996946939).
+ * Remove DDI 55 caso presente e preenche DDD 65 se vier sem DDD.
+ */
+export function normalizarTelefoneBR(telefone) {
+  if (!telefone) return '';
+  let limpo = digits(telefone);
+  if ((limpo.length === 12 || limpo.length === 13) && limpo.startsWith('55')) {
+    limpo = limpo.slice(2);
+  }
+  // Se veio apenas com 8 ou 9 dígitos locais sem DDD, assume DDD 65 (Cuiabá - Dino Barbearia)
+  if (limpo.length === 9) {
+    limpo = '65' + limpo;
+  } else if (limpo.length === 8) {
+    limpo = '659' + limpo;
+  }
+  return limpo;
+}
+
+export function formatPhone(phone) {
+  const d = normalizarTelefoneBR(phone) || digits(phone);
   if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
   if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
   return phone || '';
+}
+
+/**
+ * Higieniza o nome do cliente removendo sufixos legados entre parênteses
+ * como "(Club Combo - Asaas Dia 04)", "( Bruno )", "( Kenidy )", "(Club)"
+ * e extrai rótulos de plano / assinatura e barbeiro como metadados estruturados.
+ */
+export function sanitizarNomeCliente(nomeBruto) {
+  if (!nomeBruto) return { nomeLimpo: '', tags: [], planoDetectado: '', barbeiroAnotado: '' };
+  const raw = String(nomeBruto).trim();
+  const tags = [];
+  let planoDetectado = '';
+  let barbeiroAnotado = '';
+
+  const regexParenteses = /\(([^)]+)\)/g;
+  let match;
+  while ((match = regexParenteses.exec(raw)) !== null) {
+    const conteudo = match[1].trim();
+    if (conteudo) {
+      tags.push(conteudo);
+      const cLower = conteudo.toLowerCase();
+      if (
+        cLower.includes('club') ||
+        cLower.includes('combo') ||
+        cLower.includes('asaas') ||
+        cLower.includes('plano') ||
+        cLower.includes('assinatura') ||
+        cLower.includes('mensal') ||
+        cLower.includes('vip') ||
+        cLower.includes('pacote')
+      ) {
+        planoDetectado = conteudo;
+      } else if (['bruno', 'nati', 'dino', 'kenidy', 'rafael', 'douglas', 'pedro'].some((b) => cLower.includes(b))) {
+        barbeiroAnotado = conteudo;
+      }
+    }
+  }
+
+  // Remove os parênteses e espaços redundantes para obter o nome limpo e elegante
+  let nomeLimpo = raw.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!nomeLimpo) nomeLimpo = raw;
+
+  return { nomeLimpo, tags, planoDetectado, barbeiroAnotado };
+}
+
+/**
+ * Escolhe a melhor versão do nome entre o histórico e o dado recente do ERP/Agenda:
+ * Prefere nomes sem parênteses, mais completos ou com sobrenome.
+ */
+export function escolherMelhorNome(atual, novo) {
+  if (!atual) return novo || '';
+  if (!novo) return atual || '';
+
+  const { nomeLimpo: aLimpo } = sanitizarNomeCliente(atual);
+  const { nomeLimpo: nLimpo } = sanitizarNomeCliente(novo);
+
+  if (!aLimpo) return nLimpo || novo;
+  if (!nLimpo) return aLimpo || atual;
+
+  // Evita nomes genéricos
+  const aGenerico = aLimpo.toLowerCase().startsWith('cliente avec') || aLimpo.toLowerCase().startsWith('cel:');
+  const nGenerico = nLimpo.toLowerCase().startsWith('cliente avec') || nLimpo.toLowerCase().startsWith('cel:');
+  if (aGenerico && !nGenerico) return nLimpo;
+  if (!aGenerico && nGenerico) return aLimpo;
+
+  const aPalavras = aLimpo.split(' ').filter((p) => p.length > 1).length;
+  const nPalavras = nLimpo.split(' ').filter((p) => p.length > 1).length;
+
+  if (nPalavras > aPalavras) return nLimpo;
+  if (nPalavras === aPalavras && nLimpo.length > aLimpo.length) return nLimpo;
+  return aLimpo;
 }
 
 const SERVICOS_EXTRAS_SET = new Set([
@@ -37,7 +129,7 @@ const SERVICOS_EXTRAS_SET = new Set([
   'selagem', 'pigmentacao', 'limpeza de pele', 'depilacao nariz', 'depilacao orelha'
 ]);
 
-// Cache em memória consolidado (TTL 60 segundos)
+// Cache em memória consolidado (TTL 30 segundos com auto-invalidação)
 let cacheConsolidado = null;
 let cacheTimestamp = 0;
 
@@ -56,11 +148,101 @@ export async function carregarBaseConsolidada({
   force = false,
 } = {}) {
   const now = Date.now();
-  if (!force && cacheConsolidado && (now - cacheTimestamp < 60000)) {
+  if (!force && cacheConsolidado && (now - cacheTimestamp < 30000)) {
     return cacheConsolidado;
   }
 
+  // Fallback de auto-hidratação caso não sejam passados agendamentos e comandas
+  let agRecentes = Array.isArray(agendamentosRecentes) ? [...agendamentosRecentes] : [];
+  let cmdRecentes = Array.isArray(comandasRecentes) ? [...comandasRecentes] : [];
+
+  if (agRecentes.length === 0 || cmdRecentes.length === 0) {
+    try {
+      const raiz = typeof db === 'function' ? db() : null;
+      if (raiz?.barbearias) {
+        const estadoDino = raiz.barbearias[DINO_CANONICAL_EMPRESA_ID] || raiz.barbearias['dino'] || {};
+        if (agRecentes.length === 0 && estadoDino.agendamentos) {
+          agRecentes = Object.values(estadoDino.agendamentos);
+        }
+        if (cmdRecentes.length === 0 && estadoDino.comandas) {
+          cmdRecentes = Object.values(estadoDino.comandas);
+        }
+      }
+    } catch (_) {}
+  }
+
   const clientsMap = new Map();
+
+  // Helper para obter ou criar cliente no Map garantindo unificação por telefone normalizado
+  function obterOuCriarCliente(telNorm, nomeBruto, dadosIniciais = {}) {
+    const { nomeLimpo, planoDetectado, tags } = sanitizarNomeCliente(nomeBruto);
+    const key = telNorm && telNorm.length >= 8 ? `tel:${telNorm}` : `nome:${normalize(nomeLimpo || nomeBruto)}`;
+
+    let client = clientsMap.get(key);
+    // Tenta encontrar por variações
+    if (!client && telNorm && telNorm.length >= 8) {
+      client = clientsMap.get(`tel:${telNorm.slice(-8)}`);
+      if (client) {
+        // Atualiza a chave para o formato completo
+        clientsMap.set(key, client);
+      }
+    }
+    if (!client && nomeLimpo) {
+      client = clientsMap.get(`nome:${normalize(nomeLimpo)}`);
+      if (client && telNorm) {
+        clientsMap.set(key, client);
+      }
+    }
+
+    if (!client) {
+      client = {
+        key,
+        nome: nomeLimpo || nomeBruto || 'Cliente',
+        nomeOriginal: nomeBruto,
+        telefone: telNorm,
+        telefoneNorm: telNorm,
+        telefoneFormatado: formatPhone(telNorm),
+        cpf: dadosIniciais.cpf || '',
+        totalVisitas: 0,
+        totalGasto: 0,
+        primeiraVisita: '9999-99-99',
+        ultimaVisita: '0000-00-00',
+        profissionais: {},
+        servicos: {},
+        tevePacote: Boolean(planoDetectado || dadosIniciais.pacote),
+        planoClub: planoDetectado || '',
+        servicosExtras: new Set(),
+        datasVisitas: [],
+        mesesAtivo: new Set(),
+        historicoItens: [],
+        tags: new Set(tags),
+        veioHoje: false,
+        temAgendamentoHoje: false,
+        temAgendamentoFuturo: false,
+        telefonesSecundarios: new Set(),
+      };
+      clientsMap.set(key, client);
+    } else {
+      client.nome = escolherMelhorNome(client.nome, nomeLimpo);
+      if (telNorm) {
+        if (!client.telefone) {
+          client.telefone = telNorm;
+          client.telefoneNorm = telNorm;
+          client.telefoneFormatado = formatPhone(telNorm);
+        } else if (client.telefone !== telNorm) {
+          client.telefonesSecundarios.add(telNorm);
+        }
+      }
+      if (dadosIniciais.cpf && !client.cpf) client.cpf = dadosIniciais.cpf;
+      if (planoDetectado) {
+        client.tevePacote = true;
+        client.planoClub = planoDetectado;
+      }
+      for (const t of tags) client.tags.add(t);
+    }
+
+    return client;
+  }
 
   // 1. Ler histórico do Avec do JSONL caso o arquivo exista
   if (fs.existsSync(AVEC_DATA_FILE)) {
@@ -76,41 +258,11 @@ export async function carregarBaseConsolidada({
         continue;
       }
 
-      const nome = (row.cliente || '').trim();
-      if (!nome) continue;
+      const nomeBruto = (row.cliente || '').trim();
+      if (!nomeBruto) continue;
 
-      const tel = digits(row.celular || row.telefone || '');
-      const key = tel && tel.length >= 8 ? `tel:${tel.slice(-8)}` : `nome:${normalize(nome)}`;
-
-      let client = clientsMap.get(key);
-      if (!client) {
-        client = {
-          key,
-          nome,
-          telefone: tel,
-          telefoneFormatado: formatPhone(tel),
-          cpf: row.cpf || '',
-          totalVisitas: 0,
-          totalGasto: 0,
-          primeiraVisita: '9999-99-99',
-          ultimaVisita: '0000-00-00',
-          profissionais: {},
-          servicos: {},
-          tevePacote: false,
-          servicosExtras: new Set(),
-          datasVisitas: [],
-          mesesAtivo: new Set(),
-          historicoItens: [],
-        };
-        clientsMap.set(key, client);
-      }
-
-      if (tel && !client.telefone) {
-        client.telefone = tel;
-        client.telefoneFormatado = formatPhone(tel);
-      }
-      if (nome.length > client.nome.length) client.nome = nome;
-      if (row.cpf && !client.cpf) client.cpf = row.cpf;
+      const telNorm = normalizarTelefoneBR(row.celular || row.telefone || '');
+      const client = obterOuCriarCliente(telNorm, nomeBruto, { cpf: row.cpf, pacote: Boolean(row.pacote) });
 
       const dataIso = row.data_iso || '';
       if (dataIso) {
@@ -154,41 +306,24 @@ export async function carregarBaseConsolidada({
   }
 
   // 2. Mesclar com comandas recentes do ERP Kytto
-  for (const cmd of comandasRecentes) {
-    const nome = (cmd.clienteNome || '').trim();
-    const tel = digits(cmd.clienteTelefone || '');
-    if (!nome && !tel) continue;
-    const key = tel && tel.length >= 8 ? `tel:${tel.slice(-8)}` : `nome:${normalize(nome)}`;
+  for (const cmd of cmdRecentes) {
+    const nomeBruto = (cmd.clienteNome || '').trim();
+    const telNorm = normalizarTelefoneBR(cmd.clienteTelefone || '');
+    if (!nomeBruto && !telNorm) continue;
 
-    let client = clientsMap.get(key);
-    if (!client) {
-      client = {
-        key,
-        nome: nome || 'Cliente',
-        telefone: tel,
-        telefoneFormatado: formatPhone(tel),
-        cpf: cmd.clienteCpf || '',
-        totalVisitas: 0,
-        totalGasto: 0,
-        primeiraVisita: '9999-99-99',
-        ultimaVisita: '0000-00-00',
-        profissionais: {},
-        servicos: {},
-        tevePacote: false,
-        servicosExtras: new Set(),
-        datasVisitas: [],
-        mesesAtivo: new Set(),
-        historicoItens: [],
-      };
-      clientsMap.set(key, client);
-    }
+    const client = obterOuCriarCliente(telNorm, nomeBruto, { cpf: cmd.clienteCpf });
 
     const dataIso = String(cmd.dataComandaIso || cmd.dataComandaOriginal || cmd.criadoEm || '').slice(0, 10);
     if (dataIso) {
       if (dataIso < client.primeiraVisita) client.primeiraVisita = dataIso;
-      if (dataIso > client.ultimaVisita) client.ultimaVisita = dataIso;
+      if (dataIso >= client.ultimaVisita) client.ultimaVisita = dataIso;
       client.datasVisitas.push(dataIso);
       client.mesesAtivo.add(dataIso.slice(0, 7));
+
+      if (dataIso === dataReferencia) {
+        client.veioHoje = true;
+        client.temAgendamentoHoje = true;
+      }
     }
 
     const valor = Number(cmd.total || 0);
@@ -200,16 +335,69 @@ export async function carregarBaseConsolidada({
 
     client.historicoItens.push({
       data: dataIso,
-      servico: 'Atendimento Kytto',
+      servico: 'Atendimento Kytto (Comanda)',
       profissional: prof,
       valor,
       comanda: cmd.numeroComanda || cmd.id || '',
       pacote: false,
-      origem: 'kytto',
+      origem: 'kytto_comanda',
     });
   }
 
-  // 3. Processar métricas, segmentação e mensagens
+  // 3. Mesclar com agendamentos recentes do ERP Kytto (Agenda Viva em Tempo Real)
+  for (const ag of agRecentes) {
+    if (!ag || ag.status === 'cancelado') continue;
+
+    const nomeBruto = String(ag.clienteNome || ag.nome || '').trim();
+    const telNorm = normalizarTelefoneBR(ag.clienteTelefone || ag.telefone || '');
+    if (!nomeBruto && !telNorm) continue;
+
+    const client = obterOuCriarCliente(telNorm, nomeBruto, { cpf: ag.clienteCpf || ag.cpf });
+
+    const dataIso = String(ag.dataAgenda || ag.dataHora || ag.criadoEm || '').slice(0, 10);
+    const hora = String(ag.horario || ag.hora || '').slice(0, 5);
+    const valor = Number(ag.valor || ag.preco || 0);
+    const prof = (ag.barbeiroNome || ag.profissionalNome || ag.barbeiro || 'Equipe Dino').trim();
+    const serv = (ag.servicoNome || ag.servico || 'Corte e Estilo').trim();
+
+    if (dataIso) {
+      if (dataIso < client.primeiraVisita) client.primeiraVisita = dataIso;
+      if (dataIso >= client.ultimaVisita) {
+        client.ultimaVisita = dataIso;
+      }
+      client.datasVisitas.push(dataIso);
+      client.mesesAtivo.add(dataIso.slice(0, 7));
+
+      if (dataIso === dataReferencia) {
+        client.veioHoje = true;
+        client.temAgendamentoHoje = true;
+      } else if (dataIso > dataReferencia) {
+        client.temAgendamentoFuturo = true;
+      }
+    }
+
+    // Contabiliza visita e gasto caso concluído ou realizado hoje/passado
+    if (ag.status === 'concluido' || ag.status === 'em_atendimento' || dataIso <= dataReferencia) {
+      client.totalVisitas += 1;
+      client.totalGasto += valor;
+    }
+
+    client.profissionais[prof] = (client.profissionais[prof] || 0) + 1;
+    client.servicos[serv] = (client.servicos[serv] || 0) + 1;
+
+    client.historicoItens.push({
+      data: dataIso,
+      horario: hora,
+      servico: serv,
+      profissional: prof,
+      valor,
+      agendamentoId: ag.id || '',
+      origem: 'kytto_agenda',
+      status: ag.status || 'confirmado',
+    });
+  }
+
+  // 4. Processar métricas, segmentação e mensagens
   const hojeMs = new Date(dataReferencia).getTime();
   const consolidados = [];
 
@@ -219,14 +407,23 @@ export async function carregarBaseConsolidada({
 
     const ultMs = new Date(c.ultimaVisita).getTime();
     const diffDias = Math.max(0, Math.floor((hojeMs - ultMs) / (1000 * 60 * 60 * 24)));
-    c.diasSemVir = diffDias;
 
-    // Faixas de recência / churn
-    if (diffDias <= 30) c.statusRecuperacao = 'ativo';
-    else if (diffDias <= 60) c.statusRecuperacao = 'atencao_30_60';
-    else if (diffDias <= 90) c.statusRecuperacao = 'alerta_60_90';
-    else if (diffDias <= 180) c.statusRecuperacao = 'churn_90_180';
-    else c.statusRecuperacao = 'perdido_180_mais';
+    // Se o cliente esteve hoje na barbearia, possui agendamento confirmado hoje ou no futuro:
+    // diasSemVir é estritamente 0 e o status é ATIVO, blindado contra alarme falso de churn!
+    if (c.veioHoje || c.temAgendamentoHoje || c.temAgendamentoFuturo || c.ultimaVisita >= dataReferencia) {
+      c.diasSemVir = 0;
+      c.statusRecuperacao = 'ativo';
+      c.emChurn = false;
+    } else {
+      c.diasSemVir = diffDias;
+      // Faixas de recência / churn
+      if (diffDias <= 30) c.statusRecuperacao = 'ativo';
+      else if (diffDias <= 60) c.statusRecuperacao = 'atencao_30_60';
+      else if (diffDias <= 90) c.statusRecuperacao = 'alerta_60_90';
+      else if (diffDias <= 180) c.statusRecuperacao = 'churn_90_180';
+      else c.statusRecuperacao = 'perdido_180_mais';
+      c.emChurn = diffDias > 21;
+    }
 
     // Profissional preferido
     const topProf = Object.entries(c.profissionais).sort((a, b) => b[1] - a[1])[0];
@@ -262,6 +459,7 @@ export async function carregarBaseConsolidada({
     }
 
     c.servicosExtrasLista = Array.from(c.servicosExtras);
+    c.tagsLista = Array.from(c.tags || []);
     c.historicoItens.sort((a, b) => (b.data || '').localeCompare(a.data || ''));
 
     // Mensagem humanizada para WhatsApp

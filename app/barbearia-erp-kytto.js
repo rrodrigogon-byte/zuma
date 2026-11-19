@@ -13,6 +13,7 @@ import * as canaisFidelidadeKytto from './canais-fidelidade-kytto.js';
 import { executeDinoReversal, getDinoReversalMemoryAdapter } from './core/dino-reversal-coordinator.js';
 import { kyttoEventBus } from './core/kytto-event-bus.js';
 import { isProdutoBebida } from './core/dino-regras-comissoes.js';
+import { invalidarCacheRecuperacao } from './dino-recuperacao-avec.js';
 
 const STATUS = new Set(['agendado', 'confirmado', 'em_atendimento', 'concluido', 'cancelado', 'nao_compareceu']);
 const TRANSICOES = {
@@ -162,7 +163,10 @@ function estadoVazio() {
 
 export function estadoEmpresa(empresaId, criar = true) {
   const raiz = db();
-  const key = String(empresaId || '');
+  let key = String(empresaId || '');
+  if (['dino', 'emp-kytto-001', 'emp_dino'].includes(key.toLowerCase()) && (raiz.barbearias?.['d0d0ac01-8e50-4b61-8c79-de4aaa916da6'] || !raiz.barbearias?.[key])) {
+    key = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+  }
   const existente = raiz.barbearias?.[key];
   if (!criar && !existente) return estadoVazio();
   raiz.barbearias ||= {};
@@ -3920,6 +3924,7 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
     }
   }
   save();
+  try { invalidarCacheRecuperacao(); } catch (_) {}
   if (faturada) {
     try {
       kyttoEventBus.emitir('comanda.fechada', {
@@ -4626,6 +4631,7 @@ export function criarAgendamento(empresaId, dados = {}, opcoes = {}) {
   const vagaOrigemId = identificarVagaLiberada(estado.agendamentos, novo);
   estado.agendamentos[id] = vagaOrigemId ? { ...novo, vagaOrigemId } : novo;
   save();
+  try { invalidarCacheRecuperacao(); } catch (_) {}
   return { ...estado.agendamentos[id] };
 }
 
@@ -4708,6 +4714,7 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}, opcoe
   }
   Object.assign(atual, agendamento, { atualizadoEm: dataAtual() });
   save();
+  try { invalidarCacheRecuperacao(); } catch (_) {}
   return { ...atual };
 }
 
@@ -4774,6 +4781,7 @@ export function alterarStatusAgendamento(empresaId, agendamentoId, status, dados
     atual.confirmacaoAutomatica = { ...atual.confirmacaoAutomatica, status: 'cancelado', prazoRespostaAte: null };
   }
   save();
+  try { invalidarCacheRecuperacao(); } catch (_) {}
   return { ...atual };
 }
 

@@ -230,6 +230,40 @@ function identificarChaveTenant(empresaId) {
  * 2. Fechamento Rápido (Dinheiro na Mesa com Chave PIX e Link)
  * 3. Reposição / Conveniência
  */
+function formatarReferenciaBarbeiro(profissional) {
+  const nomeExib = String(profissional || 'Bruno').trim();
+  const nLower = nomeExib.toLowerCase();
+
+  // Casos especiais de equipe, genérico ou ex-barbeiro longo
+  if (
+    nLower.includes('nossa equipe') ||
+    nLower.includes('equipe') ||
+    nLower.startsWith('um dos') ||
+    nLower.startsWith('uma das') ||
+    nLower.includes('especialista')
+  ) {
+    const comProfissional = nLower.startsWith('um dos') || nLower.startsWith('uma das')
+      ? `com ${nomeExib}`
+      : `com a ${nomeExib}`;
+    return {
+      comProfissional,
+      nomeExibicao: nomeExib,
+      verHorarios: 'Quer que eu veja os horários disponíveis com nossa equipe para esta semana sem compromisso?',
+      semVaga: 'para você não ficar sem horário no final de semana com nossos barbeiros, quer que eu te mande as vagas abertas de quinta e sexta?',
+    };
+  }
+
+  // Barbeiros individuais específicos (ex: Bruno, Nati, Dino)
+  const artigo = nLower.startsWith('nati') ? 'a' : 'o';
+  const pronome = nLower.startsWith('nati') ? 'ela' : 'ele';
+  return {
+    comProfissional: `com ${artigo} ${nomeExib}`,
+    nomeExibicao: nomeExib,
+    verHorarios: `Quer que eu veja os horários disponíveis com ${pronome} para esta semana sem compromisso?`,
+    semVaga: `para você não ficar sem horário no final de semana com ${artigo} ${nomeExib}, quer que eu te mande as vagas abertas de quinta e sexta?`,
+  };
+}
+
 function gerarOpcoesMensagens({
   clienteNome,
   diasSemVir,
@@ -266,10 +300,10 @@ function gerarOpcoesMensagens({
   let msgLembrete = '';
 
   if (contextoSegmento === 'dino') {
-    const bar = profissional || 'Bruno';
-    msgSuave = `${saudacaoSuave} Passando aqui rapidinho para saber como você está e se o visual está em dia! Notamos que já faz ${diasSemVir} dias do seu último corte com o ${bar}. Quer que eu veja os horários disponíveis com ele para esta semana sem compromisso?${optOut}`;
-    msgFechamento = `${saudacaoFechamento} Já faz ${diasSemVir} dias do seu corte com o ${bar}. Liberamos hoje um bônus especial: Corte Premium + Barboterapia completa com condição exclusiva. Para agilizar seu agendamento em 1 toque: ${linkDireto} (ou se preferir garantir via PIX: ${chavePix}). Qual horário fica melhor pra você?${optOut}`;
-    msgLembrete = `Opa ${primeiroNome}! Lembrete amigável da ${empresaNome}: seu ciclo de corte (${diasSemVir} dias) está vencendo. Para você não ficar sem horário no final de semana com o ${bar}, quer que eu te mande as vagas abertas de quinta e sexta?${optOut}`;
+    const refBar = formatarReferenciaBarbeiro(profissional);
+    msgSuave = `${saudacaoSuave} Passando aqui rapidinho para saber como você está e se o visual está em dia! Notamos que já faz ${diasSemVir} dias do seu último corte ${refBar.comProfissional}. ${refBar.verHorarios}${optOut}`;
+    msgFechamento = `${saudacaoFechamento} Já faz ${diasSemVir} dias do seu corte ${refBar.comProfissional}. Liberamos hoje um bônus especial: Corte Premium + Barboterapia completa com condição exclusiva. Para agilizar seu agendamento em 1 toque: ${linkDireto} (ou se preferir garantir via PIX: ${chavePix}). Qual horário fica melhor pra você?${optOut}`;
+    msgLembrete = `Opa ${primeiroNome}! Lembrete amigável da ${empresaNome}: seu ciclo de corte (${diasSemVir} dias) está vencendo. ${refBar.semVaga}${optOut}`;
   } else if (contextoSegmento === 'stallone') {
     const item = itemHistorico || 'suplemento';
     msgSuave = `${saudacaoSuave} Passando para saber como estão os treinos e sua rotina de evolução! Vimos que sua última compra de ${item} foi há ${diasSemVir} dias. Está precisando de algum auxílio nos suplementos dessa fase?${optOut}`;
@@ -322,7 +356,7 @@ function gerarOpcoesMensagens({
  * Constrói o diagnóstico completo de vendas, inteligência preditiva e oportunidades
  * isolado e completo para cada empresa.
  */
-export async function buildInteligenciaVendas(raiz, { empresaId, lojaId }) {
+export async function buildInteligenciaVendas(raiz, { empresaId, lojaId, barbeariaErpKytto, force = false } = {}) {
   const hoje = hojeCuiaba();
   const config = obterConfigEmpresa(raiz, empresaId);
   const chaveTenant = config.chaveTenant;
@@ -358,23 +392,48 @@ export async function buildInteligenciaVendas(raiz, { empresaId, lojaId }) {
   }
 
   // Padrão: Dino Barbearia
-  return buildInteligenciaDino(raiz, { empresaId, lojaId, hoje, config });
+  return buildInteligenciaDino(raiz, { empresaId, lojaId, hoje, config, barbeariaErpKytto, force });
 }
 
 /**
  * Inteligência de Vendas específica para DINO BARBEARIA
  */
-async function buildInteligenciaDino(raiz, { empresaId, lojaId, hoje, config }) {
-  const estado = raiz.barbearias?.[empresaId] || {};
-  const agendamentos = Object.values(estado.agendamentos || {});
-  const comandas = Object.values(estado.comandas || {});
-  const produtos = Object.values(estado.produtosRevenda || {}).filter(p => p.ativo !== false);
+async function buildInteligenciaDino(raiz, { empresaId, lojaId, hoje, config, barbeariaErpKytto, force = false }) {
+  const canonicalEmpresaId = ['dino', 'emp-kytto-001', 'emp_dino'].includes(String(empresaId || '').toLowerCase())
+    ? 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6'
+    : String(empresaId || '');
+
+  const estado = raiz.barbearias?.[canonicalEmpresaId] || raiz.barbearias?.[empresaId] || (barbeariaErpKytto?.estadoEmpresa ? barbeariaErpKytto.estadoEmpresa(canonicalEmpresaId, false) : {});
+  let agendamentos = [];
+  let comandas = [];
+  let produtos = [];
+
+  if (barbeariaErpKytto) {
+    try {
+      agendamentos = barbeariaErpKytto.listarAgendamentos(canonicalEmpresaId) || [];
+      comandas = barbeariaErpKytto.listarComandasBarbearia(canonicalEmpresaId) || [];
+      produtos = (barbeariaErpKytto.listarProdutosRevenda?.(canonicalEmpresaId) || []).filter(p => p.ativo !== false);
+    } catch (e) {
+      console.warn('[inteligencia-vendas] Falha ao obter dados barbeariaErpKytto:', e.message);
+    }
+  }
+
+  // Fallback para raiz.barbearias caso o adapter ERP não retorne itens
+  if (!agendamentos.length) {
+    agendamentos = Object.values(estado.agendamentos || {});
+    comandas = Object.values(estado.comandas || {});
+    if (!produtos.length) {
+      produtos = Object.values(estado.produtosRevenda || {}).filter(p => p.ativo !== false);
+    }
+  }
 
   let baseClientes = [];
   try {
     baseClientes = await carregarBaseConsolidada({
       comandasRecentes: comandas,
       agendamentosRecentes: agendamentos,
+      dataReferencia: hoje,
+      force,
     });
   } catch (err) {
     console.error('[inteligencia-vendas] Falha ao carregar base Dino:', err);
@@ -407,7 +466,10 @@ async function buildInteligenciaDino(raiz, { empresaId, lojaId, hoje, config }) 
       contextoSegmento: 'dino',
     });
 
-    if (dias >= config.cicloChurnDias && dias <= 90) {
+    // Se o cliente esteve hoje na barbearia, possui agendamento confirmado hoje/futuro ou corte em dia:
+    if (c.veioHoje || c.temAgendamentoHoje || c.temAgendamentoFuturo || dias < (config.cicloChurnDias || 21)) {
+      // Cliente em dia ou atendido — nunca colocar na lista de reativação/churn
+    } else if (dias >= config.cicloChurnDias && dias <= 90) {
       clientesReativacao.push({
         id: c.key || c.telefone,
         nome,
@@ -415,6 +477,7 @@ async function buildInteligenciaDino(raiz, { empresaId, lojaId, hoje, config }) 
         diasSemVir: dias,
         ultimaVisita: c.ultimaVisita,
         barbeiroPreferido: barbeiro,
+        planoClub: c.planoClub || '',
         gastoTotal: c.totalGasto || (c.totalVisitas * ticketMedioAtual),
         propensao: dias <= 35 ? 'Alta' : 'Média',
         mensagemIa: opcoes.fechamento.texto,
@@ -424,6 +487,7 @@ async function buildInteligenciaDino(raiz, { empresaId, lojaId, hoje, config }) 
     }
 
     const fazBarba = Object.keys(c.servicos || {}).some(s => textoPlano(s).includes('barba'));
+    const refBar = formatarReferenciaBarbeiro(barbeiro);
     if (!fazBarba && c.totalVisitas >= 2) {
       clientesUpSell.push({
         id: c.key || c.telefone,
@@ -432,7 +496,7 @@ async function buildInteligenciaDino(raiz, { empresaId, lojaId, hoje, config }) 
         barbeiroPreferido: barbeiro,
         tipoOferta: 'Combo Corte + Barboterapia',
         impactoTicket: 60,
-        mensagemIa: `Opa ${nome.split(' ')[0]}, tudo joia? Aqui é o ${config.agenteIaNome}! No seu próximo corte com o ${barbeiro}, que tal incluir nossa Barboterapia completa com toalha quente no Combo especial? Você garante R$ 30 de desconto no combo. Chave PIX da Dino para antecipar: ${config.chavePix}. Posso deixar reservado junto?${config.optOutAtivo ? '\n\n' + config.fraseOptOut : ''}`,
+        mensagemIa: `Opa ${nome.split(' ')[0]}, tudo joia? Aqui é o ${config.agenteIaNome}! No seu próximo corte ${refBar.comProfissional}, que tal incluir nossa Barboterapia completa com toalha quente no Combo especial? Você garante R$ 30 de desconto no combo. Chave PIX da Dino para antecipar: ${config.chavePix}. Posso deixar reservado junto?${config.optOutAtivo ? '\n\n' + config.fraseOptOut : ''}`,
         opcoesMensagem: opcoes,
       });
     }
@@ -455,8 +519,14 @@ async function buildInteligenciaDino(raiz, { empresaId, lojaId, hoje, config }) 
   clientesClube.sort((a, b) => b.gastoTotal - a.gastoTotal);
 
   // Cálculo dinâmico estritamente de HOJE para FRENTE (sem datas passadas)
+  const estadoParaBuracos = {
+    ...estado,
+    agendamentos: (estado && estado.agendamentos && Object.keys(estado.agendamentos).length)
+      ? estado.agendamentos
+      : (Array.isArray(agendamentos) ? Object.fromEntries(agendamentos.map((a, i) => [a.id || `ag_${i}`, a])) : {})
+  };
   const buracosAgenda = calcularBuracosAgendaDino({
-    estado,
+    estado: estadoParaBuracos,
     hoje,
     baseClientes,
     config,

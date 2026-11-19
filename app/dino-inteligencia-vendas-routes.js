@@ -15,11 +15,14 @@ import {
   registrarConversaoVenda,
   obterConversoesVenda,
 } from './dino-inteligencia-vendas.js';
+import { autoUnificarTodosDuplicados } from './barbearia-cliente-unificacao.js';
+import { invalidarCacheRecuperacao } from './dino-recuperacao-avec.js';
 
 export function registerInteligenciaVendasRoutes(app, {
   db,
   legacyEmpresaId,
   legacyLojaId,
+  barbeariaErpKytto,
   auth,
   requireStaff,
   isAdminGlobal,
@@ -52,7 +55,13 @@ export function registerInteligenciaVendasRoutes(app, {
     try {
       const empresaId = extrairEmpresaId(req);
       const lojaId = extrairLojaId(req);
-      const dados = await buildInteligenciaVendas(db(), { empresaId, lojaId });
+      const force = req.query.force === 'true' || req.query.refresh === 'true';
+      const dados = await buildInteligenciaVendas(db(), {
+        empresaId,
+        lojaId,
+        barbeariaErpKytto,
+        force,
+      });
       res.json(dados);
     } catch (error) {
       console.error('[inteligencia-vendas] Erro ao processar:', error);
@@ -213,6 +222,20 @@ export function registerInteligenciaVendasRoutes(app, {
   app.post('/api/admin/inteligencia-vendas/registrar-conversao', handlerRegistrarConversao);
   app.get('/api/admin/inteligencia-vendas/conversoes', handlerGetConversoes);
   app.post('/api/admin/inteligencia-vendas/disparar-acao', handlerDisparar);
+  app.post('/api/admin/inteligencia-vendas/auto-unificar', async (req, res) => {
+    try {
+      const empresaId = extrairEmpresaId(req);
+      const resultado = autoUnificarTodosDuplicados(empresaId);
+      invalidarCacheRecuperacao();
+      res.json({ ok: true, sucesso: true, empresaId, resultado, mensagem: 'Higienização e unificação de clientes executada com sucesso!' });
+    } catch (err) {
+      res.status(500).json({ error: err.message || 'Erro ao unificar clientes.' });
+    }
+  });
+  app.post('/api/admin/inteligencia-vendas/invalidar-cache', (req, res) => {
+    invalidarCacheRecuperacao();
+    res.json({ ok: true, mensagem: 'Cache de inteligência comercial invalidado com sucesso.' });
+  });
 
   app.get('/api/admin/vender-mais', handlerGet);
   app.post('/api/admin/vender-mais/disparar-acao', handlerDisparar);
@@ -270,4 +293,18 @@ export function registerInteligenciaVendasRoutes(app, {
 
   app.get('/api/admin/inteligencia-vendas/empresas-autorizadas', handlerEmpresasAutorizadas);
   app.get('/api/admin/barbearia/inteligencia-vendas/empresas-autorizadas', handlerEmpresasAutorizadas);
+  app.post('/api/admin/barbearia/inteligencia-vendas/auto-unificar', async (req, res) => {
+    try {
+      const empresaId = extrairEmpresaId(req);
+      const resultado = autoUnificarTodosDuplicados(empresaId);
+      invalidarCacheRecuperacao();
+      res.json({ ok: true, sucesso: true, empresaId, resultado, mensagem: 'Higienização e unificação de clientes executada com sucesso!' });
+    } catch (err) {
+      res.status(500).json({ error: err.message || 'Erro ao unificar clientes.' });
+    }
+  });
+  app.post('/api/admin/barbearia/inteligencia-vendas/invalidar-cache', (req, res) => {
+    invalidarCacheRecuperacao();
+    res.json({ ok: true, mensagem: 'Cache de inteligência comercial invalidado com sucesso.' });
+  });
 }

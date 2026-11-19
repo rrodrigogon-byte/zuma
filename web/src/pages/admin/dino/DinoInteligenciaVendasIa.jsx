@@ -186,12 +186,13 @@ export default function DinoInteligenciaVendasIa() {
     setTimeout(() => setMensagemSucesso(''), 4000);
   };
 
-  const carregarInteligencia = useCallback(async (empId) => {
+  const [unificando, setUnificando] = useState(false);
+  const carregarInteligencia = useCallback(async (empId, force = false) => {
     setCarregando(true);
     setErro(null);
     try {
       const targetEmpresa = empId || empresaAtivaId || "dino";
-      const qs = targetEmpresa ? `?empresaId=${encodeURIComponent(targetEmpresa)}` : "";
+      const qs = `?empresaId=${encodeURIComponent(targetEmpresa)}${force ? '&force=true' : ''}`;
       const res = await api.get(`/api/admin/inteligencia-vendas${qs}`).catch(() =>
         api.get(`/api/admin/barbearia/inteligencia-vendas${qs}`)
       );
@@ -206,6 +207,21 @@ export default function DinoInteligenciaVendasIa() {
       setCarregando(false);
     }
   }, [empresaAtivaId]);
+
+  const executarUnificacao = async () => {
+    setUnificando(true);
+    try {
+      const targetEmpresa = empresaAtivaId || 'dino';
+      await api.post(`/api/admin/inteligencia-vendas/auto-unificar?empresaId=${encodeURIComponent(targetEmpresa)}`);
+      setMensagemSucesso('Base saneada e unificada com sucesso! Cadastros e agendas sincronizados em tempo real.');
+      await carregarInteligencia(targetEmpresa, true);
+      setTimeout(() => setMensagemSucesso(''), 5000);
+    } catch (e) {
+      alert(e.message || 'Erro ao unificar clientes.');
+    } finally {
+      setUnificando(false);
+    }
+  };
 
   // Carrega lista autorizada de empresas
   useEffect(() => {
@@ -753,7 +769,7 @@ export default function DinoInteligenciaVendasIa() {
             </div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
               <button
-                onClick={() => carregarInteligencia(empresaAtivaId)}
+                onClick={() => carregarInteligencia(empresaAtivaId, true)}
                 style={{
                   padding: '10px 18px',
                   borderRadius: 10,
@@ -768,7 +784,26 @@ export default function DinoInteligenciaVendasIa() {
                   gap: 8
                 }}
               >
-                <span>🔄</span> Atualizar Oportunidades
+                <span>🔄</span> Atualizar (Tempo Real)
+              </button>
+              <button
+                onClick={executarUnificacao}
+                disabled={unificando}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  background: unificando ? 'rgba(255,255,255,0.05)' : 'rgba(16,185,129,0.2)',
+                  color: '#fff',
+                  cursor: unificando ? 'not-allowed' : 'pointer',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8
+                }}
+              >
+                <span>⚡</span> {unificando ? 'Unificando...' : 'Unificar & Sanear Base'}
               </button>
             </div>
           </div>
@@ -1116,6 +1151,11 @@ export default function DinoInteligenciaVendasIa() {
                               <div>
                                 <strong style={{ fontSize: 15, color: COR.fg }}>{c.nome}</strong>
                                 <span style={{ fontSize: 13, color: COR.muted, marginLeft: 8 }}>{c.telefone || 'Sem telefone'}</span>
+                                {c.planoClub && (
+                                  <span style={{ fontSize: 11, background: '#fef3c7', color: '#92400e', fontWeight: 700, padding: '2px 7px', borderRadius: 6, marginLeft: 8 }}>
+                                    🏷️ {c.planoClub}
+                                  </span>
+                                )}
                                 {c.barbeiroPreferido && (
                                   <span style={{ fontSize: 12, color: COR.azul, fontWeight: 700, marginLeft: 8 }}>
                                     · Barbeiro: {c.barbeiroPreferido}

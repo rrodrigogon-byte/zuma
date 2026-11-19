@@ -18,7 +18,8 @@ const clean = (value) => String(value || '').trim();
 // leitura combinada (financeiro-central-kytto) e o razão o lê explicitamente.
 export function legacyEmpresaIdFromCommerce(empresaId) {
   const value = clean(empresaId);
-  return value === DINO_LEGACY_EMPRESA_ID ? DINO_COMMERCE_EMPRESA_ID : value;
+  const lower = value.toLowerCase();
+  return (value === DINO_LEGACY_EMPRESA_ID || lower === 'dino' || lower === 'emp_dino') ? DINO_COMMERCE_EMPRESA_ID : value;
 }
 
 export function legacyLojaIdFromCommerce(lojaId, empresaId = '') {
