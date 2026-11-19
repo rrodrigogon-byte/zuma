@@ -108,4 +108,17 @@ test('Carteira de clientes por profissional - mapeamento e resumo', async (t) =>
     assert(msg.includes('Dino'));
     assert(msg.includes('25 dias'));
   });
+
+  await t.test('resumo calcula taxa de retencao e ticket medio', () => {
+    const resumo = carteira.resumoCarteirasProfissionais(empId);
+    assert(typeof resumo.taxaRetencaoGeral === 'number');
+    assert(typeof resumo.ticketMedioGeral === 'number');
+    assert.equal(resumo.carteiras[0].taxaRetencao >= 0, true);
+  });
+
+  await t.test('exportarCarteiraCsv gera cabecalho e linhas no formato brasileiro', () => {
+    const csv = carteira.exportarCarteiraCsv(empId);
+    assert(csv.startsWith('\uFEFF'));
+    assert(csv.includes('Nome do Cliente;Telefone;Barbeiro Titular'));
+  });
 });
