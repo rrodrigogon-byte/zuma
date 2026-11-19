@@ -1,0 +1,1318 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Zuma Kytto · Central Operacional 360° (PDV, KDS, Garçom & Motoboy)</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="zumi-mascote.svg">
+  <meta name="theme-color" content="#F97316">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            zuma: {
+              bg: '#0B0C10',
+              surface: '#151821',
+              card: '#1C212D',
+              border: '#2C3446',
+              salmon: '#F97316',
+              salmonDark: '#EA580C',
+              nori: '#10B981',
+              noriDark: '#059669',
+              gold: '#F59E0B',
+              crimson: '#EF4444',
+              muted: '#94A3B8'
+            }
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      background-color: #0B0C10;
+      color: #F8FAFC;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      touch-action: manipulation;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: #151821;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #2C3446;
+      border-radius: 4px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb:hover {
+      background: #F97316;
+    }
+    @keyframes pulse-call {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.75; transform: scale(1.04); }
+    }
+    .animate-pulse-call {
+      animation: pulse-call 1.2s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-zuma-bg text-slate-100 antialiased selection:bg-zuma-salmon selection:text-white">
+
+  <!-- ================= TOPBAR OPERACIONAL UNIFICADA ================= -->
+  <header class="sticky top-0 z-40 bg-zuma-surface/95 backdrop-blur border-b border-zuma-border px-3 sm:px-6 py-2.5">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
+      
+      <!-- Brand & Status da Operação -->
+      <div class="flex items-center space-x-3">
+        <a href="index.html" class="flex items-center space-x-2.5 group" title="Voltar à Loja Oficial e Cardápio">
+          <div class="w-9 h-9 rounded-xl bg-zuma-salmon/20 border border-zuma-salmon/40 flex items-center justify-center p-1 group-hover:scale-105 transition-transform">
+            <img src="zumi-mascote.svg" alt="Zumi" class="w-full h-full object-contain">
+          </div>
+          <div>
+            <div class="flex items-center space-x-1.5">
+              <span class="font-extrabold text-sm sm:text-base tracking-tight text-white">ZUMA KYTTO</span>
+              <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-zuma-salmon/20 text-zuma-salmon border border-zuma-salmon/40">ESTAÇÃO 360°</span>
+            </div>
+            <p class="text-[10px] text-zuma-muted flex items-center space-x-1">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-ping"></span>
+              <span>Tangará da Serra · Turno Aberto</span>
+            </p>
+          </div>
+        </a>
+
+        <!-- Link Rápido para Zuma Pilot -->
+        <a href="pilot.html" target="_blank" class="hidden md:flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-[11px] font-bold text-emerald-300 transition-all">
+          <span>🚀</span><span>Zuma Pilot IA</span>
+        </a>
+      </div>
+
+      <!-- Seletor de Perfil Operacional (4 Módulos) -->
+      <nav class="flex items-center bg-zuma-bg border border-zuma-border p-1 rounded-xl space-x-1 overflow-x-auto custom-scroll">
+        <button onclick="mudarModulo('caixa')" id="btn-mod-caixa" 
+                class="mod-tab active px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 bg-zuma-salmon text-white shadow-sm whitespace-nowrap">
+          <span>🖥️</span><span>Frente de Caixa</span>
+        </button>
+        <button onclick="mudarModulo('cozinha')" id="btn-mod-cozinha" 
+                class="mod-tab px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 text-zuma-muted hover:text-white whitespace-nowrap">
+          <span>👨‍🍳</span><span>Cozinha (KDS)</span>
+          <span id="badge-kds-pendentes" class="ml-1 bg-red-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold">4</span>
+        </button>
+        <button onclick="mudarModulo('garcom')" id="btn-mod-garcom" 
+                class="mod-tab px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 text-zuma-muted hover:text-white whitespace-nowrap">
+          <span>📱</span><span>App Garçom</span>
+          <span id="badge-garcom-chamadas" class="ml-1 bg-amber-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold">2</span>
+        </button>
+        <button onclick="mudarModulo('motoboy')" id="btn-mod-motoboy" 
+                class="mod-tab px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 text-zuma-muted hover:text-white whitespace-nowrap">
+          <span>🛵</span><span>App Motoboy</span>
+          <span id="badge-motoboy-fila" class="ml-1 bg-sky-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold">3</span>
+        </button>
+      </nav>
+
+      <!-- Ações de Download & PWA -->
+      <div class="flex items-center space-x-2">
+        <button onclick="simularPedidoChegando()" title="Simular novo pedido entrando na cozinha para testar alerta"
+                class="px-2.5 py-1.5 rounded-lg bg-orange-950/40 hover:bg-orange-900 border border-orange-700/60 text-xs font-bold text-orange-300 hover:text-white flex items-center space-x-1 transition-all">
+          <span>⚡</span><span class="hidden sm:inline">+ Simular Pedido</span>
+        </button>
+        <button onclick="baixarTudoOffline()" title="Baixar todos os 211 produtos e comandas para usar offline"
+                class="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-xs font-bold text-zinc-300 hover:text-white flex items-center space-x-1.5 transition-all">
+          <span>💾</span><span class="hidden sm:inline">Baixar Tudo Offline</span>
+        </button>
+        <button onclick="instalarPwa()" id="btn-pwa-install"
+                class="px-2.5 py-1.5 rounded-lg bg-emerald-600/30 hover:bg-emerald-600 border border-emerald-500/50 text-xs font-bold text-emerald-300 hover:text-white flex items-center space-x-1.5 transition-all">
+          <span>📲</span><span class="hidden sm:inline">Instalar App</span>
+        </button>
+        <button onclick="alternarSom()" id="btn-som-kds" title="Som de novo pedido"
+                class="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white text-xs">
+          <span id="icone-som">🔔</span>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ================= CONTEÚDO PRINCIPAL (MÓDULOS) ================= -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6">
+
+    <!-- ========================================================================= -->
+    <!-- MÓDULO 1: FRENTE DE CAIXA (PDV & FECHAMENTO)                              -->
+    <!-- ========================================================================= -->
+    <section id="mod-caixa" class="mod-conteudo block space-y-5">
+      
+      <!-- Topo Caixa: Status & Totais -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="bg-zuma-surface border border-zuma-border rounded-xl p-3.5 space-y-1">
+          <div class="flex items-center justify-between text-xs text-zuma-muted">
+            <span>Status do Caixa</span>
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          </div>
+          <div class="text-xl font-black text-white">Aberto (Turno Noite)</div>
+          <div class="text-[11px] text-zinc-400">Operador: Akira Tanaka</div>
+        </div>
+
+        <div class="bg-zuma-surface border border-zuma-border rounded-xl p-3.5 space-y-1">
+          <span class="text-xs text-zuma-muted block">Total Faturado Hoje</span>
+          <div id="caixa-total-dia" class="text-xl font-black text-emerald-400">R$ 3.845,50</div>
+          <div class="text-[11px] text-zinc-400">42 vendas realizadas</div>
+        </div>
+
+        <div class="bg-zuma-surface border border-zuma-border rounded-xl p-3.5 space-y-1">
+          <span class="text-xs text-zuma-muted block">Fundo de Troco</span>
+          <div class="text-xl font-black text-white">R$ 250,00</div>
+          <div class="text-[11px] text-zinc-400">Suprimento inicial ok</div>
+        </div>
+
+        <div class="bg-zuma-surface border border-zuma-border rounded-xl p-3.5 flex flex-col justify-between">
+          <span class="text-xs text-zuma-muted">Ações de Caixa</span>
+          <div class="flex space-x-1.5 pt-1">
+            <button onclick="acaoSangria()" class="flex-1 py-1 bg-zinc-800 hover:bg-zinc-700 text-xs font-bold rounded-lg border border-zinc-700 text-amber-400">
+              Sangria
+            </button>
+            <button onclick="acaoSuprimento()" class="flex-1 py-1 bg-zinc-800 hover:bg-zinc-700 text-xs font-bold rounded-lg border border-zinc-700 text-emerald-400">
+              Suprimento
+            </button>
+            <button onclick="fecharTurnoZReport()" class="flex-1 py-1 bg-red-950/40 hover:bg-red-900 border border-red-800 text-xs font-bold rounded-lg text-red-300">
+              Z-Report
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Grade Principal do PDV: Venda Rápida + Formas de Pagamento -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        
+        <!-- Coluna Esquerda: Catálogo Touch / Busca Rápida de Produtos (7 Colunas) -->
+        <div class="lg:col-span-7 bg-zuma-surface border border-zuma-border rounded-2xl p-4 space-y-4">
+          <div class="flex items-center justify-between gap-3">
+            <h3 class="font-extrabold text-white text-sm sm:text-base flex items-center space-x-2">
+              <span>🧾</span><span>Terminal de Venda Rápida (PDV Touch)</span>
+            </h3>
+            <span id="pdv-skus-badge" class="text-xs text-emerald-400 font-mono bg-emerald-950/40 border border-emerald-800 px-2 py-0.5 rounded-full">
+              211 SKUs Reais Carregados
+            </span>
+          </div>
+
+          <!-- Input de Busca Rápida por Código PDV ou Nome -->
+          <div class="relative">
+            <input type="text" id="pdv-busca-input" oninput="filtrarPdvProdutos()" 
+                   placeholder="Digite o código (ex: 666, ZUM-001) ou nome do sushi..." 
+                   class="w-full bg-zuma-bg border border-zuma-border rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-zuma-salmon">
+            <span class="absolute right-3 top-2.5 text-zinc-500 text-sm">🔍</span>
+          </div>
+
+          <!-- Filtro Rápido de Categorias do PDV (23 Categorias Reais) -->
+          <div class="flex space-x-1.5 overflow-x-auto custom-scroll pb-1 text-xs" id="pdv-categorias-bar">
+            <!-- Gerado dinamicamente -->
+          </div>
+
+          <!-- Grid de Produtos Touch com Fotos Reais em CDN -->
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[500px] overflow-y-auto custom-scroll pr-1" id="pdv-produtos-grid">
+            <!-- Gerado dinamicamente -->
+          </div>
+        </div>
+
+        <!-- Coluna Direita: Comanda Atual, Totais & Pagamento (5 Colunas) -->
+        <div class="lg:col-span-5 bg-zuma-surface border border-zuma-border rounded-2xl p-4 space-y-4">
+          <div class="flex items-center justify-between border-b border-zuma-border pb-3">
+            <div>
+              <h4 class="font-bold text-white text-sm">Comanda / Venda Atual</h4>
+              <span class="text-xs text-zuma-muted" id="pdv-mesa-label">Balcão Caixa</span>
+            </div>
+            <select id="pdv-seletor-mesa" onchange="atualizarMesaPdv()" class="bg-zuma-bg border border-zuma-border text-xs text-white rounded-lg p-1.5">
+              <option value="0">Balcão / Caixa</option>
+              <option value="1">Mesa 01</option>
+              <option value="2">Mesa 02</option>
+              <option value="4">Mesa 04</option>
+              <option value="8">Mesa 08</option>
+              <option value="14">Mesa 14 (Deck)</option>
+              <option value="19">Mesa 19 (Bistrô)</option>
+              <option value="22">Mesa 22 (Sushi Bar)</option>
+              <option value="99">Delivery Takeaway</option>
+            </select>
+          </div>
+
+          <!-- Lista de Itens da Comanda Atual -->
+          <div class="space-y-2 min-h-[160px] max-h-[220px] overflow-y-auto custom-scroll" id="pdv-itens-lista">
+            <!-- Gerado via JS -->
+          </div>
+
+          <!-- Totais da Venda -->
+          <div class="bg-zuma-bg p-3.5 rounded-xl border border-zuma-border space-y-1 text-xs">
+            <div class="flex justify-between text-zuma-muted">
+              <span>Subtotal:</span>
+              <span id="pdv-subtotal-val" class="text-white font-mono">R$ 0,00</span>
+            </div>
+            <div class="flex justify-between text-zuma-muted">
+              <span>Desconto / Fidelidade:</span>
+              <span id="pdv-desconto-val" class="text-emerald-400 font-mono">R$ 0,00</span>
+            </div>
+            <div class="flex justify-between text-base font-black text-white pt-1 border-t border-zuma-border">
+              <span>TOTAL A PAGAR:</span>
+              <span id="pdv-total-val" class="text-zuma-salmon font-mono text-lg">R$ 0,00</span>
+            </div>
+          </div>
+
+          <!-- Formas de Pagamento Touch -->
+          <div class="space-y-2">
+            <span class="text-xs font-bold uppercase text-zuma-muted block">Forma de Pagamento:</span>
+            <div class="grid grid-cols-2 gap-2 text-xs font-bold">
+              <button onclick="selecionarFormaPagamento('pix')" id="btn-pay-pix" class="py-2.5 px-3 rounded-xl border border-emerald-500/50 bg-emerald-950/20 text-emerald-400 flex items-center justify-center space-x-1.5">
+                <span>⚡</span><span>PIX Dinâmico</span>
+              </button>
+              <button onclick="selecionarFormaPagamento('credito')" id="btn-pay-credito" class="py-2.5 px-3 rounded-xl border border-zuma-border bg-zuma-bg text-white hover:border-zinc-500 flex items-center justify-center space-x-1.5">
+                <span>💳</span><span>Crédito</span>
+              </button>
+              <button onclick="selecionarFormaPagamento('debito')" id="btn-pay-debito" class="py-2.5 px-3 rounded-xl border border-zuma-border bg-zuma-bg text-white hover:border-zinc-500 flex items-center justify-center space-x-1.5">
+                <span>💳</span><span>Débito</span>
+              </button>
+              <button onclick="selecionarFormaPagamento('dinheiro')" id="btn-pay-dinheiro" class="py-2.5 px-3 rounded-xl border border-zuma-border bg-zuma-bg text-white hover:border-zinc-500 flex items-center justify-center space-x-1.5">
+                <span>💵</span><span>Dinheiro / Troco</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Área Dinâmica de Fechamento: Calculadora de Troco ou QR Code PIX -->
+          <div id="pdv-area-fechamento" class="p-3 bg-zuma-bg rounded-xl border border-zuma-border text-xs">
+            <!-- Preenchido via JS conforme forma selecionada -->
+          </div>
+
+          <!-- Botão Concluir Venda -->
+          <button onclick="concluirVendaPdv()" class="w-full py-3.5 rounded-xl bg-zuma-salmon hover:bg-orange-600 text-white font-extrabold text-sm transition-all shadow-lg shadow-orange-950/40 flex items-center justify-center space-x-2">
+            <span>✅</span><span>Finalizar Venda &amp; Emitir Cupom</span>
+          </button>
+
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- MÓDULO 2: KDS COZINHA & SUSHI BAR (PRODUÇÃO EM TEMPO REAL)                -->
+    <!-- ========================================================================= -->
+    <section id="mod-cozinha" class="mod-conteudo hidden space-y-5">
+      
+      <!-- Topo KDS: Filtro de Praças & Metas de SLA -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zuma-surface p-4 rounded-2xl border border-zuma-border">
+        <div>
+          <h3 class="font-extrabold text-white text-base flex items-center space-x-2">
+            <span>👨‍🍳</span><span>Painel KDS Cozinha &amp; Sushi Bar</span>
+          </h3>
+          <p class="text-xs text-zuma-muted">Gestão visual das 4 praças de produção com controle de tempo de espera e SLA em tempo real.</p>
+        </div>
+
+        <!-- Seletor de Praça -->
+        <div class="flex space-x-1.5 bg-zuma-bg p-1 rounded-xl border border-zuma-border text-xs overflow-x-auto">
+          <button onclick="filtrarPracaKds('todas')" class="kds-praca-btn active px-3 py-1.5 rounded-lg font-bold bg-zuma-salmon text-white">Todas</button>
+          <button onclick="filtrarPracaKds('sushi_bar')" class="kds-praca-btn px-3 py-1.5 rounded-lg font-bold text-zuma-muted hover:text-white">Sushi Bar (Frio)</button>
+          <button onclick="filtrarPracaKds('cozinha')" class="kds-praca-btn px-3 py-1.5 rounded-lg font-bold text-zuma-muted hover:text-white">Wok &amp; Quentes</button>
+          <button onclick="filtrarPracaKds('fritadeira')" class="kds-praca-btn px-3 py-1.5 rounded-lg font-bold text-zuma-muted hover:text-white">Fritadeira &amp; Hot</button>
+          <button onclick="filtrarPracaKds('bar')" class="kds-praca-btn px-3 py-1.5 rounded-lg font-bold text-zuma-muted hover:text-white">Bar &amp; Sodas</button>
+        </div>
+      </div>
+
+      <!-- Grade de Comandas KDS em Tempo Real -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" id="kds-comandas-grid">
+        <!-- Renderizado dinamicamente via JS -->
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- MÓDULO 3: APLICATIVO DO GARÇOM (COMANDA MÓVEL TOUCH)                       -->
+    <!-- ========================================================================= -->
+    <section id="mod-garcom" class="mod-conteudo hidden space-y-5">
+      
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zuma-surface p-4 rounded-2xl border border-zuma-border">
+        <div>
+          <h3 class="font-extrabold text-white text-base flex items-center space-x-2">
+            <span>📱</span><span>Comanda Móvel do Garçom · 27 Mesas</span>
+          </h3>
+          <p class="text-xs text-zuma-muted">Lançamento de itens na mesa, atendimento de chamadas e alerta de prato pronto no passa-pratos.</p>
+        </div>
+
+        <div class="flex space-x-2 text-xs">
+          <span class="px-2.5 py-1 bg-emerald-950/30 text-emerald-400 border border-emerald-800 rounded-lg font-bold">18 Livres</span>
+          <span class="px-2.5 py-1 bg-blue-950/30 text-blue-400 border border-blue-800 rounded-lg font-bold">7 Ocupadas</span>
+          <span class="px-2.5 py-1 bg-amber-950/30 text-amber-400 border border-amber-800 rounded-lg font-bold">2 Chamando</span>
+        </div>
+      </div>
+
+      <!-- Grade Visual das 27 Mesas -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3" id="garcom-mesas-grid">
+        <!-- Renderizado dinamicamente via JS -->
+      </div>
+
+      <!-- Modal de Lançamento na Mesa (Abre ao clicar na mesa) -->
+      <div id="modal-comanda-mesa" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-3">
+        <div class="bg-zuma-surface border border-zuma-border rounded-2xl max-w-lg w-full p-5 space-y-4 max-h-[90vh] flex flex-col justify-between shadow-2xl">
+          <div class="flex items-center justify-between border-b border-zuma-border pb-3">
+            <div>
+              <h4 id="modal-mesa-titulo" class="font-black text-white text-base">Comanda Mesa 04</h4>
+              <span id="modal-mesa-subtitulo" class="text-xs text-zuma-muted">Salão Família · 6 Lugares</span>
+            </div>
+            <button onclick="fecharModalMesa()" class="text-zinc-400 hover:text-white p-1 text-lg">✕</button>
+          </div>
+
+          <!-- Busca Rápida no Cardápio Geral de 211 SKUs -->
+          <div class="space-y-2">
+            <input type="text" id="garcom-busca-modal" oninput="filtrarItensModalGarcom()"
+                   placeholder="🔍 Buscar qualquer item do cardápio real..."
+                   class="w-full bg-zuma-bg border border-zuma-border text-white text-xs rounded-xl p-2.5 focus:border-zuma-salmon outline-none">
+          </div>
+
+          <!-- Itens para Adicionar -->
+          <div class="space-y-2 overflow-y-auto custom-scroll pr-1 max-h-[220px]">
+            <span class="text-xs font-bold text-zuma-muted block uppercase">Itens Disponíveis:</span>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs" id="garcom-itens-rapidos">
+              <!-- Renderizado via JS -->
+            </div>
+
+            <!-- Observação para a Cozinha -->
+            <div class="pt-2">
+              <label class="text-[11px] font-bold text-zuma-muted block mb-1">Observações para o Sushiman / Cozinha:</label>
+              <input type="text" id="garcom-obs-input" placeholder="Ex: Sem wasabi, molho tarê à parte, caprichar na panko..."
+                     class="w-full bg-zuma-bg border border-zuma-border text-white text-xs rounded-xl p-2.5 focus:border-zuma-salmon outline-none">
+            </div>
+          </div>
+
+          <!-- Ações da Comanda -->
+          <div class="pt-3 border-t border-zuma-border space-y-2">
+            <button onclick="lancarPedidoGarcom()" class="w-full py-3 bg-zuma-salmon hover:bg-orange-600 text-white font-bold rounded-xl text-xs flex items-center justify-center space-x-1.5 transition-all">
+              <span>🚀</span><span>Disparar Pedido para Cozinha (KDS)</span>
+            </button>
+            <div class="flex space-x-2">
+              <button onclick="pedirContaMesa()" class="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-amber-400 border border-zinc-700 rounded-xl font-bold text-xs">
+                Pedir a Conta (Fechar)
+              </button>
+              <button onclick="dividirContaMesa()" class="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-sky-400 border border-zinc-700 rounded-xl font-bold text-xs">
+                Dividir Conta
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- MÓDULO 4: APLICATIVO DO MOTOBOY (EXPEDIÇÃO & ROTAS DELIVERY)               -->
+    <!-- ========================================================================= -->
+    <section id="mod-motoboy" class="mod-conteudo hidden space-y-5">
+      
+      <!-- Topo do Motoboy: Identificação & Ganhos do Turno -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div class="bg-zuma-surface border border-zuma-border rounded-xl p-4 space-y-1">
+          <span class="text-xs text-zuma-muted block">Entregador em Turno</span>
+          <div class="text-lg font-black text-white flex items-center space-x-2">
+            <span>Carlos 'Ninja' Silva</span>
+            <span class="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-bold">Online</span>
+          </div>
+          <div class="text-xs text-zinc-400">Moto Honda CG 160 · Placa RTO-4A12</div>
+        </div>
+
+        <div class="bg-zuma-surface border border-zuma-border rounded-xl p-4 space-y-1">
+          <span class="text-xs text-zuma-muted block">Corridas Concluídas Hoje</span>
+          <div class="text-2xl font-black text-sky-400" id="motoboy-corridas-count">7 entregas</div>
+          <div class="text-xs text-emerald-400 font-semibold">100% no prazo (&lt; 35 min)</div>
+        </div>
+
+        <div class="bg-zuma-surface border border-zuma-border rounded-xl p-4 space-y-1">
+          <span class="text-xs text-zuma-muted block">Taxa Acumulada a Receber</span>
+          <div class="text-2xl font-black text-emerald-400" id="motoboy-ganhos-val">R$ 98,00</div>
+          <div class="text-xs text-zinc-400">Pago via PIX ao final do turno</div>
+        </div>
+      </div>
+
+      <!-- Fila de Pedidos de Delivery na Expedição -->
+      <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-4 space-y-4">
+        <div class="flex items-center justify-between border-b border-zuma-border pb-3">
+          <div>
+            <h3 class="font-extrabold text-white text-base flex items-center space-x-2">
+              <span>📦</span><span>Pedidos Prontos na Expedição</span>
+            </h3>
+            <p class="text-xs text-zuma-muted">Assuma corridas, abra a rota no Waze/Google Maps com 1 toque e confirme a entrega com o código de 4 dígitos.</p>
+          </div>
+          <span class="text-xs bg-zuma-salmon/20 text-zuma-salmon font-bold px-3 py-1 rounded-full">
+            Tangará da Serra · Raio 8 km
+          </span>
+        </div>
+
+        <!-- Lista de Cards de Entregas -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="motoboy-entregas-grid">
+          <!-- Renderizado via JS -->
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ================= TOAST NOTIFICATION ================= -->
+  <div id="toast-op" class="fixed bottom-5 right-5 bg-zinc-900 border border-zuma-salmon text-white px-4 py-3 rounded-xl shadow-2xl z-50 text-xs font-bold transform translate-y-20 opacity-0 transition-all duration-300 flex items-center space-x-2">
+    <span id="toast-icone">✅</span>
+    <span id="toast-texto">Operação realizada com sucesso!</span>
+  </div>
+
+  <!-- ================= JAVASCRIPT DA CENTRAL OPERACIONAL ================= -->
+  <script>
+    // Estado Global da Aplicação Operacional
+    let moduloAtual = 'caixa';
+    let somAtivo = true;
+    let deferredPrompt = null;
+    let dadosOperacionais = null;
+    let produtosPdv = [];
+    let categoriasPdv = [];
+    let produtosPdvFiltrados = [];
+    let categoriaPdvAtiva = 'todos';
+    let carrinhoPdv = [];
+    let formaPagamentoPdv = 'pix';
+    let mesaPdvAtual = 0;
+    let mesaSelecionadaGarcom = null;
+
+    // Inicialização da Página
+    document.addEventListener('DOMContentLoaded', async () => {
+      await carregarDadosOperacionais();
+      renderizarPdv();
+      renderizarKds();
+      renderizarGarcom();
+      renderizarMotoboy();
+      registrarServiceWorker();
+    });
+
+    // PWA: Registro do Service Worker
+    function registrarServiceWorker() {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js')
+          .then(() => console.log('[Zuma Kytto] Service Worker registrado para cache offline'))
+          .catch(err => console.warn('[Zuma Kytto] Falha ao registrar Service Worker:', err));
+      }
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        const btn = document.getElementById('btn-pwa-install');
+        if (btn) btn.classList.remove('hidden');
+      });
+    }
+
+    function instalarPwa() {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then((choice) => {
+          if (choice.outcome === 'accepted') {
+            mostrarToast('📲 Aplicativo instalado com sucesso na tela inicial!', '🎉');
+          }
+          deferredPrompt = null;
+        });
+      } else {
+        alert('Para instalar no celular ou tablet:\nToque no menu de 3 pontinhos do navegador e selecione "Adicionar à tela inicial" ou "Instalar Aplicativo".');
+      }
+    }
+
+    // Carregar Estado do Backend Kytto ou Cache Offline
+    async function carregarDadosOperacionais() {
+      try {
+        const resp = await fetch('/api/public/zuma/operacional/completo');
+        if (resp.ok) {
+          const data = await resp.json();
+          dadosOperacionais = data.operacional;
+          if (data.produtos && data.produtos.length) {
+            produtosPdv = data.produtos;
+          }
+          if (data.categorias && data.categorias.length) {
+            categoriasPdv = data.categorias;
+          }
+        }
+      } catch (e) {
+        console.warn('Erro ao buscar /operacional/completo, tentando arquivo local:', e);
+      }
+
+      // Se ainda não carregou os 211 produtos, buscar no cardapio-real-zuma.json
+      if (!produtosPdv || produtosPdv.length === 0) {
+        try {
+          const respJson = await fetch('./cardapio-real-zuma.json');
+          if (respJson.ok) {
+            const dataJson = await respJson.json();
+            produtosPdv = dataJson.produtos || [];
+            categoriasPdv = dataJson.categorias || [];
+          }
+        } catch (e2) {
+          console.warn('Tentando localStorage offline:', e2);
+        }
+      }
+
+      // Se ainda não tiver, verificar localStorage
+      if (!produtosPdv || produtosPdv.length === 0) {
+        const cacheLocal = localStorage.getItem('zuma_catalogo_offline');
+        if (cacheLocal) {
+          try {
+            const parsed = JSON.parse(cacheLocal);
+            produtosPdv = parsed.produtos || parsed.catalogoProdutos || [];
+            categoriasPdv = parsed.categorias || [];
+          } catch (e3) {}
+        }
+      }
+
+      // Se ainda vazio, fallback de segurança
+      if (!produtosPdv || produtosPdv.length === 0) {
+        produtosPdv = PRODUTOS_PDV_MOCK_FALLBACK;
+      }
+
+      produtosPdvFiltrados = [...produtosPdv];
+      const badge = document.getElementById('pdv-skus-badge');
+      if (badge) badge.textContent = `${produtosPdv.length} SKUs Reais Carregados`;
+    }
+
+    // Navegação entre os 4 Módulos Operacionais
+    function mudarModulo(modId) {
+      moduloAtual = modId;
+      document.querySelectorAll('.mod-conteudo').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.mod-tab').forEach(btn => {
+        btn.classList.remove('active', 'bg-zuma-salmon', 'text-white');
+        btn.classList.add('text-zuma-muted');
+      });
+
+      const alvo = document.getElementById(`mod-${modId}`);
+      const btn = document.getElementById(`btn-mod-${modId}`);
+      if (alvo) alvo.classList.remove('hidden');
+      if (btn) {
+        btn.classList.add('active', 'bg-zuma-salmon', 'text-white');
+        btn.classList.remove('text-zuma-muted');
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // =========================================================================
+    // MÓDULO 1: FRENTE DE CAIXA (PDV TOUCH COM 211 SKUS)
+    // =========================================================================
+    const PRODUTOS_PDV_MOCK_FALLBACK = [
+      { id: 391445, cod_pdv: "666", nome: "Promo Combo Grelhado", preco: 82.00, categoria: "PROMOÇÕES", foto: "https://alloydeliveryimages.ligafiles.com.br/item_images/4212/6a42c9db4854aizz09.webp" },
+      { id: 1260701, cod_pdv: "677", nome: "Tubo Uramaki Filadélfia", preco: 58.90, categoria: "SUSHI NO TUBO", foto: "https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp" },
+      { id: 1, cod_pdv: "ZUM-001", nome: "Combinado Individual 18 Pçs", preco: 62.00, categoria: "COMBOS", foto: "https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp" },
+      { id: 2, cod_pdv: "ZUM-003", nome: "Combinado Zuma Casal 40 Pçs", preco: 139.00, categoria: "COMBOS", foto: "https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp" },
+      { id: 3, cod_pdv: "ZUM-004", nome: "Especial Zuma 68 Peças", preco: 219.00, categoria: "ESPECIAIS", foto: "https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp" },
+      { id: 71, cod_pdv: "ZUM-071", nome: "Hot Roll Filadélfia (12un)", preco: 31.90, categoria: "HOT ROLLS", foto: "https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp" },
+      { id: 35, cod_pdv: "ZUM-035", nome: "Sashimi Salmão Fresco 12 Fatias", preco: 54.90, categoria: "SASHIMIS", foto: "https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp" },
+      { id: 115, cod_pdv: "ZUM-115", nome: "Yakissoba Tradicional Zuma", preco: 48.00, categoria: "PRATOS QUENTES", foto: "https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp" },
+      { id: 50, cod_pdv: "ZUM-050", nome: "Poke Clássico de Salmão", preco: 43.90, categoria: "POKE", foto: "https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp" },
+      { id: 160, cod_pdv: "ZUM-160", nome: "Soda Italiana Maçã Verde 500ml", preco: 18.00, categoria: "BEBIDAS", foto: "https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp" }
+    ];
+
+    function renderizarPdv() {
+      renderizarCategoriasPdv();
+      renderizarGridProdutosPdv();
+      renderizarCarrinhoPdv();
+      selecionarFormaPagamento('pix');
+    }
+
+    function renderizarCategoriasPdv() {
+      const catBar = document.getElementById('pdv-categorias-bar');
+      if (!catBar) return;
+
+      const cats = [
+        { id: "todos", nome: "Todos os 211 SKUs" },
+        ...categoriasPdv.map(c => ({ id: c.slug || c.id || c.codigo, nome: c.nome }))
+      ];
+
+      catBar.innerHTML = cats.map(c => `
+        <button onclick="filtrarCategoriaPdv('${c.id}')" 
+                class="px-2.5 py-1 rounded-lg border text-xs font-bold transition-all whitespace-nowrap ${categoriaPdvAtiva === c.id ? 'bg-zuma-salmon text-white border-zuma-salmon' : 'border-zuma-border bg-zuma-bg text-zinc-400 hover:text-white'}">
+          ${c.nome}
+        </button>
+      `).join('');
+    }
+
+    function renderizarGridProdutosPdv() {
+      const grid = document.getElementById('pdv-produtos-grid');
+      if (!grid) return;
+
+      const fallbackFoto = 'https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp';
+
+      grid.innerHTML = produtosPdvFiltrados.map(p => {
+        const cod = p.codigo_pdv || p.cod_pdv || p.cod || `ZUM-${p.id}`;
+        const foto = p.foto_url || p.foto || fallbackFoto;
+        const preco = parseFloat(p.preco || 0);
+        const cat = p.categoria_nome || p.categoria || '';
+
+        return `
+          <div onclick="adicionarItemPdv('${cod}')" 
+               class="bg-zuma-bg hover:bg-zinc-800 border border-zuma-border hover:border-zuma-salmon rounded-xl p-2 cursor-pointer transition-all flex flex-col justify-between group shadow-sm">
+            <div class="space-y-1">
+              <div class="relative w-full h-20 rounded-lg overflow-hidden bg-zinc-900 border border-zinc-800/80">
+                <img src="${foto}" alt="${p.nome}" class="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                     onerror="this.src='${fallbackFoto}'">
+                <span class="absolute top-1 left-1 bg-black/70 backdrop-blur-sm px-1.5 py-0.2 rounded text-[9px] font-mono text-zinc-300">
+                  ${cod}
+                </span>
+              </div>
+              <h5 class="text-xs font-bold text-white leading-tight line-clamp-2 mt-1" title="${p.nome}">${p.nome}</h5>
+              ${cat ? `<span class="text-[9px] text-zinc-400 block truncate">${cat}</span>` : ''}
+            </div>
+            <div class="mt-2 pt-1 border-t border-zinc-800 flex items-center justify-between">
+              <span class="text-xs font-black text-zuma-salmon font-mono">R$ ${preco.toFixed(2)}</span>
+              <button class="px-2 py-0.5 bg-zinc-800 group-hover:bg-zuma-salmon text-zinc-300 group-hover:text-white rounded text-[10px] font-bold transition-all">
+                + Adicionar
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function filtrarPdvProdutos() {
+      const termo = (document.getElementById('pdv-busca-input').value || '').toLowerCase().trim();
+      produtosPdvFiltrados = produtosPdv.filter(p => {
+        const nome = (p.nome || '').toLowerCase();
+        const cod = String(p.codigo_pdv || p.cod_pdv || p.cod || '').toLowerCase();
+        const cat = (p.categoria_nome || p.categoria || '').toLowerCase();
+        const desc = (p.descricao || '').toLowerCase();
+        
+        const matchCat = categoriaPdvAtiva === 'todos' || 
+                         p.categoria_codigo === categoriaPdvAtiva || 
+                         p.categoria_id === categoriaPdvAtiva || 
+                         p.slug === categoriaPdvAtiva ||
+                         cat === categoriaPdvAtiva.toLowerCase();
+                         
+        const matchTermo = !termo || nome.includes(termo) || cod.includes(termo) || cat.includes(termo) || desc.includes(termo);
+        return matchCat && matchTermo;
+      });
+      renderizarGridProdutosPdv();
+    }
+
+    function filtrarCategoriaPdv(catId) {
+      categoriaPdvAtiva = catId;
+      renderizarCategoriasPdv();
+      filtrarPdvProdutos();
+    }
+
+    function adicionarItemPdv(cod) {
+      const prod = produtosPdv.find(p => String(p.codigo_pdv || p.cod_pdv || p.cod || p.id) === String(cod));
+      if (!prod) return;
+
+      const itemExistente = carrinhoPdv.find(i => String(i.cod) === String(cod));
+      if (itemExistente) {
+        itemExistente.qtd += 1;
+      } else {
+        carrinhoPdv.push({
+          cod,
+          nome: prod.nome,
+          preco: parseFloat(prod.preco || 0),
+          qtd: 1
+        });
+      }
+      renderizarCarrinhoPdv();
+      tocarBipe();
+    }
+
+    function removerItemPdv(cod) {
+      carrinhoPdv = carrinhoPdv.filter(i => String(i.cod) !== String(cod));
+      renderizarCarrinhoPdv();
+    }
+
+    function renderizarCarrinhoPdv() {
+      const container = document.getElementById('pdv-itens-lista');
+      if (!container) return;
+
+      if (carrinhoPdv.length === 0) {
+        container.innerHTML = `<div class="text-center py-8 text-zinc-500 text-xs">Comanda vazia. Toque em qualquer produto do cardápio para adicionar.</div>`;
+      } else {
+        container.innerHTML = carrinhoPdv.map(item => `
+          <div class="flex items-center justify-between p-2 rounded-lg bg-zuma-bg border border-zuma-border/80 text-xs">
+            <div class="flex-1 pr-2">
+              <strong class="text-white block text-[11px] leading-tight">${item.nome}</strong>
+              <span class="text-zinc-500 text-[10px] font-mono">${item.qtd}x R$ ${item.preco.toFixed(2)}</span>
+            </div>
+            <div class="flex items-center space-x-2 font-mono">
+              <span class="text-emerald-400 font-bold">R$ ${(item.qtd * item.preco).toFixed(2)}</span>
+              <button onclick="removerItemPdv('${item.cod}')" class="text-red-400 hover:text-red-300 font-bold px-1.5 py-0.5 rounded bg-zinc-800">✕</button>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      const total = carrinhoPdv.reduce((acc, i) => acc + (i.preco * i.qtd), 0);
+      document.getElementById('pdv-subtotal-val').textContent = `R$ ${total.toFixed(2)}`;
+      document.getElementById('pdv-total-val').textContent = `R$ ${total.toFixed(2)}`;
+      atualizarAreaFechamento();
+    }
+
+    function selecionarFormaPagamento(forma) {
+      formaPagamentoPdv = forma;
+      const botoes = ['pix', 'credito', 'debito', 'dinheiro'];
+      botoes.forEach(b => {
+        const btn = document.getElementById(`btn-pay-${b}`);
+        if (btn) {
+          if (b === forma) {
+            btn.className = 'py-2.5 px-3 rounded-xl border border-zuma-salmon bg-orange-950/20 text-zuma-salmon font-bold flex items-center justify-center space-x-1.5';
+          } else {
+            btn.className = 'py-2.5 px-3 rounded-xl border border-zuma-border bg-zuma-bg text-white hover:border-zinc-500 font-bold flex items-center justify-center space-x-1.5';
+          }
+        }
+      });
+      atualizarAreaFechamento();
+    }
+
+    function atualizarAreaFechamento() {
+      const area = document.getElementById('pdv-area-fechamento');
+      if (!area) return;
+
+      const total = carrinhoPdv.reduce((acc, i) => acc + (i.preco * i.qtd), 0);
+
+      if (formaPagamentoPdv === 'pix') {
+        area.innerHTML = `
+          <div class="flex items-center space-x-3">
+            <div class="w-16 h-16 bg-white p-1 rounded-lg flex items-center justify-center shrink-0">
+              <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=PIX_ZUMA_COZINHA_${total}" alt="QR Code PIX" class="w-full h-full">
+            </div>
+            <div class="space-y-1">
+              <strong class="text-white block font-bold text-xs">PIX Dinâmico Instantâneo</strong>
+              <p class="text-zinc-400 text-[10px]">Chave CNPJ: 36.296.848/0001-57 (Zuma Cozinha Oriental)</p>
+              <span class="text-emerald-400 font-bold text-xs">Aguardando confirmação do banco...</span>
+            </div>
+          </div>
+        `;
+      } else if (formaPagamentoPdv === 'dinheiro') {
+        area.innerHTML = `
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-zinc-400 font-bold">Valor Recebido do Cliente:</span>
+              <input type="number" id="pdv-dinheiro-recebido" value="${Math.ceil(total)}" oninput="calcularTrocoPdv()" 
+                     class="w-24 bg-zuma-surface border border-zuma-border text-white text-right font-mono font-bold p-1 rounded text-xs">
+            </div>
+            <div class="flex items-center justify-between text-xs font-bold pt-1 border-t border-zinc-800">
+              <span class="text-zinc-400">Troco a Devolver:</span>
+              <span id="pdv-troco-val" class="text-amber-400 font-mono text-sm">R$ 0,00</span>
+            </div>
+          </div>
+        `;
+        calcularTrocoPdv();
+      } else {
+        area.innerHTML = `
+          <div class="text-center py-2 text-zinc-400 space-y-1">
+            <span class="text-lg">💳</span>
+            <p class="text-xs font-bold text-white">Insira ou aproxime o cartão na Maquininha Kytto</p>
+            <p class="text-[10px] text-zinc-500">Taxa Débito 1,2% / Crédito 2,8% · Conciliação em 3 segundos</p>
+          </div>
+        `;
+      }
+    }
+
+    function calcularTrocoPdv() {
+      const total = carrinhoPdv.reduce((acc, i) => acc + (i.preco * i.qtd), 0);
+      const input = document.getElementById('pdv-dinheiro-recebido');
+      const recebido = input ? parseFloat(input.value) || 0 : total;
+      const troco = Math.max(0, recebido - total);
+      const elTroco = document.getElementById('pdv-troco-val');
+      if (elTroco) elTroco.textContent = `R$ ${troco.toFixed(2)}`;
+    }
+
+    function atualizarMesaPdv() {
+      const sel = document.getElementById('pdv-seletor-mesa');
+      mesaPdvAtual = sel.value;
+      document.getElementById('pdv-mesa-label').textContent = sel.options[sel.selectedIndex].text;
+    }
+
+    async function concluirVendaPdv() {
+      if (carrinhoPdv.length === 0) {
+        alert('Adicione pelo menos 1 item na comanda para finalizar!');
+        return;
+      }
+
+      const total = carrinhoPdv.reduce((acc, i) => acc + (i.preco * i.qtd), 0);
+      
+      try {
+        const resp = await fetch('/api/public/zuma/caixa/fechar-venda', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mesaNumero: mesaPdvAtual,
+            valorTotal: total,
+            formaPagamento: formaPagamentoPdv,
+            itens: carrinhoPdv
+          })
+        });
+        const data = await resp.json();
+        mostrarToast(`✅ Venda ${data.venda.id} finalizada com sucesso! Recibo fiscal emitido.`, '🧾');
+      } catch (e) {
+        mostrarToast(`✅ Venda de R$ ${total.toFixed(2)} finalizada em modo offline! Recibo gerado.`, '🧾');
+      }
+
+      tocarSucesso();
+      carrinhoPdv = [];
+      renderizarCarrinhoPdv();
+    }
+
+    function acaoSangria() {
+      const val = prompt('Digite o valor da sangria para recolhimento ao cofre (R$):', '500,00');
+      if (val) mostrarToast(`Sangria de R$ ${val} registrada com comprovante!`, '🔒');
+    }
+
+    function acaoSuprimento() {
+      const val = prompt('Digite o valor do suprimento de troco (R$):', '100,00');
+      if (val) mostrarToast(`Suprimento de R$ ${val} inserido no caixa!`, '💵');
+    }
+
+    function fecharTurnoZReport() {
+      if (confirm('Deseja imprimir a Leitura Z e fechar o turno atual?')) {
+        alert('LEITURA Z GERADA:\n• Total Bruto: R$ 3.845,50\n• PIX: R$ 1.840,00\n• Cartões: R$ 1.735,50\n• Dinheiro: R$ 270,00\n• Fundo Troco: R$ 250,00\nCaixa encerrado com 100% de conciliação!');
+      }
+    }
+
+    // =========================================================================
+    // MÓDULO 2: KDS COZINHA & SUSHI BAR
+    // =========================================================================
+    let comandasKds = [
+      { id: "KDS-301", comanda: "Mesa 02", hora: "21:15", esperaMin: 7, sla: 15, status: "em_preparo", praca: "sushi_bar", itens: [{ n: "Promo Combo Grelhado", q: 1, obs: "Sem gergelim", p: false }, { n: "Tubo Uramaki Filadélfia", q: 1, obs: "Cream cheese extra", p: true }] },
+      { id: "KDS-302", comanda: "Delivery #345", hora: "21:18", esperaMin: 4, sla: 20, status: "pendente", praca: "cozinha", itens: [{ n: "Yakissoba Tradicional Zuma", q: 1, obs: "Molho extra", p: false }, { n: "Hot Filadélfia (12un)", q: 2, obs: "Crocante", p: false }] },
+      { id: "KDS-303", comanda: "Mesa 08", hora: "21:05", esperaMin: 17, sla: 15, status: "atrasado", praca: "fritadeira", itens: [{ n: "Guioza Bovina 6un", q: 1, obs: "Ao vapor", p: true }, { n: "Lula Crocante Especial", q: 1, obs: "Limão", p: false }] },
+      { id: "KDS-304", comanda: "Mesa 14 (Deck)", hora: "21:20", esperaMin: 2, sla: 5, status: "pronto", praca: "bar", itens: [{ n: "2x Soda Maçã Verde", q: 2, obs: "Gelo", p: true }, { n: "Chopp Artesanal IPA 500ml", q: 2, obs: "Cremoso", p: true }] }
+    ];
+
+    let pracaKdsFiltro = 'todas';
+
+    function renderizarKds() {
+      const grid = document.getElementById('kds-comandas-grid');
+      if (!grid) return;
+
+      const filtradas = pracaKdsFiltro === 'todas' ? comandasKds : comandasKds.filter(c => c.praca === pracaKdsFiltro);
+
+      const badgeP = document.getElementById('badge-kds-pendentes');
+      if (badgeP) badgeP.textContent = comandasKds.filter(c => c.status !== 'pronto').length;
+
+      grid.innerHTML = filtradas.map(c => {
+        let corStatus = "border-zinc-700 bg-zuma-surface";
+        let badgeSla = "bg-emerald-950 text-emerald-400 border-emerald-800";
+        if (c.status === 'atrasado' || c.esperaMin > c.sla) {
+          corStatus = "border-red-500 bg-red-950/20";
+          badgeSla = "bg-red-900 text-red-200 border-red-700 font-black animate-pulse";
+        } else if (c.status === 'pronto') {
+          corStatus = "border-emerald-500 bg-emerald-950/20";
+          badgeSla = "bg-emerald-600 text-white font-bold";
+        } else if (c.status === 'em_preparo') {
+          corStatus = "border-sky-500 bg-sky-950/20";
+          badgeSla = "bg-sky-900 text-sky-200 border-sky-700 font-bold";
+        }
+
+        return `
+          <div class="border ${corStatus} rounded-2xl p-4 flex flex-col justify-between space-y-3 shadow-lg">
+            <div>
+              <div class="flex items-center justify-between pb-2 border-b border-zinc-800">
+                <div>
+                  <strong class="text-white text-base block font-black">${c.comanda}</strong>
+                  <span class="text-[10px] text-zinc-400 font-mono">${c.id} · ${c.hora}</span>
+                </div>
+                <div class="text-right">
+                  <span class="text-xs font-mono font-bold px-2 py-0.5 rounded border ${badgeSla}">
+                    ⏱️ ${c.esperaMin}m / ${c.sla}m
+                  </span>
+                </div>
+              </div>
+
+              <!-- Lista de Itens com Checkboxes -->
+              <div class="pt-2 space-y-2 text-xs">
+                ${c.itens.map(i => `
+                  <div class="p-2 rounded-lg bg-zuma-bg/80 border border-zinc-800 flex items-start space-x-2">
+                    <input type="checkbox" ${i.p ? 'checked' : ''} class="mt-0.5 accent-zuma-salmon rounded cursor-pointer">
+                    <div class="flex-1">
+                      <span class="${i.p ? 'line-through text-zinc-500' : 'text-white font-bold'} block text-xs">
+                        ${i.q}x ${i.n}
+                      </span>
+                      ${i.obs ? `<span class="text-amber-400 text-[10px] font-sans">⚠️ ${i.obs}</span>` : ''}
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+
+            <!-- Botões de Ação da Comanda -->
+            <div class="pt-2 border-t border-zinc-800 flex space-x-2 text-xs">
+              ${c.status !== 'pronto' 
+                ? `<button onclick="marcarComandaPronta('${c.id}')" class="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-all">
+                    ✓ Marcar Pronto / Chamar Garçom
+                   </button>`
+                : `<button onclick="expedirComanda('${c.id}')" class="w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-emerald-400 font-bold rounded-xl border border-zinc-700 transition-all">
+                    Expedido (Retirado)
+                   </button>`
+              }
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function filtrarPracaKds(pracaId) {
+      pracaKdsFiltro = pracaId;
+      document.querySelectorAll('.kds-praca-btn').forEach(btn => btn.classList.remove('active', 'bg-zuma-salmon', 'text-white'));
+      renderizarKds();
+    }
+
+    function marcarComandaPronta(kdsId) {
+      const c = comandasKds.find(item => item.id === kdsId);
+      if (c) {
+        c.status = 'pronto';
+        c.itens.forEach(i => i.p = true);
+        renderizarKds();
+        mostrarToast(`🔔 Comanda ${c.comanda} PRONTA no passa-pratos! Garçom notificado!`, '🍱');
+        tocarBipe();
+      }
+    }
+
+    function expedirComanda(kdsId) {
+      comandasKds = comandasKds.filter(item => item.id !== kdsId);
+      renderizarKds();
+      mostrarToast(`Comanda ${kdsId} expedida com sucesso!`, '🚀');
+    }
+
+    function simularPedidoChegando() {
+      const novoId = `KDS-${Math.floor(350 + Math.random() * 50)}`;
+      const mesaSorteada = Math.floor(1 + Math.random() * 27);
+      const pratoSorteado = produtosPdv[Math.floor(Math.random() * produtosPdv.length)] || { nome: "Promo Combo Grelhado" };
+
+      comandasKds.unshift({
+        id: novoId,
+        comanda: `Mesa ${String(mesaSorteada).padStart(2, '0')}`,
+        hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        esperaMin: 0,
+        sla: 15,
+        status: "pendente",
+        praca: "sushi_bar",
+        itens: [
+          { n: pratoSorteado.nome, q: 1, obs: "Preparo imediato", p: false }
+        ]
+      });
+
+      renderizarKds();
+      mostrarToast(`🔔 NOVO PEDIDO: ${pratoSorteado.nome} na Mesa ${mesaSorteada}!`, '👨‍🍳');
+      tocarBipe();
+    }
+
+    // =========================================================================
+    // MÓDULO 3: APP DO GARÇOM (COMANDA DIGITAL · 27 MESAS)
+    // =========================================================================
+    const MESAS_GARCOM = Array.from({ length: 27 }, (_, i) => {
+      const num = String(i + 1).padStart(2, '0');
+      let setor = "Salão Principal";
+      let status = "livre";
+      if (i >= 12 && i < 18) setor = "Deck Jardim";
+      else if (i >= 18 && i < 22) setor = "Bistrô Casais";
+      else if (i >= 22) setor = "Sushi Bar Balcão";
+
+      if ([2, 4, 8, 14, 19].includes(i + 1)) status = "ocupada";
+      if ([7, 21].includes(i + 1)) status = "chamando";
+      if (i + 1 === 10) status = "conta";
+
+      return { num, setor, status, total: status === 'ocupada' ? (Math.random() * 150 + 60).toFixed(2) : 0 };
+    });
+
+    function renderizarGarcom() {
+      const grid = document.getElementById('garcom-mesas-grid');
+      if (!grid) return;
+
+      const chamandoCount = MESAS_GARCOM.filter(m => m.status === 'chamando').length;
+      const badgeG = document.getElementById('badge-garcom-chamadas');
+      if (badgeG) badgeG.textContent = chamandoCount;
+
+      grid.innerHTML = MESAS_GARCOM.map(m => {
+        let cor = "border-zinc-800 bg-zuma-surface text-zinc-400";
+        let statusBadge = "Livre";
+        let pulseClass = "";
+
+        if (m.status === 'ocupada') {
+          cor = "border-blue-500/60 bg-blue-950/20 text-blue-300";
+          statusBadge = `R$ ${m.total}`;
+        } else if (m.status === 'chamando') {
+          cor = "border-amber-500 bg-amber-950/30 text-amber-300 ring-2 ring-amber-500";
+          statusBadge = "🔔 Chamando!";
+          pulseClass = "animate-pulse-call";
+        } else if (m.status === 'conta') {
+          cor = "border-orange-500 bg-orange-950/30 text-orange-300";
+          statusBadge = "Pediu Conta";
+        }
+
+        return `
+          <div onclick="abrirModalMesa('${m.num}')" 
+               class="border ${cor} ${pulseClass} rounded-2xl p-3 cursor-pointer hover:scale-105 transition-all text-center space-y-1">
+            <span class="text-[10px] text-zinc-500 uppercase block font-bold">${m.setor}</span>
+            <div class="text-2xl font-black text-white">Mesa ${m.num}</div>
+            <span class="text-[11px] font-bold block ${m.status === 'chamando' ? 'text-amber-400 font-black' : 'text-zinc-400'}">
+              ${statusBadge}
+            </span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function abrirModalMesa(num) {
+      mesaSelecionadaGarcom = num;
+      document.getElementById('modal-mesa-titulo').textContent = `Comanda Mesa ${num}`;
+      const mesaObj = MESAS_GARCOM.find(m => m.num === num);
+      if (mesaObj) {
+        document.getElementById('modal-mesa-subtitulo').textContent = `${mesaObj.setor} · 4 Lugares · Status: ${mesaObj.status.toUpperCase()}`;
+      }
+
+      filtrarItensModalGarcom();
+      document.getElementById('modal-comanda-mesa').classList.remove('hidden');
+    }
+
+    function fecharModalMesa() {
+      document.getElementById('modal-comanda-mesa').classList.add('hidden');
+    }
+
+    function filtrarItensModalGarcom() {
+      const containerRapidos = document.getElementById('garcom-itens-rapidos');
+      if (!containerRapidos) return;
+
+      const termo = (document.getElementById('garcom-busca-modal')?.value || '').toLowerCase().trim();
+      const lista = produtosPdv.filter(p => !termo || p.nome.toLowerCase().includes(termo)).slice(0, 8);
+
+      containerRapidos.innerHTML = lista.map(p => `
+        <button onclick="adicionarItemGarcom('${p.nome}')" class="p-2 bg-zuma-bg border border-zinc-800 hover:border-zuma-salmon rounded-xl text-left text-xs transition-all">
+          <strong class="text-white block text-[11px] truncate">${p.nome}</strong>
+          <span class="text-emerald-400 font-mono text-[10px]">R$ ${parseFloat(p.preco || 0).toFixed(2)}</span>
+        </button>
+      `).join('');
+    }
+
+    function adicionarItemGarcom(nome) {
+      mostrarToast(`+1 ${nome} adicionado à comanda da Mesa ${mesaSelecionadaGarcom}!`, '🍣');
+      tocarBipe();
+    }
+
+    function lancarPedidoGarcom() {
+      const obs = document.getElementById('garcom-obs-input').value;
+      fecharModalMesa();
+      
+      const mesa = MESAS_GARCOM.find(m => m.num === mesaSelecionadaGarcom);
+      if (mesa) {
+        mesa.status = 'ocupada';
+        renderizarGarcom();
+      }
+
+      mostrarToast(`🚀 Pedido da Mesa ${mesaSelecionadaGarcom} enviado para a Cozinha!`, '👨‍🍳');
+      tocarBipe();
+    }
+
+    function pedirContaMesa() {
+      fecharModalMesa();
+      const mesa = MESAS_GARCOM.find(m => m.num === mesaSelecionadaGarcom);
+      if (mesa) {
+        mesa.status = 'conta';
+        renderizarGarcom();
+      }
+      mostrarToast(`Conta da Mesa ${mesaSelecionadaGarcom} solicitada ao Caixa!`, '🧾');
+    }
+
+    function dividirContaMesa() {
+      const pessoas = prompt('Dividir a conta da mesa em quantas pessoas?', '2');
+      if (pessoas) {
+        alert(`Conta da Mesa ${mesaSelecionadaGarcom} dividida em ${pessoas} pessoas com sucesso! Valores calculados no PDV.`);
+      }
+    }
+
+    // =========================================================================
+    // MÓDULO 4: APP DO MOTOBOY (DELIVERY EXPRESS & ROTAS)
+    // =========================================================================
+    let entregasMotoboy = [
+      { id: "DEL-801", cliente: "Juliana Mendes", tel: "(65) 99912-3344", endereco: "Rua Antônio Hortolani, 450, Centro", taxa: 12.00, valorTotal: 148.50, itens: "Promo Combo Grelhado + Hot Nutella", status: "pronto_para_coleta", motoboy: null, codigo: "4821" },
+      { id: "DEL-802", cliente: "Dr. Fernando Barros", tel: "(65) 99655-8899", endereco: "Av. Tancredo Neves, 1220, Jardim Europa", taxa: 14.00, valorTotal: 215.00, itens: "Especial Zuma 68 Pçs + 2x Sodas", status: "em_transito", motoboy: "Carlos 'Ninja'", codigo: "7913" },
+      { id: "DEL-803", cliente: "Beatriz Oliveira", tel: "(65) 99877-1122", endereco: "Rua 26, 890, Vila Alta", taxa: 16.00, valorTotal: 92.00, itens: "Yakissoba Misto + Rolinho", status: "pronto_para_coleta", motoboy: null, codigo: "3154" }
+    ];
+
+    function renderizarMotoboy() {
+      const grid = document.getElementById('motoboy-entregas-grid');
+      if (!grid) return;
+
+      const badgeM = document.getElementById('badge-motoboy-fila');
+      if (badgeM) badgeM.textContent = entregasMotoboy.length;
+
+      grid.innerHTML = entregasMotoboy.map(e => `
+        <div class="bg-zuma-bg border ${e.status === 'em_transito' ? 'border-sky-500 bg-sky-950/10' : 'border-zuma-border'} rounded-2xl p-4 space-y-3 flex flex-col justify-between shadow-sm">
+          <div class="space-y-2">
+            <div class="flex items-center justify-between border-b border-zinc-800 pb-2">
+              <div>
+                <strong class="text-white text-base block font-bold">${e.cliente}</strong>
+                <span class="text-zinc-500 text-[10px] font-mono">${e.id}</span>
+              </div>
+              <span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                Taxa: R$ ${e.taxa.toFixed(2)}
+              </span>
+            </div>
+
+            <div class="space-y-1 text-xs">
+              <div class="flex items-start space-x-1.5 text-zinc-300">
+                <span class="text-sm">📍</span>
+                <span class="font-bold">${e.endereco}</span>
+              </div>
+              <div class="text-zinc-400 text-[11px] pl-5">Pedido: <strong class="text-white">${e.itens}</strong></div>
+              <div class="text-zinc-400 text-[11px] pl-5">Total a Receber: <strong class="text-emerald-400 font-mono">R$ ${e.valorTotal.toFixed(2)}</strong></div>
+            </div>
+          </div>
+
+          <!-- Ações do Motoboy -->
+          <div class="space-y-2 pt-2 border-t border-zinc-800 text-xs">
+            <!-- Botão de Rota Maps / Waze -->
+            <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.endereco + ', Tangará da Serra - MT')}" 
+               target="_blank"
+               class="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white rounded-xl font-bold flex items-center justify-center space-x-1.5 transition-all">
+              <span>🗺️</span><span>Abrir Rota no Google Maps / Waze</span>
+            </a>
+
+            <!-- Botão WhatsApp do Cliente -->
+            <a href="https://wa.me/55${e.tel.replace(/\D/g, '')}?text=${encodeURIComponent('Olá ' + e.cliente + '! Aqui é o entregador do Zuma Cozinha Oriental. Estou a caminho do seu endereço com seu pedido quentinho!')}"
+               target="_blank"
+               class="w-full py-2 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-800 text-emerald-300 rounded-xl font-bold flex items-center justify-center space-x-1.5 transition-all">
+              <span>💬</span><span>Avisar Cliente no WhatsApp</span>
+            </a>
+
+            <!-- Botão Assumir / Concluir -->
+            ${e.status === 'pronto_para_coleta' 
+              ? `<button onclick="assumirCorrida('${e.id}')" class="w-full py-2.5 bg-zuma-salmon hover:bg-orange-600 text-white font-bold rounded-xl transition-all">
+                  🛵 Assumir esta Corrida
+                 </button>`
+              : `<button onclick="concluirEntrega('${e.id}')" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-all">
+                  ✅ Confirmar Entrega Realizada (Código ${e.codigo})
+                 </button>`
+            }
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function assumirCorrida(id) {
+      const e = entregasMotoboy.find(item => item.id === id);
+      if (e) {
+        e.status = 'em_transito';
+        e.motoboy = "Carlos 'Ninja'";
+        renderizarMotoboy();
+        mostrarToast(`🛵 Você assumiu a corrida para ${e.cliente}! Boa rota!`, '📍');
+        tocarBipe();
+      }
+    }
+
+    function concluirEntrega(id) {
+      const e = entregasMotoboy.find(item => item.id === id);
+      if (e) {
+        entregasMotoboy = entregasMotoboy.filter(item => item.id !== id);
+        renderizarMotoboy();
+        mostrarToast(`🎉 Entrega concluída! +R$ ${e.taxa.toFixed(2)} creditados na sua carteira!`, '💰');
+        tocarSucesso();
+      }
+    }
+
+    // =========================================================================
+    // UTILITÁRIOS: DOWNLOAD OFFLINE, SOM & TOAST
+    // =========================================================================
+    async function baixarTudoOffline() {
+      try {
+        let dadosDownload = null;
+        try {
+          const resp = await fetch('/api/public/zuma/download-offline');
+          dadosDownload = await resp.json();
+        } catch (e) {
+          dadosDownload = {
+            ok: true,
+            dataGeracao: new Date().toISOString(),
+            versaoPacote: "2026.11.19-kytto-zuma-offline",
+            produtos: produtosPdv,
+            categorias: categoriasPdv,
+            mesas: MESAS_GARCOM,
+            entregas: entregasMotoboy
+          };
+        }
+        
+        // Salvar em localStorage para acesso offline garantido
+        localStorage.setItem('zuma_catalogo_offline', JSON.stringify(dadosDownload));
+        
+        // Criar blob para download em arquivo
+        const blob = new Blob([JSON.stringify(dadosDownload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Zuma_Cozinha_Oriental_Backup_Offline_${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        mostrarToast(`📦 Base de ${produtosPdv.length} SKUs, 27 mesas e regras baixada com sucesso!`, '💾');
+        tocarSucesso();
+      } catch (e) {
+        alert('Dados salvos no cache do navegador para operação offline imediata!');
+      }
+    }
+
+    function tocarBipe() {
+      if (!somAtivo) return;
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.2);
+      } catch (e) {}
+    }
+
+    function tocarSucesso() {
+      if (!somAtivo) return;
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+        osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1); // E5
+        osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.2); // G5
+        osc.frequency.setValueAtTime(1046.50, ctx.currentTime + 0.3); // C6
+        gain.gain.setValueAtTime(0.18, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.45);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.45);
+      } catch (e) {}
+    }
+
+    function alternarSom() {
+      somAtivo = !somAtivo;
+      document.getElementById('icone-som').textContent = somAtivo ? '🔔' : '🔕';
+      mostrarToast(somAtivo ? 'Som de alertas ativado' : 'Som de alertas mudo', somAtivo ? '🔔' : '🔕');
+    }
+
+    function mostrarToast(msg, icone = '✅') {
+      const toast = document.getElementById('toast-op');
+      document.getElementById('toast-texto').textContent = msg;
+      document.getElementById('toast-icone').textContent = icone;
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      setTimeout(() => {
+        toast.classList.add('translate-y-20', 'opacity-0');
+      }, 3500);
+    }
+  </script>
+
+</body>
+</html>

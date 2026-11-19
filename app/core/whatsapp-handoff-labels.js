@@ -12,6 +12,7 @@ export const MOTIVOS_EQUIPE = {
   duvida_sem_resposta: 'T-Rex não soube responder',
   reclamacao: 'reclamação',
   excecao_financeira: 'exceção financeira',
+  failover_automatico_sla_10min: 'failover automático (SLA 10m)',
   dado_sensivel: 'dado sensível enviado',
   identidade_ambigua: 'cadastro a confirmar',
 };
@@ -27,4 +28,3 @@ export function motivoLegivel(reason) {
   if (codigo.startsWith('delivery:')) return 'falha de envio';
   return codigo.replace(/_/g, ' ').slice(0, 60);
 }
-

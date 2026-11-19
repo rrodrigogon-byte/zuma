@@ -25,11 +25,11 @@ test('última mensagem da equipe por contato, ignorando grupo e horário inváli
   assert.equal(r[0].at.toISOString(), '2026-10-02T13:05:00.000Z');
 });
 
-test('pausa padrão de 120 min, limitada entre 15 e 720; desliga com off', () => {
+test('pausa padrão de 30 min, limitada entre 15 e 720; desliga com off', () => {
   const antes = { ...process.env };
   try {
     delete process.env.WHATSAPP_AI_STAFF_PAUSE_MIN;
-    assert.equal(staffPauseMinutes(), 120);
+    assert.equal(staffPauseMinutes(), 30);
     process.env.WHATSAPP_AI_STAFF_PAUSE_MIN = '1';
     assert.equal(staffPauseMinutes(), 15);
     process.env.WHATSAPP_AI_STAFF_PAUSE_MIN = '99999';

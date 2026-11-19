@@ -207,6 +207,24 @@ export const APELIDOS_SERVICOS = {
   'corte infantil': ['corte infantil agendamento online', 'corte infantil', 'corte com bruno ou nati agendamento online', 'corte com dino agendamento online'],
   'infantil': ['corte infantil agendamento online', 'corte infantil', 'corte com bruno ou nati agendamento online', 'corte com dino agendamento online'],
   'corte com dino': ['corte com dino'],
+  // Expressões coloquiais e gírias populares de barbearia
+  'dar um tapa': ['corte premium', 'corte com bruno ou nati agendamento online', 'corte com bruno ou nati'],
+  'dar um tapa no visual': ['corte e barba premium', 'corte e barba agendamento online', 'corte e barba'],
+  'dar um talento': ['corte premium', 'corte com bruno ou nati agendamento online', 'corte com bruno ou nati'],
+  'dar um grau': ['corte premium', 'corte com bruno ou nati agendamento online', 'corte com bruno ou nati'],
+  'dar uma geral': ['corte e barba premium', 'corte e barba agendamento online', 'corte e barba'],
+  'geral': ['corte e barba premium', 'corte e barba agendamento online', 'corte e barba'],
+  'na regua': ['corte premium', 'corte com bruno ou nati agendamento online', 'corte com bruno ou nati'],
+  'corte na regua': ['corte premium', 'corte com bruno ou nati agendamento online', 'corte com bruno ou nati'],
+  'regua': ['corte premium', 'corte com bruno ou nati agendamento online', 'corte com bruno ou nati'],
+  'cabelo e bigode': ['corte e barba agendamento online', 'corte e barba', 'corte e barba com dino agendamento online', 'corte e barba premium', 'combo'],
+  'corte e bigode': ['corte e barba agendamento online', 'corte e barba', 'corte e barba com dino agendamento online', 'corte e barba premium', 'combo'],
+  'barba e bigode': ['barba premium', 'barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba'],
+  'bigode': ['barba premium', 'barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba'],
+  'fazer bigode': ['barba premium', 'barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba'],
+  'sobrancelhas': ['design de sobrancelha', 'sobrancelha (navalha)', 'sobrancelha'],
+  'fazer sobrancelhas': ['design de sobrancelha', 'sobrancelha (navalha)', 'sobrancelha'],
+  'sobrancelha na navalha': ['sobrancelha (navalha)', 'design de sobrancelha', 'sobrancelha'],
   'barba com dino': ['barba com o dino', 'barba com dino'],
   'corte e barba com dino': ['corte e barba com dino'],
 };
@@ -230,7 +248,8 @@ export function matchAgendaName(value, items = [], { isDino = null } = {}) {
     const correspondencias = APELIDOS_SERVICOS[chaveServico];
     const achados = items.filter((item) => {
       const n = nomeComparavel(item?.nome);
-      if (!/\b(combo|completo)\b/i.test(chaveServico) && !/\b(corte|cabelo)\b/i.test(semPreposicao) && /\b(corte|cabelo)\b/i.test(n) && !/\b(corte|cabelo)\b/i.test(chaveServico)) return false;
+      const ehExpressaoCorteOuCombo = /\b(tapa|talento|grau|regua|geral|visual)\b/i.test(chaveServico);
+      if (!ehExpressaoCorteOuCombo && !/\b(combo|completo)\b/i.test(chaveServico) && !/\b(corte|cabelo)\b/i.test(semPreposicao) && /\b(corte|cabelo)\b/i.test(n) && !/\b(corte|cabelo)\b/i.test(chaveServico)) return false;
       return correspondencias.some((c) => n === c || n.includes(c));
     });
     if (achados.length === 1) {
@@ -258,7 +277,12 @@ export function matchAgendaName(value, items = [], { isDino = null } = {}) {
   // 3. Mapeamento inteligente de serviços por palavras-chave (corte, barba, combo)
   const comDino = isDino !== null ? isDino : /\bdino\b/i.test(alvo);
   const temCorte = /\b(corte|cabelo)\b/i.test(alvo);
-  const temBarba = /\bbarba\b/i.test(alvo);
+  const temBarba = /\b(barba|bigode|cavanhaque)\b/i.test(alvo);
+  const temSobrancelha = /\bsobrancelha[s]?\b/i.test(alvo);
+  if (temSobrancelha) {
+    const achado = items.find((it) => /sobrancelha/i.test(nomeComparavel(it?.nome)));
+    if (achado) return { item: achado, candidatos: [achado] };
+  }
   if (temCorte && temBarba) {
     const achado = items.find((it) => {
       const n = nomeComparavel(it?.nome);
@@ -3074,9 +3098,9 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'listar_promocoes_ativas', description: 'Lista somente promoções ativas e vigentes da unidade. Nunca invente ofertas, valores ou cupons.', parameters: { type: 'OBJECT', properties: { limit: { type: 'INTEGER' } } } },
   { name: 'preparar_promocao_cliente', description: 'Prepara o envio de uma promoção ao cliente com opt-in. O envio só ocorre após CONFIRMAR.', parameters: { type: 'OBJECT', properties: { promotionId: { type: 'STRING' }, code: { type: 'STRING' }, message: { type: 'STRING' } }, required: ['promotionId', 'message'] } },
   { name: 'preparar_agendamento', description: 'Prepara um agendamento para confirmação. Não grava o agendamento. Use o id retornado por listar_profissionais; na agenda da barbearia também é aceito "qualquer" quando o cliente não tem preferência. Vários serviços na mesma ida: passe os demais em extraServiceIds e eles são encaixados em sequência. Para outra pessoa (filho, amigo), use o nome DELA em customerName. customerName é o nome real (nunca "Cliente"): se não souber, pergunte antes.', parameters: { type: 'OBJECT', properties: { confirmarOutroHorario: { type: 'BOOLEAN', description: 'true só depois que o cliente disse que quer mais um horário no mesmo dia' }, serviceId: { type: 'STRING' }, professionalId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' }, customerName: { type: 'STRING', description: 'Nome real da pessoa atendida' }, notes: { type: 'STRING' }, usePlan: { type: 'BOOLEAN', description: 'Somente quando o cliente pedir usar seu pacote. Exige saldo e validade, um procedimento por confirmação.' }, extraServiceIds: { type: 'ARRAY', items: { type: 'STRING' }, description: 'até 3 serviços seguidos na mesma visita' } }, required: ['serviceId', 'professionalId', 'date', 'time', 'customerName'] } },
-  { name: 'preparar_remarcacao', description: 'Prepara a remarcação de um agendamento existente do cliente para nova data/hora (e opcionalmente novo profissional se o cliente aceitar outro barbeiro). Aceita o id, código ou vazio quando o contato tem um único horário ou informou o dia.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING', description: 'id, código ou vazio' }, date: { type: 'STRING', description: 'Nova data ISO AAAA-MM-DD' }, time: { type: 'STRING', description: 'Novo horário HH:MM' }, professionalId: { type: 'STRING', description: 'Opcional: id ou nome do profissional se mudou de barbeiro' } }, required: ['date', 'time'] } },
+  { name: 'preparar_remarcacao', description: 'Prepara a remarcação de um agendamento existente do cliente para nova data/hora. NUNCA peça código de agendamento ao cliente: deixe appointmentId vazio para busca automática pelo telefone do contato.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING', description: 'Opcional. ID retornado por consultar_meus_agendamentos ou vazio para busca automática' }, date: { type: 'STRING', description: 'Nova data ISO AAAA-MM-DD' }, time: { type: 'STRING', description: 'Novo horário HH:MM' }, professionalId: { type: 'STRING', description: 'Opcional: id ou nome do profissional se mudou de barbeiro' } }, required: ['date', 'time'] } },
   { name: 'preparar_cancelamento_pedido', description: 'Prepara o cancelamento de um pedido DO PRÓPRIO contato que ainda aguarda pagamento, para o cliente confirmar com SIM. Pedido pago, em separação ou entregue não cancela por aqui: ofereça a equipe.', parameters: { type: 'OBJECT', properties: { orderCode: { type: 'STRING', description: 'Código do pedido (KC-...); vazio se o contato tem um só pedido aguardando pagamento' } } } },
-  { name: 'preparar_cancelamento', description: 'Prepara o cancelamento de um agendamento do cliente para confirmação. Aceita o id (consultar_meus_agendamentos) ou o código da confirmação; se o contato tiver um só horário futuro, pode mandar vazio.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING', description: 'id, código da confirmação (ex.: 5D0FDE32) ou vazio' } } } },
+  { name: 'preparar_cancelamento', description: 'Prepara o cancelamento de um agendamento do cliente para confirmação (exige SIM do cliente). NUNCA peça código de agendamento ao cliente: deixe appointmentId vazio para busca automática pelo telefone do contato.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING', description: 'Opcional. ID retornado por consultar_meus_agendamentos ou vazio para busca automática' } } } },
 
   { name: 'enviar_comprovante_pix', description: 'Envia o comprovante PIX do cliente para notificar o Dino do pagamento do pedido. Só use quando o cliente enviar o comprovante PIX na conversa após você ter gerado o pedido.', parameters: { type: 'OBJECT', properties: { orderCode: { type: 'STRING', description: 'Código do pedido que o cliente acabou de pagar' } }, required: ['orderCode'] } },
   { name: 'preparar_despesa', description: 'Prepara um lançamento de despesa PENDENTE a partir da nota ou recibo extraído da imagem desta conversa. Só use quando houver valor, data e confiança suficientes. Não paga, não confirma pagamento e exige SIM do responsável.', parameters: { type: 'OBJECT', properties: {} } },

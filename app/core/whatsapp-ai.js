@@ -27,15 +27,18 @@ import { ensureWhatsappLead, listPromotionsToAnnounce, updateWhatsappMarketingCo
 import { enviarAudio, enviarEnquete, enviarFigurinha, enviarMensagem, enqueteSuportada, foiEnviadoPelaPlataforma } from './whatsapp.js';
 import { generateSpeechWithType } from './whatsapp-ai-tts.js';
 import { enviarFigurinhaDoMomento } from './whatsapp-stickers.js';
-import { encontrarClientePorTelefone } from '../dino-clientes-vinculo.js';
-import { planoDoTelefone } from '../dino-captacao-kytto.js';
+import { encontrarClientePorTelefone, telefoneChave } from '../dino-clientes-vinculo.js';
+import { planoDoTelefone, listarListaEspera, alterarStatusListaEspera, revogarAvisosListaEspera } from '../dino-captacao-kytto.js';
 import { cleanCustomerDisplayName } from './whatsapp-ai-normalize.js';
 import * as barbearia from '../barbearia-erp-kytto.js';
 import { getDynamicLearnedGuidance } from './trex-auto-learner.js';
 
-function formatarDicaDinoUpsell(empresaId) {
+function formatarDicaDinoUpsell(empresaId, phone = '') {
   try {
     const eid = empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    if (phone && planoDoTelefone?.(eid, phone)) {
+      return '💡 *Benefício Club Dino:* Como assinante do Clube, você tem 10% de desconto exclusivo em qualquer produto de bancada! Deseja que eu já separe sua Pomada Matte ou Óleo de Barba para retirada?';
+    }
     const prods = barbearia.listarProdutosRevenda?.(eid, { incluirInativos: false }) || [];
     const pomada = prods.find(p => p.ativo !== false && p.nome?.toLowerCase().includes('pomada') && p.nome?.toLowerCase().includes('matte'))
       || prods.find(p => p.ativo !== false && p.nome?.toLowerCase().includes('pomada'))
@@ -336,7 +339,16 @@ export const BARBERSHOP_SYSTEM_GUIDANCE = `
   * NUNCA diga que a Nati está viajando se a data solicitada for diferente de 17 ou 18 de novembro! Se o cliente pedir 12/11, 13/11 ou outra data, agende ou consulte com a Nati normalmente!
   * Quando o cliente pedir múltiplos horários (ex: um para dependente e outro para ele), atenda e consulte com total agilidade!
 - Agendamento ultra direto em 1 passo: quando o cliente disser dia/data + horário + serviço ou profissional: chame preparar_agendamento IMEDIATAMENTE no primeiro turno!
-- REGRA DE SEGURANÇA MÁXIMA - NUNCA CANCELE AGENDAMENTOS SEM PEDIDO EXPLÍCITO: Você NUNCA deve chamar a ferramenta preparar_cancelamento a não ser que o cliente tenha solicitado COM TODAS AS LETRAS o cancelamento/desmarcação do horário dele (ex: "quero cancelar", "cancela meu horário", "desmarca meu corte").
+- REGRA DE CANCELAMENTO E REMARCAÇÃO (ZERO ATRITO & RETENÇÃO ATIVA):
+  * NUNCA, SOB HIPÓTESE ALGUMA, peça código de agendamento (ex: 5D0FDE32) ao cliente! Nenhum cliente tem esse código. Chame preparar_cancelamento ou preparar_remarcacao deixando appointmentId vazio ou chame consultar_meus_agendamentos; o sistema busca automaticamente pelo telefone do WhatsApp!
+  * Quando o cliente pedir cancelamento com todas as letras ("preciso cancelar", "cancela meu corte", "não poderei ir"): chame preparar_cancelamento para confirmar o cancelamento, e pergunte IMEDIATAMENTE se ele já gostaria de deixar garantido para outro dia ou turno da semana para não perder o horário com o barbeiro!
+  * REGRA DE SEGURANÇA MÁXIMA: NUNCA cancele sem pedido explícito do cliente (frases como "tô na dúvida", "vou ver", "não posso às 14h, tem às 16h?" são remarcações ou consultas, NUNCA cancelamentos).
+- HORÁRIO LOTADO E ENCAIXE NA LISTA DE ESPERA (WAITLIST ATIVA):
+  * Quando o barbeiro ou dia solicitado estiver 100% ocupado: NUNCA responda apenas "não temos horário" ou "lotou".
+  * 1. Apresente os horários livres com outro barbeiro da equipe no mesmo turno (ex: "Com o Bruno lotou hoje, mas a Nati tem às 15h e 16h30!").
+  * 2. Se o cliente preferir aguardar o mesmo barbeiro, ofereça IMEDIATAMENTE colocá-lo na Lista de Espera prioritária (entrar_lista_espera), avisando que assim que alguém desmarcar ele recebe um aviso automático aqui pelo WhatsApp!
+- RESPOSTAS DE CONFIRMAÇÃO DE DIÁRIA E LEMBRETE:
+  * Quando o cliente responder à confirmação ou lembrete ("sim", "confirmo", "ok", "com certeza", "fechado"): confirme a presença na hora com tranquilidade! Se responder que não poderá comparecer ("não vou conseguir", "cancela", "imprevisto"): chame preparar_cancelamento e ofereça nova data.
 - AGENDAMENTOS SÃO FIRMES E NÃO TÊM TEMPO LIMITE DE CONFIRMAÇÃO: Na Barbearia Dino, os horários marcados são permanentes e garantidos. NÃO EXISTE PRAZO DE EXPIRAÇÃO. NUNCA diga nem sugira que o cliente tem 1 hora ou prazo para confirmar, e NUNCA cancele agendamentos por falta de resposta.
 - MODO RV (RÉGUA VELOZ - AGENDAMENTO ÁGIL COM 2 OPÇÕES + LINK DE APOIO + FINALIZAÇÃO COMPLETA NO CHAT):
   * REGRA DAS DUAS OPÇÕES REAIS: Ao apresentar horários livres, ofereça de forma rápida e direta exatamente DUAS opções reais de horários (as 2 melhores vagas mais convenientes), sem listas longas de 5 ou 6 opções.
@@ -385,6 +397,11 @@ export const BARBERSHOP_SYSTEM_GUIDANCE = `
   * REMARCAÇÃO IMEDIATA APÓS LEMBRETE: Se o cliente responder a um lembrete dizendo "remarca", "outro dia", "outro horário" ou "na sexta que vem no mesmo horário", o agendamento a ser remarcado é OBRIGATORIAMENTE o agendamento do lembrete acabado de enviar! Chame preparar_remarcacao imediatamente com a nova data e horário sem perguntar "qual agendamento quer remarcar?".
   * RESOLUÇÃO RESILIENTE DE SERVIÇOS: Se o cliente pedir "corte e barba", "barba e corte" ou "cabelo e barba", use sempre o combo oficial ("Combo Corte + Barba" ou "CORTE E BARBA PREMIUM"). NUNCA diga que o código do serviço não foi encontrado e nunca exiba mensagens cruas de erro da API.
   * RESPEITO AO CADASTRO DO CLIENTE: NUNCA pergunte "qual seu nome completo" se o cliente já tiver nome na conversa ou no cadastro. Use o nome com naturalidade e acolhimento.
+  * PROIBIÇÃO ABSOLUTA DE JUSTIFICAR ERROS OU RECUSAS DIZENDO QUE "FOI UM TESTE":
+    - É TERMINANTEMENTE PROIBIDO dizer para qualquer cliente que um agendamento, horário, aviso ou mensagem passada "foi um teste", "era teste", "foi apenas um teste" ou "desconsidere, era teste"!
+    - Se você trocou o profissional por engano (ex: marcou Bruno em vez da Nati) ou se o cliente recusou a opção ("Não", "Não era esse", "Quero a Nati"):
+      1. Assuma com naturalidade e acolhimento o engano: "Desculpa o engano no barbeiro! Vamos agendar certinho com a Nati para o dia [Data] às [Horário]!".
+      2. NUNCA diga que foi um teste. O cliente é real e espera profissionalismo absoluto da recepção.
   * AVISO DE CHEGADA: Expressões como "Tô chegando", "A caminho" ou "2 min" são avisos de chegada para o atendimento de hoje. NUNCA confirme agendamentos futuros em datas posteriores por conta de aviso de chegada.
 `;
 
@@ -2139,7 +2156,7 @@ export async function confirmNextAppointment(context, userText = '') {
         const primeiroNome = context.customerName ? `, ${context.customerName.split(' ')[0]}` : '';
         const servicoComProf = serviceWithProfessional(especifico.servico?.nome || 'Seu horário', especifico.profissional?.nome || 'a equipe');
         return {
-          text: `Confirmado${primeiroNome}! ${servicoComProf}, ${quando}. Te esperamos na Dino Barbearia! 💈\n\n${formatarDicaDinoUpsell(context?.empresaId)}`,
+          text: `Confirmado${primeiroNome}! ${servicoComProf}, ${quando}. Te esperamos na Dino Barbearia! 💈\n\n${formatarDicaDinoUpsell(context?.empresaId, context?.phone)}`,
           kind: 'presence_confirmed',
         };
       }
@@ -2221,7 +2238,7 @@ export async function confirmNextAppointment(context, userText = '') {
     const quando = new Date(proximo.dataHora).toLocaleString('pt-BR', { timeZone: 'America/Cuiaba', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const servicoComProf = serviceWithProfessional(proximo.servico?.nome || 'Seu horário', proximo.profissional?.nome || 'a equipe');
     return {
-      text: `Confirmado${primeiroNome}! ${servicoComProf}, ${quando}. Te esperamos na Dino Barbearia! 💈\n\n${formatarDicaDinoUpsell(context?.empresaId)}`,
+      text: `Confirmado${primeiroNome}! ${servicoComProf}, ${quando}. Te esperamos na Dino Barbearia! 💈\n\n${formatarDicaDinoUpsell(context?.empresaId, context?.phone)}`,
       kind: 'presence_confirmed',
     };
   }
@@ -2234,14 +2251,72 @@ export async function confirmNextAppointment(context, userText = '') {
   const diaTexto = new Date(primeiro.dataHora).toLocaleDateString('pt-BR', { timeZone: 'America/Cuiaba', weekday: 'short', day: '2-digit', month: '2-digit' });
   const profNome = primeiro.profissional?.nome || 'a equipe';
   return {
-    text: `Confirmados${primeiroNome}! Seus ${confirmados.length} horários com ${profNome}, ${diaTexto}: ${itensTexto}. Te esperamos na Dino Barbearia! 💈\n\n${formatarDicaDinoUpsell(context?.empresaId)}`,
+    text: `Confirmados${primeiroNome}! Seus ${confirmados.length} horários com ${profNome}, ${diaTexto}: ${itensTexto}. Te esperamos na Dino Barbearia! 💈\n\n${formatarDicaDinoUpsell(context?.empresaId, context?.phone)}`,
     kind: 'presence_confirmed',
   };
 }
 
+export async function confirmWaitlistSlot(context, userText = '') {
+  try {
+    const empId = context.empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    const tel = context.phone;
+    if (!tel) return null;
+    const chave = telefoneChave(tel);
+    const todasEntradas = listarListaEspera(empId, { status: 'aguardando' });
+    const entradas = todasEntradas.filter((it) =>
+      telefoneChave(it.telefone) === chave && Array.isArray(it.avisos) && it.avisos.length > 0
+    );
+    if (!entradas.length) return null;
+    const entrada = entradas[entradas.length - 1];
+    const ultimoAviso = entrada.avisos[entrada.avisos.length - 1];
+    if (!ultimoAviso) return null;
+
+    const dataAgenda = entrada.data;
+    const horaLocal = ultimoAviso.horaLocal;
+    const servicoId = entrada.servicoId;
+    const profissionalId = entrada.profissionalId && entrada.profissionalId !== 'qualquer' ? entrada.profissionalId : 'qualquer';
+
+    const run = createWhatsappAiToolExecutor({ ...context, toolResults: undefined, toolLinks: undefined });
+    const res = await run('preparar_agendamento', {
+      serviceId: servicoId,
+      professionalId: profissionalId,
+      date: dataAgenda,
+      time: horaLocal,
+      customerName: entrada.nome || context.customerName || 'Cliente',
+    });
+
+    if (res?.acao?.id) {
+      await confirmPendingAction({
+        empresaId: context.empresaId,
+        lojaId: context.lojaId,
+        sessionId: context.sessionId,
+        phone: context.phone,
+        customerName: entrada.nome || context.customerName,
+      });
+
+      alterarStatusListaEspera(empId, entrada.id, 'agendado', entrada.lojaId);
+
+      const [ano, mes, dia] = String(dataAgenda).split('-');
+      const servicoNome = entrada.servicoNome || 'seu atendimento';
+      const primeiroNome = cleanCustomerDisplayName(entrada.nome || context.customerName || '').split(' ')[0];
+      const saudacao = primeiroNome ? `${primeiroNome}, ` : '';
+
+      return {
+        text: `Sensacional, ${saudacao}consegui a vaga pra você! 💈 Seu horário de *${servicoNome}* está garantido e confirmado para o dia *${dia}/${mes}* às *${horaLocal}* na Dino Barbearia!
+
+Te esperamos lá!`,
+        kind: 'waitlist_confirmed',
+      };
+    }
+  } catch (err) {
+    console.warn('[whatsapp-ai] Erro ao confirmar vaga da lista de espera:', err.message);
+  }
+  return null;
+}
+
 function isCancellationRequest(text) {
   const t = String(text ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
-  return /\b(nao deu certo de (?:eu )?ir|nao vou (?:conseguir|poder) ir|nao poderei ir|nao vou mais conseguir|cancela|cancelar|cancelo|desmarca|desmarcar|desmarco|imprevisto nao vou)\b/i.test(t);
+  return /\b(pode\s+cancelar|cancela|cancelar|cancelo|desmarca|desmarcar|desmarco|pode\s+desmarcar|nao\s+deu\s+certo\s+de\s+(?:eu\s+)?ir|nao\s+vou\s+(?:conseguir|poder)\s+(?:ir|comparecer)|nao\s+poderei\s+(?:ir|comparecer)|nao\s+vou\s+mais\s+(?:conseguir|poder)|imprevisto\s+(?:hoje\s+)?nao\s+vou|nao\s+vou\s+conseguir|nao\s+consigo\s+ir)\b/i.test(t);
 }
 
 async function deterministicResponseCore(task, channel, session, message) {
@@ -2393,6 +2468,48 @@ async function deterministicResponseCore(task, channel, session, message) {
     }
   }
 
+  const ultimoEnvioEraAvisoVaga = recentMsgs.some((m) =>
+    m.papel === 'assistant' && (
+      m.metadados?.kind === 'waitlist_offer' ||
+      m.metadados?.tipo === 'aviso_vaga' ||
+      /(?:abriu\s+um\s+hor[aá]rio|lista\s+de\s+espera|como\s+voc[eê]\s+pediu\s+na\s+lista)/i.test(m.conteudo || '')
+    )
+  );
+
+  // 1. Cliente da lista de espera aceita a vaga liberada ("Sim", "Quero", "Pode marcar", "Bora")
+  if (!session.assigned_to && ultimoEnvioEraAvisoVaga && ehIntencaoConfirmacao) {
+    const vagaConfirmada = await confirmWaitlistSlot(context, message.text).catch(() => null);
+    if (vagaConfirmada) return vagaConfirmada;
+  }
+
+  // 2. Cliente da lista de espera pede para sair ou recusa a vaga
+  if (!session.assigned_to && ultimoEnvioEraAvisoVaga && /(?:sair|cancelar|cancela|nao\s+quero|n[aã]o\s+precisa)/i.test(message.text)) {
+    try {
+      const empId = context.empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+      revogarAvisosListaEspera(empId, context.phone);
+      return {
+        text: 'Combinado! Desativamos os avisos da lista de espera para este horário. Se precisar de algo, só me chamar por aqui!',
+        kind: 'waitlist_revoked',
+      };
+    } catch {}
+  }
+
+  // 3. Cliente responde ao lembrete pedindo cancelamento direto ("Não vou conseguir ir", "Cancela")
+  if (!session.assigned_to && (!session.acao_pendente || ultimoEnvioEraLembrete) && isCancellationRequest(message.text)) {
+    try {
+      const prepared = await toolPrepareCancellation({ ...context, customerText: message.text }, {});
+      if (prepared?.ok && prepared.acao) {
+        session.acao_pendente = { actionId: prepared.acao.id, type: prepared.acao.tipo, summary: prepared.acao.resumo, mostrado: true, preparadoEm: new Date().toISOString() };
+        await db.query(`UPDATE whatsapp_ai_sessions SET acao_pendente = acao_pendente || '{"mostrado":true}'::jsonb WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`, [session.id, session.empresa_id, session.loja_id]);
+        return {
+          text: composeReplyWithNewAction('Tranquilo, imprevistos acontecem! Já preparei o cancelamento do seu horário:', session.acao_pendente, persona),
+          kind: 'cancellation_prepared',
+        };
+      }
+    } catch {}
+  }
+
+  // 4. Confirmação de presença em agendamento existente
   if (!session.assigned_to && (!session.acao_pendente || ultimoEnvioEraLembrete || perguntouQualConfirmar) && (ehIntencaoConfirmacao || (temLembreteAtivo && (ehIntencaoConfirmacao || perguntouQualConfirmar)))) {
     const confirmado = await confirmNextAppointment(context, message.text).catch(() => null);
     if (confirmado) {
@@ -2784,6 +2901,17 @@ async function deterministicResponseCore(task, channel, session, message) {
     }
     // Link de pagamento/carrinho gerado nesta resposta sempre chega ao cliente.
     if (presentationContext.toolLinks?.length) result = { ...result, text: ensureToolLinks(result.text, presentationContext.toolLinks) };
+    // Higienização anti-alucinação: remove justificativas indevidas de "foi teste"
+    if (/\b(o agendamento que te passei foi um teste|foi um teste|era um teste|foi apenas um teste|somente um teste)\b/i.test(result.text)) {
+      result = {
+        ...result,
+        text: result.text.replace(/\b(o\s+agendamento\s+que\s+te\s+passei\s+foi\s+um\s+teste\.?|foi\s+(um\s+)?teste\.?|era\s+(um\s+)?teste\.?|apenas\s+um\s+teste\.?|somente\s+um\s+teste\.?)\s*/gi, '')
+      };
+      if (!result.text.trim()) {
+        result.text = 'Desculpa o engano! Vamos verificar certinho o horário que você prefere.';
+      }
+    }
+
     // Dia da semana que não bate com a data é corrigido antes de chegar ao cliente.
     const datas = fixWeekdayMistakes(result.text);
     if (datas.fixes.length) {
@@ -3336,6 +3464,13 @@ export async function listWhatsappAiSessions(context = {}, { limit = 50, status,
             personalization_prompted_at, opportunity_offered_at,
             opportunity_declined_at, opportunity_count,
             estado->>'staffPauseUntil' AS staff_pause_until,
+            (SELECT m.criado_em FROM whatsapp_ai_messages m
+              WHERE m.sessao_id = s.id AND m.empresa_id = s.empresa_id AND m.papel = 'user'
+              ORDER BY m.criado_em DESC LIMIT 1) AS ultima_msg_cliente_em,
+            (SELECT m.criado_em FROM whatsapp_ai_messages m
+              WHERE m.sessao_id = s.id AND m.empresa_id = s.empresa_id AND m.papel = 'assistant'
+                AND (m.metadados->>'autor' = 'equipe' OR m.metadados->>'origem' = 'celular')
+              ORDER BY m.criado_em DESC LIMIT 1) AS ultima_msg_equipe_em,
             (SELECT LEFT(m.conteudo, 160) FROM whatsapp_ai_messages m
               WHERE m.sessao_id = s.id AND m.empresa_id = s.empresa_id AND m.papel = 'user'
               ORDER BY m.criado_em DESC LIMIT 1) AS ultima_mensagem_cliente,
@@ -3350,36 +3485,59 @@ export async function listWhatsappAiSessions(context = {}, { limit = 50, status,
       LIMIT $${values.length}`,
     values,
   );
-  return result.rows.map(row => ({
-    id: row.id,
-    telefone: row.telefone ? `***${row.telefone.slice(-4)}` : '',
-    nome: row.nome,
-    status: row.status,
-    hasPendingAction: row.has_pending_action === true,
-    pendingSummary: row.pending_summary || null,
-    marketingOptOut: row.marketing_opt_out === true,
-    ultima_interacao_em: row.ultima_interacao_em,
-    atualizado_em: row.atualizado_em,
-    handoff_requested_at: row.handoff_requested_at,
-    handoff_reason: row.handoff_reason,
-    handoff_label: motivoLegivel(row.handoff_reason),
-    // Equipe respondendo pelo celular: até quando a IA fica pausada nesta conversa.
-    staff_pause_until: row.handoff_reason === STAFF_REASON && row.staff_pause_until ? row.staff_pause_until : null,
-    assigned: Boolean(row.assigned_to),
-    isMine: Boolean(row.assigned_to && context.usuarioId && String(row.assigned_to) === String(context.usuarioId)),
-    assigned_at: row.assigned_at,
-    closed_at: row.closed_at,
-    priority: Number(row.priority || 0),
-    privacy_notice_at: row.privacy_notice_at,
-    personalization_prompted_at: row.personalization_prompted_at,
-    opportunity_offered_at: row.opportunity_offered_at,
-    opportunity_declined_at: row.opportunity_declined_at,
-    opportunity_count: Number(row.opportunity_count || 0),
-    ultima_mensagem_cliente: row.ultima_mensagem_cliente || '',
-    ultima_resposta_ia: row.ultima_resposta_ia || '',
-    // Vermelho no quadro: a IA não resolveu e ninguém da equipe assumiu ainda.
-    precisa_atendente: row.status === 'humano' && !row.assigned_to && row.handoff_reason !== STAFF_REASON,
-  }));
+  const agora = Date.now();
+  return result.rows.map(row => {
+    const slaMinutos = 5;
+    const limiteFailoverMinutos = 10;
+    const msgClienteEm = row.ultima_msg_cliente_em ? new Date(row.ultima_msg_cliente_em).getTime() : 0;
+    const msgEquipeEm = row.ultima_msg_equipe_em ? new Date(row.ultima_msg_equipe_em).getTime() : 0;
+    const inicioEspera = msgClienteEm || (row.assigned_at ? new Date(row.assigned_at).getTime() : 0) || (row.handoff_requested_at ? new Date(row.handoff_requested_at).getTime() : 0) || (row.ultima_interacao_em ? new Date(row.ultima_interacao_em).getTime() : 0);
+    const aguardandoEquipe = row.status === 'humano' && (!msgEquipeEm || (msgClienteEm && msgClienteEm > msgEquipeEm));
+    const tempoEsperaMinutos = aguardandoEquipe && inicioEspera ? Math.max(0, Math.floor((agora - inicioEspera) / 60000)) : 0;
+    const slaExcedido = aguardandoEquipe && tempoEsperaMinutos >= slaMinutos;
+    const slaAlerta = aguardandoEquipe && !slaExcedido && tempoEsperaMinutos >= 3;
+    const tempoParaFailoverMinutos = aguardandoEquipe ? Math.max(0, limiteFailoverMinutos - tempoEsperaMinutos) : 0;
+    const failoverIminente = aguardandoEquipe && tempoEsperaMinutos >= 8;
+    const statusSla = !aguardandoEquipe ? 'respondido' : slaExcedido ? (tempoEsperaMinutos >= limiteFailoverMinutos ? 'failover_excedido' : 'sla_estourado') : slaAlerta ? 'alerta_amarelo' : 'dentro_do_sla';
+
+    return {
+      id: row.id,
+      telefone: row.telefone ? `***${row.telefone.slice(-4)}` : '',
+      nome: row.nome,
+      status: row.status,
+      hasPendingAction: row.has_pending_action === true,
+      pendingSummary: row.pending_summary || null,
+      marketingOptOut: row.marketing_opt_out === true,
+      ultima_interacao_em: row.ultima_interacao_em,
+      atualizado_em: row.atualizado_em,
+      handoff_requested_at: row.handoff_requested_at,
+      handoff_reason: row.handoff_reason,
+      handoff_label: motivoLegivel(row.handoff_reason),
+      // Equipe respondendo pelo celular: até quando a IA fica pausada nesta conversa.
+      staff_pause_until: row.handoff_reason === STAFF_REASON && row.staff_pause_until ? row.staff_pause_until : null,
+      assigned: Boolean(row.assigned_to),
+      isMine: Boolean(row.assigned_to && context.usuarioId && String(row.assigned_to) === String(context.usuarioId)),
+      assigned_at: row.assigned_at,
+      closed_at: row.closed_at,
+      priority: Number(row.priority || 0),
+      privacy_notice_at: row.privacy_notice_at,
+      personalization_prompted_at: row.personalization_prompted_at,
+      opportunity_offered_at: row.opportunity_offered_at,
+      opportunity_declined_at: row.opportunity_declined_at,
+      opportunity_count: Number(row.opportunity_count || 0),
+      ultima_mensagem_cliente: row.ultima_mensagem_cliente || '',
+      ultima_resposta_ia: row.ultima_resposta_ia || '',
+      tempoEsperaMinutos,
+      slaMinutos,
+      slaExcedido,
+      slaAlerta,
+      tempoParaFailoverMinutos,
+      failoverIminente,
+      statusSla,
+      // Vermelho no quadro: a IA não resolveu e ninguém da equipe assumiu ainda, ou SLA de 5m estourado.
+      precisa_atendente: (row.status === 'humano' && !row.assigned_to && row.handoff_reason !== STAFF_REASON) || slaExcedido,
+    };
+  });
 }
 
 async function auditHandoff(trx, context, sessionId, action, after = {}) {
@@ -4487,4 +4645,185 @@ export async function startWhatsappAiSession(context = {}, input = {}) {
   }
 
   return { ok: true, session, message: messageResult };
+}
+
+/**
+ * Failover Automático de 10 Minutos para atendimento WhatsApp:
+ * Se a conversa estiver em status: 'humano' por mais de 10 minutos sem envio de mensagem pela atendente,
+ * o T-Rex reassume a conversa automaticamente, pede desculpas pela demora e envia o link direto de auto-agendamento.
+ */
+export async function executarFailoverAutomaticoHandoff(context = {}, { limiteMinutos = 10, enviar = true } = {}) {
+  const limite = Math.max(3, Math.min(60, Number(limiteMinutos) || 10));
+  const empresaId = context.empresaId ? String(context.empresaId).trim() : null;
+  const lojaId = context.lojaId ? String(context.lojaId).trim() : null;
+
+  const params = [];
+  let filterClause = "WHERE s.status = 'humano' AND c.provedor = 'whatsapp' AND c.status = 'ativo'";
+  if (empresaId && UUID_PATTERN.test(empresaId)) {
+    params.push(empresaId);
+    filterClause += ` AND s.empresa_id = $${params.length}`;
+  }
+  if (lojaId && UUID_PATTERN.test(lojaId)) {
+    params.push(lojaId);
+    filterClause += ` AND s.loja_id = $${params.length}`;
+  }
+
+  const query = `
+    SELECT s.id, s.empresa_id, s.loja_id, s.canal_id, s.telefone, s.nome, s.handoff_reason,
+           s.handoff_requested_at, s.assigned_to, s.assigned_at, s.ultima_interacao_em,
+           s.estado,
+           c.api_base_url, c.configuracao, c.nome AS canal_nome,
+           (SELECT m.conteudo FROM whatsapp_ai_messages m
+             WHERE m.sessao_id = s.id AND m.empresa_id = s.empresa_id AND m.papel = 'user'
+             ORDER BY m.criado_em DESC LIMIT 1) AS ultima_msg_cliente,
+           (SELECT m.criado_em FROM whatsapp_ai_messages m
+             WHERE m.sessao_id = s.id AND m.empresa_id = s.empresa_id AND m.papel = 'user'
+             ORDER BY m.criado_em DESC LIMIT 1) AS ultima_msg_cliente_em,
+           (SELECT m.criado_em FROM whatsapp_ai_messages m
+             WHERE m.sessao_id = s.id AND m.empresa_id = s.empresa_id AND m.papel = 'assistant'
+               AND (m.metadados->>'autor' = 'equipe' OR m.metadados->>'origem' = 'celular')
+             ORDER BY m.criado_em DESC LIMIT 1) AS ultima_msg_equipe_em
+      FROM whatsapp_ai_sessions s
+      JOIN canais_integracao c ON c.id = s.canal_id AND c.empresa_id = s.empresa_id AND c.loja_id = s.loja_id
+     ${filterClause}
+  `;
+
+  const { rows } = await db.queryRead(query, params).catch(() => ({ rows: [] }));
+  const agora = Date.now();
+  const resgatadas = [];
+
+  for (const session of rows) {
+    const msgClienteEm = session.ultima_msg_cliente_em ? new Date(session.ultima_msg_cliente_em).getTime() : 0;
+    const msgEquipeEm = session.ultima_msg_equipe_em ? new Date(session.ultima_msg_equipe_em).getTime() : 0;
+    const inicioEspera = msgClienteEm || (session.assigned_at ? new Date(session.assigned_at).getTime() : 0) || (session.handoff_requested_at ? new Date(session.handoff_requested_at).getTime() : 0) || (session.ultima_interacao_em ? new Date(session.ultima_interacao_em).getTime() : 0);
+
+    // Se a equipe respondeu DEPOIS da última mensagem do cliente ou início de espera, não há failover
+    if (msgEquipeEm && (!msgClienteEm || msgEquipeEm >= msgClienteEm)) {
+      continue;
+    }
+
+    const minutosEspera = inicioEspera ? Math.max(0, Math.floor((agora - inicioEspera) / 60000)) : 0;
+    if (minutosEspera < limite) {
+      continue;
+    }
+
+    // Sessão estourou o limite de failover (>= 10 min)! O T-Rex reassume.
+    const textoCliente = String(session.ultima_msg_cliente || '').toLowerCase();
+    let profissionalDetectado = '';
+    if (/\b(bruno|brunao)\b/i.test(textoCliente)) {
+      profissionalDetectado = 'bruno';
+    } else if (/\b(nati|natani)\b/i.test(textoCliente)) {
+      profissionalDetectado = 'nati';
+    } else if (/\b(dino|guilherme|mestre dino)\b/i.test(textoCliente)) {
+      profissionalDetectado = 'dino';
+    }
+
+    const linkAgendamento = obterLinkAgendaDino({ professionalIdOrName: profissionalDetectado });
+    const primeiroNome = session.nome ? cleanText(session.nome.split(' ')[0], 40) : '';
+    const saudacao = primeiroNome ? `Olá, ${primeiroNome}! ` : 'Olá! ';
+
+    const textoMensagem = `${saudacao}Peço sinceras desculpas pela demora no retorno! Nossa equipe está em atendimento presencial no momento. 💈\n\nPara sua comodidade e para não atrasar seu agendamento, você pode conferir os horários livres e agendar diretamente no nosso link:\n👉 ${linkAgendamento}\n\n(Ou se preferir, pode me dizer por aqui mesmo o serviço, dia e horário que você prefere que eu agendo agora pra você!)`;
+
+    const updated = await db.transaction(async (trx) => {
+      const up = await trx.query(
+        `UPDATE whatsapp_ai_sessions
+            SET status = 'ativo',
+                estado = (estado - 'handoffReason') - 'staffPauseUntil' || '{"failoverSla10min": true}'::jsonb,
+                handoff_requested_at = NULL,
+                handoff_reason = 'failover_automatico_sla_10min',
+                assigned_to = NULL,
+                assigned_at = NULL,
+                priority = 0,
+                acao_pendente = NULL,
+                atualizado_em = CURRENT_TIMESTAMP
+          WHERE id = $1 AND status = 'humano'
+          RETURNING id, telefone, canal_id, empresa_id, loja_id`,
+        [session.id],
+      );
+      return up.rows[0];
+    }).catch(() => null);
+
+    if (!updated) continue;
+
+    await auditHandoff(db, { empresaId: session.empresa_id, lojaId: session.loja_id, usuarioId: null }, session.id, 'failover_automatico_sla_10min', {
+      minutosEspera,
+      limite,
+      profissionalDetectado: profissionalDetectado || 'geral',
+      linkAgendamento,
+    }).catch(() => null);
+
+    let envioSucesso = false;
+    if (enviar && session.telefone) {
+      try {
+        const tenant = {
+          nome: session.configuracao?.display_name || session.canal_nome || 'Barbearia Dino',
+          whatsapp_api_url: session.api_base_url || undefined,
+          whatsapp_instance: session.configuracao?.instance || undefined,
+          transport: session.configuracao?.transporte === 'waha' || session.configuracao?.provider === 'waha' ? 'waha' : undefined,
+          waha_session: session.configuracao?.waha_session || session.configuracao?.instance || undefined,
+          waha_group_id: session.configuracao?.waha_group_id || undefined,
+          empresa_id: session.empresa_id,
+          loja_id: session.loja_id,
+          canal_id: session.canal_id,
+        };
+
+        const externalId = `trex:failover:${session.id}:${Date.now()}`;
+        const salvo = await db.query(
+          `INSERT INTO whatsapp_ai_messages
+            (empresa_id, loja_id, canal_id, sessao_id, direcao, papel, evento_externo_id, conteudo, metadados, delivery_status)
+           VALUES ($1, $2, $3, $4, 'saida', 'assistant', $5, $6, $7::jsonb, 'sending')
+           RETURNING id`,
+          [
+            session.empresa_id,
+            session.loja_id,
+            session.canal_id,
+            session.id,
+            externalId,
+            textoMensagem,
+            JSON.stringify({ autor: 'trex', motivo: 'failover_automatico_sla_10min', linkAgendamento }),
+          ],
+        ).catch(() => null);
+
+        const resEnvio = await enviarMensagem(tenant, session.telefone, textoMensagem).catch((err) => ({ ok: false, error: err?.message }));
+        envioSucesso = resEnvio?.ok === true;
+
+        if (salvo?.rows?.[0]?.id) {
+          await db.query(
+            `UPDATE whatsapp_ai_messages
+                SET delivery_status = $1,
+                    delivered_at = CASE WHEN $1 = 'sent' THEN CURRENT_TIMESTAMP ELSE delivered_at END
+              WHERE id = $2`,
+            [envioSucesso ? 'sent' : 'failed', salvo.rows[0].id],
+          ).catch(() => null);
+        }
+
+        await db.query(
+          `UPDATE whatsapp_ai_sessions
+              SET ultima_interacao_em = CURRENT_TIMESTAMP,
+                  atualizado_em = CURRENT_TIMESTAMP
+            WHERE id = $1`,
+          [session.id],
+        ).catch(() => null);
+      } catch (err) {
+        console.warn(`[Failover WhatsApp] Erro ao enviar mensagem de failover para ${session.telefone}:`, err?.message);
+      }
+    }
+
+    resgatadas.push({
+      sessionId: session.id,
+      telefone: session.telefone ? `***${session.telefone.slice(-4)}` : '',
+      nome: session.nome,
+      minutosEspera,
+      profissionalDetectado: profissionalDetectado || 'geral',
+      linkAgendamento,
+      mensagemEnviada: envioSucesso,
+    });
+  }
+
+  return {
+    executadoEm: new Date().toISOString(),
+    totalVerificadas: rows.length,
+    totalResgatadas: resgatadas.length,
+    resgatadas,
+  };
 }

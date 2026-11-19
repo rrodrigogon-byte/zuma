@@ -12,7 +12,7 @@ import * as captacao from '../dino-captacao-kytto.js';
 import { confirmationDeadlineExpired, confirmationPlan, secondConfirmationWindowOpen } from './dino-confirmation-policy.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const EVENTOS = new Set(['criado', 'remarcado', 'cancelado', 'lembrete', 'confirmacao_dia']);
+const EVENTOS = new Set(['criado', 'remarcado', 'cancelado', 'lembrete', 'confirmacao_dia', 'lembrete_30m']);
 // Aviso de vaga para a lista de espera: reaproveita a mesma fila e o mesmo tipo de
 // tarefa (notificar_agendamento), sem nova tabela nem migração.
 const EVENTO_VAGA = 'vaga';
@@ -604,6 +604,9 @@ export function mensagem(snapshot, agendamento, cliente, evento, persona = null)
   const quando = formatarQuando(agendamento);
   const cabecalho = `Olá, ${nomeLimpo}.`;
   const rodape = 'Esta é uma mensagem de atendimento. Para não receber estes avisos, responda SAIR.';
+  if (evento === 'lembrete_30m') {
+    return `${cabecalho} Passando pra avisar que seu horário de ${servico} com ${profissional} é daqui a pouco, às ${quando.split('às ')[1] || quando}! Já estamos te esperando na recepção da Dino Barbearia! 💈 ${rodape}`;
+  }
   if (evento === EVENTO_CONFIRMACAO_DIA) {
     return `${cabecalho} Passando para confirmar seu horário de hoje: ${quando} (${servico}) com ${profissional}. Responda CONFIRMO para confirmar sua presença, ou REMARCAR se preferir outro horário. Te aguardamos! ${rodape}`;
   }

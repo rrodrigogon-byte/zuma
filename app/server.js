@@ -18,6 +18,7 @@ import { loadAvecMix } from './core/avec-revenue-mix.js';
 import * as barbeariaClienteFicha360 from './barbearia-cliente-ficha-360.js';
 import * as barbeariaClienteUnificacao from './barbearia-cliente-unificacao.js';
 import express from 'express';
+import { routerZuma } from './modules/restaurante-zuma.js';
 import { createPerformanceMetrics, eventLoopMetrics } from './core/performance-metrics.js';
 import { cleanCustomerDisplayName } from './core/whatsapp-ai-normalize.js';
 import { stallonePageMeta } from './core/stallone-page-meta.js';
@@ -90,7 +91,7 @@ import { responderErro as responderErroBarra } from './modules/acesso/banco.js';
 import { registrarExtensaoWhatsappAi } from './core/whatsapp-ai-extensoes.js';
 import { WHATSAPP_AI_TOOL_DECLARATIONS } from './core/whatsapp-ai-tools.js';
 import { avecGovernanceNoStore } from './core/avec-import-http-policy.js';
-import { whatsappAiOperationalStatus } from './core/whatsapp-ai.js';
+import { whatsappAiOperationalStatus, executarFailoverAutomaticoHandoff } from './core/whatsapp-ai.js';
 import { legacyWppAvailable } from './core/whatsapp-legacy-scope.js';
 import { canCheckWhatsappConnection, safeWhatsappConnection } from './core/whatsapp-connection-readiness.js';
 import { getInstanceStatus, sendTextViaChatbotBackend } from './core/whatsapp-provider.js';
@@ -263,6 +264,7 @@ import { profissionalDoUsuario } from './dino-modo-barbeiro.js';
 import { provisionarEquipeDino } from './dino-equipe-seed.js';
 import { provisionarCatalogoDino, SERVICOS_DINO_OFICIAIS, PRODUTOS_DINO_OFICIAIS } from './dino-catalogo-seed.js';
 import { provisionarPalatarePizzaria, PALATARE_EMPRESA_ID, PALATARE_DADOS_EMPRESA } from './palatare-pizzaria-seed.js';
+import { provisionarZumaRestaurante, ZUMA_EMPRESA_ID, ZUMA_DADOS_EMPRESA } from './zuma-cozinha-oriental-seed.js';
 import { provisionarConcretoUsina, CONCRETO_EMPRESA_ID, CONCRETO_DADOS_EMPRESA, CONCRETO_SILOS_INICIAIS, CONCRETO_BAIAS_INICIAIS, CONCRETO_TANQUES_ADITIVOS, CONCRETO_ENTRADAS_SUPRIMENTOS, CONCRETO_BATELADAS_PROCESSO } from './concreto-usina-seed.js';
 import { criarRotasConcreto } from './modules/concreto/rotas.js';
 import { criarRotasDeliveryMarketplaces, criarRotasWebhooksDelivery } from './modules/pizzaria/rotas-delivery-marketplaces.js';
@@ -867,6 +869,31 @@ app.get('/api/admin/dino/nps/ultimas-avaliacoes', (req, res) => {
   }
 });
 
+app.post('/api/admin/dino/gestao/executar-failover', async (req, res) => {
+  try {
+    const limiteMinutos = Math.max(1, Math.min(60, Number(req.body?.limiteMinutos || req.query?.limiteMinutos) || 10));
+    const resultado = await executarFailoverAutomaticoHandoff(
+      { empresaId: req.body?.empresaId || req.query?.empresaId, lojaId: req.body?.lojaId || req.query?.lojaId },
+      { limiteMinutos, enviar: req.body?.enviar !== false && req.query?.enviar !== 'false' }
+    );
+    res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/admin/dino/gestao/status-failover', async (req, res) => {
+  try {
+    const resultado = await executarFailoverAutomaticoHandoff(
+      { empresaId: req.query?.empresaId, lojaId: req.query?.lojaId },
+      { limiteMinutos: 10, enviar: false }
+    );
+    res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.post('/api/public/dino/recuperacao-ativa/report-20h/enviar', async (req, res) => {
   try {
     const dataFiltro = req.body?.data || req.query.data || null;
@@ -1287,6 +1314,7 @@ const EMPRESA_DINO_ID = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
 const EMPRESA_STALLONE_ID = '31f70c83-9172-40c2-945f-9e793b5048be';
 const EMPRESA_AGRO_OPEN_ID = '2e041110-db20-4fd1-8278-12bd3dead008';
 const EMPRESA_PALATARE_ID = 'c1c1ac01-8e50-4b61-8c79-de4aaa916da9';
+export const EMPRESA_ZUMA_ID = 'c3c3ac01-8e50-4b61-8c79-de4aaa916da3';
 export const HOLDING_PALATARE_EMPRESA_ID = 'c0c0ac01-8e50-4b61-8c79-de4aaa916da0';
 export const HOLDING_PALATARE_LOJA_ID = 'c0c0ac01-8e50-4b61-8c79-de4aaa916da1';
 
@@ -1371,6 +1399,19 @@ const isConcretoUser = (user) => {
   );
   return em.includes("concreto") || em.includes("serrano") || em.includes("usina") || em.includes("despacho");
 };
+const isZumaUser = (user) => {
+  if (!user) return false;
+  if (isAdminGlobal(user)) return false;
+  const em = norm(
+    (user.email || "") + " " +
+    (user.emailAlternativo || "") + " " +
+    (user.username || "") + " " +
+    (user.login || "") + " " +
+    (user.nome || "") + " " +
+    (user.id || "")
+  );
+  return em.includes("zuma") || em.includes("oriental") || em.includes("sushiman");
+};
 const obterEmpresasAutorizadasDoUsuario = (user) => {
   if (!user) return [];
   if (isAdminGlobal(user)) {
@@ -1408,6 +1449,13 @@ const obterEmpresasAutorizadasDoUsuario = (user) => {
       "palatare",
       "concreto",
       "holding"
+    ];
+  }
+  if (isZumaUser(user)) {
+    // Zuma Cozinha Oriental
+    return [
+      EMPRESA_ZUMA_ID,
+      "zuma"
     ];
   }
   if (user?.empresaId) {
@@ -1787,6 +1835,26 @@ async function commerceSessionFor(user) {
         lojas_acessiveis: lojas,
         loja,
         lojaId: loja?.id || null,
+      };
+    }
+
+    // 5. Zuma Cozinha Oriental
+    if (isZumaUser(user)) {
+      const empresasZuma = [
+        { id: EMPRESA_ZUMA_ID, nome: 'Zuma Cozinha Oriental', razaoSocial: 'Zuma Cozinha Oriental LTDA', cnpj: '36.296.848/0001-57', brandKey: 'zuma', tipoNegocio: 'restaurante', grupoId: null, grupoNome: 'Grupo Zuma Cozinha Oriental', ativa: true }
+      ];
+      const lojas = [
+        { id: 'c3c3ac01-8e50-4b61-8c79-de4aaa916da0', empresaId: EMPRESA_ZUMA_ID, codigo: 'ZUMA-MATRIZ', nome: 'Zuma Cozinha Oriental - Principal', ativa: true }
+      ];
+      const empresa = empresasZuma[0];
+      const loja = lojas[0];
+      return {
+        empresas_acessiveis: empresasZuma,
+        empresa,
+        empresaId: EMPRESA_ZUMA_ID,
+        lojas_acessiveis: lojas,
+        loja,
+        lojaId: loja.id,
       };
     }
 
@@ -2519,7 +2587,11 @@ const pizzariaPublicoRouter = criarRotasPizzariaPublico();
 app.use(['/api/admin/palatare', '/api/admin/pizzaria'], auth, requireStaff, pizzariaSuiteRouter);
 app.use(['/api/publico/palatare', '/api/publico/pizzaria'], pizzariaPublicoRouter);
 
-// [kytto-concreto] Rotas públicas de impressão e visualização de documentos oficiais
+  // [kytto-zuma] Hub Oficial do Restaurante Zuma Cozinha Oriental
+  app.use(['/api/zuma', '/api/public/zuma', '/api/publico/zuma'], routerZuma);
+  app.use('/api/admin/zuma', auth, requireStaff, routerZuma);
+
+  // [kytto-concreto] Rotas públicas de impressão e visualização de documentos oficiais
   app.get("/api/concreto/laudos/:id/aceitacao-html", async (req, res) => {
     try {
       const { gerarHtmlLaudoAceitacaoEstatistica } = await import("./modules/concreto/servico.js");
@@ -13637,6 +13709,7 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
     try { sincronizarTenantsEquipes(commerceDb); } catch (err) { console.warn('Aviso ao sincronizar tenants:', err.message); }
     try { provisionarPalatarePizzaria({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar Palatare:', err.message); }
     try { provisionarConcretoUsina({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar Concreto:', err.message); }
+    try { provisionarZumaRestaurante({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar Zuma:', err.message); }
     try {
       if (commerceDb && typeof commerceDb.query === 'function') {
         commerceDb.query(`
@@ -13721,6 +13794,14 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
     const intervalo = Math.max(30, Number.parseInt(process.env.WHATSAPP_CONNECTION_WATCHDOG_SECONDS || '60', 10) || 60) * 1000;
     setInterval(() => { vigiarConexoesWhatsapp().catch((error) => console.warn('[WhatsApp] vigia de conexão:', String(error?.message || error).slice(0, 200))); }, intervalo).unref();
   }
+  // Failover Automático de SLA (10 min) para WhatsApp: T-Rex reassume e envia auto-agendamento
+  setInterval(async () => {
+    try {
+      await executarFailoverAutomaticoHandoff({}, { limiteMinutos: 10, enviar: true });
+    } catch (error) {
+      console.warn('[WhatsApp] failover automático SLA:', String(error?.message || error).slice(0, 200));
+    }
+  }, 60 * 1000).unref();
 })().catch(error => {
   console.error('FATAL: falha no boot seguro do SetPoint:', error?.code || error?.message || error);
   process.exit(1);

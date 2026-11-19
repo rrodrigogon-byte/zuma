@@ -203,6 +203,40 @@ export const TEMPLATES_NEGOCIO = {
     comissoes: { baseServicos: 10, baseProdutos: 5 },
     moduloPrincipal: 'restaurante'
   },
+
+  oriental: {
+    id: 'oriental',
+    icon: '🍣',
+    label: 'Cozinha Oriental & Sushi Bar',
+    tagline: 'Restaurantes japoneses, sushi bars, rodízios orientais, poke e delivery especializado.',
+    servicos: [
+      { nome: 'Taxa de Entrega / Delivery Especial', preco: 10, duracaoMinutos: 40, categoria: 'Delivery', grupoServico: 'entrega' },
+      { nome: 'Taxa de Rolha Especial (Saquê / Vinho)', preco: 45, duracaoMinutos: 0, categoria: 'Serviço de Mesa', grupoServico: 'servicos' },
+      { nome: 'Reserva Especial Tatame VIP / Omakase', preco: 80, duracaoMinutos: 180, categoria: 'Reservas', grupoServico: 'reservas' }
+    ],
+    produtos: [
+      { nome: 'Combinado Salmão Especial (20 Peças)', precoVenda: 98, custoUnitario: 38, categoria: 'Combinados & Barcas', setor: 'sushi_bar', estoqueAtual: 40, estoqueMinimo: 10 },
+      { nome: 'Sashimi Salmão Fresco (10 Fatias)', precoVenda: 48, custoUnitario: 19, categoria: 'Sashimis & Niguiris', setor: 'sushi_bar', estoqueAtual: 35, estoqueMinimo: 8 },
+      { nome: 'Hot Roll Philadelphia Crocante (8 un)', precoVenda: 38, custoUnitario: 12, categoria: 'Hot Rolls & Fritos', setor: 'cozinha', estoqueAtual: 50, estoqueMinimo: 12 },
+      { nome: 'Uramaki Ebi Furai Especial (8 un)', precoVenda: 46, custoUnitario: 16, categoria: 'Uramakis & Rolls', setor: 'sushi_bar', estoqueAtual: 35, estoqueMinimo: 8 },
+      { nome: 'Temaki Salmão Completo c/ Cream Cheese', precoVenda: 36, custoUnitario: 14, categoria: 'Temakis', setor: 'sushi_bar', estoqueAtual: 40, estoqueMinimo: 10 },
+      { nome: 'Yakisoba Tradicional Misto (Carne e Frango)', precoVenda: 49, custoUnitario: 16, categoria: 'Pratos Quentes & Cozinha', setor: 'cozinha', estoqueAtual: 30, estoqueMinimo: 8 },
+      { nome: 'Guioza Suíno Artesanal no Vapor (6 un)', precoVenda: 34, custoUnitario: 10, categoria: 'Entradas Orientais', setor: 'cozinha', estoqueAtual: 40, estoqueMinimo: 10 },
+      { nome: 'Harumaki Primavera Tradicional (4 un)', precoVenda: 28, custoUnitario: 8, categoria: 'Entradas Orientais', setor: 'cozinha', estoqueAtual: 40, estoqueMinimo: 10 },
+      { nome: 'Sunomono Especial com Salmão Fresco', precoVenda: 26, custoUnitario: 7, categoria: 'Entradas Orientais', setor: 'sushi_bar', estoqueAtual: 35, estoqueMinimo: 8 },
+      { nome: 'Poke Bowl Salmão Fresh Tropical', precoVenda: 55, custoUnitario: 20, categoria: 'Pokes & Bowls', setor: 'sushi_bar', estoqueAtual: 25, estoqueMinimo: 6 },
+      { nome: 'Saquê Junmai Hakushika Garrafa 720ml', precoVenda: 125, custoUnitario: 58, categoria: 'Saquês & Bebidas Orientais', setor: 'bar', estoqueAtual: 20, estoqueMinimo: 5 },
+      { nome: 'Saquê Dose Especial 150ml', precoVenda: 28, custoUnitario: 10, categoria: 'Saquês & Bebidas Orientais', setor: 'bar', estoqueAtual: 30, estoqueMinimo: 8 },
+      { nome: 'Cerveja Japonesa Kirin Ichiban 355ml', precoVenda: 24, custoUnitario: 12, categoria: 'Cervejas & Chopps', setor: 'bar', estoqueAtual: 48, estoqueMinimo: 12 },
+      { nome: 'Chá Verde Gelado Green Tea 400ml', precoVenda: 12, custoUnitario: 3.5, categoria: 'Bebidas Sem Álcool', setor: 'bar', estoqueAtual: 40, estoqueMinimo: 10 },
+      { nome: 'Refrigerante Lata 350ml', precoVenda: 7.5, custoUnitario: 2.8, categoria: 'Bebidas Sem Álcool', setor: 'bar', estoqueAtual: 80, estoqueMinimo: 20 },
+      { nome: 'Petit Gâteau de Chá Verde Matcha com Sorvete', precoVenda: 36, custoUnitario: 12, categoria: 'Sobremesas Orientais', setor: 'cozinha', estoqueAtual: 20, estoqueMinimo: 5 },
+      { nome: 'Tempurá de Sorvete com Calda de Frutas', precoVenda: 32, custoUnitario: 9, categoria: 'Sobremesas Orientais', setor: 'cozinha', estoqueAtual: 20, estoqueMinimo: 5 }
+    ],
+    comissoes: { baseServicos: 10, baseProdutos: 6 },
+    moduloPrincipal: 'restaurante'
+  },
+
   outro: {
     id: 'outro',
     icon: '🏢',

@@ -114,6 +114,7 @@ const migrationFiles = [
   '125_reclassificar_casanova_potenciais_clientes.sql',
   '126_tef_solucoes_terminais_stallone_nutre_sport.sql',
   '127_dino_influencer_daily_metrics_and_stallone_club.sql',
+  '128_zuma_cozinha_oriental_completo.sql',
 ];
 const advisoryLockKey = 825410732;
 

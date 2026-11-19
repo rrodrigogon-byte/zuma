@@ -213,14 +213,16 @@ export default function WhatsappHumanQueue({
     let ia = 0
     let equipe = 0
     let pendentes = 0
+    let slaEstourado = 0
     for (const r of baseRows) {
-      const isUrgente = r.status !== 'encerrado' && (r.precisaAtendente || (r.status === 'humano' && !r.assigned))
+      const isUrgente = r.status !== 'encerrado' && (r.precisaAtendente || (r.status === 'humano' && !r.assigned) || r.slaExcedido)
       if (isUrgente) urgentes++
       else if (r.status === 'humano') equipe++
       else if (r.status === 'ativo') ia++
       if (r.status !== 'encerrado' && r.hasPendingAction) pendentes++
+      if (r.status === 'humano' && r.slaExcedido) slaEstourado++
     }
-    return { urgentes, ia, equipe, pendentes, total: baseRows.length }
+    return { urgentes, ia, equipe, pendentes, slaEstourado, total: baseRows.length }
   }, [baseRows])
 
   useEffect(() => {
@@ -319,6 +321,8 @@ export default function WhatsappHumanQueue({
     let list = baseRows
     if (subFiltro === 'urgentes') {
       list = list.filter((r) => r.status !== 'encerrado' && (r.precisaAtendente || (r.status === 'humano' && !r.assigned)))
+    } else if (subFiltro === 'sla') {
+      list = list.filter((r) => r.status === 'humano' && r.slaExcedido)
     } else if (subFiltro === 'ia') {
       list = list.filter((r) => r.status === 'ativo' && !r.precisaAtendente)
     } else if (subFiltro === 'equipe') {
@@ -652,6 +656,14 @@ export default function WhatsappHumanQueue({
         </button>
         <button
           type="button"
+          className={`wa-trex-pill ${subFiltro === 'sla' ? 'active' : ''} ${stats.slaEstourado > 0 ? 'has-urgentes' : ''}`}
+          onClick={() => setSubFiltro(subFiltro === 'sla' ? 'todas' : 'sla')}
+          style={stats.slaEstourado > 0 ? { background: 'rgba(239, 68, 68, 0.2)', borderColor: '#ef4444', color: '#f87171', fontWeight: 700 } : {}}
+        >
+          ⏱️ SLA &gt;5m ({stats.slaEstourado})
+        </button>
+        <button
+          type="button"
           className={`wa-trex-pill ${subFiltro === 'ia' ? 'active' : ''}`}
           onClick={() => setSubFiltro(subFiltro === 'ia' ? 'todas' : 'ia')}
         >
@@ -691,10 +703,12 @@ export default function WhatsappHumanQueue({
           {displayedRows.map((item) => {
             const comEquipe = item.status === 'humano'
             const encerrada = item.status === 'encerrado'
-            const precisaColetaUrgente = !encerrada && (item.precisaAtendente || (comEquipe && !item.isMine) || Boolean(item.handoff_requested_at && !item.isMine))
-            const tom = encerrada ? 'encerrada' : precisaColetaUrgente ? 'alerta' : comEquipe ? 'equipe' : 'ia'
+            const precisaColetaUrgente = !encerrada && (item.precisaAtendente || (comEquipe && !item.isMine) || Boolean(item.handoff_requested_at && !item.isMine) || item.slaExcedido)
+            const tom = encerrada ? 'encerrada' : item.slaExcedido ? 'alerta' : precisaColetaUrgente ? 'alerta' : comEquipe ? 'equipe' : 'ia'
             const titulo = item.nome || item.telefone
-            const situacao = encerrada ? 'Encerrada' : precisaColetaUrgente
+            const situacao = encerrada ? 'Encerrada' : item.slaExcedido
+              ? `🚨 SLA ESTOURADO (${item.tempoEsperaMinutos}m) · ${item.handoff_label}`
+              : precisaColetaUrgente
               ? `🚨 URGENTE · ${item.handoff_label}`
               : comEquipe ? (item.assigned ? (item.isMine ? 'Com você' : 'Com outro atendente') : `Com a equipe · ${item.handoff_label}`) : 'Em conversa com o T-Rex'
             return (
@@ -706,6 +720,32 @@ export default function WhatsappHumanQueue({
                   </div>
                   <span className="wa-trex-card__selo">{situacao}</span>
                 </header>
+                {comEquipe && item.slaExcedido && (
+                  <div style={{ background: 'rgba(239, 68, 68, 0.16)', border: '1.5px solid #ef4444', borderRadius: 8, padding: '8px 12px', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <div>
+                      <strong style={{ color: '#ef4444', fontSize: 13, display: 'block' }}>🚨 SLA DE 5 MINUTOS ESTOURADO!</strong>
+                      <span style={{ fontSize: 12, color: '#fca5a5' }}>Cliente aguardando resposta da equipe há <b>{item.tempoEsperaMinutos} minutos</b>.</span>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontSize: 11, background: '#ef4444', color: '#fff', padding: '3px 7px', borderRadius: 4, fontWeight: 700, display: 'inline-block' }}>
+                        Failover em {item.tempoParaFailoverMinutos} min
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {comEquipe && !item.slaExcedido && item.slaAlerta && (
+                  <div style={{ background: 'rgba(245, 158, 11, 0.14)', border: '1.5px solid #f59e0b', borderRadius: 8, padding: '8px 12px', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <div>
+                      <strong style={{ color: '#f59e0b', fontSize: 13, display: 'block' }}>⚠️ ALERTA DE SLA (Meta: máx 5 min)</strong>
+                      <span style={{ fontSize: 12, color: '#fde68a' }}>Aguardando resposta da recepção há <b>{item.tempoEsperaMinutos} minutos</b>.</span>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 700 }}>
+                        Failover em {item.tempoParaFailoverMinutos} min
+                      </span>
+                    </div>
+                  </div>
+                )}
                 {precisaColetaUrgente && <p className="wa-trex-card__aviso" role="alert">🚨 Coleta urgente: O atendente deve assumir esta conversa.</p>}
                 {!encerrada && item.hasPendingAction && (
                   <div className="wa-trex-card__msg" style={{ background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.45)', borderRadius: 8, padding: '8px 10px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
@@ -728,7 +768,7 @@ export default function WhatsappHumanQueue({
                 {item.ultimaRespostaIa && <p className="wa-trex-card__msg wa-trex-card__msg--ia"><b>T-Rex:</b> {item.ultimaRespostaIa}</p>}
                 <p className="wa-trex-card__meta">
                   Última mensagem: <strong>{queueDateLabel(item.ultima_interacao_em)}</strong>
-                  {comEquipe && <> · Esperando: <strong>{queueWaitLabel(item.handoff_requested_at)}</strong></>}
+                  {comEquipe && <> · Esperando: <strong>{queueWaitLabel(item.handoff_requested_at)}</strong> (SLA: {item.slaExcedido ? <span style={{ color: '#ef4444', fontWeight: 700 }}>Estourado 🚨</span> : item.slaAlerta ? <span style={{ color: '#f59e0b', fontWeight: 700 }}>Alerta ⚠️</span> : <span style={{ color: '#10b981', fontWeight: 700 }}>Normal ✅</span>})</>}
                   {encerrada && item.closed_at && <> · Encerrada: <strong>{queueDateLabel(item.closed_at)}</strong></>}
                 </p>
                 <button type="button" className="c360-btn ghost wa-trex-card__ver" onClick={() => setConversaId(item.id)}>Ver conversa completa</button>
