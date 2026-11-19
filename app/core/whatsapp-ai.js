@@ -28,6 +28,7 @@ import { enviarAudio, enviarEnquete, enviarFigurinha, enviarMensagem, enqueteSup
 import { generateSpeechWithType } from './whatsapp-ai-tts.js';
 import { enviarFigurinhaDoMomento } from './whatsapp-stickers.js';
 import { encontrarClientePorTelefone } from '../dino-clientes-vinculo.js';
+import { planoDoTelefone } from '../dino-captacao-kytto.js';
 import { cleanCustomerDisplayName } from './whatsapp-ai-normalize.js';
 import * as barbearia from '../barbearia-erp-kytto.js';
 import { getDynamicLearnedGuidance } from './trex-auto-learner.js';
@@ -1124,11 +1125,25 @@ export function customerContextFor(toolContext) {
     cliente.viralgramProfile?.tier ? `Perfil ViralGram: ${cliente.viralgramProfile.tier} (Score ${cliente.viralgramProfile.reputationScore})` : null,
   ].filter(Boolean).join(' | ');
 
+  let alertaPlano = '';
+  try {
+    const infoPlano = planoDoTelefone(toolContext.empresaId, toolContext.phone);
+    if (infoPlano && (infoPlano.utilizavel || infoPlano.restantes > 0 || infoPlano.status === 'ativa')) {
+      const nomePlano = infoPlano.plano || infoPlano.nome || 'Plano/Pacote';
+      const restantes = infoPlano.restantes ?? (infoPlano.sessoesRestantes ?? 0);
+      const totalContratadas = infoPlano.sessoesNoCiclo ?? (infoPlano.sessoesContratadas ?? 0);
+      const servicos = Array.isArray(infoPlano.servicosIncluidos) && infoPlano.servicosIncluidos.length
+        ? infoPlano.servicosIncluidos.join(', ')
+        : 'Corte e Barba com Dino e equipe';
+      alertaPlano = `🚨 ATENÇÃO MÁXIMA T-REX — CLIENTE É ASSINANTE / POSSUI PACOTE ATIVO: Este cliente possui o plano/pacote "${nomePlano}" ativo com ${restantes} sessões restantes (de ${totalContratadas} contratadas). Serviços inclusos no plano: ${servicos}. REGRA MANDATÓRIA: O serviço solicitado está 100% INCLUSO no seu plano/pacote (${nomePlano}) com R$ 0,00 ADICIONAL! NUNCA informe cobrança avulsa (ex: NUNCA diga "todos por R$ 600" ou passe valor cheio)! Ao apresentar os horários livres, diga expressamente com carinho e acolhimento que o horário está incluso no plano ${nomePlano} do cliente (R$ 0,00 adicional). Exemplo: "Com o Dino, tenho horários para corte e barba hoje às 15h, 17h ou 17h15, todos inclusos no seu plano ${nomePlano} (R$ 0,00 adicional). Qual fica melhor pra você?". E ao confirmar o agendamento, confirme com usePlan=true sem gerar cobrança avulsa.`;
+    }
+  } catch (_) {}
+
   const instrucaoPendentes = pendentes.length
     ? `Campos pendentes no cadastro para você perguntar com simpatia após confirmar o agendamento: ${pendentes.join(', ')}.`
     : 'Cadastro completo! Agradeça o cliente e chame pelo primeiro nome com calor humano.';
 
-  return `PERFIL DO CLIENTE CADASTRADO (${conhecidos}). ${alertaAniversario ? `${alertaAniversario} ` : ''}${alertaEsposa ? `${alertaEsposa} ` : ''}${instrucaoPendentes}`;
+  return `PERFIL DO CLIENTE CADASTRADO (${conhecidos}). ${alertaPlano ? `\n${alertaPlano}\n` : ''}${alertaAniversario ? `${alertaAniversario} ` : ''}${alertaEsposa ? `${alertaEsposa} ` : ''}${instrucaoPendentes}`;
 }
 
 export async function agendaContextFor(toolContext, { now = Date.now() } = {}) {

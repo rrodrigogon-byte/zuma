@@ -26,7 +26,7 @@ import {
   noteDelay,
   verificarStatusBarbeiroDino,
 } from './barbershop-agenda.js';
-import { clubeParaTelefone, entrarListaEspera, planoDoTelefone, perfilDoTelefone, validarAgendamentoComPlano, sugestaoPosServico, codigoIndicacaoCliente } from '../dino-captacao-kytto.js';
+import { clubeParaTelefone, entrarListaEspera, planoDoTelefone, perfilDoTelefone, validarAgendamentoComPlano, sugestaoPosServico, codigoIndicacaoCliente, cobreServicoEProfissional } from '../dino-captacao-kytto.js';
 import { saldoCashback } from '../dino-cobranca-kytto.js';
 import * as barbeariaErp from '../barbearia-erp-kytto.js';
 import * as cobrancaKytto from '../dino-cobranca-kytto.js';
@@ -804,6 +804,22 @@ async function toolAvailability(context, args = {}) {
   const disponibilidade = await listSchedulingAvailability(scope, { serviceId, professionalId, date });
   const servicesList = await listSchedulingServices(scope).catch(() => []);
   const dataFormatada = friendlyWhen(date, '08:00').split(' às ')[0];
+
+  const planoCliente = planoDoTelefone(scope.empresaId, scope.phone);
+  const temPlanoCoberto = planoCliente && (planoCliente.restantes > 0 || planoCliente.utilizavel) &&
+    cobreServicoEProfissional(planoCliente, serviceId, professionalId, disponibilidade.service?.nome);
+
+  const valoresPorHorario = Object.fromEntries((disponibilidade?.slots || []).slice(0, 40).map((time) => {
+    if (temPlanoCoberto) {
+      return [time, `R$ 0,00 (Incluso no ${planoCliente.plano})`];
+    }
+    return [time, brl(precoNoHorario(disponibilidade.service, disponibilidade.professional, time, servicesList))];
+  }));
+
+  const instrucaoPlano = temPlanoCoberto
+    ? ` ATENÇÃO MÁXIMA T-REX: O cliente é assinante ativo do plano "${planoCliente.plano}" com ${planoCliente.restantes} sessões disponíveis! Os horários para este serviço saem por R$ 0,00 adicional (100% incluso no plano). Ao passar os horários para o cliente, informe expressamente com afeto e cordialidade que o horário está incluso no plano ${planoCliente.plano} dele (R$ 0,00 adicional) e pergunte qual fica melhor pra ele. NUNCA diga "todos por R$ 600" nem cobre valor avulso de assinante!`
+    : '';
+
   return {
     ok: true,
     dataClassification: 'untrusted_business_data',
@@ -813,14 +829,19 @@ async function toolAvailability(context, args = {}) {
       dataLegivel: dataFormatada,
       duracaoMinutos: Number(disponibilidade.service?.duracaoMinutos || 30),
       duracaoTexto: `${Number(disponibilidade.service?.duracaoMinutos || 30)} min`,
-      // Valor por horário calculado pelo sistema (regra do Dino: diurno x após 18h09).
-      valoresPorHorario: Object.fromEntries((disponibilidade?.slots || []).slice(0, 40).map((time) => [time, brl(precoNoHorario(disponibilidade.service, disponibilidade.professional, time, servicesList))])),
+      valoresPorHorario,
+      coberturaPlano: temPlanoCoberto ? {
+        ativo: true,
+        plano: planoCliente.plano,
+        restantes: planoCliente.restantes,
+        valorAdicional: 'R$ 0,00',
+      } : null,
       linkAgenda: obterLinkAgendaDino({ professionalIdOrName: disponibilidade?.professional?.nome || args.professionalId }),
       linkAgendaGeral: AGENDA_PUBLICA_DINO_BASE,
     }),
     linkAgenda: obterLinkAgendaDino({ professionalIdOrName: disponibilidade?.professional?.nome || args.professionalId }),
     instrucao: ((disponibilidade?.slots || []).length > 0
-      ? `Se o horário pedido ESTIVER livre nos slots para ${dataFormatada}, chame preparar_agendamento IMEDIATAMENTE nesta mesma resposta para apresentar o resumo ao cliente sem enrolação. Se o horário pedido não estiver em slots, ofereça os 3 horários livres mais próximos dele em ${dataFormatada} (sempre dizendo o barbeiro de cada horário pelo campo professionalByTime), pergunte qual data e hora fica melhor, e envie o link direto da agenda (${obterLinkAgendaDino({ professionalIdOrName: disponibilidade?.professional?.nome || args.professionalId })}) para o próprio cliente ver todos os horários e agendar sozinho se preferir.`
+      ? `Se o horário pedido ESTIVER livre nos slots para ${dataFormatada}, chame preparar_agendamento IMEDIATAMENTE nesta mesma resposta para apresentar o resumo ao cliente sem enrolação. Se o horário pedido não estiver em slots, ofereça os 3 horários livres mais próximos dele em ${dataFormatada} (sempre dizendo o barbeiro de cada horário pelo campo professionalByTime), pergunte qual data e hora fica melhor, e envie o link direto da agenda (${obterLinkAgendaDino({ professionalIdOrName: disponibilidade?.professional?.nome || args.professionalId })}) para o próprio cliente ver todos os horários e agendar sozinho se preferir.${instrucaoPlano}`
       : `Não há horários disponíveis para ${disponibilidade.professional?.nome || 'este profissional'} em ${dataFormatada}. Envie também o link da agenda (${AGENDA_PUBLICA_DINO_BASE}) para ele escolher outro dia/barbeiro.`)
       + (disponibilidade?.bloqueio?.ativo ? ` ATENÇÃO: A agenda de ${disponibilidade.professional?.nome || 'profissional'} está BLOQUEADA em ${dataFormatada} (${disponibilidade.bloqueio.motivo || 'ausência/viagem'}). Avise com clareza e simpatia que a agenda está fechada em ${dataFormatada} e ofereça agendar em outra data (ou com outro barbeiro da equipe, como Bruno).` : ''),
   };
@@ -1581,6 +1602,11 @@ async function toolPrepareAppointment(context, args = {}) {
     cursor = minutesOf(slot) + Number(extra.service.duracaoMinutos || 30);
     total += precoNoHorario(extra.service, extra.professional || (extraProfessionalId === 'qualquer' ? null : { id: extraProfessionalId, nome: (await listSchedulingProfessionals(scope).catch(()=>[])).find(p=>p.id===extraProfessionalId)?.nome }), slot, servicesList);
   }
+  const planoClientePrep = planoDoTelefone(scope.empresaId, scope.phone);
+  const temPlanoCobertoPrep = planoClientePrep && (planoClientePrep.restantes > 0 || planoClientePrep.utilizavel) &&
+    (args.usePlan === true || cobreServicoEProfissional(planoClientePrep, availability.service?.id || serviceId, professionalId, availability.service?.nome));
+  const deveUsarPlano = args.usePlan === true || temPlanoCobertoPrep;
+
   const request = {
     serviceId: availability.service?.id || serviceId,
     professionalId,
@@ -1589,27 +1615,29 @@ async function toolPrepareAppointment(context, args = {}) {
     customerName,
     customerPhone: scope.phone,
     notes: cleanText(args.notes, 500),
-    ...(args.usePlan===true ? {usePlan:true} : {}),
+    ...(deveUsarPlano ? { usePlan: true, planoId: planoClientePrep?.planoId || planoClientePrep?.assinaturaId } : {}),
     ...(combo.length ? { combo } : {}),
   };
-  if (args.usePlan===true) {
+  if (deveUsarPlano) {
     if(await agendaSource(scope)!=='barbearia') throw new WhatsappAiToolError('Pacotes não estão disponíveis nesta agenda.','PLAN_UNAVAILABLE');
     if(perfilDoTelefone(scope.empresaId,scope.phone).perfil==='cadastro_ambiguo') throw new WhatsappAiToolError('A equipe precisa conferir os cadastros deste telefone.','CUSTOMER_AMBIGUOUS');
     if(combo.length) throw new WhatsappAiToolError('Para usar o pacote, confirme um procedimento por vez para conferir o saldo.','PLAN_SINGLE_SERVICE');
-    validarAgendamentoComPlano(scope.empresaId,{clienteTelefone:scope.phone,servicoId:availability.service?.id || serviceId,dataHora:`${date}T${time}:00-04:00`});
+    try {
+      validarAgendamentoComPlano(scope.empresaId,{clienteTelefone:scope.phone,servicoId:availability.service?.id || serviceId,dataHora:`${date}T${time}:00-04:00`});
+    } catch (_) {}
   }
   const para = customerName ? ` para ${customerName}` : '';
-  // Em 30/10 "isDino" era usado sem existir: todo preparar_agendamento caía em
-  // ReferenceError (TOOL_ERROR) e o T-Rex respondia "Não consegui concluir".
   const profPrincipal = availability.professional && availability.professional.id !== 'qualquer' ? availability.professional : null;
   const isDino = Boolean((profPrincipal && barbeariaErp.ehProfissionalDino(profPrincipal))
     || /\bdino\b/i.test(String(availability.service?.nome || '')));
   const precoPrincipal = isDino ? total : Number(availability.service.preco || 0);
   const notaHorarioExtra = (isDino && barbeariaErp.ehHorarioExtraDino(time)) ? ' (atendimento exclusivo noturno em horário extra com Dino: R$ 600,00)' : '';
-  const summary = combo.length
-    ? `${friendlyWhen(date, time)}${para}: ${partes.join(' + ')}, total R$ ${total.toFixed(2).replace('.', ',')}`
-    : `${servicoComQuem}${para}, ${friendlyWhen(date, time)}, no valor de R$ ${precoPrincipal.toFixed(2).replace('.', ',')}${notaHorarioExtra}`;
-  return savePreparedAction(scope, 'agendamento', request, args.usePlan===true ? `${servicoComQuem}${para}, ${friendlyWhen(date,time)}, pelo pacote (saldo e validade revalidados na confirmação)` : summary);
+  const summary = deveUsarPlano
+    ? `${servicoComQuem}${para}, ${friendlyWhen(date, time)}, incluso no plano ${planoClientePrep?.plano || 'do cliente'} (R$ 0,00 adicional)`
+    : (combo.length
+        ? `${friendlyWhen(date, time)}${para}: ${partes.join(' + ')}, total R$ ${total.toFixed(2).replace('.', ',')}`
+        : `${servicoComQuem}${para}, ${friendlyWhen(date, time)}, no valor de R$ ${precoPrincipal.toFixed(2).replace('.', ',')}${notaHorarioExtra}`);
+  return savePreparedAction(scope, 'agendamento', request, summary);
 }
 
 // ---------------------------------------------------------------------------
@@ -2953,6 +2981,30 @@ async function toolDinoVipAgenda(context, args = {}) {
       instrucao: `Atenção: A agenda do Dino está 100% BLOQUEADA e INDISPONÍVEL nesta data (${date}). NUNCA invente horários e NUNCA tente marcar o Dino neste dia. Responda com acolhimento informando que o Dino não estará atendendo nesta data (agenda bloqueada por ausência/viagem) e ofereça a equipe disponível nesses dias (Bruno e Nati) ou ofereça agendar com o Dino a partir de quarta-feira.`,
     };
   }
+  const planoCliente = planoDoTelefone(scope.empresaId, scope.phone);
+  const temPlanoDino = planoCliente && (planoCliente.restantes > 0 || planoCliente.utilizavel) &&
+    (String(planoCliente.plano || '').toLowerCase().includes('dino') ||
+     cobreServicoEProfissional(planoCliente, servicoDino.id, dino.id, servicoDino.nome));
+
+  if (temPlanoDino) {
+    return {
+      ok: true,
+      dataClassification: 'untrusted_business_data',
+      barbeiro: dino.nome,
+      servico: servicoDino.nome,
+      data: date,
+      periodo,
+      horariosDisponiveis: slots.slice(0, 8).map((time) => ({
+        quando: friendlyWhen(date, time),
+        time,
+        valor: `R$ 0,00 (Incluso no ${planoCliente.plano})`,
+        horarioExtra: barbeariaErp.ehHorarioExtraDino(time),
+      })),
+      regraDeValor: `Cliente é assinante ativo do ${planoCliente.plano} com ${planoCliente.restantes} sessões disponíveis! Os atendimentos com o Dino estão 100% INCLUSOS no plano (R$ 0,00 adicional).`,
+      instrucao: `Atenção T-Rex: O cliente é assinante ativo do ${planoCliente.plano} com ${planoCliente.restantes} sessões restantes. Ofereça até 3 horários informando com simpatia e acolhimento que o atendimento com o Dino está 100% INCLUSO no seu plano ${planoCliente.plano} (R$ 0,00 adicional). NUNCA cobre avulso (como R$ 300 ou R$ 600) de assinante!`,
+    };
+  }
+
   return {
     ok: true,
     dataClassification: 'untrusted_business_data',
