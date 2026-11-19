@@ -85,6 +85,7 @@ export default function BarbeariaNovoAgendamentoModal({
     if (agendamentoEdicao) {
       const dur = agendamentoEdicao.duracaoMinutos || 30
       const ini = agendamentoEdicao.horaLocal || agendamentoEdicao.hora || horaInicial || '10:00'
+      const srv = servicos.find((s) => s.id === agendamentoEdicao.servicoId) || servicoPadrao
       return [{
         id: 'linha-0',
         servicoId: agendamentoEdicao.servicoId || servicoPadrao.id,
@@ -93,11 +94,12 @@ export default function BarbeariaNovoAgendamentoModal({
         tempo: dur,
         inicio: ini,
         fim: calcularHoraFim(ini, dur),
-        valor: Number(agendamentoEdicao.valor || 0),
+        valor: agendamentoEdicao.valor !== undefined && agendamentoEdicao.valor !== null ? Number(agendamentoEdicao.valor) : Number(srv.preco || 0),
       }]
     }
     const ini = horaInicial || '10:00'
-    const dur = servicoPadrao.duracaoMinutos || 30
+    const srv = servicos.find((s) => s.id === servicoInicialId) || servicoPadrao
+    const dur = srv.duracaoMinutos || 30
     return [{
       id: 'linha-0',
       servicoId: servicoInicialId || servicoPadrao.id,
@@ -106,7 +108,7 @@ export default function BarbeariaNovoAgendamentoModal({
       tempo: dur,
       inicio: ini,
       fim: calcularHoraFim(ini, dur),
-      valor: Number(servicoPadrao.preco || 0),
+      valor: Number(srv.preco || 0),
     }]
   })
 
@@ -303,20 +305,26 @@ export default function BarbeariaNovoAgendamentoModal({
       usarPlano,
       recorrencia,
       observacoes,
+      permitirValorPersonalizado: true,
+      valorManual: true,
       linhasServicos: linhasServicos.map((l) => ({
         servicoId: l.servicoId,
         profissionalId: l.semPreferencia ? '' : l.profissionalId,
         duracaoMinutos: l.tempo,
         horaInicio: l.inicio,
         horaFim: l.fim,
-        valor: l.valor,
+        valor: Number(l.valor) || 0,
+        permitirValorPersonalizado: true,
+        valorManual: true,
       })),
       // Propriedades retrocompatíveis para a primeira linha de serviço
       servicoId: linhasServicos[0]?.servicoId,
       profissionalId: linhasServicos[0]?.semPreferencia ? '' : linhasServicos[0]?.profissionalId,
       hora: linhasServicos[0]?.inicio,
       duracaoMinutos: linhasServicos[0]?.tempo,
-      valor: linhasServicos[0]?.valor,
+      valor: Number(linhasServicos[0]?.valor) || 0,
+      permitirValorPersonalizado: true,
+      valorManual: true,
       encaixe: forcarEncaixe,
     }
 
@@ -884,12 +892,16 @@ export default function BarbeariaNovoAgendamentoModal({
             <table className="bna-servicos-table">
               <thead>
                 <tr>
-                  <th style={{ width: '32%' }}>Serviço</th>
-                  <th style={{ width: '28%' }}>Profissional</th>
+                  <th style={{ width: '28%' }}>Serviço</th>
+                  <th style={{ width: '24%' }}>Profissional</th>
                   <th style={{ width: '10%', textAlign: 'center' }}>Duração</th>
                   <th style={{ width: '11%', textAlign: 'center' }}>Início</th>
                   <th style={{ width: '11%', textAlign: 'center' }}>Término</th>
-                  <th style={{ width: '14%', textAlign: 'right' }}>Valor</th>
+                  <th style={{ width: '16%', minWidth: '120px', textAlign: 'right' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', width: '100%' }}>
+                      Valor <span style={{ fontSize: '11px', color: '#60a5fa' }} title="Valor editável livremente">✏️</span>
+                    </span>
+                  </th>
                   {linhasServicos.length > 1 && <th style={{ width: '4%' }}></th>}
                 </tr>
               </thead>
@@ -972,16 +984,28 @@ export default function BarbeariaNovoAgendamentoModal({
                         <div className="bna-table-time-ro">{linha.fim || '00:00'}</div>
                       </td>
 
-                      {/* VALOR */}
-                      <td>
-                        <div className="bna-table-val-wrap">
-                          <span>R$</span>
+                      {/* VALOR EDITÁVEL COM MÁSCARA / DIGITAÇÃO FLUIDA */}
+                      <td style={{ minWidth: '120px', textAlign: 'right' }}>
+                        <div className="bna-table-val-wrap" title="Clique para editar o valor do serviço livremente">
+                          <span className="bna-val-moeda">R$</span>
                           <input
                             type="number"
                             step="0.01"
                             min="0"
-                            value={linha.valor}
-                            onChange={(e) => atualizarLinha(index, { valor: Number(e.target.value) || 0 })}
+                            className="bna-input-preco-editavel"
+                            value={linha.valor === '' ? '' : (linha.valor !== undefined && linha.valor !== null ? linha.valor : 0)}
+                            placeholder="0,00"
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => {
+                              const valStr = e.target.value;
+                              atualizarLinha(index, { valor: valStr === '' ? '' : Number(valStr) });
+                            }}
+                            onBlur={(e) => {
+                              const num = Math.max(0, Number(e.target.value) || 0);
+                              atualizarLinha(index, { valor: Math.round(num * 100) / 100 });
+                            }}
+                            title="Clique para editar o valor do serviço livremente"
+                            aria-label="Valor do serviço em reais"
                           />
                         </div>
                       </td>
