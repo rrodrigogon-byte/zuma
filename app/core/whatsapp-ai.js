@@ -1075,7 +1075,25 @@ const AGENDA_CONTEXT_TTL_MS = 5 * 60 * 1000;
 export function customerContextFor(toolContext) {
   if (!toolContext?.phone || !toolContext?.empresaId) return '';
   const cliente = encontrarClientePorTelefone(toolContext.empresaId, toolContext.phone);
+
+  let alertaPlano = '';
+  try {
+    const infoPlano = planoDoTelefone(toolContext.empresaId, toolContext.phone);
+    if (infoPlano && (infoPlano.utilizavel || infoPlano.restantes > 0 || infoPlano.status === 'ativa')) {
+      const nomePlano = infoPlano.plano || infoPlano.nome || 'Plano/Pacote';
+      const restantes = infoPlano.restantes ?? (infoPlano.sessoesRestantes ?? 0);
+      const totalContratadas = infoPlano.sessoesNoCiclo ?? (infoPlano.sessoesContratadas ?? 0);
+      const servicos = Array.isArray(infoPlano.servicosIncluidos) && infoPlano.servicosIncluidos.length
+        ? infoPlano.servicosIncluidos.join(', ')
+        : 'Corte e Barba com Dino e equipe';
+      alertaPlano = `🚨 ATENÇÃO MÁXIMA T-REX — CLIENTE É ASSINANTE / POSSUI PACOTE ATIVO:\n- Este cliente possui o plano/pacote "${nomePlano}" ativo com ${restantes} sessões restantes (de ${totalContratadas} contratadas).\n- Serviços inclusos no plano: ${servicos}.\n- REGRA MANDATÓRIA: O serviço solicitado está 100% INCLUSO no seu plano/pacote (${nomePlano}) com R$ 0,00 ADICIONAL! NUNCA informe cobrança avulsa (ex: NUNCA diga "todos por R$ 600" ou passe valor cheio)! Ao apresentar os horários livres, diga expressamente com carinho e acolhimento que o horário está incluso no plano ${nomePlano} do cliente (R$ 0,00 adicional). Exemplo: "Com o Dino, tenho horários para corte e barba hoje às 15h, 17h ou 17h15, todos inclusos no seu plano ${nomePlano} (R$ 0,00 adicional). Qual fica melhor pra você?". E ao confirmar o agendamento, confirme com usePlan=true sem gerar cobrança avulsa.`;
+    }
+  } catch (_) {}
+
   if (!cliente) {
+    if (alertaPlano) {
+      return `DADOS DO CLIENTE NESTA CONVERSA: Cliente identificado pelo telefone ${toolContext.phone}.\n${alertaPlano}\nAtenda com o calor humano do T-Rex, resolva o horário pelo plano do cliente com R$ 0,00 adicional e, logo após, colete data de aniversário, bairro/cidade e estado civil para cadastrar com atualizar_cadastro_cliente.`;
+    }
     return 'DADOS DO CLIENTE NESTA CONVERSA: Cliente novo ou ainda sem cadastro completo. Atenda com o calor humano do T-Rex, resolva o horário ou dúvida dele e, logo após, colete data de aniversário, bairro/cidade e estado civil para cadastrar com atualizar_cadastro_cliente.';
   }
   const pendentes = [];
@@ -1125,19 +1143,7 @@ export function customerContextFor(toolContext) {
     cliente.viralgramProfile?.tier ? `Perfil ViralGram: ${cliente.viralgramProfile.tier} (Score ${cliente.viralgramProfile.reputationScore})` : null,
   ].filter(Boolean).join(' | ');
 
-  let alertaPlano = '';
-  try {
-    const infoPlano = planoDoTelefone(toolContext.empresaId, toolContext.phone);
-    if (infoPlano && (infoPlano.utilizavel || infoPlano.restantes > 0 || infoPlano.status === 'ativa')) {
-      const nomePlano = infoPlano.plano || infoPlano.nome || 'Plano/Pacote';
-      const restantes = infoPlano.restantes ?? (infoPlano.sessoesRestantes ?? 0);
-      const totalContratadas = infoPlano.sessoesNoCiclo ?? (infoPlano.sessoesContratadas ?? 0);
-      const servicos = Array.isArray(infoPlano.servicosIncluidos) && infoPlano.servicosIncluidos.length
-        ? infoPlano.servicosIncluidos.join(', ')
-        : 'Corte e Barba com Dino e equipe';
-      alertaPlano = `🚨 ATENÇÃO MÁXIMA T-REX — CLIENTE É ASSINANTE / POSSUI PACOTE ATIVO: Este cliente possui o plano/pacote "${nomePlano}" ativo com ${restantes} sessões restantes (de ${totalContratadas} contratadas). Serviços inclusos no plano: ${servicos}. REGRA MANDATÓRIA: O serviço solicitado está 100% INCLUSO no seu plano/pacote (${nomePlano}) com R$ 0,00 ADICIONAL! NUNCA informe cobrança avulsa (ex: NUNCA diga "todos por R$ 600" ou passe valor cheio)! Ao apresentar os horários livres, diga expressamente com carinho e acolhimento que o horário está incluso no plano ${nomePlano} do cliente (R$ 0,00 adicional). Exemplo: "Com o Dino, tenho horários para corte e barba hoje às 15h, 17h ou 17h15, todos inclusos no seu plano ${nomePlano} (R$ 0,00 adicional). Qual fica melhor pra você?". E ao confirmar o agendamento, confirme com usePlan=true sem gerar cobrança avulsa.`;
-    }
-  } catch (_) {}
+
 
   const instrucaoPendentes = pendentes.length
     ? `Campos pendentes no cadastro para você perguntar com simpatia após confirmar o agendamento: ${pendentes.join(', ')}.`

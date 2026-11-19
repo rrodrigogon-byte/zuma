@@ -569,6 +569,51 @@ app.post('/api/public/dino/recuperacao-ativa/validar-whatsapp', async (req, res)
     res.status(500).json({ ok: false, error: err.message });
   }
 });
+app.get('/api/public/dino/trex/diagnostico-telefone', async (req, res) => {
+  try {
+    const { telefone = '5514997462929', empresaId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6' } = req.query || {};
+    const { planoDoTelefone, perfilDoTelefone, cobreServicoEProfissional } = await import('./dino-captacao-kytto.js');
+    const { customerContextFor } = await import('./core/whatsapp-ai.js');
+    const { encontrarClientePorTelefone } = await import('./dino-clientes-vinculo.js');
+    const barbearia = await import('./barbearia-erp-kytto.js');
+
+    const cli = encontrarClientePorTelefone(empresaId, telefone);
+    const plano = planoDoTelefone(empresaId, telefone);
+    const perfil = perfilDoTelefone(empresaId, telefone);
+
+    const toolContext = {
+      empresaId,
+      phone: telefone,
+      customerName: cli?.nome || 'Rodrigo',
+      toolResults: [],
+      toolLinks: []
+    };
+    const promptCtx = customerContextFor(toolContext);
+
+    const dino = barbearia.listarProfissionais(empresaId).find((p) => barbearia.ehProfissionalDino(p)) || { id: 'dino', nome: 'Dino' };
+    const servicos = barbearia.listarServicos(empresaId);
+    const combo = servicos.find((s) => s.nome.toLowerCase().includes('corte e barba')) || servicos[0];
+
+    const cobertoCombo = plano ? cobreServicoEProfissional(plano, combo?.id, dino.id, combo?.nome) : false;
+
+    res.json({
+      ok: true,
+      telefone,
+      cliente: cli ? { id: cli.id, nome: cli.nome, telefone: cli.telefone } : null,
+      plano,
+      perfil: { perfil: perfil.perfil, pacotes: perfil.pacotes },
+      promptCtx,
+      coberturaComboDino: {
+        servico: combo?.nome,
+        coberto: cobertoCombo,
+        valorEsperado: cobertoCombo ? 'R$ 0,00' : 'R$ 600,00'
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message, stack: err.stack });
+  }
+});
+
 app.post('/api/public/dino/whatsapp/validar-rodrigo', async (req, res) => {
   try {
     const { telefone = '5514997462929', mensagem = null } = req.body || {};
