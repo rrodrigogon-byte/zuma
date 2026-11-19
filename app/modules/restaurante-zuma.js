@@ -741,8 +741,8 @@ routerZuma.get('/operacional/completo', (req, res) => {
   res.json({
     ok: true,
     restaurante: {
-      nome: ZUMA_DADOS_EMPRESA.nome_fantasia,
-      razaoSocial: ZUMA_DADOS_EMPRESA.razao_social,
+      nome: ZUMA_DADOS_EMPRESA.nomeFantasia || ZUMA_DADOS_EMPRESA.nome,
+      razaoSocial: ZUMA_DADOS_EMPRESA.razaoSocial,
       cnpj: ZUMA_DADOS_EMPRESA.cnpj,
       cidade: "Tangará da Serra - MT",
       endereco: "Av. Brasil 1605 S"
