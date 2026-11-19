@@ -2,6 +2,10 @@
 -- Cadastro de Empresa Restaurante Oriental, Loja Matriz, Storefront E-commerce,
 -- 25 Mesas, 23 Categorias, 211 Produtos Oficiais, Clientes CRM, AI Facts e Atendimento Ágil WhatsApp (KyttoIA).
 
+-- Expandir setores permitidos em bar_produtos para suportar sushi_bar e balcao
+ALTER TABLE bar_produtos DROP CONSTRAINT IF EXISTS chk_bar_produto_setor;
+ALTER TABLE bar_produtos ADD CONSTRAINT chk_bar_produto_setor CHECK (setor IN ('bar', 'cozinha', 'chapa', 'sushi_bar', 'balcao'));
+
 DO $$
 BEGIN
   -- 1. EMPRESA ZUMA COZINHA ORIENTAL
