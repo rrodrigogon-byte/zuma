@@ -738,7 +738,7 @@ export default function AgendamentoOnline() {
                       </span>
                     </div>
                     <span style={{ display: "block", color: theme.muted, fontSize: 12, marginTop: 3 }}>
-                      {estilo.desc}
+                      {sv.descricao || estilo.desc}
                     </span>
                     <span style={{ display: "inline-block", color: theme.muted, fontSize: 11, marginTop: 4 }}>
                       ⏱ {sv.duracao_min} min de cadeira

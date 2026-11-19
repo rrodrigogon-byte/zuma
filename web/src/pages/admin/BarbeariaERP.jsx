@@ -890,12 +890,12 @@ export default function BarbeariaERP({ tabInicial } = {}) {
     dataInicio: "",
     dataFim: "",
     diaTodo: false,
-    inicioHora: "08:00",
-    fimHora: "20:00",
+    inicioHora: "10:00",
+    fimHora: "11:00",
     profissionalId: "",
     periodo: "apenas_dia",
     dataFimRepeticao: "",
-    diasSemana: [1, 2, 3, 4, 5, 6],
+    diasSemana: [1, 2, 3, 4, 5, 6, 0],
   });
   const [filtroBloqueioProf, setFiltroBloqueioProf] = useState("");
   const [grupoServicos, setGrupoServicos] = useState("todos");
@@ -2865,16 +2865,26 @@ export default function BarbeariaERP({ tabInicial } = {}) {
     if (event?.preventDefault) event.preventDefault();
     const dados = overrideData || formBloqueio;
     const dataInicio = dados.dataInicio || dados.data || dataSelecionada || new Date().toISOString().slice(0, 10);
-    const dataFim = dados.dataFim || dados.dataFimRepeticao || dataInicio;
+    const dataFimInformada = dados.dataFimRepeticao || dados.dataFim || dataInicio;
     const ehDiaTodo = dados.diaTodo === true || dados.periodo === "dia_todo";
     const inicioH = ehDiaTodo ? "00:00" : (dados.inicioHora || "08:00");
     const fimH = ehDiaTodo ? "23:59" : (dados.fimHora || "20:00");
+    const segFim = fimH === "23:59" ? "59" : "00";
 
-    const isSingleDay = dataFim <= dataInicio && ["apenas_dia", "dia_todo", "30_min", "1_hora", "2_horas", "3_horas"].includes(dados.periodo || "apenas_dia");
+    const diasSemanaValidos = Array.isArray(dados.diasSemana) && dados.diasSemana.length > 0
+      ? dados.diasSemana
+      : [1, 2, 3, 4, 5, 6, 0];
+    const escolheuDiasEspecificos = diasSemanaValidos.length > 0 && diasSemanaValidos.length < 7;
+    const periodoEfetivo = dados.periodo || "apenas_dia";
+
+    const isSingleDay =
+      !escolheuDiasEspecificos &&
+      dataFimInformada <= dataInicio &&
+      ["apenas_dia", "dia_todo", "30_min", "1_hora", "2_horas", "3_horas"].includes(periodoEfetivo);
 
     if (isSingleDay) {
-      const inicio = new Date(`${dataInicio}T${inicioH}:00`).toISOString();
-      const fim = new Date(`${dataInicio}T${fimH}:59`).toISOString();
+      const inicio = new Date(`${dataInicio}T${inicioH}:00-04:00`).toISOString();
+      const fim = new Date(`${dataInicio}T${fimH}:${segFim}-04:00`).toISOString();
       const res = await executar(
         () =>
           api.post("/api/admin/barbearia/bloqueios", {
@@ -2893,31 +2903,33 @@ export default function BarbeariaERP({ tabInicial } = {}) {
       }
     } else {
       let diasLimite = 1;
-      if (dados.periodo === "uma_semana") diasLimite = 7;
-      else if (dados.periodo === "15_dias") diasLimite = 15;
-      else if (dados.periodo === "30_dias") diasLimite = 30;
-      else if (dados.periodo === "60_dias") diasLimite = 60;
-      else if (dados.periodo === "1_ano") diasLimite = 365;
-      else if (dados.periodo === "indeterminado") diasLimite = 1825;
-      else if (dataFim > dataInicio) {
-        const diffMs = new Date(`${dataFim}T12:00:00`).getTime() - new Date(`${dataInicio}T12:00:00`).getTime();
+      if (periodoEfetivo === "uma_semana") diasLimite = 7;
+      else if (periodoEfetivo === "15_dias") diasLimite = 15;
+      else if (periodoEfetivo === "30_dias") diasLimite = 30;
+      else if (periodoEfetivo === "60_dias") diasLimite = 60;
+      else if (periodoEfetivo === "90_dias") diasLimite = 90;
+      else if (periodoEfetivo === "180_dias") diasLimite = 180;
+      else if (periodoEfetivo === "1_ano") diasLimite = 365;
+      else if (periodoEfetivo === "2_anos" || periodoEfetivo === "indeterminado") diasLimite = 730;
+      else if (periodoEfetivo === "escolher_data" && dataFimInformada >= dataInicio) {
+        const diffMs = new Date(`${dataFimInformada}T12:00:00`).getTime() - new Date(`${dataInicio}T12:00:00`).getTime();
         diasLimite = Math.max(1, Math.round(diffMs / 86400000) + 1);
+      } else if (dataFimInformada > dataInicio) {
+        const diffMs = new Date(`${dataFimInformada}T12:00:00`).getTime() - new Date(`${dataInicio}T12:00:00`).getTime();
+        diasLimite = Math.max(1, Math.round(diffMs / 86400000) + 1);
+      } else if (escolheuDiasEspecificos) {
+        diasLimite = 365;
       }
 
       const lote = [];
       let dataCursor = new Date(`${dataInicio}T12:00:00`);
       let count = 0;
-      let dataFimObj = new Date(`${dataFim}T12:00:00`);
 
-      const diasSemanaValidos = Array.isArray(dados.diasSemana) && dados.diasSemana.length > 0
-        ? dados.diasSemana
-        : [0, 1, 2, 3, 4, 5, 6];
-
-      while (count < diasLimite && dataCursor <= dataFimObj) {
+      while (count < diasLimite) {
         if (diasSemanaValidos.includes(dataCursor.getDay())) {
           const isoDia = dataCursor.toISOString().slice(0, 10);
-          const inicio = new Date(`${isoDia}T${inicioH}:00`).toISOString();
-          const fim = new Date(`${isoDia}T${fimH}:59`).toISOString();
+          const inicio = new Date(`${isoDia}T${inicioH}:00-04:00`).toISOString();
+          const fim = new Date(`${isoDia}T${fimH}:${segFim}-04:00`).toISOString();
           lote.push({
             titulo: dados.titulo || "Bloqueio de agenda",
             motivo: dados.motivo || "",
@@ -2931,8 +2943,8 @@ export default function BarbeariaERP({ tabInicial } = {}) {
       }
 
       if (lote.length === 0) {
-        const inicio = new Date(`${dataInicio}T${inicioH}:00`).toISOString();
-        const fim = new Date(`${dataInicio}T${fimH}:59`).toISOString();
+        const inicio = new Date(`${dataInicio}T${inicioH}:00-04:00`).toISOString();
+        const fim = new Date(`${dataInicio}T${fimH}:${segFim}-04:00`).toISOString();
         lote.push({
           titulo: dados.titulo || "Bloqueio de agenda",
           motivo: dados.motivo || "",
@@ -2942,7 +2954,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
         });
       }
 
-      if (lote.length > 300 && !window.confirm(`Você está prestes a criar ${lote.length} bloqueios. Continuar?`)) return;
+      if (lote.length > 500 && !window.confirm(`Você está prestes a criar ${lote.length} bloqueios recorrentes na agenda. Continuar?`)) return;
 
       await executar(
         () => api.post("/api/admin/barbearia/bloqueios", { lote }),
@@ -2957,6 +2969,19 @@ export default function BarbeariaERP({ tabInicial } = {}) {
     await executar(
       () => api.delete(`/api/admin/barbearia/bloqueios/${bloqueio.id}`),
       "Bloqueio desativado.",
+    );
+  }
+
+  async function desativarSerieBloqueio(bloqueio) {
+    if (!window.confirm(`Desativar TODOS os bloqueios recorrentes futuros de “${bloqueio.titulo}” deste profissional?`)) return;
+    await executar(
+      () => api.post("/api/admin/barbearia/bloqueios/desativar-serie", {
+        bloqueioId: bloqueio.id,
+        profissionalId: bloqueio.profissionalId || "",
+        titulo: bloqueio.titulo || "",
+        futurosApenas: true,
+      }),
+      "Série de bloqueios recorrentes desativada.",
     );
   }
 
@@ -4336,12 +4361,18 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                   }}
                   onClick={() => {
                     setFormBloqueio({
-                      titulo: "Almoço",
-                      motivo: "Horário de almoço",
-                      inicioHora: "12:00",
-                      fimHora: "13:00",
+                      titulo: "",
+                      motivo: "",
+                      inicioHora: "10:00",
+                      fimHora: "11:00",
                       profissionalId: profissionalFiltro || "",
                       data: dataSelecionada,
+                      dataInicio: dataSelecionada,
+                      dataFim: dataSelecionada,
+                      dataFimRepeticao: "",
+                      diaTodo: false,
+                      periodo: "apenas_dia",
+                      diasSemana: [1, 2, 3, 4, 5, 6, 0],
                     });
                     setModal("bloqueioAgenda");
                   }}
@@ -5956,21 +5987,48 @@ export default function BarbeariaERP({ tabInicial } = {}) {
               </span>
               <button
                 type="button"
+                style={{ padding: "6px 12px", background: "#2563eb", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}
+                onClick={() => {
+                  const bruno = profissionais.find(p => /bruno/i.test(p.nome) || /bruno/i.test(p.apelido || ""));
+                  const hoje = dataSelecionada || new Date().toISOString().slice(0, 10);
+                  setFormBloqueio(atual => ({
+                    ...atual,
+                    titulo: "Buscar filho no judô",
+                    motivo: "Toda segunda e quarta das 18:00 às 18:30 o Bruno busca o filho dele no judô",
+                    data: hoje,
+                    dataInicio: hoje,
+                    dataFim: hoje,
+                    diaTodo: false,
+                    inicioHora: "18:00",
+                    fimHora: "18:30",
+                    profissionalId: bruno ? bruno.id : "",
+                    periodo: "1_ano",
+                    diasSemana: [1, 3],
+                  }));
+                }}
+              >
+                🥋 Bruno: Buscar filho no Judô (Seg e Qua 18:00–18:30)
+              </button>
+              <button
+                type="button"
                 style={{ padding: "6px 12px", background: "#f59e0b", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}
                 onClick={() => {
                   const dino = profissionais.find(p => /dino/i.test(p.nome));
-                  setFormBloqueio({
+                  const hoje = dataSelecionada || new Date().toISOString().slice(0, 10);
+                  setFormBloqueio(atual => ({
+                    ...atual,
                     titulo: "Ausência / Viagem Dino",
                     motivo: "Dino ausente (segunda e terça - agenda bloqueada)",
-                    dataInicio: "2026-11-09",
-                    dataFim: "2026-11-10",
+                    data: hoje,
+                    dataInicio: hoje,
+                    dataFim: hoje,
                     diaTodo: true,
                     inicioHora: "00:00",
                     fimHora: "23:59",
                     profissionalId: dino ? dino.id : "",
-                    periodo: "escolher_data",
+                    periodo: "30_dias",
                     diasSemana: [1, 2],
-                  });
+                  }));
                 }}
               >
                 👑 Bloquear Seg e Ter (Dino)
@@ -5982,9 +6040,11 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                   const hoje = new Date().toISOString().slice(0, 10);
                   setFormBloqueio(atual => ({
                     ...atual,
+                    data: hoje,
                     dataInicio: hoje,
                     dataFim: hoje,
                     diaTodo: true,
+                    periodo: "dia_todo",
                     inicioHora: "00:00",
                     fimHora: "23:59",
                     titulo: atual.titulo || "Folga / Ausência",
@@ -5992,24 +6052,6 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                 }}
               >
                 📅 Bloquear Hoje (Dia Todo)
-              </button>
-              <button
-                type="button"
-                style={{ padding: "6px 12px", background: "var(--bg-card)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12, cursor: "pointer" }}
-                onClick={() => {
-                  const amanha = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-                  setFormBloqueio(atual => ({
-                    ...atual,
-                    dataInicio: amanha,
-                    dataFim: amanha,
-                    diaTodo: true,
-                    inicioHora: "00:00",
-                    fimHora: "23:59",
-                    titulo: atual.titulo || "Folga / Ausência",
-                  }));
-                }}
-              >
-                ⏭️ Bloquear Amanhã (Dia Todo)
               </button>
             </div>
 
@@ -6039,19 +6081,34 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                       ))}
                   </select>
                 </Field>
-                <Field label="Título do Bloqueio *">
-                  <input
-                    required
-                    value={formBloqueio.titulo}
-                    onChange={(event) =>
+                <Field label="Período de Aplicação">
+                  <select
+                    value={formBloqueio.periodo || "apenas_dia"}
+                    onChange={(e) => {
+                      const val = e.target.value;
                       setFormBloqueio((atual) => ({
                         ...atual,
-                        titulo: event.target.value,
-                      }))
-                    }
+                        periodo: val,
+                        diaTodo: val === "dia_todo",
+                        inicioHora: val === "dia_todo" ? "00:00" : atual.inicioHora,
+                        fimHora: val === "dia_todo" ? "23:59" : atual.fimHora,
+                      }));
+                    }}
                     style={inputStyle}
-                    placeholder="Ex: Ausência Dino, Folga, Almoço, Manutenção…"
-                  />
+                  >
+                    <option value="apenas_dia">Apenas este dia</option>
+                    <option value="uma_semana">Uma semana (7 dias)</option>
+                    <option value="15_dias">15 dias</option>
+                    <option value="30_dias">30 dias (1 mês)</option>
+                    <option value="60_dias">60 dias (2 meses)</option>
+                    <option value="90_dias">90 dias (3 meses)</option>
+                    <option value="180_dias">180 dias (6 meses)</option>
+                    <option value="1_ano">1 ano (12 meses)</option>
+                    <option value="2_anos">2 anos (24 meses)</option>
+                    <option value="indeterminado">Tempo indeterminado</option>
+                    <option value="escolher_data">Escolher uma data final</option>
+                    <option value="dia_todo">Dia todo (00:00 às 23:59)</option>
+                  </select>
                 </Field>
                 <Field label="Data Início *">
                   <input
@@ -6062,6 +6119,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                       const v = event.target.value;
                       setFormBloqueio((atual) => ({
                         ...atual,
+                        data: v,
                         dataInicio: v,
                         dataFim: atual.dataFim && atual.dataFim >= v ? atual.dataFim : v,
                       }));
@@ -6069,43 +6127,25 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                     style={inputStyle}
                   />
                 </Field>
-                <Field label="Data Término (para períodos)">
-                  <input
-                    type="date"
-                    value={formBloqueio.dataFim || formBloqueio.dataInicio || dataSelecionada}
-                    onChange={(event) =>
-                      setFormBloqueio((atual) => ({
-                        ...atual,
-                        dataFim: event.target.value,
-                      }))
-                    }
-                    style={inputStyle}
-                  />
-                </Field>
-                <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "rgba(0,0,0,0.02)", borderRadius: 6, border: "1px solid var(--border)" }}>
-                  <input
-                    type="checkbox"
-                    id="chkDiaTodo"
-                    checked={formBloqueio.diaTodo || formBloqueio.periodo === "dia_todo"}
-                    onChange={(e) => {
-                      const checked = e.target.checked;
-                      setFormBloqueio(atual => ({
-                        ...atual,
-                        diaTodo: checked,
-                        periodo: checked ? "dia_todo" : "apenas_dia",
-                        inicioHora: checked ? "00:00" : (atual.inicioHora === "00:00" ? "08:00" : atual.inicioHora),
-                        fimHora: checked ? "23:59" : (atual.fimHora === "23:59" ? "20:00" : atual.fimHora),
-                      }));
-                    }}
-                    style={{ width: 18, height: 18, cursor: "pointer" }}
-                  />
-                  <label htmlFor="chkDiaTodo" style={{ fontSize: 13, fontWeight: 600, cursor: "pointer", margin: 0 }}>
-                    Bloquear o dia todo (00:00 às 23:59) - Sem atendimentos nesta(s) data(s)
-                  </label>
-                </div>
+                {formBloqueio.periodo === "escolher_data" && (
+                  <Field label="Data Término *">
+                    <input
+                      type="date"
+                      value={formBloqueio.dataFim || formBloqueio.dataFimRepeticao || formBloqueio.dataInicio || dataSelecionada}
+                      onChange={(event) =>
+                        setFormBloqueio((atual) => ({
+                          ...atual,
+                          dataFim: event.target.value,
+                          dataFimRepeticao: event.target.value,
+                        }))
+                      }
+                      style={inputStyle}
+                    />
+                  </Field>
+                )}
                 {!(formBloqueio.diaTodo || formBloqueio.periodo === "dia_todo") && (
                   <>
-                    <Field label="Horário Início">
+                    <Field label="Hora Inicial">
                       <input
                         type="time"
                         required
@@ -6119,7 +6159,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                         style={inputStyle}
                       />
                     </Field>
-                    <Field label="Horário Fim">
+                    <Field label="Hora Final">
                       <input
                         type="time"
                         required
@@ -6135,7 +6175,54 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                     </Field>
                   </>
                 )}
-                <Field label="Motivo / Observações" full>
+                <Field label="Dia da semana:" full>
+                  <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", padding: "8px 12px", background: "rgba(0,0,0,0.03)", borderRadius: 8, border: "1px solid var(--border)" }}>
+                    {[
+                      { id: 1, label: "Seg" },
+                      { id: 2, label: "Ter" },
+                      { id: 3, label: "Qua" },
+                      { id: 4, label: "Qui" },
+                      { id: 5, label: "Sex" },
+                      { id: 6, label: "Sab" },
+                      { id: 0, label: "Dom" },
+                    ].map((d) => {
+                      const arr = Array.isArray(formBloqueio.diasSemana) ? formBloqueio.diasSemana : [1, 2, 3, 4, 5, 6, 0];
+                      const marcado = arr.includes(d.id);
+                      return (
+                        <label key={d.id} style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 13.5, fontWeight: marcado ? 700 : 500 }}>
+                          <input
+                            type="checkbox"
+                            checked={marcado}
+                            onChange={(e) => {
+                              const val = e.target.checked ? [...arr, d.id] : arr.filter((id) => id !== d.id);
+                              setFormBloqueio((atual) => ({
+                                ...atual,
+                                diasSemana: val,
+                                periodo: val.length < 7 && val.length > 0 && (!atual.periodo || atual.periodo === "apenas_dia") ? "1_ano" : atual.periodo,
+                              }));
+                            }}
+                          />
+                          {d.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </Field>
+                <Field label="Título do Bloqueio *" full>
+                  <input
+                    required
+                    value={formBloqueio.titulo}
+                    onChange={(event) =>
+                      setFormBloqueio((atual) => ({
+                        ...atual,
+                        titulo: event.target.value,
+                      }))
+                    }
+                    style={inputStyle}
+                    placeholder="Ex: Buscar filho no judô, Ausência Dino, Folga, Almoço…"
+                  />
+                </Field>
+                <Field label="Obs / Motivo" full>
                   <input
                     value={formBloqueio.motivo}
                     onChange={(event) =>
@@ -6290,13 +6377,23 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                           {item.motivo ? (" · Motivo: " + item.motivo) : ""}
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        style={{ ...styles.small, color: "#dc2626", borderColor: "#fca5a5", cursor: "pointer" }}
-                        onClick={() => desativarBloqueio(item)}
-                      >
-                        🗑️ Desbloquear
-                      </button>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          style={{ ...styles.small, color: "#dc2626", borderColor: "#fca5a5", cursor: "pointer" }}
+                          onClick={() => desativarBloqueio(item)}
+                        >
+                          🗑️ Desbloquear dia
+                        </button>
+                        <button
+                          type="button"
+                          style={{ ...styles.small, color: "#b45309", borderColor: "#fcd34d", cursor: "pointer" }}
+                          onClick={() => desativarSerieBloqueio(item)}
+                          title="Desbloquear todos os dias futuros desta série recorrente"
+                        >
+                          🗓️ Desbloquear série
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -7857,7 +7954,36 @@ export default function BarbeariaERP({ tabInicial } = {}) {
 
   function renderModal() {
     if (modal === "bloqueioAgenda") {
+      const HORARIOS_15_MIN = [];
+      for (let h = 0; h < 24; h++) {
+        for (let m = 0; m < 60; m += 15) {
+          HORARIOS_15_MIN.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
+        }
+      }
+      HORARIOS_15_MIN.push("23:59");
+
+      const diasSemanaAtuais = Array.isArray(formBloqueio.diasSemana)
+        ? formBloqueio.diasSemana
+        : [1, 2, 3, 4, 5, 6, 0];
+
+      const NOMES_DIAS = { 1: "Segunda", 2: "Terça", 3: "Quarta", 4: "Quinta", 5: "Sexta", 6: "Sábado", 0: "Domingo" };
+      const diasMarcadosTexto = [1, 2, 3, 4, 5, 6, 0]
+        .filter((id) => diasSemanaAtuais.includes(id))
+        .map((id) => NOMES_DIAS[id])
+        .join(", ");
+
       const atalhos = [
+        {
+          rotulo: "🥋 Bruno: Buscar filho no Judô (Seg e Qua 18:00–18:30)",
+          titulo: "Buscar filho no judô",
+          motivo: "Toda segunda e quarta das 18:00 às 18:30 o Bruno busca o filho dele no judô",
+          inicio: "18:00",
+          fim: "18:30",
+          diaTodo: false,
+          periodo: "1_ano",
+          diasSemana: [1, 3],
+          brunoAuto: true,
+        },
         {
           rotulo: "👑 Seg e Ter (Dino)",
           titulo: "Ausência Dino",
@@ -7865,24 +7991,9 @@ export default function BarbeariaERP({ tabInicial } = {}) {
           inicio: "00:00",
           fim: "23:59",
           diaTodo: true,
-          dataInicio: "2026-11-09",
-          dataFim: "2026-11-10",
-          periodo: "escolher_data",
+          periodo: "30_dias",
           diasSemana: [1, 2],
           dinoAuto: true,
-        },
-        {
-          rotulo: "✈️ Viagem Nati (17 e 18/11)",
-          titulo: "Viagem Nati",
-          motivo: "Nati em viagem (17 e 18 de novembro) - agenda bloqueada",
-          inicio: "00:00",
-          fim: "23:59",
-          diaTodo: true,
-          dataInicio: "2026-11-17",
-          dataFim: "2026-11-18",
-          periodo: "escolher_data",
-          diasSemana: [0, 1, 2, 3, 4, 5, 6],
-          natiAuto: true,
         },
         {
           rotulo: "🥪 Almoço (12h às 13h)",
@@ -7890,6 +8001,8 @@ export default function BarbeariaERP({ tabInicial } = {}) {
           motivo: "Horário de almoço",
           inicio: "12:00",
           fim: "13:00",
+          periodo: "1_ano",
+          diasSemana: [1, 2, 3, 4, 5, 6],
         },
         {
           rotulo: "🥗 Almoço (13h às 14h)",
@@ -7897,6 +8010,8 @@ export default function BarbeariaERP({ tabInicial } = {}) {
           motivo: "Horário de almoço",
           inicio: "13:00",
           fim: "14:00",
+          periodo: "1_ano",
+          diasSemana: [1, 2, 3, 4, 5, 6],
         },
         {
           rotulo: "☕ Pausa (30 min)",
@@ -7909,24 +8024,20 @@ export default function BarbeariaERP({ tabInicial } = {}) {
           rotulo: "🏥 Compromisso Pessoal",
           titulo: "Compromisso",
           motivo: "Consulta / Assunto pessoal",
-          inicio: "16:00",
-          fim: "17:00",
-        },
-        {
-          rotulo: "📋 Reunião / Treinamento",
-          titulo: "Reunião",
-          motivo: "Treinamento e alinhamento interno",
-          inicio: "08:00",
-          fim: "09:00",
+          inicio: "18:00",
+          fim: "18:30",
         },
         {
           rotulo: "🏖️ Folga (Dia Todo)",
           titulo: "Folga",
           motivo: "Dia de folga do profissional",
-          inicio: "08:00",
-          fim: "19:00",
+          inicio: "00:00",
+          fim: "23:59",
+          diaTodo: true,
+          periodo: "dia_todo",
         },
       ];
+
       return (
         <Modal
           title="🔒 Bloquear Horário na Agenda"
@@ -7956,12 +8067,13 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                       padding: "6px 12px",
                       fontSize: 12,
                       borderRadius: 8,
+                      borderColor: at.brunoAuto ? "#f59e0b" : undefined,
+                      background: at.brunoAuto ? "rgba(245, 158, 11, 0.14)" : undefined,
                     }}
-                    onClick={() =>
-                    {
+                    onClick={() => {
                       const dino = at.dinoAuto ? profissionais.find((p) => /dino/i.test(p.nome)) : null;
                       const nati = at.natiAuto ? profissionais.find((p) => /nati|natani/i.test(p.nome) || /nati|natani/i.test(p.apelido || "")) : null;
-                      const profAlvo = dino ? dino.id : (nati ? nati.id : atual.profissionalId);
+                      const bruno = at.brunoAuto ? profissionais.find((p) => /bruno/i.test(p.nome) || /bruno/i.test(p.apelido || "")) : null;
                       setFormBloqueio((atual) => ({
                         ...atual,
                         titulo: at.titulo,
@@ -7969,22 +8081,22 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                         inicioHora: at.inicio,
                         fimHora: at.fim,
                         diaTodo: at.diaTodo || false,
-                        dataInicio: at.dataInicio || atual.dataInicio,
-                        dataFim: at.dataFim || atual.dataFim,
-                        periodo: at.periodo || atual.periodo,
-                        diasSemana: at.diasSemana || atual.diasSemana,
-                        profissionalId: profAlvo,
-                      }))
-                    }
-                    }
+                        dataInicio: at.dataInicio || atual.dataInicio || atual.data || dataSelecionada,
+                        dataFim: at.dataFim || atual.dataFim || atual.data || dataSelecionada,
+                        periodo: at.periodo || atual.periodo || "apenas_dia",
+                        diasSemana: at.diasSemana || atual.diasSemana || [1, 2, 3, 4, 5, 6, 0],
+                        profissionalId: bruno ? bruno.id : dino ? dino.id : nati ? nati.id : atual.profissionalId,
+                      }));
+                    }}
                   >
                     {at.rotulo}
                   </button>
                 ))}
               </div>
             </div>
+
             <div style={styles.formGrid}>
-              <Field label="Profissional">
+              <Field label="Profissional:" full>
                 <select
                   value={formBloqueio.profissionalId || ""}
                   onChange={(e) =>
@@ -7995,7 +8107,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                   }
                   style={inputStyle}
                 >
-                  <option value="">Toda a unidade / Equipe</option>
+                  <option value="">Selecione... (ou Toda a unidade / Equipe)</option>
                   {profissionais
                     .filter((p) => p.ativo !== false)
                     .map((p) => (
@@ -8005,27 +8117,29 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                     ))}
                 </select>
               </Field>
-              <Field label="Data de Início *">
+
+              <Field label="Data:">
                 <input
                   type="date"
                   required
-                  value={formBloqueio.data || dataSelecionada}
+                  value={formBloqueio.data || formBloqueio.dataInicio || dataSelecionada}
                   onChange={(e) => {
                     const d = e.target.value;
-                    setFormBloqueio((atual) => ({ ...atual, data: d }));
+                    setFormBloqueio((atual) => ({ ...atual, data: d, dataInicio: d }));
                     if (d) setDataSelecionada(d);
                   }}
                   style={inputStyle}
                 />
               </Field>
-              <Field label="Período de Bloqueio">
+
+              <Field label="Período:">
                 <select
-                  value={formBloqueio.periodo}
+                  value={formBloqueio.periodo || "apenas_dia"}
                   onChange={(e) => {
                     const val = e.target.value;
                     setFormBloqueio((atual) => {
-                      let fim = atual.fimHora;
-                      let inicio = atual.inicioHora;
+                      let fim = atual.fimHora || "11:00";
+                      let inicio = atual.inicioHora || "10:00";
                       if (val === "dia_todo") {
                         inicio = "00:00";
                         fim = "23:59";
@@ -8053,6 +8167,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                       return {
                         ...atual,
                         periodo: val,
+                        diaTodo: val === "dia_todo",
                         inicioHora: inicio,
                         fimHora: fim,
                       };
@@ -8061,91 +8176,45 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                   style={inputStyle}
                 >
                   <option value="apenas_dia">Apenas este dia</option>
-                  <option value="30_min">30 Minutos</option>
-                  <option value="1_hora">1 Hora</option>
-                  <option value="2_horas">2 Horas</option>
-                  <option value="3_horas">3 Horas</option>
-                  <option value="dia_todo">Dia todo (00:00 às 23:59)</option>
-                  <option value="uma_semana">Uma semana</option>
+                  <option value="uma_semana">Uma semana (7 dias)</option>
                   <option value="15_dias">15 dias</option>
-                  <option value="30_dias">30 dias</option>
-                  <option value="60_dias">60 dias</option>
-                  <option value="1_ano">1 ano</option>
+                  <option value="30_dias">30 dias (1 mês)</option>
+                  <option value="60_dias">60 dias (2 meses)</option>
+                  <option value="90_dias">90 dias (3 meses)</option>
+                  <option value="180_dias">180 dias (6 meses)</option>
+                  <option value="1_ano">1 ano (12 meses)</option>
+                  <option value="2_anos">2 anos (24 meses)</option>
                   <option value="indeterminado">Tempo indeterminado</option>
                   <option value="escolher_data">Escolher uma data final</option>
+                  <option value="30_min">Duração rápida: 30 Minutos</option>
+                  <option value="1_hora">Duração rápida: 1 Hora</option>
+                  <option value="2_horas">Duração rápida: 2 Horas</option>
+                  <option value="3_horas">Duração rápida: 3 Horas</option>
+                  <option value="dia_todo">Dia todo (00:00 às 23:59)</option>
                 </select>
               </Field>
+
               {formBloqueio.periodo === "escolher_data" && (
                 <Field label="Data Final *">
                   <input
                     type="date"
                     required
-                    value={formBloqueio.dataFimRepeticao}
+                    value={formBloqueio.dataFimRepeticao || formBloqueio.dataFim || ""}
                     onChange={(e) =>
                       setFormBloqueio((atual) => ({
                         ...atual,
                         dataFimRepeticao: e.target.value,
+                        dataFim: e.target.value,
                       }))
                     }
                     style={inputStyle}
                   />
                 </Field>
               )}
-              {formBloqueio.periodo !== "apenas_dia" && (
-                <Field label="Dias da semana" full>
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 12,
-                      flexWrap: "wrap",
-                      marginTop: 4,
-                    }}
-                  >
-                    {[
-                      { id: 1, label: "Seg" },
-                      { id: 2, label: "Ter" },
-                      { id: 3, label: "Qua" },
-                      { id: 4, label: "Qui" },
-                      { id: 5, label: "Sex" },
-                      { id: 6, label: "Sáb" },
-                      { id: 0, label: "Dom" },
-                    ].map((d) => (
-                      <label
-                        key={d.id}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 4,
-                          cursor: "pointer",
-                          fontSize: 14,
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={formBloqueio.diasSemana.includes(d.id)}
-                          onChange={(e) => {
-                            const val = e.target.checked
-                              ? [...formBloqueio.diasSemana, d.id]
-                              : formBloqueio.diasSemana.filter(
-                                  (id) => id !== d.id,
-                                );
-                            setFormBloqueio((atual) => ({
-                              ...atual,
-                              diasSemana: val,
-                            }));
-                          }}
-                        />
-                        {d.label}
-                      </label>
-                    ))}
-                  </div>
-                </Field>
-              )}
-              <Field label="Início *">
-                <input
-                  type="time"
-                  required
-                  value={formBloqueio.inicioHora}
+
+              <Field label="Hora Inicial:">
+                <select
+                  value={formBloqueio.inicioHora || "10:00"}
                   onChange={(e) =>
                     setFormBloqueio((atual) => ({
                       ...atual,
@@ -8153,13 +8222,18 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                     }))
                   }
                   style={inputStyle}
-                />
+                >
+                  {HORARIOS_15_MIN.map((h) => (
+                    <option key={`ini-${h}`} value={h}>
+                      {h}
+                    </option>
+                  ))}
+                </select>
               </Field>
-              <Field label="Término *">
-                <input
-                  type="time"
-                  required
-                  value={formBloqueio.fimHora}
+
+              <Field label="Hora Final:">
+                <select
+                  value={formBloqueio.fimHora || "11:00"}
                   onChange={(e) =>
                     setFormBloqueio((atual) => ({
                       ...atual,
@@ -8167,25 +8241,178 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                     }))
                   }
                   style={inputStyle}
-                />
+                >
+                  {HORARIOS_15_MIN.map((h) => (
+                    <option key={`fim-${h}`} value={h}>
+                      {h}
+                    </option>
+                  ))}
+                </select>
               </Field>
-              <Field label="Título / Motivo Principal *">
-                <input
-                  required
-                  placeholder="Ex: Almoço, Médico, Folga..."
-                  value={formBloqueio.titulo}
-                  onChange={(e) =>
-                    setFormBloqueio((atual) => ({
-                      ...atual,
-                      titulo: e.target.value,
-                    }))
-                  }
-                  style={inputStyle}
-                />
+
+              <Field label="Dia da semana:" full>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    flexWrap: "wrap",
+                    padding: "10px 14px",
+                    background: "rgba(255,255,255,0.03)",
+                    border: "1px solid var(--line)",
+                    borderRadius: 10,
+                    marginTop: 4,
+                  }}
+                >
+                  <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                    {[
+                      { id: 1, label: "Seg" },
+                      { id: 2, label: "Ter" },
+                      { id: 3, label: "Qua" },
+                      { id: 4, label: "Qui" },
+                      { id: 5, label: "Sex" },
+                      { id: 6, label: "Sab" },
+                      { id: 0, label: "Dom" },
+                    ].map((d) => {
+                      const marcado = diasSemanaAtuais.includes(d.id);
+                      return (
+                        <label
+                          key={d.id}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                            cursor: "pointer",
+                            fontSize: 14,
+                            fontWeight: marcado ? 700 : 500,
+                            color: marcado ? "var(--fg)" : "var(--muted)",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={marcado}
+                            style={{ width: 17, height: 17, accentColor: "#2563eb", cursor: "pointer" }}
+                            onChange={(e) => {
+                              const val = e.target.checked
+                                ? [...diasSemanaAtuais, d.id]
+                                : diasSemanaAtuais.filter((id) => id !== d.id);
+                              setFormBloqueio((atual) => ({
+                                ...atual,
+                                diasSemana: val,
+                                // Se o usuario escolheu dias da semana especificos e estava em 'apenas_dia', promove para '1_ano' automaticamente
+                                periodo:
+                                  val.length < 7 && val.length > 0 && (!atual.periodo || atual.periodo === "apenas_dia")
+                                    ? "1_ano"
+                                    : atual.periodo,
+                              }));
+                            }}
+                          />
+                          {d.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      style={{ ...styles.small, fontSize: 11, padding: "4px 8px" }}
+                      onClick={() =>
+                        setFormBloqueio((atual) => ({
+                          ...atual,
+                          diasSemana: [1, 3],
+                          periodo: !atual.periodo || atual.periodo === "apenas_dia" ? "1_ano" : atual.periodo,
+                        }))
+                      }
+                    >
+                      Seg e Qua
+                    </button>
+                    <button
+                      type="button"
+                      style={{ ...styles.small, fontSize: 11, padding: "4px 8px" }}
+                      onClick={() =>
+                        setFormBloqueio((atual) => ({
+                          ...atual,
+                          diasSemana: [2, 4],
+                          periodo: !atual.periodo || atual.periodo === "apenas_dia" ? "1_ano" : atual.periodo,
+                        }))
+                      }
+                    >
+                      Ter e Qui
+                    </button>
+                    <button
+                      type="button"
+                      style={{ ...styles.small, fontSize: 11, padding: "4px 8px" }}
+                      onClick={() =>
+                        setFormBloqueio((atual) => ({
+                          ...atual,
+                          diasSemana: [1, 2, 3, 4, 5],
+                          periodo: !atual.periodo || atual.periodo === "apenas_dia" ? "1_ano" : atual.periodo,
+                        }))
+                      }
+                    >
+                      Seg a Sex
+                    </button>
+                    <button
+                      type="button"
+                      style={{ ...styles.small, fontSize: 11, padding: "4px 8px" }}
+                      onClick={() =>
+                        setFormBloqueio((atual) => ({
+                          ...atual,
+                          diasSemana: [1, 2, 3, 4, 5, 6, 0],
+                        }))
+                      }
+                    >
+                      Todos
+                    </button>
+                  </div>
+                </div>
+                {(diasSemanaAtuais.length < 7 || (formBloqueio.periodo && formBloqueio.periodo !== "apenas_dia")) && (
+                  <div
+                    style={{
+                      marginTop: 8,
+                      padding: "8px 12px",
+                      borderRadius: 8,
+                      background: "rgba(37, 99, 235, 0.12)",
+                      border: "1px solid rgba(37, 99, 235, 0.35)",
+                      fontSize: 12.5,
+                      color: "#93c5fd",
+                      fontWeight: 600,
+                    }}
+                  >
+                    📅 Recorrência programada: aplicar toda <strong>{diasMarcadosTexto || "semana"}</strong> das{" "}
+                    <strong>{formBloqueio.inicioHora || "10:00"}</strong> às{" "}
+                    <strong>{formBloqueio.fimHora || "11:00"}</strong>.
+                  </div>
+                )}
               </Field>
-              <Field label="Observação / Detalhe" full>
-                <input
-                  placeholder="Ex: Almoço com a família, dentista às 16h..."
+
+              <Field label="Título*:" full>
+                <div style={{ position: "relative" }}>
+                  <input
+                    required
+                    maxLength={255}
+                    placeholder="Ex: Buscar filho no judô, Almoço, Médico, Folga..."
+                    value={formBloqueio.titulo}
+                    onChange={(e) =>
+                      setFormBloqueio((atual) => ({
+                        ...atual,
+                        titulo: e.target.value,
+                      }))
+                    }
+                    style={inputStyle}
+                  />
+                  <div style={{ textAlign: "right", fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
+                    {255 - String(formBloqueio.titulo || "").length}/255
+                  </div>
+                </div>
+              </Field>
+
+              <Field label="Obs:" full>
+                <textarea
+                  rows={2}
+                  placeholder="Ex: Toda segunda e quarta das 18:00 às 18:30 o Bruno busca o filho dele no judô..."
                   value={formBloqueio.motivo}
                   onChange={(e) =>
                     setFormBloqueio((atual) => ({
@@ -8193,12 +8420,12 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                       motivo: e.target.value,
                     }))
                   }
-                  style={inputStyle}
+                  style={{ ...inputStyle, resize: "vertical" }}
                 />
               </Field>
             </div>
             <p style={{ fontSize: 12, color: "var(--muted)", margin: 0 }}>
-              🔒 Enquanto o horário estiver bloqueado, o sistema rejeitará
+              🔒 Enquanto o horário estiver bloqueado, o sistema e o T-Rex rejeitarão
               agendamentos sobrepostos tanto no painel quanto no agendamento
               online público.
             </p>
@@ -8214,13 +8441,13 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                 type="submit"
                 style={{
                   ...styles.primary,
-                  background: "#f59e0b",
-                  color: "#000000",
+                  background: "#2563eb",
+                  color: "#ffffff",
                   fontWeight: 800,
                 }}
                 disabled={salvando}
               >
-                {salvando ? "Bloqueando…" : "Salvar Bloqueio"}
+                {salvando ? "Salvando…" : "Salvar"}
               </button>
             </div>
           </form>

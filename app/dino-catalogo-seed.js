@@ -199,10 +199,20 @@ export function provisionarCatalogoDino({
   let servicosAtualizados = 0;
   let produtosAtualizados = 0;
 
-  // 1. Sincronizar Serviços
+  // 1. Sincronizar Serviços (se a empresa já possui catálogo real próprio, mantém os seeds inativos e fora do agendamento online)
+  const temServicosReais = Object.values(estado.servicos).some(
+    (s) => s && !String(s.id || '').startsWith('srv-dino-') && s.ativo !== false
+  );
   for (const srv of SERVICOS_DINO_OFICIAIS) {
+    const ativoEfetivo = temServicosReais ? false : srv.ativo;
     if (!estado.servicos[srv.id]) {
-      estado.servicos[srv.id] = { ...srv, empresaId };
+      estado.servicos[srv.id] = {
+        ...srv,
+        duracaoMinutos: srv.duracaoMin,
+        ativo: ativoEfetivo,
+        permiteAgendamentoOnline: false,
+        empresaId,
+      };
       servicosAtualizados++;
     } else {
       // Atualiza valores preservando histórico
@@ -211,9 +221,28 @@ export function provisionarCatalogoDino({
         nome: srv.nome,
         preco: srv.preco,
         duracaoMin: srv.duracaoMin,
+        duracaoMinutos: srv.duracaoMin,
         categoria: srv.categoria,
-        ativo: srv.ativo,
+        ativo: ativoEfetivo,
+        permiteAgendamentoOnline: false,
       });
+    }
+  }
+
+  // Higieniza também outras chaves de barbearia que tenham serviços reais + seeds legados
+  const root = getDbRoot();
+  for (const [, barb] of Object.entries(root.barbearias || {})) {
+    const srvs = barb?.servicos || {};
+    const possuiReais = Object.values(srvs).some(
+      (s) => s && !String(s.id || '').startsWith('srv-dino-') && s.ativo !== false
+    );
+    if (possuiReais) {
+      for (const s of Object.values(srvs)) {
+        if (s && String(s.id || '').startsWith('srv-dino-')) {
+          s.ativo = false;
+          s.permiteAgendamentoOnline = false;
+        }
+      }
     }
   }
 

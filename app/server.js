@@ -9858,10 +9858,12 @@ app.post('/api/admin/barbearia/bloqueios', async (req, res) => {
     const empresaId = legacyEmpresaId(req);
     const lojaId = legacyLojaId(req);
     if (Array.isArray(req.body.lote)) {
-      const bloqueios = req.body.lote.map(b => barbeariaErpKytto.criarBloqueio(empresaId, { ...b, lojaId }));
-      for (const b of bloqueios) {
-        void sincronizarBloqueioNoPostgres(empresaId, b).catch(() => null);
-      }
+      const bloqueios = barbeariaErpKytto.criarBloqueiosEmLote(empresaId, req.body.lote, lojaId);
+      void (async () => {
+        for (const b of bloqueios) {
+          await sincronizarBloqueioNoPostgres(empresaId, b).catch(() => null);
+        }
+      })();
       return res.status(201).json({ ok: true, bloqueios });
     }
     const bloqueio = barbeariaErpKytto.criarBloqueio(empresaId, { ...(req.body || {}), lojaId });
@@ -9869,6 +9871,18 @@ app.post('/api/admin/barbearia/bloqueios', async (req, res) => {
     res.status(201).json({ ok: true, bloqueio });
   }
   catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.post('/api/admin/barbearia/bloqueios/desativar-serie', async (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const desativados = barbeariaErpKytto.desativarBloqueiosSerie(empresaId, req.body || {});
+    void (async () => {
+      for (const b of desativados) {
+        await desativarBloqueioNoPostgres(empresaId, b).catch(() => null);
+      }
+    })();
+    res.json({ ok: true, desativados, total: desativados.length });
+  } catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.patch('/api/admin/barbearia/bloqueios/:id', async (req, res) => {
   try {
