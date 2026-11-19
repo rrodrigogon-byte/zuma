@@ -27,15 +27,18 @@ import { ensureWhatsappLead, listPromotionsToAnnounce, updateWhatsappMarketingCo
 import { enviarAudio, enviarEnquete, enviarFigurinha, enviarMensagem, enqueteSuportada, foiEnviadoPelaPlataforma } from './whatsapp.js';
 import { generateSpeechWithType } from './whatsapp-ai-tts.js';
 import { enviarFigurinhaDoMomento } from './whatsapp-stickers.js';
-import { encontrarClientePorTelefone } from '../dino-clientes-vinculo.js';
-import { planoDoTelefone } from '../dino-captacao-kytto.js';
+import { encontrarClientePorTelefone, telefoneChave } from '../dino-clientes-vinculo.js';
+import { planoDoTelefone, listarListaEspera, alterarStatusListaEspera, revogarAvisosListaEspera } from '../dino-captacao-kytto.js';
 import { cleanCustomerDisplayName } from './whatsapp-ai-normalize.js';
 import * as barbearia from '../barbearia-erp-kytto.js';
 import { getDynamicLearnedGuidance } from './trex-auto-learner.js';
 
-function formatarDicaDinoUpsell(empresaId) {
+function formatarDicaDinoUpsell(empresaId, phone = '') {
   try {
     const eid = empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    if (phone && planoDoTelefone?.(eid, phone)) {
+      return '💡 *Benefício Club Dino:* Como assinante do Clube, você tem 10% de desconto exclusivo em qualquer produto de bancada! Deseja que eu já separe sua Pomada Matte ou Óleo de Barba para retirada?';
+    }
     const prods = barbearia.listarProdutosRevenda?.(eid, { incluirInativos: false }) || [];
     const pomada = prods.find(p => p.ativo !== false && p.nome?.toLowerCase().includes('pomada') && p.nome?.toLowerCase().includes('matte'))
       || prods.find(p => p.ativo !== false && p.nome?.toLowerCase().includes('pomada'))
@@ -2148,7 +2151,7 @@ export async function confirmNextAppointment(context, userText = '') {
         const primeiroNome = context.customerName ? `, ${context.customerName.split(' ')[0]}` : '';
         const servicoComProf = serviceWithProfessional(especifico.servico?.nome || 'Seu horário', especifico.profissional?.nome || 'a equipe');
         return {
-          text: `Confirmado${primeiroNome}! ${servicoComProf}, ${quando}. Te esperamos na Dino Barbearia! 💈\n\n${formatarDicaDinoUpsell(context?.empresaId)}`,
+          text: `Confirmado${primeiroNome}! ${servicoComProf}, ${quando}. Te esperamos na Dino Barbearia! 💈\n\n${formatarDicaDinoUpsell(context?.empresaId, context?.phone)}`,
           kind: 'presence_confirmed',
         };
       }
@@ -2230,7 +2233,7 @@ export async function confirmNextAppointment(context, userText = '') {
     const quando = new Date(proximo.dataHora).toLocaleString('pt-BR', { timeZone: 'America/Cuiaba', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const servicoComProf = serviceWithProfessional(proximo.servico?.nome || 'Seu horário', proximo.profissional?.nome || 'a equipe');
     return {
-      text: `Confirmado${primeiroNome}! ${servicoComProf}, ${quando}. Te esperamos na Dino Barbearia! 💈\n\n${formatarDicaDinoUpsell(context?.empresaId)}`,
+      text: `Confirmado${primeiroNome}! ${servicoComProf}, ${quando}. Te esperamos na Dino Barbearia! 💈\n\n${formatarDicaDinoUpsell(context?.empresaId, context?.phone)}`,
       kind: 'presence_confirmed',
     };
   }
@@ -2243,14 +2246,72 @@ export async function confirmNextAppointment(context, userText = '') {
   const diaTexto = new Date(primeiro.dataHora).toLocaleDateString('pt-BR', { timeZone: 'America/Cuiaba', weekday: 'short', day: '2-digit', month: '2-digit' });
   const profNome = primeiro.profissional?.nome || 'a equipe';
   return {
-    text: `Confirmados${primeiroNome}! Seus ${confirmados.length} horários com ${profNome}, ${diaTexto}: ${itensTexto}. Te esperamos na Dino Barbearia! 💈\n\n${formatarDicaDinoUpsell(context?.empresaId)}`,
+    text: `Confirmados${primeiroNome}! Seus ${confirmados.length} horários com ${profNome}, ${diaTexto}: ${itensTexto}. Te esperamos na Dino Barbearia! 💈\n\n${formatarDicaDinoUpsell(context?.empresaId, context?.phone)}`,
     kind: 'presence_confirmed',
   };
 }
 
+export async function confirmWaitlistSlot(context, userText = '') {
+  try {
+    const empId = context.empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    const tel = context.phone;
+    if (!tel) return null;
+    const chave = telefoneChave(tel);
+    const todasEntradas = listarListaEspera(empId, { status: 'aguardando' });
+    const entradas = todasEntradas.filter((it) =>
+      telefoneChave(it.telefone) === chave && Array.isArray(it.avisos) && it.avisos.length > 0
+    );
+    if (!entradas.length) return null;
+    const entrada = entradas[entradas.length - 1];
+    const ultimoAviso = entrada.avisos[entrada.avisos.length - 1];
+    if (!ultimoAviso) return null;
+
+    const dataAgenda = entrada.data;
+    const horaLocal = ultimoAviso.horaLocal;
+    const servicoId = entrada.servicoId;
+    const profissionalId = entrada.profissionalId && entrada.profissionalId !== 'qualquer' ? entrada.profissionalId : 'qualquer';
+
+    const run = createWhatsappAiToolExecutor({ ...context, toolResults: undefined, toolLinks: undefined });
+    const res = await run('preparar_agendamento', {
+      serviceId: servicoId,
+      professionalId: profissionalId,
+      date: dataAgenda,
+      time: horaLocal,
+      customerName: entrada.nome || context.customerName || 'Cliente',
+    });
+
+    if (res?.acao?.id) {
+      await confirmPendingAction({
+        empresaId: context.empresaId,
+        lojaId: context.lojaId,
+        sessionId: context.sessionId,
+        phone: context.phone,
+        customerName: entrada.nome || context.customerName,
+      });
+
+      alterarStatusListaEspera(empId, entrada.id, 'agendado', entrada.lojaId);
+
+      const [ano, mes, dia] = String(dataAgenda).split('-');
+      const servicoNome = entrada.servicoNome || 'seu atendimento';
+      const primeiroNome = cleanCustomerDisplayName(entrada.nome || context.customerName || '').split(' ')[0];
+      const saudacao = primeiroNome ? `${primeiroNome}, ` : '';
+
+      return {
+        text: `Sensacional, ${saudacao}consegui a vaga pra você! 💈 Seu horário de *${servicoNome}* está garantido e confirmado para o dia *${dia}/${mes}* às *${horaLocal}* na Dino Barbearia!
+
+Te esperamos lá!`,
+        kind: 'waitlist_confirmed',
+      };
+    }
+  } catch (err) {
+    console.warn('[whatsapp-ai] Erro ao confirmar vaga da lista de espera:', err.message);
+  }
+  return null;
+}
+
 function isCancellationRequest(text) {
   const t = String(text ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
-  return /\b(nao deu certo de (?:eu )?ir|nao vou (?:conseguir|poder) ir|nao poderei ir|nao vou mais conseguir|cancela|cancelar|cancelo|desmarca|desmarcar|desmarco|imprevisto nao vou)\b/i.test(t);
+  return /\b(pode\s+cancelar|cancela|cancelar|cancelo|desmarca|desmarcar|desmarco|pode\s+desmarcar|nao\s+deu\s+certo\s+de\s+(?:eu\s+)?ir|nao\s+vou\s+(?:conseguir|poder)\s+(?:ir|comparecer)|nao\s+poderei\s+(?:ir|comparecer)|nao\s+vou\s+mais\s+(?:conseguir|poder)|imprevisto\s+(?:hoje\s+)?nao\s+vou|nao\s+vou\s+conseguir|nao\s+consigo\s+ir)\b/i.test(t);
 }
 
 async function deterministicResponseCore(task, channel, session, message) {
@@ -2402,6 +2463,48 @@ async function deterministicResponseCore(task, channel, session, message) {
     }
   }
 
+  const ultimoEnvioEraAvisoVaga = recentMsgs.some((m) =>
+    m.papel === 'assistant' && (
+      m.metadados?.kind === 'waitlist_offer' ||
+      m.metadados?.tipo === 'aviso_vaga' ||
+      /(?:abriu\s+um\s+hor[aá]rio|lista\s+de\s+espera|como\s+voc[eê]\s+pediu\s+na\s+lista)/i.test(m.conteudo || '')
+    )
+  );
+
+  // 1. Cliente da lista de espera aceita a vaga liberada ("Sim", "Quero", "Pode marcar", "Bora")
+  if (!session.assigned_to && ultimoEnvioEraAvisoVaga && ehIntencaoConfirmacao) {
+    const vagaConfirmada = await confirmWaitlistSlot(context, message.text).catch(() => null);
+    if (vagaConfirmada) return vagaConfirmada;
+  }
+
+  // 2. Cliente da lista de espera pede para sair ou recusa a vaga
+  if (!session.assigned_to && ultimoEnvioEraAvisoVaga && /(?:sair|cancelar|cancela|nao\s+quero|n[aã]o\s+precisa)/i.test(message.text)) {
+    try {
+      const empId = context.empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+      revogarAvisosListaEspera(empId, context.phone);
+      return {
+        text: 'Combinado! Desativamos os avisos da lista de espera para este horário. Se precisar de algo, só me chamar por aqui!',
+        kind: 'waitlist_revoked',
+      };
+    } catch {}
+  }
+
+  // 3. Cliente responde ao lembrete pedindo cancelamento direto ("Não vou conseguir ir", "Cancela")
+  if (!session.assigned_to && (!session.acao_pendente || ultimoEnvioEraLembrete) && isCancellationRequest(message.text)) {
+    try {
+      const prepared = await toolPrepareCancellation({ ...context, customerText: message.text }, {});
+      if (prepared?.ok && prepared.acao) {
+        session.acao_pendente = { actionId: prepared.acao.id, type: prepared.acao.tipo, summary: prepared.acao.resumo, mostrado: true, preparadoEm: new Date().toISOString() };
+        await db.query(`UPDATE whatsapp_ai_sessions SET acao_pendente = acao_pendente || '{"mostrado":true}'::jsonb WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`, [session.id, session.empresa_id, session.loja_id]);
+        return {
+          text: composeReplyWithNewAction('Tranquilo, imprevistos acontecem! Já preparei o cancelamento do seu horário:', session.acao_pendente, persona),
+          kind: 'cancellation_prepared',
+        };
+      }
+    } catch {}
+  }
+
+  // 4. Confirmação de presença em agendamento existente
   if (!session.assigned_to && (!session.acao_pendente || ultimoEnvioEraLembrete || perguntouQualConfirmar) && (ehIntencaoConfirmacao || (temLembreteAtivo && (ehIntencaoConfirmacao || perguntouQualConfirmar)))) {
     const confirmado = await confirmNextAppointment(context, message.text).catch(() => null);
     if (confirmado) {

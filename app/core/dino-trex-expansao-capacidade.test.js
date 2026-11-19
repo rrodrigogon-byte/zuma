@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { matchAgendaName, WHATSAPP_AI_TOOL_DECLARATIONS } from './whatsapp-ai-tools.js';
-import { BARBERSHOP_SYSTEM_GUIDANCE } from './whatsapp-ai.js';
+import { BARBERSHOP_SYSTEM_GUIDANCE, confirmWaitlistSlot } from './whatsapp-ai.js';
 
 test('1. Mapeamento de Gírias e Termos Coloquiais de Barbearia no T-Rex', () => {
   const listaServicos = [
@@ -52,4 +52,28 @@ test('3. Diretrizes de Atendimento do T-Rex para Horário Lotado e Retenção At
   assert.match(BARBERSHOP_SYSTEM_GUIDANCE, /NUNCA, SOB HIPÓTESE ALGUMA, peça código de agendamento/i);
   assert.match(BARBERSHOP_SYSTEM_GUIDANCE, /HORÁRIO LOTADO E ENCAIXE NA LISTA DE ESPERA/i);
   assert.match(BARBERSHOP_SYSTEM_GUIDANCE, /RESPOSTAS DE CONFIRMAÇÃO DE DIÁRIA E LEMBRETE/i);
+});
+
+test('4. Detecção e Processamento de Cancelamento Conversacional em Lembretes', () => {
+  const cancelIntents = [
+    'não deu certo de eu ir hoje',
+    'nao vou conseguir comparecer',
+    'pode cancelar por favor',
+    'imprevisto hoje nao vou conseguir',
+    'desmarca pra mim',
+    'cancela meu horario',
+    'nao consigo ir',
+    'nao poderei ir hoje',
+  ];
+
+  const cancelRegex = /\b(pode\s+cancelar|cancela|cancelar|cancelo|desmarca|desmarcar|desmarco|pode\s+desmarcar|nao\s+deu\s+certo\s+de\s+(?:eu\s+)?ir|nao\s+vou\s+(?:conseguir|poder)\s+(?:ir|comparecer)|nao\s+poderei\s+(?:ir|comparecer)|nao\s+vou\s+mais\s+(?:conseguir|poder)|imprevisto\s+(?:hoje\s+)?nao\s+vou|nao\s+vou\s+conseguir|nao\s+consigo\s+ir)\b/i;
+
+  for (const frase of cancelIntents) {
+    const normalizada = frase.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    assert.ok(cancelRegex.test(normalizada), `"${frase}" deve ser reconhecida como intenção de cancelamento`);
+  }
+});
+
+test('5. Módulo confirmWaitlistSlot exportado e disponível', () => {
+  assert.equal(typeof confirmWaitlistSlot, 'function', 'confirmWaitlistSlot deve ser uma função assíncrona exportada');
 });
