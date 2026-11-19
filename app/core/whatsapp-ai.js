@@ -28,7 +28,7 @@ import { enviarAudio, enviarEnquete, enviarFigurinha, enviarMensagem, enqueteSup
 import { generateSpeechWithType } from './whatsapp-ai-tts.js';
 import { enviarFigurinhaDoMomento } from './whatsapp-stickers.js';
 import { encontrarClientePorTelefone, telefoneChave } from '../dino-clientes-vinculo.js';
-import { planoDoTelefone, listarListaEspera, alterarStatusListaEspera, revogarAvisosListaEspera } from '../dino-captacao-kytto.js';
+import { planoDoTelefone, perfilDoTelefone, listarListaEspera, alterarStatusListaEspera, revogarAvisosListaEspera } from '../dino-captacao-kytto.js';
 import { cleanCustomerDisplayName } from './whatsapp-ai-normalize.js';
 import * as barbearia from '../barbearia-erp-kytto.js';
 import { getDynamicLearnedGuidance } from './trex-auto-learner.js';
@@ -396,6 +396,13 @@ export const BARBERSHOP_SYSTEM_GUIDANCE = `
   * FILTRO DE HORÁRIOS COMERCIAIS (NUNCA OFEREÇA MADRUGADA): O expediente da barbearia é das 07h30 às 19h00. NUNCA ofereça horários antes das 08h00 (como 06h00 ou 06h30) a não ser que o cliente tenha solicitado explicitamente horário muito cedo ou de madrugada!
   * REMARCAÇÃO IMEDIATA APÓS LEMBRETE: Se o cliente responder a um lembrete dizendo "remarca", "outro dia", "outro horário" ou "na sexta que vem no mesmo horário", o agendamento a ser remarcado é OBRIGATORIAMENTE o agendamento do lembrete acabado de enviar! Chame preparar_remarcacao imediatamente com a nova data e horário sem perguntar "qual agendamento quer remarcar?".
   * RESOLUÇÃO RESILIENTE DE SERVIÇOS: Se o cliente pedir "corte e barba", "barba e corte" ou "cabelo e barba", use sempre o combo oficial ("Combo Corte + Barba" ou "CORTE E BARBA PREMIUM"). NUNCA diga que o código do serviço não foi encontrado e nunca exiba mensagens cruas de erro da API.
+  * COMPREENSÃO DE DADOS E ATENDIMENTO VELOZ DE CLIENTES HABITUAIS (FAST-TRACK VIP):
+    - O Motor KyttoIA fornece no contexto os dados reais do cliente (barbeiro habitual, serviço de costume, total de visitas e turno preferido).
+    - Quando o cliente habitual perguntar horários sem especificar o serviço ("tem horário hoje?", "tem vaga amanhã?", "quero marcar"), NÃO FAÇA perguntas burocráticas que atrasam a conversa!
+    - Chame imediatamente sugerir_proximos_horarios para o barbeiro habitual e serviço frequente dele e ofereça de prontidão as 2 melhores opções de horários livres!
+    - Exemplo veloz: "Opa, [Nome]! Para fazer [Serviço Habitual] com [Barbeiro Habitual], tenho hoje às [Horário 1] ou [Horário 2]! Qual fica melhor pra você?".
+    - Se o cliente tiver plano ou pacote ativo, mencione sempre que o atendimento está incluso por R$ 0,00 adicional!
+    - PERSISTÊNCIA DO BARBEIRO: Se o cliente citou um profissional específico ("Nati", "Bruno", "Dino"), NUNCA mude para outro barbeiro nem passe 'qualquer' para as ferramentas!
   * RESPEITO AO CADASTRO DO CLIENTE: NUNCA pergunte "qual seu nome completo" se o cliente já tiver nome na conversa ou no cadastro. Use o nome com naturalidade e acolhimento.
   * PROIBIÇÃO ABSOLUTA DE JUSTIFICAR ERROS OU RECUSAS DIZENDO QUE "FOI UM TESTE":
     - É TERMINANTEMENTE PROIBIDO dizer para qualquer cliente que um agendamento, horário, aviso ou mensagem passada "foi um teste", "era teste", "foi apenas um teste" ou "desconsidere, era teste"!
@@ -1107,11 +1114,23 @@ export function customerContextFor(toolContext) {
     }
   } catch (_) {}
 
+  // Detecção e fixação de profissional focal da conversa (válido para clientes novos e cadastrados)
+  let blocoFocal = '';
+  const combinedRecent = `${toolContext?.customerText || ''} ${toolContext?.recentUserText || ''} ${toolContext?.lastAssistantText || ''}`;
+  let profFocal = '';
+  if (/\b(nati|natani)\b/i.test(combinedRecent)) profFocal = 'Nati';
+  else if (/\b(bruno|mendes)\b/i.test(combinedRecent)) profFocal = 'Bruno Mendes Pedroso';
+  else if (/\b(dino|mestre dino|guilherme)\b/i.test(combinedRecent)) profFocal = 'Guilherme Cunha (Dino)';
+
+  if (profFocal) {
+    blocoFocal = `\n🎯 PROFISSIONAL FOCAL FIXADO NESTA CONVERSA: ${profFocal}. O cliente está negociando com ${profFocal}. Ao chamar sugerir_proximos_horarios ou preparar_agendamento, use OBRIGATORIAMENTE professionalId para ${profFocal}. NUNCA passe professionalId: 'qualquer' nem aloque outro barbeiro!`;
+  }
+
   if (!cliente) {
-    if (alertaPlano) {
-      return `DADOS DO CLIENTE NESTA CONVERSA: Cliente identificado pelo telefone ${toolContext.phone}.\n${alertaPlano}\nAtenda com o calor humano do T-Rex, resolva o horário pelo plano do cliente com R$ 0,00 adicional e, logo após, colete data de aniversário, bairro/cidade e estado civil para cadastrar com atualizar_cadastro_cliente.`;
-    }
-    return 'DADOS DO CLIENTE NESTA CONVERSA: Cliente novo ou ainda sem cadastro completo. Atenda com o calor humano do T-Rex, resolva o horário ou dúvida dele e, logo após, colete data de aniversário, bairro/cidade e estado civil para cadastrar com atualizar_cadastro_cliente.';
+    const textoBase = alertaPlano
+      ? `DADOS DO CLIENTE NESTA CONVERSA: Cliente identificado pelo telefone ${toolContext.phone}.\n${alertaPlano}\nAtenda com o calor humano do T-Rex, resolva o horário pelo plano do cliente com R$ 0,00 adicional e, logo após, colete data de aniversário, bairro/cidade e estado civil para cadastrar com atualizar_cadastro_cliente.`
+      : 'DADOS DO CLIENTE NESTA CONVERSA: Cliente novo ou ainda sem cadastro completo. Atenda com o calor humano do T-Rex, resolva o horário ou dúvida dele e, logo após, colete data de aniversário, bairro/cidade e estado civil para cadastrar com atualizar_cadastro_cliente.';
+    return `${textoBase}${blocoFocal}`;
   }
   const pendentes = [];
   if (!cliente.aniversario && !cliente.dataNascimento) pendentes.push('data de aniversário');
@@ -1166,7 +1185,24 @@ export function customerContextFor(toolContext) {
     ? `Campos pendentes no cadastro para você perguntar com simpatia após confirmar o agendamento: ${pendentes.join(', ')}.`
     : 'Cadastro completo! Agradeça o cliente e chame pelo primeiro nome com calor humano.';
 
-  return `PERFIL DO CLIENTE CADASTRADO (${conhecidos}). ${alertaPlano ? `\n${alertaPlano}\n` : ''}${alertaAniversario ? `${alertaAniversario} ` : ''}${alertaEsposa ? `${alertaEsposa} ` : ''}${instrucaoPendentes}`;
+  // Análise de dados históricos e hábitos operacionais do cliente (KyttoIA CRM)
+  let blocoHabitos = '';
+  try {
+    const perfilCompleto = perfilDoTelefone(toolContext.empresaId, toolContext.phone);
+    const padrao = perfilCompleto?.padraoCliente || {};
+    const visitas = padrao.visitasTotais || 0;
+    const profHabitual = padrao.profissionalPreferido || (cliente.barbeiroTitular?.nome || null);
+    const servicoHabitual = padrao.servicoHabitual || (cliente.preferencias?.corte || 'Corte Premium');
+    const turnoHabitual = padrao.periodoPreferido || null;
+
+    if (visitas > 0 || profHabitual || servicoHabitual) {
+      blocoHabitos = `\n📊 ANÁLISE DE DADOS DO CLIENTE (HISTÓRICO REAL):\n- Total de visitas na barbearia: ${visitas} atendimento(s) concluídos.\n${profHabitual ? `- Barbeiro habitual de preferência: ${profHabitual}.\n` : ''}${servicoHabitual ? `- Serviço habitual de costume: ${servicoHabitual}.\n` : ''}${turnoHabitual ? `- Turno preferido: ${turnoHabitual}.\n` : ''}- DIRETRIZ DE ATENDIMENTO ULTRA-RÁPIDO (FAST-TRACK): Se o cliente pedir horário de forma aberta ("tem horário hoje?", "quero cortar"), priorize imediatamente o barbeiro habitual (${profHabitual || 'a equipe'}) no serviço ${servicoHabitual} via sugerir_proximos_horarios e já apresente na 1ª resposta as 2 melhores opções!`;
+    }
+  } catch (_) {}
+
+
+
+  return `PERFIL DO CLIENTE CADASTRADO (${conhecidos}). ${blocoHabitos}${blocoFocal}${alertaPlano ? `\n${alertaPlano}\n` : ''}${alertaAniversario ? `${alertaAniversario} ` : ''}${alertaEsposa ? `${alertaEsposa} ` : ''}${instrucaoPendentes}`;
 }
 
 export async function agendaContextFor(toolContext, { now = Date.now() } = {}) {

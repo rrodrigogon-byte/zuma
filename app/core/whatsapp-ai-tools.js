@@ -1082,7 +1082,23 @@ async function toolNextSlots(context, args = {}) {
     else throw new WhatsappAiToolError('informe o serviço (id de listar_servicos)', 'SERVICE_REQUIRED');
   }
   const serviceId = await resolveAgendaId(scope, rawService, 'serviceId');
-  const rawProfArg = args.professionalId || (resCtx.isRescheduleText && resCtx.matchedAppointment?.profissional?.id ? resCtx.matchedAppointment.profissional.id : 'qualquer');
+  let rawProfArg = args.professionalId;
+  if (!rawProfArg || String(rawProfArg).toLowerCase() === 'qualquer') {
+    if (resCtx.isRescheduleText && resCtx.matchedAppointment?.profissional?.id) {
+      rawProfArg = resCtx.matchedAppointment.profissional.id;
+    } else {
+      const combined = `${context?.customerText || ''} ${context?.recentUserText || ''} ${context?.lastAssistantText || ''}`;
+      if (/\b(nati|natani)\b/i.test(combined)) {
+        rawProfArg = 'Nati';
+      } else if (/\b(bruno|mendes)\b/i.test(combined)) {
+        rawProfArg = 'Bruno Mendes Pedroso';
+      } else if (/\b(dino|mestre dino|guilherme)\b/i.test(combined)) {
+        rawProfArg = 'Guilherme Cunha (Dino)';
+      } else {
+        rawProfArg = 'qualquer';
+      }
+    }
+  }
   const professionalId = await resolveAgendaId(scope, rawProfArg, 'professionalId', { allowAny: true });
   const timeConstraints = extractTimeConstraintFromText(context?.customerText || '');
   const effectiveNotBefore = timeConstraints.notBefore || (fromDate === today ? localTimeHHMM() : '');
@@ -1473,7 +1489,20 @@ async function toolPrepareExpense(context) {
 }
 async function toolPrepareAppointment(context, args = {}) {
   const scope = contextScope(context);
-  const professionalId = await resolveAgendaId(scope, args.professionalId || 'qualquer', 'professionalId', { allowAny: true });
+  let rawProfPrep = args.professionalId;
+  if (!rawProfPrep || String(rawProfPrep).toLowerCase() === 'qualquer') {
+    const combined = `${context?.customerText || ''} ${context?.recentUserText || ''} ${context?.lastAssistantText || ''}`;
+    if (/\b(nati|natani)\b/i.test(combined)) {
+      rawProfPrep = 'Nati';
+    } else if (/\b(bruno|mendes)\b/i.test(combined)) {
+      rawProfPrep = 'Bruno Mendes Pedroso';
+    } else if (/\b(dino|mestre dino|guilherme)\b/i.test(combined)) {
+      rawProfPrep = 'Guilherme Cunha (Dino)';
+    } else {
+      rawProfPrep = 'qualquer';
+    }
+  }
+  const professionalId = await resolveAgendaId(scope, rawProfPrep, 'professionalId', { allowAny: true });
   let rawService = cleanText(args.serviceId, 100);
   if (!rawService) {
     const servicos = await listSchedulingServices(scope).catch(() => []);
