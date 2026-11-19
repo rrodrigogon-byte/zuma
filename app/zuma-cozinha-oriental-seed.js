@@ -3808,15 +3808,24 @@ export const ZUMA_WHATSAPP_CONFIG = {
   tipo_canal: "cliente",
   status: "ativo",
   persona: {
-    id: "akira",
-    nome: "Akira",
+    id: "zumi",
+    nome: "Zumi",
+    subtitulo: "O Mascote Ninja do Zuma",
     ativo: true,
     mensagensCurtas: true,
     figurinhas: true,
     revelarIa: "quando_perguntado",
     motorIa: "KyttoIA 2.5 Flash",
-    tom: "Ágil, caloroso, altamente cortês e especialista em culinária japonesa",
-    saudacao: "Konbanwa! Bem-vindo ao Zuma Cozinha Oriental. Sou o Akira, assistente de atendimento ágil do Zuma. Como posso preparar sua experiência gastronômica hoje?",
+    mascote: {
+      nome: "Zumi",
+      tipo: "Peixinho-salmão ninja veloz",
+      bordaoPrincipal: "Zuma chegou, fome acabou!",
+      bordaoSecundario: "Bora, Tangará! Hoje é dia de Zumi!",
+      visual: "Salmão laranja com listras brancas de sashimi, faixa ninja preta com o logo ZUMA e hashis nas costas como espadas ninjas",
+      paleta: ["#0b0c10", "#f8fafc", "#f97316", "#e11d48"]
+    },
+    tom: "Ágil, brincalhão, acolhedor, rápido e especialista em culinária japonesa",
+    saudacao: "Bora, Tangará! 🍣 Sou o Zumi, o mascote ninja do Zuma Cozinha Oriental! Como posso preparar sua experiência gastronômica hoje? Pode me pedir recomendações, montar seu pedido por orçamento ou reservar sua mesa!",
   },
   capabilities: {
     captureLeads: true,
@@ -3824,7 +3833,7 @@ export const ZUMA_WHATSAPP_CONFIG = {
     operateStore: true,
     humanHandoff: true,
     reminders: true,
-    sendPromotions: false,
+    sendPromotions: true,
     financialOperations: true,
     manageAppointments: false,
     tableReservations: true
@@ -3841,12 +3850,13 @@ export const ZUMA_WHATSAPP_CONFIG = {
     notify_email: "contato@zumacozinhaoriental.com.br"
   },
   regras_operacionais: {
-    tempo_estimado_entrega_min: 35,
-    tempo_estimado_entrega_max: 50,
+    tempo_estimado_entrega_min: 30,
+    tempo_estimado_entrega_max: 45,
     tempo_retirada_min: 20,
     taxa_entrega_padrao: 12.00,
+    frete_gratis_condicional_valor: 120.00,
     kit_padrao: "1 kit por pedido (2 hashis, sachê de tarê, sachê de shoyu tradicional e shoyu light)",
-    politica_alteracoes: "Para preservar o equilíbrio e padrão do sushiman, os combinados e pratos não sofrem alterações de peças."
+    politica_alteracoes: "Harmonizado com carinho pelo nosso chef sushiman. Caso você tenha alguma restrição alimentar severa, nos informe nas observações para avaliarmos com todo cuidado!"
   }
 };
 
@@ -3901,6 +3911,191 @@ export const ZUMA_COMMERCE_STOREFRONT = {
       termsUrl: ""
     }
   }
+};
+
+export const ZUMA_MASCOTE_ZUMI = {
+  nome: "Zumi",
+  papel: "Mascote Oficial Ninja do Zuma Cozinha Oriental",
+  descricao: "Peixinho-salmão ninja veloz que entrega sushi voando, tornando cada pedido e comunicação uma experiência divertida e carismática.",
+  visual: {
+    corpo: "Salmão laranja com listras brancas transversais estilo corte sashimi nobre",
+    faixa: "Faixa ninja preta na testa com o logo oficial ZUMA em tipografia japonesa",
+    equipamento: "Par de hashis artesanais cruzados nas costas como espadas ninjas",
+    paletaCores: {
+      fundoPrimario: "#0b0c10",
+      textoClaro: "#f8fafc",
+      salmaoDestaque: "#f97316",
+      carmesimZuma: "#e11d48"
+    }
+  },
+  personalidade: "Ágil, brincalhão, acolhedor, rápido e com identidade local tangaraense.",
+  bordoes: [
+    "Zuma chegou, fome acabou!",
+    "Bora, Tangará! Hoje é dia de Zumi!",
+    "Do sushi bar do Zuma direto pra sua mesa!"
+  ],
+  variacoesTematicas: [
+    { dia: "segunda", versao: "Zumi Express", aderecos: "Mochila térmica ninja e cronômetro de 40 min" },
+    { dia: "terca", versao: "Zumi Hot Roll", aderecos: "Boné estilizado e dois hot rolls nas mãos" },
+    { dia: "quarta", versao: "Zumi Fit", aderecos: "Faixa esportiva e tigela de poke de salmão fresco" },
+    { dia: "quinta", versao: "Zumi da Rodada", aderecos: "Cartão de raspadinha dourada premiada" },
+    { dia: "domingo", versao: "Zumi Chef Família", aderecos: "Touca alta de mestre sushiman e barca gigante" }
+  ]
+};
+
+export const ZUMA_PLANO_CRESCIMENTO_250 = {
+  metaGeral: "+250% de faturamento (multiplicador 3,5x sobre o faturamento base)",
+  formulaMultiplicadora: "1.4 × 1.5 × 1.4 × 1.2 = 3.528x",
+  alavancas: [
+    {
+      alavanca: "Horas Abertas",
+      multiplicador: 1.4,
+      acoes: [
+        "Abertura do turno de almoço de quinta a domingo (11h às 14h) com cardápio Zuma Executivo até R$ 39,90",
+        "Segunda Express: operação enxuta 18h às 22h somente delivery com os 20 itens mais vendidos e entrega <45 min"
+      ],
+      impactoEsperado: "Elimina 50% das horas ociosas comerciais da semana"
+    },
+    {
+      alavanca: "Novos Clientes & Conversão",
+      multiplicador: 1.5,
+      acoes: [
+        "Instalação e mensuração de Pixel Meta e Google Ads em zuma.kytto.com.br",
+        "Presença do mascote Zumi no topo do storefront e em anúncios hiperlocais em Tangará da Serra",
+        "Indique-e-Ganhe divulgado ativamente: 50 pontos (R$ 10) para quem indica e frete grátis para o amigo",
+        "Frete grátis condicional para pedidos acima de R$ 120,00",
+        "Redução do tempo médio de entrega de 76 min para menos de 45 min com KDS setorizado"
+      ],
+      impactoEsperado: "+50% de clientes convertidos e menor custo de aquisição (CAC)"
+    },
+    {
+      alavanca: "Frequência de Recompra",
+      multiplicador: 1.4,
+      acoes: [
+        "Régua de 8 campanhas automatizadas de WhatsApp pelo Motor KyttoIA 2.5 Flash",
+        "Lançamento do Clube Zumi de Assinatura mensal recorrente (R$ 29,90/mês)",
+        "Cashback de 10% com expiração de 30 dias para incentivar ciclo rápido de recompra",
+        "Dias temáticos semanais com ofertas de valor percebido sem canibalização de margem"
+      ],
+      impactoEsperado: "Clientes habituais passam de 1,2 para 1,9 pedidos/mês"
+    },
+    {
+      alavanca: "Ticket Médio",
+      multiplicador: 1.2,
+      acoes: [
+        "Upsell inteligente no carrinho e conversacional no WhatsApp KyttoIA (sugestão de sodas artesanais, gunkans e harumakis)",
+        "Combos estruturados para casais e famílias com sobremesas inclusas",
+        "Higienização de cardápio: remoção do preço riscado falso em 146 itens e foco em combos de alto valor"
+      ],
+      impactoEsperado: "Elevação do ticket médio de R$ 115,00 para R$ 138,50 (+20,4%)"
+    }
+  ]
+};
+
+export const ZUMA_PROGRAMACAO_SEMANAL = [
+  { diaSemana: "Segunda-feira", turno: "18h às 22h", tema: "Segunda Express", modalidade: "Delivery & Takeaway", mecanica: "Cardápio enxuto com os 20 mais vendidos e entrega expressa garantida em até 40 min." },
+  { diaSemana: "Terça-feira", turno: "18h às 22h45", tema: "Terça do Hot Roll", modalidade: "Salão & Delivery", mecanica: "Hot Roll Filadélfia Especial em dobro até 20h para compras via WhatsApp ou Loja Kytto." },
+  { diaSemana: "Quarta-feira", turno: "18h às 22h45", tema: "Quarta Fit & Poke", modalidade: "Salão & Delivery", mecanica: "Pokes havaianos, sashimis nobres e sodas sem açúcar com combo especial para atletas e academias." },
+  { diaSemana: "Quinta-feira", turno: "11h-14h (Almoço) e 18h-22h45", tema: "Quinta da Rodada do Zumi", modalidade: "Salão, Almoço & Delivery", mecanica: "Todo pedido ganha uma Raspadinha Digital do Zumi no WhatsApp com prêmios imediatos." },
+  { diaSemana: "Sexta-feira", turno: "11h-14h (Almoço) e 18h-23h", tema: "Sexta Premium Zuma", modalidade: "Salão, Almoço & Delivery", mecanica: "Sem descontos promocionais; foco em combinados especiais do Chef, vinhos, drinks e velocidade no salão." },
+  { diaSemana: "Sábado", turno: "11h-14h (Almoço) e 18h-23h", tema: "Sábado Gastronômico", modalidade: "Salão, Almoço & Delivery", mecanica: "Pico de movimento de casais e grupos; foco em experiências de sushi bar e esteira KDS rápida." },
+  { diaSemana: "Domingo", turno: "11h-14h (Almoço) e 18h-22h30", tema: "Domingo em Família", modalidade: "Salão, Almoço & Delivery", mecanica: "Combos Família (56 a 68 peças) com sobremesas Harumaki e sodas italianas inclusas." }
+];
+
+export const ZUMA_CAMPANHAS_WHATSAPP = [
+  {
+    id: "camp-terca-hotroll",
+    nome: "Terça do Hot Roll em Dobro",
+    gatilho: "Terça-feira às 16h",
+    segmento: "Base ativa geral (com opt-in)",
+    mensagemModelo: "Bora, Tangará! 🍣 Terça é dia de Zumi! Hoje tem Hot Roll Filadélfia quentinho e crocante EM DOBRO nos pedidos até as 20h! Peça agora e garanta o seu: {{link_loja}}",
+    metaConversao: "10% de conversão em 4 horas"
+  },
+  {
+    id: "camp-quarta-fit",
+    nome: "Quarta Fit & Poke",
+    gatilho: "Quarta-feira às 11h e 17h",
+    segmento: "Clientes com histórico de Poke, Sashimi e Linha Fit",
+    mensagemModelo: "Quarta leve e saborosa com o Zumi! 🥗 Peça seu Poke de Salmão Fresco ou Sashimi e ganhe uma Soda Italiana refrescante de Maçã Verde. Escolha o seu: {{link_loja}}",
+    metaConversao: "12% de conversão"
+  },
+  {
+    id: "camp-saudade",
+    nome: "Régua da Saudade (30, 60 e 90 dias)",
+    gatilho: "Dias fracos (segunda a quarta)",
+    segmento: "Clientes sem pedidos há 30, 60 ou 90 dias",
+    mensagemModelo: "Que saudade de você! 🎏 O Zumi guardou um presente especial: R$ 15 de desconto no seu combinado favorito até domingo. Use o cupom VOLTAZUMI: {{link_loja}}",
+    metaConversao: "8% de reativação de clientes dormentes"
+  },
+  {
+    id: "camp-aniversario",
+    nome: "Aniversariantes do Mês",
+    gatilho: "Toda segunda-feira de manhã",
+    segmento: "Aniversariantes da semana",
+    mensagemModelo: "Feliz aniversário! 🎂 O Zuma quer comemorar com você: seu Temaki Especial de Salmão é por nossa conta em qualquer pedido neste mês de festa! Resgate aqui: {{link_loja}}",
+    metaConversao: "25% de conversão de aniversariantes"
+  },
+  {
+    id: "camp-pos-pedido-nps",
+    nome: "Pós-Pedido NPS & Indique um Amigo",
+    gatilho: "Dia seguinte ao pedido às 12h",
+    segmento: "Clientes que receberam pedido ontem",
+    mensagemModelo: "Como foi sua experiência com o Zuma ontem? 🌟 Avalie em 1 toque (0 a 10) e compartilhe seu link de Indique e Ganhe: seu amigo ganha frete grátis e você ganha 50 pontos (R$ 10)! {{link_indique}}",
+    metaConversao: "30% de respostas de NPS"
+  },
+  {
+    id: "camp-primeiro-para-segundo",
+    nome: "Conversão de 1º para 2º Pedido",
+    gatilho: "7 dias após o primeiro pedido",
+    segmento: "Clientes com apenas 1 pedido realizado",
+    mensagemModelo: "Adoramos receber seu primeiro pedido no Zuma! 🍣 Para sua segunda experiência ser ainda mais especial, o frete da entrega é cortesia do Zumi! Aproveite hoje: {{link_loja}}",
+    metaConversao: "18% de conversão para cliente recorrente"
+  },
+  {
+    id: "camp-vip-degustacao",
+    nome: "Acesso Exclusivo VIP",
+    gatilho: "Lançamento de pratos do Chef Sushiman",
+    segmento: "Top 10% maiores compradores (Ticket > R$ 200)",
+    mensagemModelo: "Convite especial para nosso cliente VIP! 👑 Nosso Chef preparou uma criação exclusiva fora do cardápio e você tem prioridade de prova com 20% de bônus. Faça sua reserva: {{link_loja}}",
+    metaConversao: "35% de conversão de alto valor"
+  },
+  {
+    id: "camp-rodada-zumi",
+    nome: "Quinta da Rodada do Zumi (Gamificada)",
+    gatilho: "Quinta-feira às 17h",
+    segmento: "Base ativa geral",
+    mensagemModelo: "Chegou a Quinta da Rodada do Zumi! 🎰 Todo pedido hoje ganha uma Raspadinha Digital: você pode ganhar porções de Hot Roll, sobremesas Harumaki ou cupom de R$ 20! Peça e raspe: {{link_loja}}",
+    metaConversao: "15% de conversão no dia"
+  }
+];
+
+export const ZUMA_CLUBE_ASSINATURA = {
+  nome: "Clube Zumi VIP",
+  valorMensal: 29.90,
+  recorrencia: "mensal",
+  beneficios: [
+    "Frete grátis ilimitado de segunda a quinta-feira (economia média de R$ 45/mês)",
+    "1 Temaki Especial de Salmão grátis por mês para retirada ou no delivery",
+    "10% de cashback automático em todos os pedidos pelo Kytto",
+    "Acesso antecipado a novos pratos e festivais gastronômicos do Zuma",
+    "Tag exclusiva 'Sócio Clube Zumi' no WhatsApp e no KDS da cozinha com prioridade de expedição"
+  ],
+  metaAdesao: "150 assinantes nos primeiros 90 dias (gerando R$ 4.485/mês de receita recorrente pura + garantia de 4 pedidos/mês por sócio)"
+};
+
+export const ZUMA_RANKING_MESTRE_SUSHI = {
+  nome: "Passaporte Mestre Sushi Zuma",
+  mecanica: "Gamificação por categorias degustadas pelo cliente",
+  selosDisponiveis: [
+    { categoria: "Combinados", nome: "Mestre dos Combinados", pecasMinimas: 1 },
+    { categoria: "Sashimis", nome: "Ninja do Sashimi", pecasMinimas: 1 },
+    { categoria: "Uramakis & Hossomakis", nome: "Mestre dos Enrolados", pecasMinimas: 2 },
+    { categoria: "Gunkans Especiais", nome: "Faixa Preta do Flambado", pecasMinimas: 1 },
+    { categoria: "Hot Rolls", nome: "Guardião da Crocância", pecasMinimas: 2 },
+    { categoria: "Pratos Quentes & Pokes", nome: "Sushiman Completo", pecasMinimas: 1 },
+    { categoria: "Bebidas Artesanais", nome: "Sommelier de Sodas", pecasMinimas: 1 }
+  ],
+  recompensaFinal: "Completando os 7 selos no ano, o cliente ganha a Camiseta Oficial Exclusiva do Mascote Zumi + 1 Barca Especial do Chef."
 };
 
 export const ZUMA_GANHOS_ENGENHARIA_CARDAPIO = {

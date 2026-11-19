@@ -16,6 +16,12 @@ import {
   ZUMA_WHATSAPP_CONFIG,
   ZUMA_COMMERCE_STOREFRONT,
   ZUMA_GANHOS_ENGENHARIA_CARDAPIO,
+  ZUMA_MASCOTE_ZUMI,
+  ZUMA_PLANO_CRESCIMENTO_250,
+  ZUMA_PROGRAMACAO_SEMANAL,
+  ZUMA_CAMPANHAS_WHATSAPP,
+  ZUMA_CLUBE_ASSINATURA,
+  ZUMA_RANKING_MESTRE_SUSHI,
   provisionarZumaRestaurante
 } from './zuma-cozinha-oriental-seed.js';
 
@@ -103,10 +109,20 @@ test('Zuma Cozinha Oriental - Perfis de clientes VIP no CRM e fatos de IA', () =
 test('Zuma Cozinha Oriental - Integrações e Motor KyttoIA 2.5 Flash', () => {
   assert.equal(ZUMA_WHATSAPP_CONFIG.status, 'ativo');
   assert.equal(ZUMA_WHATSAPP_CONFIG.persona.motorIa, 'KyttoIA 2.5 Flash');
-  assert.equal(ZUMA_WHATSAPP_CONFIG.persona.nome, 'Akira');
+  assert.equal(ZUMA_WHATSAPP_CONFIG.persona.nome, 'Zumi');
+  assert.equal(ZUMA_MASCOTE_ZUMI.nome, 'Zumi');
+  assert.ok(ZUMA_MASCOTE_ZUMI.bordoes.length >= 3);
   assert.ok(ZUMA_WHATSAPP_CONFIG.persona.tom.includes('Ágil'));
   assert.equal(ZUMA_COMMERCE_STOREFRONT.alias, 'zuma');
   assert.ok(ZUMA_COMMERCE_STOREFRONT.publicConfig.displayName.includes('ZUMA'));
+});
+
+test('Zuma Cozinha Oriental - Plano de Crescimento +250%, Campanhas e Clube Zumi', () => {
+  assert.equal(ZUMA_PLANO_CRESCIMENTO_250.alavancas.length, 4, 'Deve conter as 4 alavancas multiplicadoras');
+  assert.equal(ZUMA_PROGRAMACAO_SEMANAL.length, 7, 'Deve cobrir os 7 dias da semana');
+  assert.equal(ZUMA_CAMPANHAS_WHATSAPP.length, 8, 'Deve conter as 8 campanhas estratégicas de WhatsApp');
+  assert.equal(ZUMA_CLUBE_ASSINATURA.valorMensal, 29.90);
+  assert.equal(ZUMA_RANKING_MESTRE_SUSHI.selosDisponiveis.length, 7);
 });
 
 test('Zuma Cozinha Oriental - Engenharia de cardápio e projeções financeiras', () => {
