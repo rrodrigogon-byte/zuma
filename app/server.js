@@ -90,7 +90,7 @@ import { responderErro as responderErroBarra } from './modules/acesso/banco.js';
 import { registrarExtensaoWhatsappAi } from './core/whatsapp-ai-extensoes.js';
 import { WHATSAPP_AI_TOOL_DECLARATIONS } from './core/whatsapp-ai-tools.js';
 import { avecGovernanceNoStore } from './core/avec-import-http-policy.js';
-import { whatsappAiOperationalStatus } from './core/whatsapp-ai.js';
+import { whatsappAiOperationalStatus, executarFailoverAutomaticoHandoff } from './core/whatsapp-ai.js';
 import { legacyWppAvailable } from './core/whatsapp-legacy-scope.js';
 import { canCheckWhatsappConnection, safeWhatsappConnection } from './core/whatsapp-connection-readiness.js';
 import { getInstanceStatus, sendTextViaChatbotBackend } from './core/whatsapp-provider.js';
@@ -862,6 +862,31 @@ app.get('/api/admin/dino/nps/ultimas-avaliacoes', (req, res) => {
   try {
     const estatisticas = listarEstatisticasNps();
     res.json({ ok: true, ...estatisticas });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/dino/gestao/executar-failover', async (req, res) => {
+  try {
+    const limiteMinutos = Math.max(1, Math.min(60, Number(req.body?.limiteMinutos || req.query?.limiteMinutos) || 10));
+    const resultado = await executarFailoverAutomaticoHandoff(
+      { empresaId: req.body?.empresaId || req.query?.empresaId, lojaId: req.body?.lojaId || req.query?.lojaId },
+      { limiteMinutos, enviar: req.body?.enviar !== false && req.query?.enviar !== 'false' }
+    );
+    res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/admin/dino/gestao/status-failover', async (req, res) => {
+  try {
+    const resultado = await executarFailoverAutomaticoHandoff(
+      { empresaId: req.query?.empresaId, lojaId: req.query?.lojaId },
+      { limiteMinutos: 10, enviar: false }
+    );
+    res.json({ ok: true, ...resultado });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -13720,6 +13745,14 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
     const intervalo = Math.max(30, Number.parseInt(process.env.WHATSAPP_CONNECTION_WATCHDOG_SECONDS || '60', 10) || 60) * 1000;
     setInterval(() => { vigiarConexoesWhatsapp().catch((error) => console.warn('[WhatsApp] vigia de conexão:', String(error?.message || error).slice(0, 200))); }, intervalo).unref();
   }
+  // Failover Automático de SLA (10 min) para WhatsApp: T-Rex reassume e envia auto-agendamento
+  setInterval(async () => {
+    try {
+      await executarFailoverAutomaticoHandoff({}, { limiteMinutos: 10, enviar: true });
+    } catch (error) {
+      console.warn('[WhatsApp] failover automático SLA:', String(error?.message || error).slice(0, 200));
+    }
+  }, 60 * 1000).unref();
 })().catch(error => {
   console.error('FATAL: falha no boot seguro do SetPoint:', error?.code || error?.message || error);
   process.exit(1);

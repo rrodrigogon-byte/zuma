@@ -20,6 +20,7 @@ const ALLOWED_HANDOFF_LABELS = new Set([
   'T-Rex não soube responder',
   'reclamação',
   'exceção financeira',
+  'failover automático (SLA 10m)',
 ])
 
 function isRecord(value) {
@@ -87,6 +88,13 @@ function validItem(item, index, ids) {
     ultimaRespostaIa: typeof item.ultima_resposta_ia === 'string' ? item.ultima_resposta_ia.slice(0, 160) : '',
     // Vermelho: o T-Rex não resolveu e ninguém assumiu. Sem o campo (API antiga), vale o status.
     precisaAtendente: typeof item.precisa_atendente === 'boolean' ? item.precisa_atendente : (item.status === 'humano' && !item.assigned),
+    tempoEsperaMinutos: typeof item.tempoEsperaMinutos === 'number' && Number.isFinite(item.tempoEsperaMinutos) ? item.tempoEsperaMinutos : 0,
+    slaMinutos: typeof item.slaMinutos === 'number' && Number.isFinite(item.slaMinutos) ? item.slaMinutos : 5,
+    slaExcedido: Boolean(item.slaExcedido),
+    slaAlerta: Boolean(item.slaAlerta),
+    tempoParaFailoverMinutos: typeof item.tempoParaFailoverMinutos === 'number' && Number.isFinite(item.tempoParaFailoverMinutos) ? item.tempoParaFailoverMinutos : 0,
+    failoverIminente: Boolean(item.failoverIminente),
+    statusSla: typeof item.statusSla === 'string' ? item.statusSla : 'ok',
   })
 }
 

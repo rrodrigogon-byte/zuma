@@ -3336,6 +3336,13 @@ export async function listWhatsappAiSessions(context = {}, { limit = 50, status,
             personalization_prompted_at, opportunity_offered_at,
             opportunity_declined_at, opportunity_count,
             estado->>'staffPauseUntil' AS staff_pause_until,
+            (SELECT m.criado_em FROM whatsapp_ai_messages m
+              WHERE m.sessao_id = s.id AND m.empresa_id = s.empresa_id AND m.papel = 'user'
+              ORDER BY m.criado_em DESC LIMIT 1) AS ultima_msg_cliente_em,
+            (SELECT m.criado_em FROM whatsapp_ai_messages m
+              WHERE m.sessao_id = s.id AND m.empresa_id = s.empresa_id AND m.papel = 'assistant'
+                AND (m.metadados->>'autor' = 'equipe' OR m.metadados->>'origem' = 'celular')
+              ORDER BY m.criado_em DESC LIMIT 1) AS ultima_msg_equipe_em,
             (SELECT LEFT(m.conteudo, 160) FROM whatsapp_ai_messages m
               WHERE m.sessao_id = s.id AND m.empresa_id = s.empresa_id AND m.papel = 'user'
               ORDER BY m.criado_em DESC LIMIT 1) AS ultima_mensagem_cliente,
@@ -3350,36 +3357,59 @@ export async function listWhatsappAiSessions(context = {}, { limit = 50, status,
       LIMIT $${values.length}`,
     values,
   );
-  return result.rows.map(row => ({
-    id: row.id,
-    telefone: row.telefone ? `***${row.telefone.slice(-4)}` : '',
-    nome: row.nome,
-    status: row.status,
-    hasPendingAction: row.has_pending_action === true,
-    pendingSummary: row.pending_summary || null,
-    marketingOptOut: row.marketing_opt_out === true,
-    ultima_interacao_em: row.ultima_interacao_em,
-    atualizado_em: row.atualizado_em,
-    handoff_requested_at: row.handoff_requested_at,
-    handoff_reason: row.handoff_reason,
-    handoff_label: motivoLegivel(row.handoff_reason),
-    // Equipe respondendo pelo celular: até quando a IA fica pausada nesta conversa.
-    staff_pause_until: row.handoff_reason === STAFF_REASON && row.staff_pause_until ? row.staff_pause_until : null,
-    assigned: Boolean(row.assigned_to),
-    isMine: Boolean(row.assigned_to && context.usuarioId && String(row.assigned_to) === String(context.usuarioId)),
-    assigned_at: row.assigned_at,
-    closed_at: row.closed_at,
-    priority: Number(row.priority || 0),
-    privacy_notice_at: row.privacy_notice_at,
-    personalization_prompted_at: row.personalization_prompted_at,
-    opportunity_offered_at: row.opportunity_offered_at,
-    opportunity_declined_at: row.opportunity_declined_at,
-    opportunity_count: Number(row.opportunity_count || 0),
-    ultima_mensagem_cliente: row.ultima_mensagem_cliente || '',
-    ultima_resposta_ia: row.ultima_resposta_ia || '',
-    // Vermelho no quadro: a IA não resolveu e ninguém da equipe assumiu ainda.
-    precisa_atendente: row.status === 'humano' && !row.assigned_to && row.handoff_reason !== STAFF_REASON,
-  }));
+  const agora = Date.now();
+  return result.rows.map(row => {
+    const slaMinutos = 5;
+    const limiteFailoverMinutos = 10;
+    const msgClienteEm = row.ultima_msg_cliente_em ? new Date(row.ultima_msg_cliente_em).getTime() : 0;
+    const msgEquipeEm = row.ultima_msg_equipe_em ? new Date(row.ultima_msg_equipe_em).getTime() : 0;
+    const inicioEspera = msgClienteEm || (row.assigned_at ? new Date(row.assigned_at).getTime() : 0) || (row.handoff_requested_at ? new Date(row.handoff_requested_at).getTime() : 0) || (row.ultima_interacao_em ? new Date(row.ultima_interacao_em).getTime() : 0);
+    const aguardandoEquipe = row.status === 'humano' && (!msgEquipeEm || (msgClienteEm && msgClienteEm > msgEquipeEm));
+    const tempoEsperaMinutos = aguardandoEquipe && inicioEspera ? Math.max(0, Math.floor((agora - inicioEspera) / 60000)) : 0;
+    const slaExcedido = aguardandoEquipe && tempoEsperaMinutos >= slaMinutos;
+    const slaAlerta = aguardandoEquipe && !slaExcedido && tempoEsperaMinutos >= 3;
+    const tempoParaFailoverMinutos = aguardandoEquipe ? Math.max(0, limiteFailoverMinutos - tempoEsperaMinutos) : 0;
+    const failoverIminente = aguardandoEquipe && tempoEsperaMinutos >= 8;
+    const statusSla = !aguardandoEquipe ? 'respondido' : slaExcedido ? (tempoEsperaMinutos >= limiteFailoverMinutos ? 'failover_excedido' : 'sla_estourado') : slaAlerta ? 'alerta_amarelo' : 'dentro_do_sla';
+
+    return {
+      id: row.id,
+      telefone: row.telefone ? `***${row.telefone.slice(-4)}` : '',
+      nome: row.nome,
+      status: row.status,
+      hasPendingAction: row.has_pending_action === true,
+      pendingSummary: row.pending_summary || null,
+      marketingOptOut: row.marketing_opt_out === true,
+      ultima_interacao_em: row.ultima_interacao_em,
+      atualizado_em: row.atualizado_em,
+      handoff_requested_at: row.handoff_requested_at,
+      handoff_reason: row.handoff_reason,
+      handoff_label: motivoLegivel(row.handoff_reason),
+      // Equipe respondendo pelo celular: até quando a IA fica pausada nesta conversa.
+      staff_pause_until: row.handoff_reason === STAFF_REASON && row.staff_pause_until ? row.staff_pause_until : null,
+      assigned: Boolean(row.assigned_to),
+      isMine: Boolean(row.assigned_to && context.usuarioId && String(row.assigned_to) === String(context.usuarioId)),
+      assigned_at: row.assigned_at,
+      closed_at: row.closed_at,
+      priority: Number(row.priority || 0),
+      privacy_notice_at: row.privacy_notice_at,
+      personalization_prompted_at: row.personalization_prompted_at,
+      opportunity_offered_at: row.opportunity_offered_at,
+      opportunity_declined_at: row.opportunity_declined_at,
+      opportunity_count: Number(row.opportunity_count || 0),
+      ultima_mensagem_cliente: row.ultima_mensagem_cliente || '',
+      ultima_resposta_ia: row.ultima_resposta_ia || '',
+      tempoEsperaMinutos,
+      slaMinutos,
+      slaExcedido,
+      slaAlerta,
+      tempoParaFailoverMinutos,
+      failoverIminente,
+      statusSla,
+      // Vermelho no quadro: a IA não resolveu e ninguém da equipe assumiu ainda, ou SLA de 5m estourado.
+      precisa_atendente: (row.status === 'humano' && !row.assigned_to && row.handoff_reason !== STAFF_REASON) || slaExcedido,
+    };
+  });
 }
 
 async function auditHandoff(trx, context, sessionId, action, after = {}) {
@@ -4487,4 +4517,185 @@ export async function startWhatsappAiSession(context = {}, input = {}) {
   }
 
   return { ok: true, session, message: messageResult };
+}
+
+/**
+ * Failover Automático de 10 Minutos para atendimento WhatsApp:
+ * Se a conversa estiver em status: 'humano' por mais de 10 minutos sem envio de mensagem pela atendente,
+ * o T-Rex reassume a conversa automaticamente, pede desculpas pela demora e envia o link direto de auto-agendamento.
+ */
+export async function executarFailoverAutomaticoHandoff(context = {}, { limiteMinutos = 10, enviar = true } = {}) {
+  const limite = Math.max(3, Math.min(60, Number(limiteMinutos) || 10));
+  const empresaId = context.empresaId ? String(context.empresaId).trim() : null;
+  const lojaId = context.lojaId ? String(context.lojaId).trim() : null;
+
+  const params = [];
+  let filterClause = "WHERE s.status = 'humano' AND c.provedor = 'whatsapp' AND c.status = 'ativo'";
+  if (empresaId && UUID_PATTERN.test(empresaId)) {
+    params.push(empresaId);
+    filterClause += ` AND s.empresa_id = $${params.length}`;
+  }
+  if (lojaId && UUID_PATTERN.test(lojaId)) {
+    params.push(lojaId);
+    filterClause += ` AND s.loja_id = $${params.length}`;
+  }
+
+  const query = `
+    SELECT s.id, s.empresa_id, s.loja_id, s.canal_id, s.telefone, s.nome, s.handoff_reason,
+           s.handoff_requested_at, s.assigned_to, s.assigned_at, s.ultima_interacao_em,
+           s.estado,
+           c.api_base_url, c.configuracao, c.nome AS canal_nome,
+           (SELECT m.conteudo FROM whatsapp_ai_messages m
+             WHERE m.sessao_id = s.id AND m.empresa_id = s.empresa_id AND m.papel = 'user'
+             ORDER BY m.criado_em DESC LIMIT 1) AS ultima_msg_cliente,
+           (SELECT m.criado_em FROM whatsapp_ai_messages m
+             WHERE m.sessao_id = s.id AND m.empresa_id = s.empresa_id AND m.papel = 'user'
+             ORDER BY m.criado_em DESC LIMIT 1) AS ultima_msg_cliente_em,
+           (SELECT m.criado_em FROM whatsapp_ai_messages m
+             WHERE m.sessao_id = s.id AND m.empresa_id = s.empresa_id AND m.papel = 'assistant'
+               AND (m.metadados->>'autor' = 'equipe' OR m.metadados->>'origem' = 'celular')
+             ORDER BY m.criado_em DESC LIMIT 1) AS ultima_msg_equipe_em
+      FROM whatsapp_ai_sessions s
+      JOIN canais_integracao c ON c.id = s.canal_id AND c.empresa_id = s.empresa_id AND c.loja_id = s.loja_id
+     ${filterClause}
+  `;
+
+  const { rows } = await db.queryRead(query, params).catch(() => ({ rows: [] }));
+  const agora = Date.now();
+  const resgatadas = [];
+
+  for (const session of rows) {
+    const msgClienteEm = session.ultima_msg_cliente_em ? new Date(session.ultima_msg_cliente_em).getTime() : 0;
+    const msgEquipeEm = session.ultima_msg_equipe_em ? new Date(session.ultima_msg_equipe_em).getTime() : 0;
+    const inicioEspera = msgClienteEm || (session.assigned_at ? new Date(session.assigned_at).getTime() : 0) || (session.handoff_requested_at ? new Date(session.handoff_requested_at).getTime() : 0) || (session.ultima_interacao_em ? new Date(session.ultima_interacao_em).getTime() : 0);
+
+    // Se a equipe respondeu DEPOIS da última mensagem do cliente ou início de espera, não há failover
+    if (msgEquipeEm && (!msgClienteEm || msgEquipeEm >= msgClienteEm)) {
+      continue;
+    }
+
+    const minutosEspera = inicioEspera ? Math.max(0, Math.floor((agora - inicioEspera) / 60000)) : 0;
+    if (minutosEspera < limite) {
+      continue;
+    }
+
+    // Sessão estourou o limite de failover (>= 10 min)! O T-Rex reassume.
+    const textoCliente = String(session.ultima_msg_cliente || '').toLowerCase();
+    let profissionalDetectado = '';
+    if (/\b(bruno|brunao)\b/i.test(textoCliente)) {
+      profissionalDetectado = 'bruno';
+    } else if (/\b(nati|natani)\b/i.test(textoCliente)) {
+      profissionalDetectado = 'nati';
+    } else if (/\b(dino|guilherme|mestre dino)\b/i.test(textoCliente)) {
+      profissionalDetectado = 'dino';
+    }
+
+    const linkAgendamento = obterLinkAgendaDino({ professionalIdOrName: profissionalDetectado });
+    const primeiroNome = session.nome ? cleanText(session.nome.split(' ')[0], 40) : '';
+    const saudacao = primeiroNome ? `Olá, ${primeiroNome}! ` : 'Olá! ';
+
+    const textoMensagem = `${saudacao}Peço sinceras desculpas pela demora no retorno! Nossa equipe está em atendimento presencial no momento. 💈\n\nPara sua comodidade e para não atrasar seu agendamento, você pode conferir os horários livres e agendar diretamente no nosso link:\n👉 ${linkAgendamento}\n\n(Ou se preferir, pode me dizer por aqui mesmo o serviço, dia e horário que você prefere que eu agendo agora pra você!)`;
+
+    const updated = await db.transaction(async (trx) => {
+      const up = await trx.query(
+        `UPDATE whatsapp_ai_sessions
+            SET status = 'ativo',
+                estado = (estado - 'handoffReason') - 'staffPauseUntil' || '{"failoverSla10min": true}'::jsonb,
+                handoff_requested_at = NULL,
+                handoff_reason = 'failover_automatico_sla_10min',
+                assigned_to = NULL,
+                assigned_at = NULL,
+                priority = 0,
+                acao_pendente = NULL,
+                atualizado_em = CURRENT_TIMESTAMP
+          WHERE id = $1 AND status = 'humano'
+          RETURNING id, telefone, canal_id, empresa_id, loja_id`,
+        [session.id],
+      );
+      return up.rows[0];
+    }).catch(() => null);
+
+    if (!updated) continue;
+
+    await auditHandoff(db, { empresaId: session.empresa_id, lojaId: session.loja_id, usuarioId: null }, session.id, 'failover_automatico_sla_10min', {
+      minutosEspera,
+      limite,
+      profissionalDetectado: profissionalDetectado || 'geral',
+      linkAgendamento,
+    }).catch(() => null);
+
+    let envioSucesso = false;
+    if (enviar && session.telefone) {
+      try {
+        const tenant = {
+          nome: session.configuracao?.display_name || session.canal_nome || 'Barbearia Dino',
+          whatsapp_api_url: session.api_base_url || undefined,
+          whatsapp_instance: session.configuracao?.instance || undefined,
+          transport: session.configuracao?.transporte === 'waha' || session.configuracao?.provider === 'waha' ? 'waha' : undefined,
+          waha_session: session.configuracao?.waha_session || session.configuracao?.instance || undefined,
+          waha_group_id: session.configuracao?.waha_group_id || undefined,
+          empresa_id: session.empresa_id,
+          loja_id: session.loja_id,
+          canal_id: session.canal_id,
+        };
+
+        const externalId = `trex:failover:${session.id}:${Date.now()}`;
+        const salvo = await db.query(
+          `INSERT INTO whatsapp_ai_messages
+            (empresa_id, loja_id, canal_id, sessao_id, direcao, papel, evento_externo_id, conteudo, metadados, delivery_status)
+           VALUES ($1, $2, $3, $4, 'saida', 'assistant', $5, $6, $7::jsonb, 'sending')
+           RETURNING id`,
+          [
+            session.empresa_id,
+            session.loja_id,
+            session.canal_id,
+            session.id,
+            externalId,
+            textoMensagem,
+            JSON.stringify({ autor: 'trex', motivo: 'failover_automatico_sla_10min', linkAgendamento }),
+          ],
+        ).catch(() => null);
+
+        const resEnvio = await enviarMensagem(tenant, session.telefone, textoMensagem).catch((err) => ({ ok: false, error: err?.message }));
+        envioSucesso = resEnvio?.ok === true;
+
+        if (salvo?.rows?.[0]?.id) {
+          await db.query(
+            `UPDATE whatsapp_ai_messages
+                SET delivery_status = $1,
+                    delivered_at = CASE WHEN $1 = 'sent' THEN CURRENT_TIMESTAMP ELSE delivered_at END
+              WHERE id = $2`,
+            [envioSucesso ? 'sent' : 'failed', salvo.rows[0].id],
+          ).catch(() => null);
+        }
+
+        await db.query(
+          `UPDATE whatsapp_ai_sessions
+              SET ultima_interacao_em = CURRENT_TIMESTAMP,
+                  atualizado_em = CURRENT_TIMESTAMP
+            WHERE id = $1`,
+          [session.id],
+        ).catch(() => null);
+      } catch (err) {
+        console.warn(`[Failover WhatsApp] Erro ao enviar mensagem de failover para ${session.telefone}:`, err?.message);
+      }
+    }
+
+    resgatadas.push({
+      sessionId: session.id,
+      telefone: session.telefone ? `***${session.telefone.slice(-4)}` : '',
+      nome: session.nome,
+      minutosEspera,
+      profissionalDetectado: profissionalDetectado || 'geral',
+      linkAgendamento,
+      mensagemEnviada: envioSucesso,
+    });
+  }
+
+  return {
+    executadoEm: new Date().toISOString(),
+    totalVerificadas: rows.length,
+    totalResgatadas: resgatadas.length,
+    resgatadas,
+  };
 }
