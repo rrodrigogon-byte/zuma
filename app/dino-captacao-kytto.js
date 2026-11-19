@@ -954,14 +954,15 @@ export function resumoAssinatura(empresaId, assinaturaId, opcoes = {}) {
   const ciclo = cicloAtual(assinatura, plano, ms);
   const usosCiclo = controle.usos.filter((uso) => uso.ciclo === ciclo.indice);
   const limite = Math.max(0, numero(assinatura.sessoesContratadas || plano?.sessoesIncluidas, 0));
+  const totalUsadas = Math.max(usosCiclo.length, Number(assinatura.sessoesUsadas || 0));
   return {
     assinatura,
     plano,
     ciclo: { indice: ciclo.indice, inicio: iso(ciclo.inicio), fim: iso(ciclo.fim) },
-    usosNoCiclo: usosCiclo.length,
+    usosNoCiclo: totalUsadas,
     usosDoCiclo: usosCiclo.map(uso=>({...uso})),
     limiteNoCiclo: limite,
-    sessoesRestantes: Math.max(0, limite - usosCiclo.length),
+    sessoesRestantes: Math.max(0, limite - totalUsadas),
     situacaoPagamento: situacaoPagamento(empresaId, assinatura, plano, controle, ms),
     pagoAte: Number.isFinite(pagoAteMs(assinatura, plano, controle)) ? iso(pagoAteMs(assinatura, plano, controle)) : null,
     usos: controle.usos.slice(-20),
@@ -995,27 +996,97 @@ export function registrarPagamentoAssinatura(empresaId, assinaturaId, dados = {}
   return resumoAssinatura(empresaId, assinaturaId, opcoes);
 }
 
+/** Verifica se o plano cobre o serviço e profissional solicitado */
+export function cobreServicoEProfissional(cobertura, servicoId, profissionalId = null, servicoNome = '') {
+  if (!cobertura) return false;
+  const sId = String(servicoId || '');
+  const sNome = String(servicoNome || '').toLowerCase();
+  const pNome = String(cobertura.planoNome || cobertura.plano || '').toLowerCase();
+  const servicosIds = cobertura.servicosIds || [];
+
+  let servicoOk = !servicosIds.length || servicosIds.includes(sId);
+  if (!servicoOk) {
+    if (pNome.includes('pacote') || pNome.includes('procedimento')) {
+      if (sNome.includes('procedimento') || sNome.includes('corte') || sNome.includes('barba')) {
+        servicoOk = true;
+      }
+    }
+    if (pNome.includes('club dino') || (pNome.includes('dino') && pNome.includes('club'))) {
+      if (sNome.includes('dino') || sNome.includes('corte') || sNome.includes('barba') || sId.includes('dino')) {
+        servicoOk = true;
+      }
+    }
+  }
+  if (!servicoOk) return false;
+
+  if (profissionalId && profissionalId !== 'qualquer') {
+    const profId = String(profissionalId).toLowerCase();
+    const ehDino = profId.includes('dino') || profId.includes('guilherme');
+    if (cobertura.profissionalId && String(cobertura.profissionalId).toLowerCase() !== profId) {
+      if (!ehDino || !pNome.includes('dino')) return false;
+    }
+    if (cobertura.profissionaisIds?.length && !cobertura.profissionaisIds.some((id) => String(id).toLowerCase() === profId)) {
+      if (!ehDino || !pNome.includes('dino')) return false;
+    }
+  }
+  return true;
+}
+
 /** Assinatura ativa e em dia que cobre o serviço, para o cliente informado. */
-export function assinaturaQueCobre(empresaId, { clienteId, clienteTelefone, servicoId, profissionalId } = {}, opcoes = {}) {
+export function assinaturaQueCobre(empresaId, { clienteId, clienteTelefone, servicoId, profissionalId, servicoNome } = {}, opcoes = {}) {
   const chave = telefoneChave(clienteTelefone);
-  const clientes = clienteId ? null : (chave ? clientesKytto.listarClientes(String(empresaId)).filter((item) => telefoneChave(item.telefone) === chave).map((item) => item.id) : []);
-  if (!clienteId && clientes.length !== 1) return null;
+  let clientes = [];
+  if (clienteId) {
+    clientes = [String(clienteId)];
+  } else if (chave) {
+    const listKytto = clientesKytto.listarClientes(String(empresaId)).filter((item) => telefoneChave(item.telefone) === chave && item.status !== 'deletado' && item.status !== 'mesclado');
+    clientes = listKytto.map((item) => String(item.id));
+    if (clientes.length === 0) {
+      const todos = barbearia.listarClientes?.(empresaId) || [];
+      for (const c of todos) {
+        if (telefoneChave(c.telefone) === chave) clientes.push(String(c.id));
+      }
+    }
+  }
+  if (!clienteId && clientes.length === 0 && !chave) return null;
+
   const candidatas = barbearia.listarAssinaturas(empresaId, { status: 'ativa' })
-    .filter((item) => (clienteId ? item.clienteId === String(clienteId) : clientes.includes(item.clienteId)))
+    .filter((item) => {
+      if (clienteId && item.clienteId === String(clienteId)) return true;
+      if (clientes.includes(String(item.clienteId))) return true;
+      if (chave && item.clienteTelefone && telefoneChave(item.clienteTelefone) === chave) return true;
+      return false;
+    })
     .filter((assinatura) => {
-      if (!profissionalId) return true;
-      const profId = String(profissionalId);
-      if (assinatura.profissionalId && String(assinatura.profissionalId) !== profId) return false;
+      if (!profissionalId || profissionalId === 'qualquer') return true;
+      const profId = String(profissionalId).toLowerCase();
+      const ehDino = profId.includes('dino') || profId.includes('guilherme');
       const plano = barbearia.obterPlano(empresaId, assinatura.planoId) || assinatura.condicoesContratadas;
-      if (plano?.profissionalId && String(plano.profissionalId) !== profId) return false;
-      if (plano?.profissionaisIds?.length && !plano.profissionaisIds.includes(profId)) return false;
+      const pNome = String(plano?.nome || '').toLowerCase();
+      if (ehDino && pNome.includes('dino')) return true;
+      if (assinatura.profissionalId && String(assinatura.profissionalId).toLowerCase() !== profId) return false;
+      if (plano?.profissionalId && String(plano.profissionalId).toLowerCase() !== profId) return false;
+      if (plano?.profissionaisIds?.length && !plano.profissionaisIds.map((x) => String(x).toLowerCase()).includes(profId)) return false;
       return true;
     });
+
   const resumos = candidatas.map((assinatura) => resumoAssinatura(empresaId, assinatura.id, opcoes)).filter((resumo) => {
+    if (!resumo) return false;
     const servicos = resumo.plano?.servicosIds || [];
-    return !servicos.length || servicos.includes(String(servicoId));
+    if (!servicos.length) return true;
+    if (servicoId && servicos.includes(String(servicoId))) return true;
+    const sNome = String(servicoNome || '').toLowerCase();
+    const pNome = String(resumo.plano?.nome || '').toLowerCase();
+    if (pNome.includes('club dino') || (pNome.includes('dino') && pNome.includes('club'))) {
+      if (sNome.includes('dino') || sNome.includes('corte') || sNome.includes('barba')) return true;
+    }
+    if (pNome.includes('pacote') || pNome.includes('procedimento')) {
+      if (sNome.includes('corte') || sNome.includes('barba') || sNome.includes('procedimento')) return true;
+    }
+    return false;
   });
-  return resumos.find((r) => r.situacaoPagamento === 'em_dia' && r.sessoesRestantes > 0) || resumos[0] || null;
+
+  return resumos.find((r) => r.sessoesRestantes > 0) || resumos.find((r) => r.situacaoPagamento === 'em_dia') || resumos[0] || null;
 }
 
 export function registrarUsoAssinatura(empresaId, assinaturaId, dados = {}, opcoes = {}) {
@@ -2290,32 +2361,83 @@ function agendamentosConcluidosDoTelefone(empresaId, telefone, { desde = 0 } = {
 /** Plano do próprio cliente (pedido por ele): nome, saldo do ciclo e validade. */
 export function perfilDoTelefone(empresaId, telefone, opcoes = {}) {
   const chave = telefoneChave(telefone);
-  if (!chave) return {perfil:'telefone_invalido',clienteEncontrado:false,pacotes:[]};
-  const clientes = clientesKytto.listarClientes(String(empresaId)).filter(item=>telefoneChave(item.telefone)===chave && !item.anonimizadoEm);
-  if (clientes.length > 1) return {perfil:'cadastro_ambiguo',clienteEncontrado:false,pacotes:[],orientacao:'A equipe precisa conferir os cadastros deste telefone antes de informar benefícios.'};
-  const cliente = clientes[0];
-  const atendimentos=agendamentosConcluidosDoTelefone(empresaId,telefone);
-  const comandas=cliente ? barbearia.listarComandasBarbearia(empresaId).filter(c=>c.clienteId===String(cliente.id)&&['paga','em_conta'].includes(c.status)) : [];
-  const historico=cliente ? barbearia.listarHistoricoAtendimentos(empresaId,{clienteId:cliente.id}).filter(a=>a.status==='concluido') : [];
-  const hoje=dataLocal(agoraMs(opcoes));
-  const dias=new Set([...atendimentos,...comandas,...historico].map(a=>{
-    const data=a.dataAgenda||a.dataHora||a.fechadaEm||a.criadoEm;
-    if(!data)return '';return /^\d{4}-\d{2}-\d{2}$/.test(String(data)) ? data : Number.isFinite(new Date(data).valueOf()) ? dataLocal(new Date(data).valueOf()) : '';
-  }).filter(d=>d&&d<=hoje));
+  if (!chave) return { perfil: 'telefone_invalido', clienteEncontrado: false, pacotes: [] };
+
+  const todosClientes = clientesKytto.listarClientes(String(empresaId))
+    .filter((item) => telefoneChave(item.telefone) === chave && !item.anonimizadoEm && item.status !== 'deletado');
+
+  const nominais = todosClientes.filter((c) => !/^Cliente Avec/i.test(c.nome) && c.status !== 'mesclado');
+  const nomes = nominais.map((c) => c.nome);
+
+  function saoMesmoTitular(nomesLista = []) {
+    if (nomesLista.length <= 1) return true;
+    const limpos = nomesLista.map((n) => String(n || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim())
+      .filter((n) => n && !/^cliente avec/i.test(n));
+    if (limpos.length <= 1) return true;
+    const primeiro = limpos[0].split(' ')[0];
+    return limpos.every((n) => n.startsWith(primeiro));
+  }
+
+  const ehMesmoTitular = saoMesmoTitular(nomes);
+  if (todosClientes.length > 1 && !ehMesmoTitular) {
+    return { perfil: 'cadastro_ambiguo', clienteEncontrado: false, pacotes: [], orientacao: 'A equipe precisa conferir os cadastros deste telefone antes de informar benefícios.' };
+  }
+
+  const cliente = nominais[0] || todosClientes.find((c) => c.status !== 'mesclado') || todosClientes[0] || null;
+  const clientIds = new Set(todosClientes.map((c) => String(c.id)));
+  if (cliente) clientIds.add(String(cliente.id));
+
+  const atendimentos = agendamentosConcluidosDoTelefone(empresaId, telefone);
+  const comandas = cliente ? barbearia.listarComandasBarbearia(empresaId).filter((c) => clientIds.has(String(c.clienteId)) && ['paga', 'em_conta'].includes(c.status)) : [];
+  const historico = cliente ? barbearia.listarHistoricoAtendimentos(empresaId, { clienteId: cliente.id }).filter((a) => a.status === 'concluido') : [];
+  const hoje = dataLocal(agoraMs(opcoes));
+  const dias = new Set([...atendimentos, ...comandas, ...historico].map((a) => {
+    const data = a.dataAgenda || a.dataHora || a.fechadaEm || a.criadoEm;
+    if (!data) return '';
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(data)) ? data : Number.isFinite(new Date(data).valueOf()) ? dataLocal(new Date(data).valueOf()) : '';
+  }).filter((d) => d && d <= hoje));
   const visitas = dias.size;
-  const pacotes = cliente ? barbearia.listarAssinaturas(empresaId).filter(item=>item.clienteId===String(cliente.id)).map(item=>{
-    const r=resumoAssinatura(empresaId,item.id,opcoes);
-    const reservadas=reservasAssinatura(empresaId,item.id,r,opcoes),disponiveis=Math.max(0,r.sessoesRestantes-reservadas);
-    return {assinaturaId:item.id,plano:r.plano?.nome || 'Pacote',status:item.status,situacao:r.situacaoPagamento,
-      sessoesNoCiclo:r.limiteNoCiclo,usadasNoCiclo:r.usosNoCiclo,restantes:r.sessoesRestantes,pagoAte:r.pagoAte,
-      proximaRenovacao:r.pagoAte || r.ciclo.inicio,regraRenovacao:r.plano?.regraRenovacao || 'dias',
-      sessoesReservadas:reservadas,disponiveisParaAgendar:disponiveis,
-      utilizavel:item.status==='ativa'&&r.situacaoPagamento==='em_dia'&&disponiveis>0,
-      servicosIncluidos:(r.plano?.servicosIds||[]).map(id=>barbearia.listarServicos(empresaId,{incluirInativos:true}).find(s=>s.id===id)?.nome).filter(Boolean)};
-  }) : [];
-  const ativo=pacotes.find(p=>p.utilizavel),vencido=pacotes.find(p=>p.status==='ativa'&&['inadimplente','encerrada'].includes(p.situacao));
-  const emDia=pacotes.find(p=>p.status==='ativa'&&p.situacao==='em_dia');
-  const perfil=ativo?'pacote_ativo':emDia?(emDia.restantes>0?'pacote_reservado':'pacote_esgotado'):vencido?'pacote_vencido':pacotes.some(p=>p.status==='pausada')?'pacote_pausado':pacotes.some(p=>p.status==='ativa'||p.status==='pendente_ativacao')?'pacote_pendente':visitas>=2?'recorrente':cliente||visitas?'avulso':'novo';
+
+  const todasAssinaturas = barbearia.listarAssinaturas(empresaId);
+  const assinaturasDoCliente = todasAssinaturas.filter((item) => {
+    if (clientIds.has(String(item.clienteId))) return true;
+    if (item.clienteTelefone && telefoneChave(item.clienteTelefone) === chave) return true;
+    return false;
+  });
+
+  const pacotes = assinaturasDoCliente.map((item) => {
+    const r = resumoAssinatura(empresaId, item.id, opcoes);
+    if (!r) return null;
+    const reservadas = reservasAssinatura(empresaId, item.id, r, opcoes);
+    const disponiveis = Math.max(0, r.sessoesRestantes - reservadas);
+    const isPacoteOuClub = r.plano?.categoriaPlano === 'pacote' || (r.plano?.nome || '').toLowerCase().includes('pacote') || (r.plano?.nome || '').toLowerCase().includes('club');
+    const utilizavel = item.status === 'ativa' && r.situacaoPagamento === 'em_dia' && disponiveis > 0;
+    return {
+      assinaturaId: item.id,
+      planoId: r.plano?.id || item.planoId,
+      plano: r.plano?.nome || item.condicoesContratadas?.nome || 'Pacote',
+      status: item.status,
+      situacao: r.situacaoPagamento,
+      sessoesNoCiclo: r.limiteNoCiclo,
+      usadasNoCiclo: r.usosNoCiclo,
+      restantes: r.sessoesRestantes,
+      pagoAte: r.pagoAte,
+      proximaRenovacao: r.pagoAte || r.ciclo.inicio,
+      regraRenovacao: r.plano?.regraRenovacao || 'dias',
+      sessoesReservadas: reservadas,
+      disponiveisParaAgendar: disponiveis,
+      utilizavel,
+      servicosIds: r.plano?.servicosIds || [],
+      servicosIncluidos: (r.plano?.servicosIds || []).map((id) => barbearia.listarServicos(empresaId, { incluirInativos: true }).find((s) => s.id === id)?.nome).filter(Boolean),
+      profissionalId: item.profissionalId || r.plano?.profissionalId || null,
+      profissionalNome: item.profissionalNome || r.plano?.profissionalNome || null,
+    };
+  }).filter(Boolean);
+
+  const ativo = pacotes.find((p) => p.utilizavel);
+  const vencido = pacotes.find((p) => p.status === 'ativa' && ['inadimplente', 'encerrada'].includes(p.situacao));
+  const emDia = pacotes.find((p) => p.status === 'ativa' && p.situacao === 'em_dia');
+  const perfil = ativo ? 'pacote_ativo' : emDia ? (emDia.restantes > 0 ? 'pacote_reservado' : 'pacote_esgotado') : vencido ? 'pacote_vencido' : pacotes.some((p) => p.status === 'pausada') ? 'pacote_pausado' : pacotes.some((p) => p.status === 'ativa' || p.status === 'pendente_ativacao') ? 'pacote_pendente' : visitas >= 2 ? 'recorrente' : cliente || visitas ? 'avulso' : 'novo';
 
   // Aprender sempre com padrão do cliente (barbeiro preferido, período habitual e serviços mais frequentes)
   const historicoVisitas = [...atendimentos, ...comandas, ...historico];
@@ -2361,10 +2483,19 @@ export function perfilDoTelefone(empresaId, telefone, opcoes = {}) {
 }
 
 export function planoDoTelefone(empresaId, telefone, opcoes = {}) {
-  const perfil=perfilDoTelefone(empresaId,telefone,opcoes);
-  const p=perfil.pacotes.find(item=>item.utilizavel)||perfil.pacotes.find(item=>item.status==='ativa'&&item.situacao==='em_dia')||perfil.pacotes.find(item=>['ativa','pausada'].includes(item.status));
+  const perfil = perfilDoTelefone(empresaId, telefone, opcoes);
+  const p = perfil.pacotes.find((item) => item.utilizavel)
+    || perfil.pacotes.find((item) => item.status === 'ativa' && item.restantes > 0)
+    || perfil.pacotes.find((item) => item.status === 'ativa' && item.situacao === 'em_dia')
+    || perfil.pacotes.find((item) => ['ativa', 'pausada'].includes(item.status));
   if (!p) return null;
-  return {...p,perfil:perfil.perfil,pagamentoEmDia:p.situacao==='em_dia',cicloTermina:p.proximaRenovacao ? dataLocal(new Date(p.proximaRenovacao).valueOf()):null,orientacao:perfil.orientacao};
+  return {
+    ...p,
+    perfil: perfil.perfil,
+    pagamentoEmDia: p.situacao === 'em_dia',
+    cicloTermina: p.proximaRenovacao ? dataLocal(new Date(p.proximaRenovacao).valueOf()) : null,
+    orientacao: perfil.orientacao
+  };
 }
 
 /**
