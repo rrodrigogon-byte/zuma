@@ -6067,7 +6067,7 @@ app.use('/api/admin/barbearia', auth, requireStaff, resolverEscopoBarbearia, exi
 registerEquipePerformanceRoutes(app, { db, legacyEmpresaId, legacyLojaId, requireCommercePermission, salesReport, dataVersion: () => estadoGravacao()?.alteracoes ?? null });
 registerPainelGestaoRoutes(app, { db, save, audit, legacyEmpresaId, legacyLojaId, dataVersion: () => estadoGravacao()?.alteracoes ?? null });
 registerGestaoSalaoAvancadaRoutes(app, { db, legacyEmpresaId, legacyLojaId });
-registerInteligenciaVendasRoutes(app, { db, legacyEmpresaId, legacyLojaId, auth, requireStaff, isAdminGlobal, isGuilhermeUser, isSilvesterUser, obterEmpresasAutorizadasDoUsuario });
+registerInteligenciaVendasRoutes(app, { db, legacyEmpresaId, legacyLojaId, auth, requireStaff, isAdminGlobal, isGuilhermeUser, isSilvesterUser, obterEmpresasAutorizadasDoUsuario, barbeariaErpKytto, listarAgendamentosBarbearia });
 registerCustomer360Routes(app, { legacyEmpresaId, legacyLojaId, clientesKytto, barbeariaErpKytto, canaisFidelidadeKytto, listarAgendamentosBarbearia, requireCommercePermission, audit, save, coberturasDoCliente: comandaPlanoKytto.coberturasDoCliente });
 registerDinoRecuperacaoAvecRoutes(app, { legacyEmpresaId, legacyLojaId, barbeariaErpKytto, listarAgendamentosBarbearia });
 registerDinoAntibanRoutes(app, { legacyEmpresaId, legacyLojaId });
@@ -9817,7 +9817,7 @@ app.get('/api/admin/barbearia/clientes/busca', (req, res) => {
   }
 });
 
-app.get('/api/admin/barbearia/carteira-clientes', (req, res) => {
+app.get(['/api/admin/barbearia/carteira-clientes', '/api/admin/dino/carteira-clientes'], (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
     const resultado = dinoCarteiraClientes.listarCarteiraClientes(empresaId, {
@@ -9833,7 +9833,7 @@ app.get('/api/admin/barbearia/carteira-clientes', (req, res) => {
   }
 });
 
-app.get('/api/admin/barbearia/carteira-clientes/resumo', (req, res) => {
+app.get(['/api/admin/barbearia/carteira-clientes/resumo', '/api/admin/dino/carteira-clientes/resumo'], (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
     const resumo = dinoCarteiraClientes.resumoCarteirasProfissionais(empresaId, {
@@ -9845,7 +9845,7 @@ app.get('/api/admin/barbearia/carteira-clientes/resumo', (req, res) => {
   }
 });
 
-app.patch('/api/admin/barbearia/clientes/:id/vincular-barbeiro', (req, res) => {
+app.patch(['/api/admin/barbearia/clientes/:id/vincular-barbeiro', '/api/admin/dino/clientes/:id/vincular-barbeiro'], (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
     const cliente = dinoCarteiraClientes.vincularClienteBarbeiro(empresaId, req.params.id, {
@@ -9932,12 +9932,17 @@ app.get('/api/admin/barbearia/clientes/duplicados', (req, res) => {
     res.json({ ok: true, duplicados });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
-app.post('/api/admin/barbearia/clientes/auto-unificar-duplicados', (req, res) => {
+app.post([
+  '/api/admin/barbearia/clientes/auto-unificar',
+  '/api/admin/barbearia/clientes/auto-unificar-duplicados',
+  '/api/admin/dino/clientes/auto-unificar',
+  '/api/admin/dino/clientes/auto-unificar-duplicados',
+], (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
     const resultado = barbeariaClienteUnificacao.autoUnificarTodosDuplicados(empresaId);
     audit(req, 'AUTO UNIFICACAO DUPLICADOS BARBEARIA', `Grupos: ${resultado.totalGrupos}`);
-    res.json(resultado);
+    res.json({ ...resultado, gruposUnificados: resultado.totalGrupos });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.patch('/api/admin/barbearia/clientes/:id/consentimentos', (req, res) => {

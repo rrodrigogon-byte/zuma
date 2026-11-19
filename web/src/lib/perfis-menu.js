@@ -4,7 +4,7 @@
 // Abas da tela da barbearia que o operador usa no dia a dia.
 export const ABAS_DO_OPERADOR = new Set([
   'Agenda', 'Atendimento', 'Caixa e fechamento', 'Fila e bloqueios',
-  'Clientes', 'Retorno previsto', 'Lista de espera', 'Indicações', 'Fidelidade',
+  'Carteira por barbeiro', 'Clientes', 'Retorno previsto', 'Lista de espera', 'Indicações', 'Fidelidade',
   'Estoque de revenda', 'Vendas de revenda',
 ])
 

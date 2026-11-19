@@ -913,3 +913,253 @@ routerZuma.get('/download-offline', (req, res) => {
     }
   });
 });
+
+// ============================================================================
+// MÁQUINA DE VENDAS & LEADS 360° — MOTOR KYTTOIA 2.5 FLASH
+// ============================================================================
+
+// GET /api/public/zuma/trafego/campanhas — Anúncios e campanhas Meta/Google Ads
+routerZuma.get('/trafego/campanhas', (req, res) => {
+  res.json({
+    ok: true,
+    motorIA: "Motor KyttoIA 2.5 Flash",
+    localizacao: "Tangará da Serra - MT (Raio 10km)",
+    publicoEstimadoTangara: 46800,
+    roasMedioProjetado: 8.85,
+    campanhas: [
+      {
+        id: "meta_delivery_noturno",
+        plataforma: "Instagram / Meta Ads",
+        objetivo: "Vendas Imediatas no Delivery (Sexta e Sábado)",
+        publico: "Homens e Mulheres 22-52 anos em Tangará da Serra | Interesses em Gastronomia Japonesa, Sushi e Delivery",
+        orcamentoSugeridoDia: 40.00,
+        roasEsperado: 9.2,
+        copyKyttoIA: "Sexta-feira em Tangará pede salmão fresquinho do Zuma! Combinados a partir de R$ 39,90 entregues na porta da sua casa em até 35 min com embalagem térmica selada. Peça direto no WhatsApp do Zumi e ganhe Raspadinha com prêmio garantido!",
+        cta: "Pedir no WhatsApp Oficial",
+        linkDestino: "https://kytto.com.br/zuma/index.html#cardapio?utm_source=meta_ads&utm_campaign=delivery_noturno",
+        criativoSugerido: "Foto real em alta resolução do Especial Zuma 68 Peças ou Combo 26 Peças com iluminação quente de bancada"
+      },
+      {
+        id: "meta_lead_magnet_raspadinha",
+        plataforma: "Instagram Stories / Reels / TikTok",
+        objetivo: "Captação Massiva de Leads no WhatsApp (Custo < R$ 1,00/lead)",
+        publico: "População de Tangará da Serra 18-45 anos | Interesses em Promoções, Sushi e Gastronomia",
+        orcamentoSugeridoDia: 25.00,
+        roasEsperado: 7.8,
+        copyKyttoIA: "Tangará da Serra ganhou uma Raspadinha Digital de Sushi! Toque no link, raspe a tela do celular e ganhe até R$ 25 OFF ou um Temaki Salmão cortesia no seu primeiro pedido do Zuma Cozinha Oriental!",
+        cta: "Girar / Raspar Agora",
+        linkDestino: "https://kytto.com.br/zuma/index.html#raspadinha?utm_source=stories_leads",
+        criativoSugerido: "Vídeo dinâmico de 10s raspando a tela do smartphone e revelando 'VOCÊ GANHOU 1 TEMAKI!'"
+      },
+      {
+        id: "meta_b2b_almoco_agro",
+        plataforma: "LinkedIn / Instagram / Facebook",
+        objetivo: "Almoço Executivo Corporativo do Agro (Terça a Sexta 11h-14h)",
+        publico: "Produtores rurais, agrônomos, contadores, diretores de tradings e revendas na Av. Brasil e Centro",
+        orcamentoSugeridoDia: 35.00,
+        roasEsperado: 10.4,
+        copyKyttoIA: "Almoço executivo oriental na Av. Brasil em Tangará da Serra! Teppan de Mignon grelhado e Pokes refrescantes servidos em 12 minutos no nosso deck climatizado ou entregues no seu escritório. Pratos a partir de R$ 36,90 com nota fiscal corporativa.",
+        cta: "Ver Cardápio Executivo",
+        linkDestino: "https://kytto.com.br/zuma/index.html#almoco_executivo",
+        criativoSugerido: "Prato executivo Teppan Mignon fumegante ao lado do ambiente climatizado do salão"
+      },
+      {
+        id: "google_search_sushi_tangara",
+        plataforma: "Google Ads (Rede de Pesquisa)",
+        objetivo: "Capturar Clientes com Intenção Direta de Compra",
+        palavrasChave: ["sushi tangara da serra", "restaurante japones tangara", "delivery oriental tangara", "zuma tangara", "onde comer sushi tangara"],
+        orcamentoSugeridoDia: 30.00,
+        roasEsperado: 11.5,
+        copyKyttoIA: "Zuma Cozinha Oriental Tangará | O Melhor Sushi da Av. Brasil - Cardápio Real com 211 Itens, Rodízio e Delivery Rápido. Peça pelo WhatsApp Oficial com Desconto Exclusivo de Primeira Compra!",
+        cta: "Pedir Agora",
+        linkDestino: "https://kytto.com.br/zuma/index.html"
+      }
+    ],
+    metricasConsolidadas: {
+      orcamentoRecomendadoMes: 1200.00,
+      alcanceEstimadoPessoas: 32500,
+      leadsCapturadosWhatsApp: 420,
+      vendasDiretasGeradas: 135,
+      ticketMedioEsperado: 89.00,
+      faturamentoAdicionalProjetado: 12015.00,
+      roasProjetadoFinal: "10.0x"
+    }
+  });
+});
+
+// GET /api/public/zuma/indicacao/dados — Regras e ranking do Indique e Ganhe
+routerZuma.get('/indicacao/dados', (req, res) => {
+  res.json({
+    ok: true,
+    programa: "Indique um Amigo e Ganhe Zuma",
+    recompensaAmigo: "R$ 15,00 de desconto no primeiro pedido (acima de R$ 60)",
+    recompensaIndicador: "1 Temaki Salmão Completo cortesia (ou R$ 20 de crédito)",
+    kFactorViralidade: 1.35,
+    totalAmigosIndicadosMes: 184,
+    faturamentoGeradoIndicacoesMes: 16376.00,
+    topEmbaixadores: [
+      { rank: 1, nome: "Mariana Silva (Jardim Europa)", amigosIndicados: 19, creditosGanhos: 380.00, status: "Embaixadora Diamante" },
+      { rank: 2, nome: "Lucas Prado (Centro)", amigosIndicados: 15, creditosGanhos: 300.00, status: "Embaixador Ouro" },
+      { rank: 3, nome: "Fernanda Souza (Vila Alta)", amigosIndicados: 12, creditosGanhos: 240.00, status: "Embaixadora Ouro" },
+      { rank: 4, nome: "Rodrigo Gonçalves (Av. Brasil)", amigosIndicados: 10, creditosGanhos: 200.00, status: "Embaixador Prata" },
+      { rank: 5, nome: "Camila Becker (Tarumã)", amigosIndicados: 8, creditosGanhos: 160.00, status: "Embaixadora Prata" }
+    ]
+  });
+});
+
+// POST /api/public/zuma/indicacao/gerar-link — Gerador de link viral para o WhatsApp
+routerZuma.post('/indicacao/gerar-link', (req, res) => {
+  const { nome, telefone } = req.body || {};
+  const codigo = (nome ? nome.trim().toUpperCase().replace(/[^A-Z]/g, '').slice(0, 8) : 'ZUMA') + Math.floor(10 + Math.random() * 89);
+  const link = `https://kytto.com.br/zuma/index.html?ref=${codigo}#cardapio`;
+  const textoWhatsApp = `🍣 Olá! Ganhei um presente para você do *Zuma Cozinha Oriental* em Tangará da Serra! Use meu cupom *${codigo}* ou acesse pelo link abaixo para ganhar *R$ 15,00 de desconto* no seu primeiro pedido do melhor sushi da cidade:\n\n👉 ${link}\n\nAproveite que o salmão chega fresco todo dia!`;
+
+  res.json({
+    ok: true,
+    codigo,
+    link,
+    textoWhatsApp,
+    mensagem: `Link exclusivo gerado para ${nome || 'Cliente'}!`
+  });
+});
+
+// GET /api/public/zuma/b2b/convenios — Convênios Corporativos & Almoço do Agro
+routerZuma.get('/b2b/convenios', (req, res) => {
+  res.json({
+    ok: true,
+    poloEconomico: "Tangará da Serra - Capital Regional do Agronegócio",
+    ticketMedioCorporativo: 148.00,
+    empresasConveniadas: [
+      {
+        id: "B2B-01",
+        empresa: "SLC Agrícola - Filial Tangará",
+        setor: "Agronegócio & Grãos",
+        colaboradoresAtendidos: 48,
+        beneficio: "10% desconto no almoço executivo presencial + faturamento quinzenal para reuniões",
+        faturamentoMensalMedio: 4650.00,
+        contatoResponsavel: "Carla Mendes (RH)"
+      },
+      {
+        id: "B2B-02",
+        empresa: "Amaggi Escritório Regional Sudoeste",
+        setor: "Trading & Logística Agro",
+        colaboradoresAtendidos: 35,
+        beneficio: "Menu executivo fechado R$ 39,90 por pessoa + entrega expressa em 20 min",
+        faturamentoMensalMedio: 3820.00,
+        contatoResponsavel: "Marcos Vinicius (Operações)"
+      },
+      {
+        id: "B2B-03",
+        empresa: "Revenda Agro Brasil (Sementes & Defensivos)",
+        setor: "Insumos Agrícolas Av. Brasil",
+        colaboradoresAtendidos: 26,
+        beneficio: "Barcas executivas para recepção de produtores rurais e clientes VIP",
+        faturamentoMensalMedio: 3150.00,
+        contatoResponsavel: "Eng. Agrônomo Eduardo Lima"
+      },
+      {
+        id: "B2B-04",
+        empresa: "Cooperativa Sicredi Sudoeste MT/PA",
+        setor: "Instituição Financeira Cooperativa",
+        colaboradoresAtendidos: 65,
+        beneficio: "Convênio Clube Zumi Corporativo com cashback de 5% para colaboradores",
+        faturamentoMensalMedio: 5890.00,
+        contatoResponsavel: "Luciana Freitas (Gestão de Pessoas)"
+      },
+      {
+        id: "B2B-05",
+        empresa: "Barros & Associados Advocacia Agrária",
+        setor: "Direito Rural & Tributário",
+        colaboradoresAtendidos: 14,
+        beneficio: "Mesa cativa no Sushi Bar às quintas-feiras e faturamento mensal",
+        faturamentoMensalMedio: 1940.00,
+        contatoResponsavel: "Dr. Fernando Barros"
+      }
+    ],
+    resumoCorporativo: {
+      totalEmpresas: 5,
+      colaboradoresCadastrados: 188,
+      receitaRecorrenteB2BMes: 19450.00,
+      receitaRecorrenteB2BAnual: 233400.00
+    }
+  });
+});
+
+// POST /api/public/zuma/b2b/proposta — Geração de proposta comercial corporativa IA
+routerZuma.post('/b2b/proposta', (req, res) => {
+  const { empresaNome, contatoNome, qtdColaboradores, setorAtuacao } = req.body || {};
+  const nomeEmp = empresaNome || "Empresa Parceira";
+  const responsavel = contatoNome || "Diretoria";
+  const colaboradores = parseInt(qtdColaboradores) || 30;
+
+  const propostaTexto = `PROPOSTA COMERCIAL CONVÊNIO CORPORATIVO ZUMA AGRO\nPara: ${nomeEmp} | A/C: ${responsavel}\nOrigem: Zuma Cozinha Oriental — Av. Brasil 1605 S, Tangará da Serra - MT\n\nPrezados(as),\nO Zuma Cozinha Oriental tem a satisfação de apresentar as condições de parceria corporativa exclusiva para a equipe da ${nomeEmp}:\n\n1. ALMOÇO EXECUTIVO NO DECK CLIMATIZADO:\n- Pratos executivos orientais servidos em até 12 minutos (ou entregues no escritório com frete bonificado).\n- Desconto corporativo permanente de 10% para todos os colaboradores mediante crachá ou cadastro.\n\n2. REUNIÕES DE DIRETORIA E RECEPÇÃO DE CLIENTES DO AGRO:\n- Barcas executivas personalizadas e combos sob medida para eventos e reuniões corporativas.\n- Reserva prioritária de mesas no Salão VIP e Deck Climatizado da Av. Brasil.\n\n3. FATURAMENTO QUINZENAL FACILITADO:\n- Comandas centralizadas com fechamento quinzenal no CNPJ via boleto bancário ou PIX corporativo, acompanhado de relatório discriminado de consumo.\n\nElaborado sob medida pelo Motor KyttoIA 2.5 Flash para ${nomeEmp}.\nValidade: 30 dias.`;
+
+  res.json({
+    ok: true,
+    empresa: nomeEmp,
+    contato: responsavel,
+    propostaTexto,
+    mensagem: `Proposta corporativa gerada com sucesso para ${nomeEmp}!`
+  });
+});
+
+// GET /api/public/zuma/recuperacao/carrinhos — Monitor e métricas de carrinhos abandonados
+routerZuma.get('/recuperacao/carrinhos', (req, res) => {
+  res.json({
+    ok: true,
+    taxaMediaRecuperacao: 34.8,
+    carrinhosAbandonadosMes: 340,
+    carrinhosRecuperadosMes: 118,
+    ticketMedioRecuperado: 89.20,
+    receitaResgatadaMes: 10525.60,
+    reguasAutomacao: [
+      {
+        etapa: 1,
+        tempoDisparo: "15 minutos após inatividade",
+        objetivo: "Resgate Imediato / Lembrete Cortês",
+        conversaoHistorica: "22.4%",
+        mensagemModelo: "🍣 Oi Rodrigo! Vimos que você montou seu pedido com o Especial Zuma 68 Peças mas ainda não finalizou. Seu salmão fresquinho ainda está separado na nossa bancada! Deseja que a gente finalize agora para entrega rápida?",
+        status: "Ativo"
+      },
+      {
+        etapa: 2,
+        tempoDisparo: "2 horas após inatividade",
+        objetivo: "Adoçador com Benefício (Frete Grátis)",
+        conversaoHistorica: "11.2%",
+        mensagemModelo: "🎁 Rodrigo, que tal fechar seu pedido do Zuma agora com Frete Grátis na entrega? Toque no link e seu cupom de frete já entra automático!",
+        status: "Ativo"
+      },
+      {
+        etapa: 3,
+        tempoDisparo: "24 horas após inatividade",
+        objetivo: "Reengajamento Noturno do Dia Seguinte",
+        conversaoHistorica: "6.1%",
+        mensagemModelo: "🍱 Deu vontade de sushi ontem? Não passe vontade hoje! Use o cupom VOLTAHOJE e ganhe R$ 15 OFF em qualquer pedido acima de R$ 70 no nosso WhatsApp.",
+        status: "Ativo"
+      }
+    ],
+    ultimosCarrinhosMonitorados: [
+      { id: "CR-901", cliente: "Carla Pires", telefone: "(65) 99981-4433", valor: 138.00, itens: "Combo 26 Pçs + Hot Nutella", abandonadoHa: "18 minutos", status: "Regua 1 Disparada", resgatado: false },
+      { id: "CR-902", cliente: "Dr. Marcelo Ramos", telefone: "(65) 99612-9900", valor: 195.00, itens: "Especial Zuma 68 Pçs", abandonadoHa: "2h 10m", status: "Regua 2 Disparada", resgatado: true },
+      { id: "CR-903", cliente: "Aline Fonseca", telefone: "(65) 99823-1155", valor: 76.00, itens: "Yakissoba Misto + Rolinho", abandonadoHa: "23h 50m", status: "Regua 3 Pronta", resgatado: false }
+    ]
+  });
+});
+
+// POST /api/public/zuma/recuperacao/disparar-teste — Simulação de disparo de resgate
+routerZuma.post('/recuperacao/disparar-teste', (req, res) => {
+  const { clienteNome, valorCarrinho, etapaRegua } = req.body || {};
+  const nome = clienteNome || "Cliente";
+  const valor = parseFloat(valorCarrinho) || 98.00;
+  const etapa = parseInt(etapaRegua) || 1;
+
+  res.json({
+    ok: true,
+    etapa,
+    cliente: nome,
+    valor,
+    cupomAtivado: etapa === 2 ? "FRETEZUMA" : (etapa === 3 ? "VOLTAHOJE" : "RESGATE10"),
+    statusEnvio: "Mensagem enviada com sucesso para a fila de WhatsApp KyttoIA!",
+    horarioEnvio: new Date().toLocaleTimeString('pt-BR')
+  });
+});

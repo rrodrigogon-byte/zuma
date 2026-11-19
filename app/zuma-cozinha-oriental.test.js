@@ -333,12 +333,13 @@ test('Zuma Cozinha Oriental - Zuma Pilot Cockpit: Aba #mercado e Inteligência C
   assert.ok(html.includes('"mercado"'), 'VIEWS deve incluir rota mercado');
 });
 
-test('Zuma Cozinha Oriental - Zuma Pilot: 14 Módulos Completos (Operação, Inteligência e Gestão 360°)', () => {
+test('Zuma Cozinha Oriental - Zuma Pilot: 18 Módulos Completos (Operação, Vendas & Leads e Gestão 360°)', () => {
   const pilotHtmlPath = path.join(__dirname, 'public', 'zuma', 'pilot.html');
   const html = fs.readFileSync(pilotHtmlPath, 'utf8');
 
   const modulos = [
     'cockpit', 'zumi', 'campanhas', 'leads', 'clientes', 'horarios', 'clube',
+    'trafego', 'indicacao', 'b2b', 'recuperacao',
     'mercado', 'engenharia', 'rfm', 'clima', 'omnichannel', 'financeiro', 'estoque'
   ];
 
@@ -355,4 +356,69 @@ test('Zuma Cozinha Oriental - Zuma Pilot: 14 Módulos Completos (Operação, Int
   assert.ok(html.includes('omniChannelCards'), 'Deve conter cartões do hub omnichannel');
   assert.ok(html.includes('sSalmWeight'), 'Deve conter simulador de rendimento do salmão fresco');
   assert.ok(html.includes('Motor KyttoIA 2.5 Flash'), 'Deve manter a diretriz oficial da marca Motor KyttoIA 2.5 Flash');
+});
+
+test('Zuma Cozinha Oriental - Máquina de Vendas & Leads 360° (Tráfego, Indicação, B2B Agro e Recuperação)', async () => {
+  const { routerZuma } = await import('./modules/restaurante-zuma.js');
+  const callRoute = (method, p, body = {}) => {
+    return new Promise((resolve) => {
+      const req = { method, path: p, query: {}, body, params: {} };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      const layer = routerZuma.stack.find(l => l.route && l.route.path === p && l.route.methods[method.toLowerCase()]);
+      if (layer) {
+        layer.route.stack[0].handle(req, res);
+      } else {
+        resolve({ status: 404, data: { error: "Route not found" } });
+      }
+    });
+  };
+
+  // 1. Tráfego & Campanhas Meta Ads
+  const trafRes = await callRoute("GET", "/trafego/campanhas");
+  assert.equal(trafRes.status, 200);
+  assert.equal(trafRes.data.ok, true);
+  assert.equal(trafRes.data.motorIA, "Motor KyttoIA 2.5 Flash");
+  assert.ok(Array.isArray(trafRes.data.campanhas) && trafRes.data.campanhas.length >= 4);
+  assert.ok(trafRes.data.campanhas[0].copyKyttoIA.includes("Zuma"));
+
+  // 2. Indicação Viral (Member Get Member)
+  const indDadosRes = await callRoute("GET", "/indicacao/dados");
+  assert.equal(indDadosRes.status, 200);
+  assert.equal(indDadosRes.data.ok, true);
+  assert.equal(indDadosRes.data.kFactorViralidade, 1.35);
+  assert.ok(indDadosRes.data.topEmbaixadores.length >= 5);
+
+  const indLinkRes = await callRoute("POST", "/indicacao/gerar-link", { nome: "Rodrigo", telefone: "(65) 99988-1234" });
+  assert.equal(indLinkRes.status, 200);
+  assert.equal(indLinkRes.data.ok, true);
+  assert.ok(indLinkRes.data.link.includes("ref="));
+  assert.ok(indLinkRes.data.textoWhatsApp.includes("Zuma Cozinha Oriental"));
+
+  // 3. Convênios Corporativos & Almoço do Agro
+  const b2bDadosRes = await callRoute("GET", "/b2b/convenios");
+  assert.equal(b2bDadosRes.status, 200);
+  assert.equal(b2bDadosRes.data.ok, true);
+  assert.ok(b2bDadosRes.data.empresasConveniadas.length >= 5);
+  assert.ok(b2bDadosRes.data.empresasConveniadas[0].empresa.includes("SLC Agrícola"));
+
+  const b2bPropRes = await callRoute("POST", "/b2b/proposta", {
+    empresaNome: "Agro Brasil Tangará",
+    contatoNome: "Diretoria Agro",
+    qtdColaboradores: 45
+  });
+  assert.equal(b2bPropRes.status, 200);
+  assert.equal(b2bPropRes.data.ok, true);
+  assert.ok(b2bPropRes.data.propostaTexto.includes("Motor KyttoIA 2.5 Flash"));
+
+  // 4. Recuperador de Carrinhos Abandonados
+  const recRes = await callRoute("GET", "/recuperacao/carrinhos");
+  assert.equal(recRes.status, 200);
+  assert.equal(recRes.data.ok, true);
+  assert.equal(recRes.data.taxaMediaRecuperacao, 34.8);
+  assert.ok(recRes.data.reguasAutomacao.length === 3);
 });

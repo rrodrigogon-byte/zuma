@@ -25,6 +25,11 @@ export function normalizarTelefoneBR(telefone) {
   if ((limpo.length === 12 || limpo.length === 13) && limpo.startsWith('55')) {
     limpo = limpo.slice(2);
   }
+  if (limpo.length === 9) {
+    limpo = '65' + limpo;
+  } else if (limpo.length === 8) {
+    limpo = '659' + limpo;
+  }
   return limpo;
 }
 
@@ -213,6 +218,10 @@ export function listarDuplicados(empresaId) {
         const bNomeOk = b.nome && !b.nome.startsWith('Cliente Avec') && !b.nome.startsWith('Cel:');
         if (aNomeOk && !bNomeOk) return -1;
         if (!aNomeOk && bNomeOk) return 1;
+        const aSemPar = !a.nome?.includes('(');
+        const bSemPar = !b.nome?.includes('(');
+        if (aSemPar && !bSemPar) return -1;
+        if (!aSemPar && bSemPar) return 1;
         return (a.criadoEm || '').localeCompare(b.criadoEm || '');
       });
 
