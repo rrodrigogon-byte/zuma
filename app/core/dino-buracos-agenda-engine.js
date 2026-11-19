@@ -62,20 +62,20 @@ export function calcularBuracosAgendaDino({
     (p) => p && p.ativo !== false
   );
 
-  // Mapeamento canônico dos profissionais oficiais da Dino
+  // Mapeamento canônico dos profissionais oficiais da Dino com IDs reais do ERP
   const barbeirosBase = [
     {
-      id: 'prof-bruno',
+      id: 'prof-mtj69hhx-002', // Bruno Mendes Pedroso
       nome: 'Bruno',
       apelido: 'Bruno',
       diasTrabalho: [1, 2, 3, 4, 5, 6], // Seg a Sáb
       horaInicio: '08:30',
       horaFim: '19:00',
-      valorMedio: 100,
+      valorMedio: 120,
       foco: 'Corte Masculino & Degradê',
     },
     {
-      id: 'prof-dino',
+      id: 'prof-mtj67o7r-001', // Dino (Guilherme)
       nome: 'Dino',
       apelido: 'Dino',
       diasTrabalho: [2, 3, 4, 5, 6], // Ter a Sáb
@@ -85,13 +85,13 @@ export function calcularBuracosAgendaDino({
       foco: 'Visagismo & Barboterapia Dino',
     },
     {
-      id: 'prof-nati',
+      id: 'prof-mv1bx3sc-011', // Nati
       nome: 'Nati',
       apelido: 'Nati',
       diasTrabalho: [2, 3, 4, 5, 6], // Ter a Sáb
       horaInicio: '08:30',
       horaFim: '18:30',
-      valorMedio: 100,
+      valorMedio: 120,
       foco: 'Corte Tradicional & Barboterapia',
     },
   ];
@@ -281,13 +281,29 @@ export function executarBloqueioBuraco(empresaId, { profissionalId, data, horari
   if (!empresaId) throw new Error('empresaId obrigatório.');
   if (!data || !horario) throw new Error('Data e horário são obrigatórios para bloquear.');
 
+  const estado = estadoEmpresa(empresaId);
+  let idReal = profissionalId;
+  if (idReal && !estado.profissionais?.[idReal]) {
+    const achado = Object.values(estado.profissionais || {}).find((p) => {
+      const pNome = (p.nome || '').toLowerCase();
+      if (/dino/i.test(idReal) && /dino/i.test(pNome)) return true;
+      if (/bruno/i.test(idReal) && /bruno/i.test(pNome)) return true;
+      if (/nati/i.test(idReal) && /nati/i.test(pNome)) return true;
+      return p.id === idReal;
+    });
+    if (achado) idReal = achado.id;
+  }
+  if (!idReal || !estado.profissionais?.[idReal]) {
+    idReal = Object.keys(estado.profissionais || {}).find(k => estado.profissionais[k]?.ativo !== false) || '';
+  }
+
   const fimHora = somarMinutosHora(horario, 45);
   const dadosBloqueio = {
     titulo: `Bloqueio ${horario}`,
     motivo: motivo || 'Horário bloqueado pela Gestão',
     inicio: `${data}T${horario}:00.000Z`,
     fim: `${data}T${fimHora}:00.000Z`,
-    profissionalId: profissionalId || '',
+    profissionalId: idReal || '',
     origem: 'gestao_buracos_ia',
   };
 
@@ -326,14 +342,42 @@ export function executarEncaixeRapidoBuraco(empresaId, {
   if (!data || !horario) throw new Error('Data e horário são obrigatórios para o encaixe.');
 
   const estado = estadoEmpresa(empresaId);
-  const srvId = servicoId || Object.keys(estado.servicos || {}).find(id => estado.servicos[id]?.ativo !== false) || 'srv-dino-corte-001';
-  const servicoReal = estado.servicos?.[srvId];
+
+  // Resolução inteligente do profissional real
+  let profIdReal = profissionalId;
+  if (profIdReal && !estado.profissionais?.[profIdReal]) {
+    const achado = Object.values(estado.profissionais || {}).find((p) => {
+      const pNome = (p.nome || '').toLowerCase();
+      if (/dino/i.test(profIdReal) && /dino/i.test(pNome)) return true;
+      if (/bruno/i.test(profIdReal) && /bruno/i.test(pNome)) return true;
+      if (/nati/i.test(profIdReal) && /nati/i.test(pNome)) return true;
+      return p.id === profIdReal;
+    });
+    if (achado) profIdReal = achado.id;
+  }
+  if (!profIdReal || !estado.profissionais?.[profIdReal]) {
+    profIdReal = Object.keys(estado.profissionais || {}).find(k => estado.profissionais[k]?.ativo !== false) || 'prof-mtj69hhx-002';
+  }
+
+  // Resolução inteligente do serviço real
+  let srvIdReal = servicoId;
+  if (srvIdReal && !estado.servicos?.[srvIdReal]) {
+    const achadoSrv = Object.values(estado.servicos || {}).find((s) => {
+      if (s.ativo === false) return false;
+      return /corte/i.test(s.nome);
+    });
+    if (achadoSrv) srvIdReal = achadoSrv.id;
+  }
+  if (!srvIdReal || !estado.servicos?.[srvIdReal]) {
+    srvIdReal = Object.keys(estado.servicos || {}).find(k => estado.servicos[k]?.ativo !== false) || 'srv-mv1a0cds-029';
+  }
+  const servicoReal = estado.servicos?.[srvIdReal];
 
   const dadosAgendamento = {
     clienteNome: clienteNome || 'Cliente Encaixe',
     clienteTelefone: clienteTelefone || '',
-    profissionalId: profissionalId || Object.keys(estado.profissionais || {})[0] || 'prof-bruno',
-    servicoId: srvId,
+    profissionalId: profIdReal,
+    servicoId: srvIdReal,
     dataAgenda: data,
     horaLocal: horario,
     dataHora: `${data}T${horario}:00.000Z`,
