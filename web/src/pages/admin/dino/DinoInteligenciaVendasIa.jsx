@@ -107,7 +107,85 @@ export default function DinoInteligenciaVendasIa() {
 
   // Formulário de Configurações Comerciais & Políticas Meta
   const [formConfig, setFormConfig] = useState(null);
+  // Estados para Buracos na Agenda (Vagas Ociosas Futuras & Ações Operacionais)
+  const [filtroBarbeiroBuracos, setFiltroBarbeiroBuracos] = useState('todos');
+  const [filtroPrazoBuracos, setFiltroPrazoBuracos] = useState('todos');
+  const [modalEncaixeAberto, setModalEncaixeAberto] = useState(false);
+  const [vagaEncaixe, setVagaEncaixe] = useState(null);
+  const [formEncaixe, setFormEncaixe] = useState({ clienteNome: '', clienteTelefone: '', servicoId: '', observacao: '' });
+  const [bloqueandoSlotId, setBloqueandoSlotId] = useState(null);
+  const [salvandoEncaixe, setSalvandoEncaixe] = useState(false);
   const [salvandoConfig, setSalvandoConfig] = useState(false);
+  // Ação 1: Bloquear horário ocioso na agenda
+  const handleBloquearSlot = async (vaga) => {
+    if (!window.confirm(`Deseja bloquear o horário ${vaga.horario} de ${vaga.dia} com ${vaga.profissional} na agenda da Dino?`)) return;
+    setBloqueandoSlotId(vaga.id);
+    try {
+      await api.post('/api/admin/dino/buracos-agenda/bloquear', {
+        empresaId: empresaAtivaId,
+        profissionalId: vaga.profissionalId,
+        data: vaga.data,
+        horario: vaga.horario,
+        motivo: 'Bloqueio de Horário Ocioso via Painel IA',
+      });
+      setMensagemSucesso(`Horário ${vaga.horario} de ${vaga.dia} bloqueado com sucesso na agenda da Dino!`);
+      setTimeout(() => setMensagemSucesso(''), 5000);
+      carregarInteligencia(empresaAtivaId);
+    } catch (e) {
+      alert(e.message || 'Erro ao bloquear horário.');
+    } finally {
+      setBloqueandoSlotId(null);
+    }
+  };
+
+  // Ação 2: Abrir modal de encaixe rápido
+  const handleAbrirEncaixe = (vaga) => {
+    setVagaEncaixe(vaga);
+    setFormEncaixe({
+      clienteNome: vaga.clienteSugerido?.nome || '',
+      clienteTelefone: vaga.clienteSugerido?.telefone || '',
+      servicoId: 'srv-dino-corte-001',
+      observacao: `Encaixe rápido no buraco de ${vaga.horario} (${vaga.dia})`,
+    });
+    setModalEncaixeAberto(true);
+  };
+
+  // Ação 2b: Confirmar encaixe rápido
+  const handleSalvarEncaixe = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!vagaEncaixe) return;
+    setSalvandoEncaixe(true);
+    try {
+      await api.post('/api/admin/dino/buracos-agenda/encaixe', {
+        empresaId: empresaAtivaId,
+        profissionalId: vagaEncaixe.profissionalId,
+        data: vagaEncaixe.data,
+        horario: vagaEncaixe.horario,
+        clienteNome: formEncaixe.clienteNome,
+        clienteTelefone: formEncaixe.clienteTelefone,
+        servicoId: formEncaixe.servicoId,
+        observacoes: formEncaixe.observacao,
+      });
+      setModalEncaixeAberto(false);
+      setVagaEncaixe(null);
+      setMensagemSucesso(`Encaixe realizado com sucesso para ${formEncaixe.clienteNome || 'o cliente'}!`);
+      setTimeout(() => setMensagemSucesso(''), 5000);
+      carregarInteligencia(empresaAtivaId);
+    } catch (err) {
+      alert(err.message || 'Erro ao salvar encaixe.');
+    } finally {
+      setSalvandoEncaixe(false);
+    }
+  };
+
+  // Ação 3: Copiar Link de Agendamento Direto
+  const handleCopiarLinkVaga = (vaga) => {
+    const link = vaga.linkAgendamento || `https://kytto.com.br/agendar/dino?data=${vaga.data}&hora=${vaga.horario}`;
+    navigator.clipboard?.writeText(link);
+    setMensagemSucesso(`Link copiado para a área de transferência!`);
+    setTimeout(() => setMensagemSucesso(''), 4000);
+  };
+
   const carregarInteligencia = useCallback(async (empId) => {
     setCarregando(true);
     setErro(null);
@@ -1217,69 +1295,423 @@ export default function DinoInteligenciaVendasIa() {
                 </div>
               )}
 
-              {/* ABA 2: PREENCHER VAGAS DA SEMANA / CAMPANHAS */}
-              {abaAtiva === 'buracos' && (
-                <div>
-                  <div style={{ marginBottom: 18 }}>
-                    <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>
-                      {labels.vagas || 'Otimizador de Vagas Ociosas & Campanhas'}
-                    </h3>
-                    <p style={{ margin: '4px 0 0', color: COR.muted, fontSize: 13 }}>
-                      Otimização ativa de capacidade ociosa e campanhas programadas de alto retorno pelo WhatsApp.
-                    </p>
-                  </div>
+              {/* ABA 2: PREENCHER VAGAS DA SEMANA / CAMPANHAS (ESTRITAMENTE DE HOJE PARA FRENTE & AÇÕES OPERACIONAIS) */}
+              {abaAtiva === 'buracos' && (() => {
+                const todasVagas = oportunidades.vagasOciosasSemana || [];
+                const vagasFiltradas = todasVagas.filter(v => {
+                  if (filtroBarbeiroBuracos !== 'todos') {
+                    if (!v.profissional.toLowerCase().includes(filtroBarbeiroBuracos.toLowerCase())) return false;
+                  }
+                  if (filtroPrazoBuracos === 'hoje') {
+                    if (v.tagPrazo !== 'hoje') return false;
+                  } else if (filtroPrazoBuracos === '3dias') {
+                    if (Number(v.offsetDias || 0) > 3) return false;
+                  } else if (filtroPrazoBuracos === '7dias') {
+                    if (Number(v.offsetDias || 0) > 7) return false;
+                  }
+                  return true;
+                });
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
-                    {(oportunidades.vagasOciosasSemana || []).map((vaga, idx) => (
-                      <div key={idx} style={{ background: '#fff', border: `1px solid ${COR.line}`, borderRadius: 14, padding: 18 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ background: COR.azulClaro, color: COR.azul, padding: '3px 8px', borderRadius: 6, fontWeight: 800, fontSize: 11 }}>
-                            {vaga.dia} {vaga.data ? `· ${vaga.data.split('-').reverse().slice(0, 2).join('/')}` : ''}
-                          </span>
-                          {vaga.horario && <strong style={{ fontSize: 16, color: COR.fg }}>{vaga.horario}</strong>}
+                return (
+                  <div>
+                    {/* Header da Aba com Informativo Oficial */}
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+                        <div>
+                          <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>
+                            ⚡ {labels.vagas || 'Otimizador de Buracos na Agenda & Vagas Ociosas'}
+                          </h3>
+                          <p style={{ margin: '4px 0 0', color: COR.muted, fontSize: 13 }}>
+                            Visualização em tempo real de horários ociosos a partir de <strong>HOJE para FRENTE</strong>. Tome ações imediatas com 1 clique.
+                          </p>
                         </div>
-
-                        <div style={{ marginTop: 12 }}>
-                          {vaga.profissional && <div style={{ fontSize: 14, fontWeight: 700, color: COR.fg }}>Profissional: {vaga.profissional}</div>}
-                          {vaga.foco && <div style={{ fontSize: 14, fontWeight: 700, color: COR.fg }}>Foco: {vaga.foco}</div>}
-                          {vaga.dica && <div style={{ fontSize: 12, color: COR.muted, marginTop: 4 }}>{vaga.dica}</div>}
-                          <div style={{ fontSize: 13, color: COR.verde, fontWeight: 800, marginTop: 6 }}>
-                            Potencial Estimado: {fmtR(vaga.potencial)}
-                          </div>
-                        </div>
-
-                        <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${COR.line}` }}>
-                          <button
-                            onClick={() => {
-                              const msg = vaga.foco
-                                ? `Olá! Aqui é o ${agenteIa}. Separamos uma condição especial da semana em ${vaga.foco}. Chave PIX: ${dados?.config?.chavePix || ''}. Veja no link: ${dados?.config?.linkDireto || ''}\n\n${dados?.config?.fraseOptOut || ''}`
-                                : `Opa! Aqui é o ${agenteIa}. Abriu um horário exclusivo com o ${vaga.profissional} nesta ${vaga.dia} às ${vaga.horario}. Quer agendar em 1 toque? ${dados?.config?.linkDireto || ''}\n\n${dados?.config?.fraseOptOut || ''}`;
-                              window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
-                            }}
-                            style={{
-                              width: '100%',
-                              padding: '10px',
-                              background: COR.azul,
-                              color: '#fff',
-                              border: 0,
-                              borderRadius: 8,
-                              fontWeight: 700,
-                              fontSize: 12,
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: 6
-                            }}
-                          >
-                            <span>📢</span> Disparar Campanha no WhatsApp
-                          </button>
+                        <div style={{ padding: '6px 12px', background: 'rgba(34, 197, 94, 0.12)', border: '1px solid #22c55e', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#15803d', fontWeight: 700 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }}></span>
+                          Agenda Ativa · Horários Passados Descartados Automaticamente
                         </div>
                       </div>
-                    ))}
+                    </div>
+
+                    {/* Filtros Dinâmicos de Barbeiro e Período */}
+                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', background: '#f8fafc', padding: '12px 16px', borderRadius: 12, border: `1px solid ${COR.line}`, marginBottom: 20 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: COR.fg }}>💈 Barbeiro:</span>
+                        {['todos', 'Bruno', 'Dino', 'Nati'].map(b => (
+                          <button
+                            key={b}
+                            type="button"
+                            onClick={() => setFiltroBarbeiroBuracos(b)}
+                            style={{
+                              padding: '5px 11px',
+                              borderRadius: 6,
+                              fontSize: 12,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              border: filtroBarbeiroBuracos === b ? `1.5px solid ${COR.azul}` : `1px solid ${COR.line}`,
+                              background: filtroBarbeiroBuracos === b ? COR.azul : '#fff',
+                              color: filtroBarbeiroBuracos === b ? '#fff' : COR.fg,
+                            }}
+                          >
+                            {b === 'todos' ? 'Todos os Barbeiros' : b}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div style={{ height: 20, width: 1, background: COR.line }}></div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: COR.fg }}>📅 Período:</span>
+                        {[
+                          { id: 'todos', label: 'Todos para Frente' },
+                          { id: 'hoje', label: '⚡ Apenas Hoje' },
+                          { id: '3dias', label: 'Próximos 3 Dias' },
+                          { id: '7dias', label: 'Próxima Semana' },
+                        ].map(p => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => setFiltroPrazoBuracos(p.id)}
+                            style={{
+                              padding: '5px 11px',
+                              borderRadius: 6,
+                              fontSize: 12,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              border: filtroPrazoBuracos === p.id ? `1.5px solid ${COR.dourado}` : `1px solid ${COR.line}`,
+                              background: filtroPrazoBuracos === p.id ? COR.dourado : '#fff',
+                              color: filtroPrazoBuracos === p.id ? '#fff' : COR.fg,
+                            }}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div style={{ marginLeft: 'auto', fontSize: 12, color: COR.muted, fontWeight: 600 }}>
+                        {vagasFiltradas.length} vaga(s) ociosa(s) encontrada(s)
+                      </div>
+                    </div>
+
+                    {/* Grid de Cards de Buracos na Agenda com Ações */}
+                    {vagasFiltradas.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '40px 20px', background: '#fff', borderRadius: 12, border: `1px dashed ${COR.line}` }}>
+                        <div style={{ fontSize: 32, marginBottom: 8 }}>🎉</div>
+                        <h4 style={{ margin: 0, fontSize: 16, color: COR.fg }}>Grade 100% Preenchida neste Período!</h4>
+                        <p style={{ margin: '6px 0 0', fontSize: 13, color: COR.muted }}>Nenhum horário ocioso encontrado para os filtros selecionados.</p>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
+                        {vagasFiltradas.map((vaga) => {
+                          const ehHoje = vaga.tagPrazo === 'hoje';
+                          const ehAmanha = vaga.tagPrazo === 'amanha';
+
+                          return (
+                            <div
+                              key={vaga.id}
+                              style={{
+                                background: '#fff',
+                                border: ehHoje ? `2px solid ${COR.dourado}` : `1px solid ${COR.line}`,
+                                borderRadius: 14,
+                                padding: 18,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                boxShadow: ehHoje ? '0 4px 14px rgba(201, 154, 46, 0.15)' : 'none',
+                                position: 'relative',
+                              }}
+                            >
+                              {/* Header do Card com Tag de Data e Horário */}
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                <span
+                                  style={{
+                                    background: ehHoje ? COR.douradoClaro : ehAmanha ? COR.azulClaro : '#f1f5f9',
+                                    color: ehHoje ? COR.dourado : ehAmanha ? COR.azul : '#475569',
+                                    padding: '4px 10px',
+                                    borderRadius: 6,
+                                    fontWeight: 800,
+                                    fontSize: 11,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                  }}
+                                >
+                                  {ehHoje ? '⚡ HOJE' : ehAmanha ? '🌅 AMANHÃ' : '📅'} {vaga.dia}
+                                </span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <span style={{ fontSize: 12, color: COR.muted }}>⏰</span>
+                                  <strong style={{ fontSize: 18, color: COR.fg, letterSpacing: '-0.5px' }}>{vaga.horario}</strong>
+                                </div>
+                              </div>
+
+                              {/* Dados do Barbeiro e Potencial */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#f8fafc', borderRadius: 8, marginBottom: 12 }}>
+                                <div style={{ width: 34, height: 34, borderRadius: '50%', background: COR.azul, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13 }}>
+                                  {vaga.profissional.slice(0, 2).toUpperCase()}
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontSize: 14, fontWeight: 800, color: COR.fg }}>
+                                    {vaga.profissional}
+                                  </div>
+                                  <div style={{ fontSize: 12, color: COR.muted }}>
+                                    {vaga.foco || 'Corte & Barba'}
+                                  </div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                  <div style={{ fontSize: 11, color: COR.muted, fontWeight: 600 }}>Potencial</div>
+                                  <div style={{ fontSize: 14, color: COR.verde, fontWeight: 900 }}>{fmtR(vaga.potencial)}</div>
+                                </div>
+                              </div>
+
+                              {/* Card de Match Inteligente de Cliente */}
+                              {vaga.clienteSugerido ? (
+                                <div style={{ padding: '10px 12px', background: 'rgba(37, 99, 235, 0.05)', border: '1px dashed rgba(37, 99, 235, 0.3)', borderRadius: 8, marginBottom: 14 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                    <span style={{ fontSize: 11, fontWeight: 800, color: COR.azul }}>🎯 CLIENTE IDEAL PARA ESTE HORÁRIO:</span>
+                                    <span style={{ fontSize: 11, color: COR.laranja, fontWeight: 700 }}>{vaga.clienteSugerido.diasSemVir} dias sem vir</span>
+                                  </div>
+                                  <div style={{ fontSize: 13, fontWeight: 700, color: COR.fg }}>
+                                    {vaga.clienteSugerido.nome}
+                                  </div>
+                                  <div style={{ fontSize: 12, color: COR.muted }}>
+                                    {vaga.clienteSugerido.telefone}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div style={{ padding: '8px 10px', background: '#f8fafc', borderRadius: 8, marginBottom: 14, fontSize: 12, color: COR.muted }}>
+                                  💡 <em>Vaga disponível para agendamento online ou envio a clientes VIPs.</em>
+                                </div>
+                              )}
+
+                              {/* Barra de Ações Rápidas (4 Botões de Ação) */}
+                              <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: `1px solid ${COR.line}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                                  {/* Botão 1: Enviar WhatsApp */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const tel = vaga.clienteSugerido?.telefone?.replace(/\D/g, '') || '';
+                                      const msg = vaga.mensagemWhatsApp || `Olá! Abriu vaga com ${vaga.profissional} ${vaga.dia} às ${vaga.horario}. Link: ${vaga.linkAgendamento}`;
+                                      const url = tel ? `https://wa.me/${tel}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+                                      window.open(url, '_blank');
+                                    }}
+                                    style={{
+                                      padding: '9px 10px',
+                                      background: '#22c55e',
+                                      color: '#fff',
+                                      border: 0,
+                                      borderRadius: 8,
+                                      fontWeight: 800,
+                                      fontSize: 12,
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      gap: 6,
+                                    }}
+                                  >
+                                    <span>📲</span> WhatsApp
+                                  </button>
+
+                                  {/* Botão 2: Fazer Encaixe Rápido */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAbrirEncaixe(vaga)}
+                                    style={{
+                                      padding: '9px 10px',
+                                      background: COR.azul,
+                                      color: '#fff',
+                                      border: 0,
+                                      borderRadius: 8,
+                                      fontWeight: 800,
+                                      fontSize: 12,
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      gap: 6,
+                                    }}
+                                  >
+                                    <span>⚡</span> Encaixe
+                                  </button>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                                  {/* Botão 3: Oferta Relâmpago 15% OFF */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const tel = vaga.clienteSugerido?.telefone?.replace(/\D/g, '') || '';
+                                      const msg = vaga.mensagemOfertaRelampago || `Oferta Especial: 15% OFF ${vaga.dia} às ${vaga.horario} com ${vaga.profissional}! ${vaga.linkAgendamento}`;
+                                      const url = tel ? `https://wa.me/${tel}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+                                      window.open(url, '_blank');
+                                    }}
+                                    style={{
+                                      padding: '8px 10px',
+                                      background: 'rgba(245, 158, 11, 0.1)',
+                                      color: '#d97706',
+                                      border: '1px solid #f59e0b',
+                                      borderRadius: 8,
+                                      fontWeight: 700,
+                                      fontSize: 11,
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      gap: 4,
+                                    }}
+                                  >
+                                    <span>🏷️</span> Oferta 15% OFF
+                                  </button>
+
+                                  {/* Botão 4: Bloquear Horário */}
+                                  <button
+                                    type="button"
+                                    disabled={bloqueandoSlotId === vaga.id}
+                                    onClick={() => handleBloquearSlot(vaga)}
+                                    style={{
+                                      padding: '8px 10px',
+                                      background: '#fee2e2',
+                                      color: '#b91c1c',
+                                      border: '1px solid #fca5a5',
+                                      borderRadius: 8,
+                                      fontWeight: 700,
+                                      fontSize: 11,
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      gap: 4,
+                                    }}
+                                  >
+                                    <span>🔒</span> {bloqueandoSlotId === vaga.id ? 'Bloqueando…' : 'Bloquear Slot'}
+                                  </button>
+                                </div>
+
+                                {/* Link Auxiliar de Copiar URL */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopiarLinkVaga(vaga)}
+                                  style={{
+                                    padding: '6px',
+                                    background: 'transparent',
+                                    color: COR.muted,
+                                    border: 'none',
+                                    fontSize: 11,
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    textAlign: 'center',
+                                    textDecoration: 'underline',
+                                  }}
+                                >
+                                  📋 Copiar link direto deste horário
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Modal de Encaixe Rápido de Horário Ocioso */}
+                    {modalEncaixeAberto && vagaEncaixe && (
+                      <div
+                        style={{
+                          position: 'fixed',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          background: 'rgba(0,0,0,0.5)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          zIndex: 9999,
+                          padding: 16,
+                        }}
+                      >
+                        <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 440, padding: 24, boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>⚡ Fazer Encaixe Rápido</h3>
+                            <button
+                              type="button"
+                              onClick={() => { setModalEncaixeAberto(false); setVagaEncaixe(null); }}
+                              style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: COR.muted }}
+                            >
+                              ✕
+                            </button>
+                          </div>
+
+                          <div style={{ padding: '10px 14px', background: '#f1f5f9', borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
+                            <div><strong>Profissional:</strong> {vagaEncaixe.profissional}</div>
+                            <div><strong>Data:</strong> {vagaEncaixe.dia} ({vagaEncaixe.data})</div>
+                            <div><strong>Horário:</strong> {vagaEncaixe.horario}</div>
+                          </div>
+
+                          <form onSubmit={handleSalvarEncaixe} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                            <div>
+                              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 4, color: COR.fg }}>
+                                Nome do Cliente *
+                              </label>
+                              <input
+                                type="text"
+                                required
+                                value={formEncaixe.clienteNome}
+                                onChange={(e) => setFormEncaixe({ ...formEncaixe, clienteNome: e.target.value })}
+                                placeholder="Nome completo do cliente"
+                                style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${COR.line}`, boxSizing: 'border-box' }}
+                              />
+                            </div>
+
+                            <div>
+                              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 4, color: COR.fg }}>
+                                Telefone (WhatsApp)
+                              </label>
+                              <input
+                                type="tel"
+                                value={formEncaixe.clienteTelefone}
+                                onChange={(e) => setFormEncaixe({ ...formEncaixe, clienteTelefone: e.target.value })}
+                                placeholder="(65) 99999-9999"
+                                style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${COR.line}`, boxSizing: 'border-box' }}
+                              />
+                            </div>
+
+                            <div>
+                              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 4, color: COR.fg }}>
+                                Serviço
+                              </label>
+                              <select
+                                value={formEncaixe.servicoId}
+                                onChange={(e) => setFormEncaixe({ ...formEncaixe, servicoId: e.target.value })}
+                                style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${COR.line}`, boxSizing: 'border-box' }}
+                              >
+                                <option value="srv-dino-corte-001">Corte Masculino Dino (R$ 90)</option>
+                                <option value="srv-dino-barba-002">Barba Terapia Tradicional (R$ 60)</option>
+                                <option value="srv-dino-combo-003">Combo Corte & Barba Premium (R$ 140)</option>
+                              </select>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+                              <button
+                                type="button"
+                                onClick={() => { setModalEncaixeAberto(false); setVagaEncaixe(null); }}
+                                style={{ flex: 1, padding: 12, borderRadius: 8, border: `1px solid ${COR.line}`, background: '#f8fafc', fontWeight: 700, cursor: 'pointer' }}
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                type="submit"
+                                disabled={salvandoEncaixe}
+                                style={{ flex: 1, padding: 12, borderRadius: 8, border: 'none', background: COR.azul, color: '#fff', fontWeight: 800, cursor: 'pointer' }}
+                              >
+                                {salvandoEncaixe ? 'Confirmando…' : 'Confirmar Encaixe'}
+                              </button>
+                            </div>
+                          </form>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* ABA 3: UP-SELL DE SERVIÇOS & PRODUTOS */}
               {abaAtiva === 'upsell' && (

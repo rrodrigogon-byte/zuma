@@ -3,6 +3,12 @@
  * Gestão de Configurações Multi-Empresa e Registro de Dinheiro na Mesa
  */
 import {
+  calcularBuracosAgendaDino,
+  executarBloqueioBuraco,
+  executarEncaixeRapidoBuraco,
+  obterHojeCuiaba,
+} from './core/dino-buracos-agenda-engine.js';
+import {
   buildInteligenciaVendas,
   obterConfigEmpresa,
   salvarConfigEmpresa,
@@ -133,6 +139,72 @@ export function registerInteligenciaVendasRoutes(app, {
       res.status(500).json({ error: error.message || 'Erro ao registrar ação de venda.' });
     }
   };
+
+
+  // 7. Buracos na Agenda (Vagas Ociosas Futuras) - Exclusivo de HOJE para FRENTE
+  const handlerGetBuracos = async (req, res) => {
+    try {
+      const empresaId = extrairEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+      const estado = db().barbearias?.[empresaId] || {};
+      const diasAFrente = Math.max(1, Number(req.query?.dias || 10));
+      const barbeiro = String(req.query?.barbeiro || '').trim();
+
+      const dadosIntel = await buildInteligenciaVendas(db(), { empresaId, lojaId: extrairLojaId(req) });
+      const buracos = dadosIntel.oportunidades?.vagasOciosasSemana || dadosIntel.vagasOciosasSemana || [];
+
+      res.json({
+        ok: true,
+        sucesso: true,
+        empresaId,
+        hoje: obterHojeCuiaba(),
+        totalBuracos: buracos.length,
+        buracos,
+      });
+    } catch (error) {
+      console.error('[buracos-agenda] Erro ao listar:', error);
+      res.status(500).json({ error: error.message || 'Erro ao listar vagas ociosas.' });
+    }
+  };
+
+  // 8. Ação: Bloquear slot ocioso
+  const handlerBloquearBuraco = async (req, res) => {
+    try {
+      const empresaId = extrairEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+      const { profissionalId, data, horario, motivo } = req.body || {};
+      const resultado = executarBloqueioBuraco(empresaId, { profissionalId, data, horario, motivo });
+      res.json(resultado);
+    } catch (error) {
+      console.error('[buracos-agenda] Erro ao bloquear:', error);
+      res.status(400).json({ error: error.message || 'Erro ao bloquear horário na agenda.' });
+    }
+  };
+
+  // 9. Ação: Fazer Encaixe Rápido
+  const handlerEncaixeBuraco = async (req, res) => {
+    try {
+      const empresaId = extrairEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+      const { profissionalId, data, horario, clienteNome, clienteTelefone, servicoId, valor } = req.body || {};
+      const resultado = executarEncaixeRapidoBuraco(empresaId, {
+        profissionalId,
+        data,
+        horario,
+        clienteNome,
+        clienteTelefone,
+        servicoId,
+        valor,
+      });
+      res.json(resultado);
+    } catch (error) {
+      console.error('[buracos-agenda] Erro no encaixe:', error);
+      res.status(400).json({ error: error.message || 'Erro ao realizar encaixe na agenda.' });
+    }
+  };
+
+  // Rotas de Buracos na Agenda
+  app.get('/api/admin/dino/buracos-agenda', handlerGetBuracos);
+  app.post('/api/admin/dino/buracos-agenda/bloquear', handlerBloquearBuraco);
+  app.post('/api/admin/dino/buracos-agenda/encaixe', handlerEncaixeBuraco);
+  app.post('/api/admin/dino/buracos-agenda/disparar-whatsapp', handlerDisparar);
 
   // Rotas canônicas universais
   app.get('/api/admin/inteligencia-vendas', handlerGet);

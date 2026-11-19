@@ -5,6 +5,7 @@
  * Kytto ERP - SetPoint Intelligence
  */
 import { carregarBaseConsolidada } from './dino-recuperacao-avec.js';
+import { calcularBuracosAgendaDino } from './core/dino-buracos-agenda-engine.js';
 
 function hojeCuiaba() {
   return new Intl.DateTimeFormat('en-CA', {
@@ -453,14 +454,15 @@ async function buildInteligenciaDino(raiz, { empresaId, lojaId, hoje, config }) 
   clientesUpSell.sort((a, b) => (b.impactoTicket || 0) - (a.impactoTicket || 0));
   clientesClube.sort((a, b) => b.gastoTotal - a.gastoTotal);
 
-  const buracosAgenda = [
-    { dia: 'Segunda', data: '2026-11-09', profissional: 'Bruno', horario: '14:30', potencial: 100 },
-    { dia: 'Segunda', data: '2026-11-09', profissional: 'Bruno', horario: '16:00', potencial: 200 },
-    { dia: 'Terça', data: '2026-11-10', profissional: 'Nati', horario: '11:15', potencial: 100 },
-    { dia: 'Terça', data: '2026-11-10', profissional: 'Bruno', horario: '15:45', profissionalExtra: 'David', potencial: 100 },
-    { dia: 'Quarta', data: '2026-11-11', profissional: 'Dino', horario: '09:30', potencial: 300 },
-    { dia: 'Quarta', data: '2026-11-11', profissional: 'David', horario: '17:00', potencial: 100 },
-  ];
+  // Cálculo dinâmico estritamente de HOJE para FRENTE (sem datas passadas)
+  const buracosAgenda = calcularBuracosAgendaDino({
+    estado,
+    hoje,
+    baseClientes,
+    config,
+    diasAFrente: 10,
+    limiteVagas: 24,
+  });
 
   const potReativacao = Math.min(clientesReativacao.length, 60) * ticketMedioAtual;
   const potUpSell = Math.min(clientesUpSell.length, 40) * 60;
