@@ -88,6 +88,21 @@ export const TENANTS_OFICIAIS = {
       { id: "usr-concreto-operador-01", username: "operador_usina", email: "usina@serranoconcreto.com.br", nome: "Operador Central Dosadora", role: "operador", pgRole: "operador" },
       { id: "usr-concreto-despacho-01", username: "despacho", email: "despacho@serranoconcreto.com.br", nome: "Despacho & Balança", role: "operador", pgRole: "operador" },
     ]
+  },
+  zuma: {
+    empresaId: "c3c3ac01-8e50-4b61-8c79-de4aaa916da3",
+    lojaId: "c3c3ac01-8e50-4b61-8c79-de4aaa916da0",
+    nome: "Zuma Cozinha Oriental",
+    slug: "zuma",
+    cnpj: "36296848000157",
+    roleIdOwner: "b125e523-957d-4d12-a881-56b958ecec45",
+    roleIdStaff: "85f0c5c5-584b-4d9f-946e-a348c3688483",
+    usuarios: [
+      { id: "usr-zuma-owner-01", username: "leandro_zuma", email: "leandro@zumacozinhaoriental.com.br", nome: "Leandro (Proprietário Zuma)", role: "organizador", pgRole: "gerente", isOwner: true },
+      { id: "usr-zuma-owner-02", username: "jessica_zuma", email: "jessica@zumacozinhaoriental.com.br", nome: "Jessica (Proprietária Zuma)", role: "organizador", pgRole: "gerente", isOwner: true },
+      { id: "usr-zuma-sushiman-01", username: "sushiman_zuma", email: "chef@zumacozinhaoriental.com.br", nome: "Chef Sushiman Zuma", role: "operador", pgRole: "operador" },
+      { id: "usr-zuma-atendente-01", username: "atendimento_zuma", email: "atendimento@zumacozinhaoriental.com.br", nome: "Atendimento & Delivery Zuma", role: "operador", pgRole: "operador" },
+    ]
   }
 };
 
@@ -115,7 +130,7 @@ export async function sincronizarTenantsEquipes(commerceDb) {
             config.empresaId,
             config.nome,
             String(config.cnpj || '12345678000199').replace(/\D/g, '').padEnd(14, '0').slice(0, 14),
-            tenantKey === 'palatare' ? 'restaurante' : (tenantKey === 'casanova' || tenantKey === 'stallone' ? 'loja' : (tenantKey === 'supermercado' ? 'supermercado' : (tenantKey === 'barbearia' || tenantKey === 'dino' ? 'barbearia' : 'outro')))
+            (tenantKey === 'palatare' || tenantKey === 'zuma') ? 'restaurante' : (tenantKey === 'casanova' || tenantKey === 'stallone' ? 'loja' : (tenantKey === 'supermercado' ? 'supermercado' : (tenantKey === 'barbearia' || tenantKey === 'dino' ? 'barbearia' : 'outro')))
           ]
         );
         if (config.lojaId) {

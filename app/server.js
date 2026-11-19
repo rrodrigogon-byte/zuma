@@ -263,6 +263,7 @@ import { profissionalDoUsuario } from './dino-modo-barbeiro.js';
 import { provisionarEquipeDino } from './dino-equipe-seed.js';
 import { provisionarCatalogoDino, SERVICOS_DINO_OFICIAIS, PRODUTOS_DINO_OFICIAIS } from './dino-catalogo-seed.js';
 import { provisionarPalatarePizzaria, PALATARE_EMPRESA_ID, PALATARE_DADOS_EMPRESA } from './palatare-pizzaria-seed.js';
+import { provisionarZumaRestaurante, ZUMA_EMPRESA_ID, ZUMA_DADOS_EMPRESA } from './zuma-cozinha-oriental-seed.js';
 import { provisionarConcretoUsina, CONCRETO_EMPRESA_ID, CONCRETO_DADOS_EMPRESA, CONCRETO_SILOS_INICIAIS, CONCRETO_BAIAS_INICIAIS, CONCRETO_TANQUES_ADITIVOS, CONCRETO_ENTRADAS_SUPRIMENTOS, CONCRETO_BATELADAS_PROCESSO } from './concreto-usina-seed.js';
 import { criarRotasConcreto } from './modules/concreto/rotas.js';
 import { criarRotasDeliveryMarketplaces, criarRotasWebhooksDelivery } from './modules/pizzaria/rotas-delivery-marketplaces.js';
@@ -1312,6 +1313,7 @@ const EMPRESA_DINO_ID = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
 const EMPRESA_STALLONE_ID = '31f70c83-9172-40c2-945f-9e793b5048be';
 const EMPRESA_AGRO_OPEN_ID = '2e041110-db20-4fd1-8278-12bd3dead008';
 const EMPRESA_PALATARE_ID = 'c1c1ac01-8e50-4b61-8c79-de4aaa916da9';
+export const EMPRESA_ZUMA_ID = 'c3c3ac01-8e50-4b61-8c79-de4aaa916da3';
 export const HOLDING_PALATARE_EMPRESA_ID = 'c0c0ac01-8e50-4b61-8c79-de4aaa916da0';
 export const HOLDING_PALATARE_LOJA_ID = 'c0c0ac01-8e50-4b61-8c79-de4aaa916da1';
 
@@ -1395,6 +1397,19 @@ const isConcretoUser = (user) => {
   );
   return em.includes("concreto") || em.includes("serrano") || em.includes("usina") || em.includes("despacho");
 };
+const isZumaUser = (user) => {
+  if (!user) return false;
+  if (isAdminGlobal(user)) return false;
+  const em = norm(
+    (user.email || "") + " " +
+    (user.emailAlternativo || "") + " " +
+    (user.username || "") + " " +
+    (user.login || "") + " " +
+    (user.nome || "") + " " +
+    (user.id || "")
+  );
+  return em.includes("zuma") || em.includes("oriental") || em.includes("sushiman");
+};
 const obterEmpresasAutorizadasDoUsuario = (user) => {
   if (!user) return [];
   if (isAdminGlobal(user)) {
@@ -1432,6 +1447,13 @@ const obterEmpresasAutorizadasDoUsuario = (user) => {
       "palatare",
       "concreto",
       "holding"
+    ];
+  }
+  if (isZumaUser(user)) {
+    // Zuma Cozinha Oriental
+    return [
+      EMPRESA_ZUMA_ID,
+      "zuma"
     ];
   }
   if (user?.empresaId) {
@@ -1811,6 +1833,26 @@ async function commerceSessionFor(user) {
         lojas_acessiveis: lojas,
         loja,
         lojaId: loja?.id || null,
+      };
+    }
+
+    // 5. Zuma Cozinha Oriental
+    if (isZumaUser(user)) {
+      const empresasZuma = [
+        { id: EMPRESA_ZUMA_ID, nome: 'Zuma Cozinha Oriental', razaoSocial: 'Zuma Cozinha Oriental LTDA', cnpj: '36.296.848/0001-57', brandKey: 'zuma', tipoNegocio: 'restaurante', grupoId: 'grp-zuma-oriental-04', grupoNome: 'Grupo Zuma Cozinha Oriental', ativa: true }
+      ];
+      const lojas = [
+        { id: 'c3c3ac01-8e50-4b61-8c79-de4aaa916da0', empresaId: EMPRESA_ZUMA_ID, codigo: 'ZUMA-MATRIZ', nome: 'Zuma Cozinha Oriental - Principal', ativa: true }
+      ];
+      const empresa = empresasZuma[0];
+      const loja = lojas[0];
+      return {
+        empresas_acessiveis: empresasZuma,
+        empresa,
+        empresaId: EMPRESA_ZUMA_ID,
+        lojas_acessiveis: lojas,
+        loja,
+        lojaId: loja.id,
       };
     }
 
@@ -13661,6 +13703,7 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
     try { sincronizarTenantsEquipes(commerceDb); } catch (err) { console.warn('Aviso ao sincronizar tenants:', err.message); }
     try { provisionarPalatarePizzaria({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar Palatare:', err.message); }
     try { provisionarConcretoUsina({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar Concreto:', err.message); }
+    try { provisionarZumaRestaurante({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar Zuma:', err.message); }
     try {
       if (commerceDb && typeof commerceDb.query === 'function') {
         commerceDb.query(`
