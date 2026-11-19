@@ -12,7 +12,7 @@ export const ZUMA_STOREFRONT_ID = "b8b8ac01-8e50-4b61-8c79-de4aaa916da0";
 export const ZUMA_ACCOUNT_ID = "a8a8ac01-8e50-4b61-8c79-de4aaa916da0";
 export const ZUMA_CNPJ = "36.296.848/0001-57";
 export const ZUMA_CNPJ_NUM = "36296848000157";
-export const ZUMA_GRUPO_ID = "grp-zuma-oriental-04";
+export const ZUMA_GRUPO_ID = null;
 export const ZUMA_GRUPO_NOME = "Grupo Zuma Cozinha Oriental";
 
 export const ZUMA_DADOS_EMPRESA = {

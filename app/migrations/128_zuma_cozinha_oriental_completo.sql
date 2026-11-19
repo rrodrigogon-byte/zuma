@@ -18,7 +18,7 @@ BEGIN
     '13.882.109-8',
     '94820',
     'restaurante',
-    'grp-zuma-oriental-04',
+    NULL,
     'Av. Brasil',
     '1605',
     'Jardim Cidade Alta',
@@ -5667,4 +5667,3 @@ FROM (
     ('Aluguel, Energia & Manutenção', 'despesa', 'operacional')
 ) AS cat(nome, tipo, grupo_dre)
 ON CONFLICT DO NOTHING;
-

@@ -1839,7 +1839,7 @@ async function commerceSessionFor(user) {
     // 5. Zuma Cozinha Oriental
     if (isZumaUser(user)) {
       const empresasZuma = [
-        { id: EMPRESA_ZUMA_ID, nome: 'Zuma Cozinha Oriental', razaoSocial: 'Zuma Cozinha Oriental LTDA', cnpj: '36.296.848/0001-57', brandKey: 'zuma', tipoNegocio: 'restaurante', grupoId: 'grp-zuma-oriental-04', grupoNome: 'Grupo Zuma Cozinha Oriental', ativa: true }
+        { id: EMPRESA_ZUMA_ID, nome: 'Zuma Cozinha Oriental', razaoSocial: 'Zuma Cozinha Oriental LTDA', cnpj: '36.296.848/0001-57', brandKey: 'zuma', tipoNegocio: 'restaurante', grupoId: null, grupoNome: 'Grupo Zuma Cozinha Oriental', ativa: true }
       ];
       const lojas = [
         { id: 'c3c3ac01-8e50-4b61-8c79-de4aaa916da0', empresaId: EMPRESA_ZUMA_ID, codigo: 'ZUMA-MATRIZ', nome: 'Zuma Cozinha Oriental - Principal', ativa: true }
