@@ -106,6 +106,7 @@ import {
   formatarMensagemReportGestao,
   enviarReportDiarioGestaoWhatsApp,
   enviarValidacaoEstrategicaWhatsApp,
+  enviarMensagemValidacaoDireta,
   registrarOptOut,
 } from './core/dino-recuperacao-ativa.js';
 import {
@@ -557,9 +558,22 @@ app.post('/api/admin/dino/recuperacao-ativa/optout', async (req, res) => {
 
 app.post('/api/public/dino/recuperacao-ativa/validar-whatsapp', async (req, res) => {
   try {
-    const { telefone = '5514997462929' } = req.body || {};
-    const resultado = await enviarValidacaoEstrategicaWhatsApp({ telefoneDestino: telefone });
+    const { telefone = '5514997462929', apenasDestino = false, mensagem = null } = req.body || {};
+    const resultado = await enviarValidacaoEstrategicaWhatsApp({
+      telefoneDestino: telefone,
+      apenasDestino: Boolean(apenasDestino),
+      mensagemCustomizada: mensagem,
+    });
     res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+app.post('/api/public/dino/whatsapp/validar-rodrigo', async (req, res) => {
+  try {
+    const { telefone = '5514997462929', mensagem = null } = req.body || {};
+    const resultado = await enviarMensagemValidacaoDireta({ telefone, mensagem });
+    res.json(resultado);
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -7583,7 +7597,8 @@ app.post('/api/admin/barbearia/agenda', async (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
     const lojaId = legacyLojaId(req);
-    if (req.body?.valor !== undefined) {
+    const permiteCustom = req.body?.permitirValorPersonalizado === true || req.body?.valorManual === true || (req.body?.origem === 'admin' && req.body?.permitirValorPersonalizado !== false);
+    if (req.body?.valor !== undefined && !permiteCustom) {
       const servico = barbeariaErpKytto.listarServicos(empresaId).find((item) => item.id === String(req.body?.servicoId ?? req.body?.servico_id ?? ''));
       if (!servico || Math.round(Number(req.body.valor) * 100) !== Math.round(Number(servico.preco) * 100)) {
         return res.status(409).json({ error: 'O valor do agendamento deve corresponder ao preço cadastrado do serviço.', code: 'APPOINTMENT_PRICE_MISMATCH' });
@@ -7597,7 +7612,7 @@ app.post('/api/admin/barbearia/agenda', async (req, res) => {
     if (naoAvisarCliente && !podeSilenciarAvisoAgenda(req.user)) {
       return res.status(403).json({ error: 'Só a gestão pode registrar agendamento sem avisar o cliente.', code: 'AVISO_CLIENTE_OBRIGATORIO' });
     }
-    const agendamento = enriquecerAgendamentoBarbearia(empresaId, barbeariaErpKytto.criarAgendamento(empresaId, body, { permitirEncaixe: encaixe, horaOperacionalEstrita: true }));
+    const agendamento = enriquecerAgendamentoBarbearia(empresaId, barbeariaErpKytto.criarAgendamento(empresaId, body, { permitirEncaixe: encaixe, horaOperacionalEstrita: true, permitirValorPersonalizado: permiteCustom }));
     try { captacaoKytto.marcarListaEsperaAgendada(empresaId, { telefone: agendamento.clienteTelefone, data: agendamento.dataAgenda, lojaId: agendamento.lojaId || lojaId, servicoId: agendamento.servicoId }); } catch (_) { /* não impede a criação da agenda */ }
     if (agendamento.encaixe) audit(req, 'AGENDA ENCAIXE', `${agendamento.id} profissional=${agendamento.profissionalId} ${agendamento.dataHora}`);
     let notificacao;
@@ -7616,7 +7631,8 @@ app.patch('/api/admin/barbearia/agenda/:id', async (req, res) => {
     const empresaId = legacyEmpresaId(req);
     const lojaId = legacyLojaId(req);
     const anterior = listarAgendamentosBarbearia(empresaId, { lojaId }).find((item) => item.id === String(req.params.id));
-    const agendamento = barbeariaErpKytto.atualizarAgendamento(empresaId, req.params.id, { ...(req.body || {}), lojaId, usuario: req.user?.email || req.user?.nome || '', origem: 'admin' }, { permitirEncaixe: req.body?.encaixe === true, horaOperacionalEstrita: true });
+    const permiteCustomPatch = req.body?.permitirValorPersonalizado === true || req.body?.valorManual === true || req.body?.origem === 'admin';
+    const agendamento = barbeariaErpKytto.atualizarAgendamento(empresaId, req.params.id, { ...(req.body || {}), lojaId, usuario: req.user?.email || req.user?.nome || '', origem: 'admin' }, { permitirEncaixe: req.body?.encaixe === true, horaOperacionalEstrita: true, permitirValorPersonalizado: permiteCustomPatch });
     if (!agendamento) return res.status(404).json({ error: 'Agendamento não encontrado na empresa ativa.' });
     const remarcado = anterior && ['dataHora', 'dataAgenda', 'profissionalId', 'servicoId'].some((campo) => String(anterior[campo] || '') !== String(agendamento[campo] || ''));
     audit(req, 'BARBEARIA AGENDAMENTO ATUALIZADO', `${agendamento.id} cliente="${agendamento.clienteNome || ''}" ${remarcado ? 'REMARCADO' : ''}`.trim());
@@ -9859,10 +9875,12 @@ app.post('/api/admin/barbearia/bloqueios', async (req, res) => {
     const empresaId = legacyEmpresaId(req);
     const lojaId = legacyLojaId(req);
     if (Array.isArray(req.body.lote)) {
-      const bloqueios = req.body.lote.map(b => barbeariaErpKytto.criarBloqueio(empresaId, { ...b, lojaId }));
-      for (const b of bloqueios) {
-        void sincronizarBloqueioNoPostgres(empresaId, b).catch(() => null);
-      }
+      const bloqueios = barbeariaErpKytto.criarBloqueiosEmLote(empresaId, req.body.lote, lojaId);
+      void (async () => {
+        for (const b of bloqueios) {
+          await sincronizarBloqueioNoPostgres(empresaId, b).catch(() => null);
+        }
+      })();
       return res.status(201).json({ ok: true, bloqueios });
     }
     const bloqueio = barbeariaErpKytto.criarBloqueio(empresaId, { ...(req.body || {}), lojaId });
@@ -9870,6 +9888,18 @@ app.post('/api/admin/barbearia/bloqueios', async (req, res) => {
     res.status(201).json({ ok: true, bloqueio });
   }
   catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.post('/api/admin/barbearia/bloqueios/desativar-serie', async (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const desativados = barbeariaErpKytto.desativarBloqueiosSerie(empresaId, req.body || {});
+    void (async () => {
+      for (const b of desativados) {
+        await desativarBloqueioNoPostgres(empresaId, b).catch(() => null);
+      }
+    })();
+    res.json({ ok: true, desativados, total: desativados.length });
+  } catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.patch('/api/admin/barbearia/bloqueios/:id', async (req, res) => {
   try {

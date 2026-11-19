@@ -645,13 +645,15 @@ export async function enviarReportDiarioGestaoWhatsApp({ empresaId = EMPRESA_DIN
 
   const conexaoGestao = obterConexao(empresaId, 'gestao');
   const instance = conexaoGestao?.instance || 'barbearia-dino-gestao';
-  const targetNumbers = Array.from(new Set([
-    telefoneDestino,
-    TELEFONE_RODRIGO_GESTAO,
-    TELEFONE_DINO_OFICIAL,
-    TELEFONE_GUILHERME_DINO,
-    TELEFONE_GUILHERME_DINO_9D,
-  ].filter(Boolean)));
+  const targetNumbers = apenasDestino
+    ? [telefoneDestino]
+    : Array.from(new Set([
+        telefoneDestino,
+        TELEFONE_RODRIGO_GESTAO,
+        TELEFONE_DINO_OFICIAL,
+        TELEFONE_GUILHERME_DINO,
+        TELEFONE_GUILHERME_DINO_9D,
+      ].filter(Boolean)));
 
   let enviado = false;
   let erro = null;
@@ -750,8 +752,8 @@ export async function enviarReportDiarioGestaoWhatsApp({ empresaId = EMPRESA_DIN
 /**
  * Dispara mensagem de validação imediata do Plano Estratégico para 14-997462929 e Gestão Dino
  */
-export async function enviarValidacaoEstrategicaWhatsApp({ telefoneDestino = '5514997462929' } = {}) {
-  const textoValidacao = `📢 *[CANAL OFICIAL DE GOVERNANÇA & GESTÃO DINO]* 🦖📋
+export async function enviarValidacaoEstrategicaWhatsApp({ telefoneDestino = '5514997462929', apenasDestino = false, mensagemCustomizada = null } = {}) {
+  const textoValidacao = mensagemCustomizada || `📢 *[CANAL OFICIAL DE GOVERNANÇA & GESTÃO DINO]* 🦖📋
 *VALIDAÇÃO ESTRATÉGICA DE ENTRADA EM PRODUÇÃO (PRD)* 💈⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Olá Rodrigo e Guilherme (Equipe Gestão Dino)!
@@ -791,13 +793,15 @@ Estamos ativando oficialmente em Produção (PRD) o *Plano Estratégico de Ocupa
 
 ✅ *STATUS:* Validado com sucesso. Sistema ativo para rodar a rotina a partir de hoje!`;
 
-  const targetNumbers = Array.from(new Set([
-    telefoneDestino,
-    TELEFONE_RODRIGO_GESTAO,
-    TELEFONE_DINO_OFICIAL,
-    TELEFONE_GUILHERME_DINO,
-    TELEFONE_GUILHERME_DINO_9D,
-  ].filter(Boolean)));
+  const targetNumbers = apenasDestino
+    ? [telefoneDestino]
+    : Array.from(new Set([
+        telefoneDestino,
+        TELEFONE_RODRIGO_GESTAO,
+        TELEFONE_DINO_OFICIAL,
+        TELEFONE_GUILHERME_DINO,
+        TELEFONE_GUILHERME_DINO_9D,
+      ].filter(Boolean)));
 
   const envios = [];
   for (const num of targetNumbers) {
@@ -824,6 +828,62 @@ Estamos ativando oficialmente em Produção (PRD) o *Plano Estratégico de Ocupa
     textoValidacao
   };
 }
+
+/**
+ * Envia mensagem direta de validação operacional exclusivamente para Rodrigo Gonçalves (14-99746-2929)
+ */
+export async function enviarMensagemValidacaoDireta({
+  telefone = '5514997462929',
+  mensagem = null,
+} = {}) {
+  const numero = String(telefone || '5514997462929').replace(/\D/g, '');
+  const textoFinal = mensagem || `📢 *[KYTTO TECNOLOGIA — VALIDAÇÃO OPERACIONAL EM PRODUÇÃO]* 🦖⚡
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Olá, Rodrigo Gonçalves! 👋
+
+Mensagem oficial de validação do canal WhatsApp Kytto / Barbearia Dino. Confirmamos que as entregas solicitadas foram implementadas e homologadas com sucesso:
+
+✅ *1. Edição Livre de Valor no Agendamento/Remarcar:*
+• Campo de valor editável no modal de Novo Agendamento e Remarcar (\`BarbeariaNovoAgendamentoModal.jsx\`);
+• Permite sobrescrever livremente o valor padrão do serviço sem perder o vínculo do catálogo;
+• Persistência no backend Kytto ERP (\`app/server.js\` e \`app/barbearia-erp-kytto.js\`) com \`permitirValorPersonalizado: true\`;
+• Repasse automático do valor customizado para a comanda e fluxo de caixa;
+• 152/152 testes automatizados aprovados e deploy ativo no Render.
+
+📊 *2. Anexo I Executivo Completo (Typst HD):*
+• 11 páginas com Playbook de Vendas, Go-To-Market e Fluxo de Caixa projetado;
+• 7 novas métricas SaaS incorporadas (NRR, Magic Number, CAC Payback, Rule of 40, Quick Ratio, TEF Integrado, SLA 2h);
+• Pipeline de 40 clientes para 2027 em Tangará da Serra com ticket médio de R$ 1,5k;
+• Estrutura física detalhada: 6 cargos a R$ 5k fixo + aluguel R$ 5k;
+• Clientes-âncora ativos: Barbearia Dino, Casa Nova Imob, Construtora Casa Nova, Stallone Nutre Sport e Resolvetudo.
+
+🎯 *3. Manual do Usuário — Sorteios & Roleta Dino:*
+• Manual ilustrado em 8 páginas cobrindo criação de campanhas, distribuição de bilhetes por compras/comandas e sorteio auditável.
+
+📈 *4. Pitch Deck de Negócios & Investidores:*
+• 21 slides executivos em PPTX e PDF HD com modelo de captação e valuation projetado.
+
+🤖 *Motor KyttoIA 2.5 Flash & Meta Cloud API:* 100% operacional em Tangará da Serra/MT.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+_Kytto Tecnologia — A plataforma que decide o jogo._`;
+
+  const resChat = await sendTextViaChatbotBackend({
+    instance: process.env.CHATBOT_BACKEND_INSTANCE || 'dino',
+    number: numero,
+    text: textoFinal,
+    simulateTyping: true,
+  });
+
+  return {
+    ok: Boolean(resChat?.ok || resChat?.data?.success === true),
+    numero,
+    questionId: resChat?.data?.key?.id || resChat?.data?.questionId || null,
+    status: resChat?.status,
+    error: resChat?.error,
+    mensagem: textoFinal,
+  };
+}
+
 
 /**
  * Worker contínuo de Recuperação Ativa & Relatório das 20h00

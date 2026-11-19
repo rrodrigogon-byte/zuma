@@ -1189,8 +1189,15 @@ async function resumeIdleHumanQueue(session, context) {
         atualizado_em = CURRENT_TIMESTAMP
       WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status = 'humano'
         AND assigned_to IS NULL
+        AND (
+          $4::boolean = true
+          OR (handoff_requested_at IS NOT NULL AND handoff_requested_at < CURRENT_TIMESTAMP - make_interval(mins => $5::int))
+          -- Fila sem motivo nem data: sobra da versão de 27-28/10 que punha toda mensagem
+          -- "fromMe" em 'humano' para sempre. Ninguém pediu atendente: volta na hora.
+          OR (handoff_requested_at IS NULL AND COALESCE(NULLIF(handoff_reason, ''), NULLIF(estado->>'handoffReason', '')) IS NULL)
+        )
       RETURNING id`,
-    [session.id, session.empresa_id, session.loja_id],
+    [session.id, session.empresa_id, session.loja_id, Boolean(deveRetomarPorDemanda), HANDOFF_IDLE_MINUTES],
   ).catch(() => ({ rows: [] }));
   if (!resumed.rows.length) return false;
   await auditHandoff(db, context, session.id, deveRetomarPorDemanda ? 'auto_resumed_scheduling_intent' : 'auto_resumed_idle_queue').catch(() => null);

@@ -81,7 +81,7 @@ function servicoPublico(item) {
     preco: Number(item.preco || 0),
     tipo_preco: item.tipoPreco || 'fixo',
     preco_rotulo: barbearia.rotuloPrecoServico(item),
-    duracao_min: Number(item.duracaoMinutos || 30),
+    duracao_min: Number(item.duracaoMinutos || item.duracaoMin || 30),
     profissionais_ids: Array.isArray(item.profissionaisIds) ? item.profissionaisIds : [],
     profissionaisIds: Array.isArray(item.profissionaisIds) ? item.profissionaisIds : [],
   };
@@ -143,8 +143,13 @@ router.get('/:slug', (req, res) => {
         return true;
       })
       .map(profissionalPublico);
-    const servicos = barbearia.listarServicos(identidade.empresaId)
+    const todosServicos = barbearia.listarServicos(identidade.empresaId);
+    const temServicosReais = todosServicos.some(
+      (item) => item.ativo !== false && !String(item.id || '').startsWith('srv-dino-')
+    );
+    const servicos = todosServicos
       .filter((item) => item.ativo !== false && item.permiteAgendamentoOnline !== false)
+      .filter((item) => !temServicosReais || !String(item.id || '').startsWith('srv-dino-'))
       .map(servicoPublico);
     const planos = barbearia.listarPlanos(identidade.empresaId)
       .filter((p) => p.ativo !== false)

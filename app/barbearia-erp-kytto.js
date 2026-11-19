@@ -1246,8 +1246,11 @@ export function excluirProdutoRevenda(empresaId, produtoId, { permanente = false
 }
 
 export function listarServicos(empresaId, { incluirInativos = false } = {}) {
-  return Object.values(estadoEmpresa(empresaId, false).servicos)
+  const todos = Object.values(estadoEmpresa(empresaId, false).servicos);
+  const temServicosReais = todos.some((item) => item && item.ativo !== false && !String(item.id || '').startsWith('srv-dino-'));
+  return todos
     .filter((item) => incluirInativos || item.ativo !== false)
+    .filter((item) => incluirInativos || !temServicosReais || !String(item.id || '').startsWith('srv-dino-'))
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
     .map(item=>({...item,grupoServico:serviceGroup(item),grupoServicoSugerido:!item.grupoServico}));
 }
@@ -1369,8 +1372,8 @@ export function listarBloqueios(empresaId, filtros = {}) {
   return Object.values(estadoEmpresa(empresaId, false).bloqueios)
     .filter((item) => filtros.incluirInativos || item.ativo !== false)
     .filter((item) => {
-      const dataInicio = chaveDia(item.inicio);
-      const dataFim = chaveDia(item.fim);
+      const dataInicio = diaOperacional(item.inicio);
+      const dataFim = diaOperacional(item.fim);
       if (filtros.data) return dataInicio <= String(filtros.data).slice(0, 10) && dataFim >= String(filtros.data).slice(0, 10);
       if (filtros.de && filtros.ate) return dataInicio <= String(filtros.ate).slice(0, 10) && dataFim >= String(filtros.de).slice(0, 10);
       return true;
@@ -1423,6 +1426,56 @@ export function atualizarBloqueio(empresaId, bloqueioId, dados = {}) {
 
 export function desativarBloqueio(empresaId, bloqueioId) {
   return atualizarBloqueio(empresaId, bloqueioId, { ativo: false });
+}
+
+export function criarBloqueiosEmLote(empresaId, lista = [], lojaIdPadrao = '') {
+  const estado = estadoEmpresa(empresaId);
+  const agora = dataAtual();
+  const criados = [];
+  for (const item of lista) {
+    const bloqueio = bloqueioNormalizado({ ...item, lojaId: item.lojaId || lojaIdPadrao });
+    if (bloqueio.profissionalId && (!estado.profissionais[bloqueio.profissionalId] || estado.profissionais[bloqueio.profissionalId].ativo === false)) {
+      throw new Error('Profissional do bloqueio não encontrado ou inativo.');
+    }
+    const jaExiste = Object.values(estado.bloqueios).find(
+      (b) => b.ativo !== false &&
+        (b.profissionalId || '') === (bloqueio.profissionalId || '') &&
+        b.inicio === bloqueio.inicio &&
+        b.fim === bloqueio.fim
+    );
+    if (jaExiste) {
+      Object.assign(jaExiste, bloqueio, { atualizadoEm: agora });
+      criados.push({ ...jaExiste });
+      continue;
+    }
+    const id = novoId('blk', estado.bloqueios);
+    estado.bloqueios[id] = { id, empresaId: String(empresaId), ...bloqueio, criadoEm: agora, atualizadoEm: agora };
+    criados.push({ ...estado.bloqueios[id] });
+  }
+  if (criados.length > 0) save();
+  return criados;
+}
+
+export function desativarBloqueiosSerie(empresaId, { bloqueioId, profissionalId, titulo, futurosApenas = true } = {}) {
+  const estado = estadoEmpresa(empresaId);
+  const ref = bloqueioId ? estado.bloqueios[String(bloqueioId)] : null;
+  const profAlvo = ref ? (ref.profissionalId || '') : String(profissionalId || '');
+  const tituloAlvo = ref ? String(ref.titulo || '').trim().toLowerCase() : String(titulo || '').trim().toLowerCase();
+  if (!tituloAlvo) return [];
+  const agoraMs = Date.now() - 86400000;
+  const desativados = [];
+  const agora = dataAtual();
+  for (const blk of Object.values(estado.bloqueios)) {
+    if (!blk || blk.ativo === false) continue;
+    if ((blk.profissionalId || '') !== profAlvo) continue;
+    if (String(blk.titulo || '').trim().toLowerCase() !== tituloAlvo) continue;
+    if (futurosApenas && new Date(blk.inicio).valueOf() < agoraMs && blk.id !== bloqueioId) continue;
+    blk.ativo = false;
+    blk.atualizadoEm = agora;
+    desativados.push({ ...blk });
+  }
+  if (desativados.length > 0) save();
+  return desativados;
 }
 
 export function listarConflitosBloqueio(empresaId, dados = {}) {
@@ -2865,7 +2918,7 @@ export function criarComandaBarbearia(empresaId, dados = {}) {
     atualizadoEm: agora,
     fechadaEm: null,
   };
-  const itensIniciais = Array.isArray(dados.itens) ? dados.itens : (agendamento?.servicoId ? [{ tipo: 'servico', servicoId: agendamento.servicoId, profissionalId }] : []);
+  const itensIniciais = Array.isArray(dados.itens) ? dados.itens : (agendamento?.servicoId ? [{ tipo: 'servico', servicoId: agendamento.servicoId, profissionalId, preco: agendamento.valor }] : []);
   if (itensIniciais.length) {
     const itens = itensIniciais.map((item) => itemComandaBarbeariaNormalizado(estado, comanda, item));
     comanda.itens.push(...itens);
@@ -4533,10 +4586,15 @@ export function criarAgendamento(empresaId, dados = {}, opcoes = {}) {
     agendamento.duracaoMinutos = duracaoAtendimentoProfissional(servico, profissional, obterCalendarioLoja(estado, agendamento.lojaId));
   }
   const precoCalculado = calcularPrecoServicoHorario(servico, profissional, agendamento.horaLocal);
+  const permiteCustom = dados.permitirValorPersonalizado === true || dados.valorManual === true || opcoes.permitirValorPersonalizado === true || dados.origem === 'admin';
   if (dados.valor !== undefined && Math.round(Number(dados.valor) * 100) !== Math.round(Number(precoCalculado) * 100) && Math.round(Number(dados.valor) * 100) !== Math.round(Number(servico.preco) * 100)) {
-    throw new Error('O valor do agendamento deve corresponder ao preço cadastrado do serviço. Use a comanda para ajustes auditados.');
+    if (!permiteCustom) {
+      throw new Error('O valor do agendamento deve corresponder ao preço cadastrado do serviço. Use a comanda para ajustes auditados.');
+    }
   }
-  agendamento.valor = precoCalculado;
+  agendamento.valor = permiteCustom && dados.valor !== undefined && Number.isFinite(Number(dados.valor))
+    ? Math.max(0, Math.round(Number(dados.valor) * 100) / 100)
+    : precoCalculado;
   validarCalendarioAgendamento(estado, agendamento, profissional);
 
   // Detecção de duplicidade acidental: mesmo cliente + mesmo profissional + mesma data e horário (duplo clique da equipe)
@@ -4608,10 +4666,15 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}, opcoe
     : duracaoAtendimentoProfissional(servico, profissional, obterCalendarioLoja(estado, agendamento.lojaId));
   const precoCalculado = calcularPrecoServicoHorario(servico, profissional, agendamento.horaLocal);
   const valorEsperado = agendamento.servicoId === atual.servicoId && Number(atual.valor) > 0 ? atual.valor : precoCalculado;
+  const permiteCustom = dados.permitirValorPersonalizado === true || dados.valorManual === true || opcoes.permitirValorPersonalizado === true || dados.origem === 'admin';
   if (dados.valor !== undefined && (!Number.isFinite(Number(dados.valor)) || Math.round(Number(dados.valor) * 100) !== Math.round(valorEsperado * 100))) {
-    throw new Error('O valor do agendamento não pode ser alterado. Use a comanda para ajustes auditados.');
+    if (!permiteCustom) {
+      throw new Error('O valor do agendamento não pode ser alterado. Use a comanda para ajustes auditados.');
+    }
   }
-  agendamento.valor = valorEsperado;
+  agendamento.valor = permiteCustom && dados.valor !== undefined && Number.isFinite(Number(dados.valor))
+    ? Math.max(0, Math.round(Number(dados.valor) * 100) / 100)
+    : valorEsperado;
   const mudouHorarioOuProf = ['dataHora', 'dataAgenda', 'horaLocal', 'profissionalId'].some((campo) => String(antes[campo] || '') !== String(agendamento[campo] || ''));
   if (mudouHorarioOuProf) {
     if (atual.vagaOrigemId) agendamento.vagaOrigemId = null;
