@@ -332,3 +332,27 @@ test('Zuma Cozinha Oriental - Zuma Pilot Cockpit: Aba #mercado e Inteligência C
   assert.ok(html.includes('Motor KyttoIA 2.5 Flash'), 'Deve utilizar o nome oficial Motor KyttoIA 2.5 Flash');
   assert.ok(html.includes('"mercado"'), 'VIEWS deve incluir rota mercado');
 });
+
+test('Zuma Cozinha Oriental - Zuma Pilot: 14 Módulos Completos (Operação, Inteligência e Gestão 360°)', () => {
+  const pilotHtmlPath = path.join(__dirname, 'public', 'zuma', 'pilot.html');
+  const html = fs.readFileSync(pilotHtmlPath, 'utf8');
+
+  const modulos = [
+    'cockpit', 'zumi', 'campanhas', 'leads', 'clientes', 'horarios', 'clube',
+    'mercado', 'engenharia', 'rfm', 'clima', 'omnichannel', 'financeiro', 'estoque'
+  ];
+
+  modulos.forEach(mod => {
+    assert.ok(html.includes(`id="v-${mod}"`), `Deve conter section view v-${mod}`);
+    assert.ok(html.includes(`data-v="${mod}"`), `Deve conter link nav data-v="${mod}"`);
+  });
+
+  // Validações específicas dos módulos avançados
+  assert.ok(html.includes('engCatFilter'), 'Deve conter filtro de categorias na engenharia de cardápio');
+  assert.ok(html.includes('engBcgFilter'), 'Deve conter filtro BCG na engenharia de cardápio');
+  assert.ok(html.includes('sRfm'), 'Deve conter simulador de aceleração de recompra RFM');
+  assert.ok(html.includes('climaConditionsCards'), 'Deve conter seletor de condições climáticas');
+  assert.ok(html.includes('omniChannelCards'), 'Deve conter cartões do hub omnichannel');
+  assert.ok(html.includes('sSalmWeight'), 'Deve conter simulador de rendimento do salmão fresco');
+  assert.ok(html.includes('Motor KyttoIA 2.5 Flash'), 'Deve manter a diretriz oficial da marca Motor KyttoIA 2.5 Flash');
+});

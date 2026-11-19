@@ -194,6 +194,7 @@ tr:last-child td{border-bottom:0}
     <nav id="nav">
       <a href="index.html" style="background:var(--nori-soft);color:var(--nori);font-weight:700"><span class="dot" style="background:var(--nori)"></span>← Loja, Mesas &amp; KDS</a>
       <a href="operacao.html" style="background:#f9731620;color:var(--salmon);font-weight:700"><span class="dot" style="background:var(--salmon)"></span>⚡ Central 360° (PDV/KDS/Garçom/Motoboy)</a>
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:8px 8px 2px;font-weight:700">Operação &amp; Vendas</div>
       <a href="#cockpit" data-v="cockpit"><span class="dot"></span>Cockpit</a>
       <a href="#zumi" data-v="zumi"><span class="dot"></span>Zumi atende</a>
       <a href="#campanhas" data-v="campanhas"><span class="dot"></span>Campanhas</a>
@@ -201,7 +202,14 @@ tr:last-child td{border-bottom:0}
       <a href="#clientes" data-v="clientes"><span class="dot"></span>Clientes</a>
       <a href="#horarios" data-v="horarios"><span class="dot"></span>Horários vazios</a>
       <a href="#clube" data-v="clube"><span class="dot"></span>Clube Zumi</a>
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:8px 8px 2px;font-weight:700">Inteligência &amp; Gestão</div>
       <a href="#mercado" data-v="mercado"><span class="dot"></span>Mercado &amp; IA 360°</a>
+      <a href="#engenharia" data-v="engenharia"><span class="dot"></span>Engenharia Cardápio</a>
+      <a href="#rfm" data-v="rfm"><span class="dot"></span>Simulador Clientes</a>
+      <a href="#clima" data-v="clima"><span class="dot"></span>Clima Tangará</a>
+      <a href="#omnichannel" data-v="omnichannel"><span class="dot"></span>Hub Omnichannel</a>
+      <a href="#financeiro" data-v="financeiro"><span class="dot"></span>DRE &amp; Financeiro</a>
+      <a href="#estoque" data-v="estoque"><span class="dot"></span>Estoque Pescados</a>
     </nav>
     <div class="foot">Protótipo. Cardápio e preços reais da loja (19/11/2026). Vendas e clientes são exemplos. Nada é enviado a clientes.</div>
   </aside>
@@ -729,6 +737,415 @@ tr:last-child td{border-bottom:0}
         </div>
       </div>
     </section>
+  
+    <!-- ENGENHARIA DE CARDÁPIO (MATRIZ BCG DOS 211 PRODUTOS) -->
+    <section class="view" id="v-engenharia" hidden>
+      <div class="head">
+        <div>
+          <span class="eyebrow">ENGENHARIA GASTRONÔMICA &amp; MATRIZ BCG · CARDÁPIO OFICIAL 211 ITENS</span>
+          <h1>Engenharia de Cardápio &amp; Rentabilidade dos 211 Produtos</h1>
+          <p class="muted">Classificação analítica dos 211 produtos em Estrelas, Burros de Carga, Quebra-Cabeças e Cães. Cálculo de CMV, margem de contribuição (R$) e recomendações do Motor KyttoIA 2.5 Flash.</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <span class="pill good">211 SKUs Mapeados</span>
+          <span class="pill">23 Categorias</span>
+          <span class="pill hot">CMV Médio 32,5%</span>
+        </div>
+      </div>
+
+      <!-- 4 QUADRANTES BCG -->
+      <div class="grid g4">
+        <div class="card kpi" style="border-top:3px solid var(--good)">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span class="eyebrow">🌟 Estrelas (Stars)</span>
+            <span class="pill good">48 itens</span>
+          </div>
+          <div class="v num" style="font-size:24px;color:var(--good)">Alta Margem + Alto Volume</div>
+          <p class="muted" style="font-size:12px;margin-top:6px">Especial Zuma 68p, Salmão 24 Fatias, Combo 56p, Hot Filadélfia 12un. <b>Ação:</b> Manter qualidade e dar visibilidade máxima.</p>
+        </div>
+        <div class="card kpi" style="border-top:3px solid #3b82f6">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span class="eyebrow">🐎 Burros de Carga</span>
+            <span class="pill" style="color:#3b82f6">64 itens</span>
+          </div>
+          <div class="v num" style="font-size:24px;color:#3b82f6">Volume Alto + Margem Média</div>
+          <p class="muted" style="font-size:12px;margin-top:6px">Combo 12p (R$ 39,90), Temaki Salmão, Yakissoba Misto. <b>Ação:</b> Criar combos com refrigerante para subir ticket médio.</p>
+        </div>
+        <div class="card kpi" style="border-top:3px solid var(--warn)">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span class="eyebrow">🧩 Quebra-Cabeças</span>
+            <span class="pill warn">56 itens</span>
+          </div>
+          <div class="v num" style="font-size:24px;color:var(--warn)">Alta Margem + Baixo Volume</div>
+          <p class="muted" style="font-size:12px;margin-top:6px">Ceviche Peruano, Usuzukuri, Risoto de Camarão, Furai Salmão. <b>Ação:</b> Disparo ativo pelo Zumi no WhatsApp.</p>
+        </div>
+        <div class="card kpi" style="border-top:3px solid var(--bad)">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span class="eyebrow">🐕 Cães (Dogs)</span>
+            <span class="pill bad">43 itens</span>
+          </div>
+          <div class="v num" style="font-size:24px;color:var(--bad)">Baixa Margem + Baixo Volume</div>
+          <p class="muted" style="font-size:12px;margin-top:6px">Hossomaki Vegetariano, Hotdog Mexicano. <b>Ação:</b> Reposicionar receita ou substituir por novidade sazonal.</p>
+        </div>
+      </div>
+
+      <!-- TABELA DE PRODUTOS COM FILTRO E BUSCA -->
+      <div class="card">
+        <div class="head" style="align-items:center;margin-bottom:12px">
+          <h2>Catálogo dos 211 Produtos com Classificação BCG</h2>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <input type="text" id="engSearch" placeholder="🔍 Buscar por nome do produto..." style="width:240px">
+            <select id="engCatFilter" style="width:190px"></select>
+            <select id="engBcgFilter" style="width:160px">
+              <option value="todos">Todos os Quadrantes</option>
+              <option value="estrela">🌟 Estrelas</option>
+              <option value="burro">🐎 Burros de Carga</option>
+              <option value="quebra">🧩 Quebra-Cabeças</option>
+              <option value="cao">🐕 Cães</option>
+            </select>
+          </div>
+        </div>
+        <div class="tablewrap" style="max-height:480px;overflow-y:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Categoria</th>
+                <th>Produto</th>
+                <th class="num">Preço Venda</th>
+                <th class="num">CMV Est.</th>
+                <th class="num">Margem R$</th>
+                <th>Quadrante BCG</th>
+                <th>Diretriz Motor KyttoIA</th>
+              </tr>
+            </thead>
+            <tbody id="engRows"></tbody>
+          </table>
+        </div>
+        <div style="margin-top:10px;font-size:12px;color:var(--muted);display:flex;justify-content:space-between">
+          <span id="engCounter">Mostrando 211 produtos</span>
+          <span>CMV calculado com base no aproveitamento de 62% do filé de salmão fresco</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- SIMULADOR DE BASE DE CLIENTES & SEGMENTAÇÃO RFM -->
+    <section class="view" id="v-rfm" hidden>
+      <div class="head">
+        <div>
+          <span class="eyebrow">INTELIGÊNCIA DE CRM &amp; COMPORTAMENTO DE CONSUMO</span>
+          <h1>Simulador de Clientes, Segmentação RFM &amp; Recompra</h1>
+          <p class="muted">Análise preditiva da base de 1.388 clientes cadastrados no delivery de Tangará da Serra. Projeção de LTV, propensão de compra e estratégias de reativação automatizadas pelo Motor KyttoIA.</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <span class="pill good">1.388 Clientes Mapeados</span>
+          <span class="pill">Recompra Atual 31,2%</span>
+          <span class="pill hot">Meta KyttoIA 48,5%</span>
+        </div>
+      </div>
+
+      <!-- CARDS DOS 5 SEGMENTOS -->
+      <div class="grid g3" id="rfmCards"></div>
+
+      <!-- SIMULADOR DE INCREMENTO DE RECOMPRA -->
+      <div class="grid g2">
+        <div class="card">
+          <h2>Simulador de Aceleração de Recompra no Delivery</h2>
+          <p class="muted" style="margin:4px 0 12px">Arraste a meta de taxa de recompra para calcular o faturamento adicional resgatado da base sem gastar com anúncios.</p>
+          <div class="slider">
+            <div style="display:flex;justify-content:space-between">
+              <label for="sRfm">Meta de Taxa de Recompra Mensal (%)</label>
+              <span class="num" id="sRfmV" style="font-weight:700;color:var(--salmon)">45%</span>
+            </div>
+            <input type="range" id="sRfm" min="31" max="55" step="1" value="45">
+          </div>
+          <div class="grid g2" id="simRfmOut" style="margin-top:14px"></div>
+        </div>
+
+        <div class="card" style="display:grid;gap:10px;align-content:start">
+          <h2>Plano de Ação para Clientes em Risco (538 Sumidos)</h2>
+          <p class="muted">Clientes que já pediram no Zuma mas estão entre 30 e 90 dias sem pedir. O Zumi ativa uma régua de resgate no WhatsApp.</p>
+          <div style="background:var(--surface2);border-radius:8px;padding:12px;font-size:13px;line-height:1.5">
+            <b>Mensagem do Zumi no WhatsApp:</b><br>
+            "🍣 Oi Rodrigo, que saudade de você no Zuma! Separamos um presente exclusivo pra você hoje: <b>R$ 15 OFF no Combo Mix</b> + Raspadinha com prêmio garantido!<br><br>
+            👉 zumacozinhaoriental.com.br/loja/pedidos<br>Cupom: VOLTAZUMA"
+          </div>
+          <button class="btn primary" id="btnResgateSumidos" style="width:100%">⚡ Agendar Campanha de Resgate para os 538 Clientes</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- CLIMA & GATILHOS METEOROLÓGICOS (TANGARÁ DA SERRA) -->
+    <section class="view" id="v-clima" hidden>
+      <div class="head">
+        <div>
+          <span class="eyebrow">AUTOMAÇÃO METEOROLÓGICA · TANGARÁ DA SERRA - MT</span>
+          <h1>Gatilhos de Clima &amp; Alavancagem de Vendas no Delivery</h1>
+          <p class="muted">Monitoramento meteorológico em tempo real de Tangará da Serra. A Kytto Weather Engine cruza temperatura e chuva para disparar ofertas automáticas dos itens certos na hora exata.</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <span class="pill good">Kytto Weather Engine v2</span>
+          <span class="pill">Tangará da Serra</span>
+          <span class="pill hot">Ativação Automática</span>
+        </div>
+      </div>
+
+      <!-- SELETOR DE CONDIÇÃO METEOROLÓGICA -->
+      <div class="card">
+        <div class="head" style="align-items:center;margin-bottom:12px">
+          <div>
+            <h2>Selecione a Condição Climática de Tangará da Serra</h2>
+            <p class="muted">Simule as variações típicas do clima local e veja as recomendações automáticas do Motor KyttoIA.</p>
+          </div>
+        </div>
+        <div class="grid g4" id="climaConditionsCards"></div>
+      </div>
+
+      <!-- PAINEL DE IMPACTO DINÂMICO -->
+      <div class="grid g2" id="climaDetailPanel">
+        <div class="card">
+          <h2>Impacto Previsto no Salão vs Delivery</h2>
+          <div class="grid g2" id="climaImpactKpis" style="margin-top:12px"></div>
+          <div style="margin-top:14px;padding:12px;background:var(--surface2);border-radius:8px;font-size:12.5px" id="climaCategoryBox"></div>
+        </div>
+
+        <div class="card" style="display:grid;gap:10px;align-content:start">
+          <h2>Disparo Automático do Zumi no WhatsApp</h2>
+          <p class="muted">Mensagem formatada com gatilho psicológico de clima para disparar na base de clientes.</p>
+          <div style="background:var(--surface2);border-radius:8px;padding:12px;font-size:13px;line-height:1.5" id="climaMsgBox"></div>
+          <button class="btn nori" id="btnDisparoClima" style="width:100%">⚡ Disparar Oferta Meteorológica para o Delivery</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- HUB DE INTEGRAÇÃO OMNICHANNEL -->
+    <section class="view" id="v-omnichannel" hidden>
+      <div class="head">
+        <div>
+          <span class="eyebrow">GESTÃO MULTICANAL &amp; DESINTERMEDIAÇÃO DE TAXAS</span>
+          <h1>Hub de Integração Omnichannel &amp; Sincronização 360°</h1>
+          <p class="muted">Visão consolidada de todos os canais de venda do Zuma: iFood, Keeto/Kytto Delivery, WhatsApp Zumi e Salão Presencial (27 mesas). Cardápio unificado e métricas de lucratividade por canal.</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <span class="pill good">4 Canais Integrados</span>
+          <span class="pill">Cardápio 211 SKUs Sincronizado</span>
+        </div>
+      </div>
+
+      <!-- CARDS DOS 4 CANAIS -->
+      <div class="grid g4" id="omniChannelCards"></div>
+
+      <!-- PLANO DE DESINTERMEDIAÇÃO -->
+      <div class="grid g2">
+        <div class="card">
+          <h2>Estratégia de Desintermediação Gradual (Resgate de Margem)</h2>
+          <p class="muted" style="margin:4px 0 12px">Como migrar pedidos do iFood para canais próprios sem perder volume de vendas.</p>
+          <table>
+            <thead>
+              <tr><th>Etapa</th><th>Ação Operacional</th><th class="num">Meta Migração</th><th class="num">Economia</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><b>Mês 1</b></td><td>Adesivo térmico no unboxing com QR Code de 10% cashback no app próprio</td><td class="num">25%</td><td class="num up">+R$ 1.400/mês</td></tr>
+              <tr><td><b>Mês 2</b></td><td>Oferta de entrada no Clube Zumi exclusiva no WhatsApp Zumi</td><td class="num">45%</td><td class="num up">+R$ 2.530/mês</td></tr>
+              <tr><td><b>Mês 3</b></td><td>Preço diferenciado: combos no iFood +15% mais caros para incentivar app próprio</td><td class="num">65%</td><td class="num up">+R$ 3.650/mês</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card" style="display:grid;gap:12px;align-content:start">
+          <h2>Status das Integrações Técnicas</h2>
+          <div style="display:grid;gap:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--surface2);border-radius:8px">
+              <span><b>Cardápio Foodsapp / PWA Kytto</b></span>
+              <span class="pill good">Sincronizado (211 itens)</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--surface2);border-radius:8px">
+              <span><b>WhatsApp Oficial Mascote Zumi</b></span>
+              <span class="pill good">Online 24h</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--surface2);border-radius:8px">
+              <span><b>iFood Marketplace (API de Pedidos)</b></span>
+              <span class="pill good">Integrado &amp; Ativo</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--surface2);border-radius:8px">
+              <span><b>Central de Produção KDS Cozinha &amp; Balcão</b></span>
+              <span class="pill good">Operando</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DRE GERENCIAL & FINANCEIRO -->
+    <section class="view" id="v-financeiro" hidden>
+      <div class="head">
+        <div>
+          <span class="eyebrow">CONTROLADORIA &amp; FINANÇAS GASTRONÔMICAS</span>
+          <h1>DRE Gerencial, Margem de Contribuição &amp; Ponto de Equilíbrio</h1>
+          <p class="muted">Demonstrativo do Resultado do Exercício com estrutura de custos reais de um restaurante oriental premium: CMV de pescados frescos, custos fixos, variáveis e projeção de lucro líquido.</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <span class="pill good">Margem Líquida 26,1%</span>
+          <span class="pill">EBITDA 28,4%</span>
+        </div>
+      </div>
+
+      <!-- KPIS FINANCEIROS -->
+      <div class="grid g4">
+        <div class="card kpi">
+          <span class="eyebrow">Receita Bruta Mensal</span>
+          <div class="v num">R$ 185.000</div>
+          <div class="d up">▲ Delivery + Salão + Clube Zumi</div>
+        </div>
+        <div class="card kpi">
+          <span class="eyebrow">CMV Pescados &amp; Insumos</span>
+          <div class="v num down">R$ 60.125</div>
+          <div class="d muted">32,5% sobre a receita bruta</div>
+        </div>
+        <div class="card kpi">
+          <span class="eyebrow">Margem de Contribuição</span>
+          <div class="v num up">R$ 113.775</div>
+          <div class="d up">61,5% de margem operacional bruta</div>
+        </div>
+        <div class="card kpi">
+          <span class="eyebrow">Lucro Líquido Final</span>
+          <div class="v num up" style="color:var(--good)">R$ 48.200</div>
+          <div class="d up">▲ 26,1% de margem líquida retida</div>
+        </div>
+      </div>
+
+      <!-- DRE COMPLETO -->
+      <div class="grid g-main">
+        <div class="card">
+          <h2>Demonstrativo do Resultado do Exercício (DRE)</h2>
+          <div class="tablewrap" style="margin-top:10px">
+            <table>
+              <thead><tr><th>Linha Contábil</th><th class="num">Valor (R$)</th><th class="num">% Receita</th><th>Detalhamento</th></tr></thead>
+              <tbody>
+                <tr style="font-weight:700"><td>(+) RECEITA BRUTA OPERACIONAL</td><td class="num">R$ 185.000,00</td><td class="num">100,0%</td><td>Vendas balcão, salão, delivery e clube</td></tr>
+                <tr class="muted"><td>(-) Deduções da Receita (Simples Nacional 6%)</td><td class="num bad">-R$ 11.100,00</td><td class="num">6,0%</td><td>Tributação regime Simples Nacional</td></tr>
+                <tr style="font-weight:600"><td>(=) RECEITA LÍQUIDA</td><td class="num">R$ 173.900,00</td><td class="num">94,0%</td><td>Base líquida de faturamento</td></tr>
+                <tr><td>(-) Custo de Mercadorias Vendidas (CMV)</td><td class="num bad">-R$ 60.125,00</td><td class="num">32,5%</td><td>Salmão chileno, camarão, atum, arroz, nori</td></tr>
+                <tr style="font-weight:700;background:var(--nori-soft)"><td>(=) MARGEM DE CONTRIBUIÇÃO BRUTA</td><td class="num up">R$ 113.775,00</td><td class="num up">61,5%</td><td>Saldo disponível para custos fixos e lucro</td></tr>
+                <tr><td>(-) Despesas Variáveis (Embalagens térmicas + Motoboys)</td><td class="num bad">-R$ 15.820,00</td><td class="num">8,6%</td><td>Lacre inviolável, sacolas térmicas e taxas</td></tr>
+                <tr><td>(-) Comissões de Canais de Venda (iFood residual + Gateway)</td><td class="num bad">-R$ 5.630,00</td><td class="num">3,0%</td><td>Taxas de marketplace e maquininha</td></tr>
+                <tr><td>(-) Custos Fixos Operacionais (Folha equipe cozinha/salão)</td><td class="num bad">-R$ 24.500,00</td><td class="num">13,2%</td><td>Sushiman chefe, auxiliares, garçons e caixa</td></tr>
+                <tr><td>(-) Custos Fixos de Estrutura (Aluguel, Energia câmara fria, Gás)</td><td class="num bad">-R$ 15.300,00</td><td class="num">8,3%</td><td>Ponto Av. Brasil, refrigeração contínua</td></tr>
+                <tr style="font-weight:700"><td>(=) EBITDA OPERACIONAL</td><td class="num up">R$ 52.525,00</td><td class="num up">28,4%</td><td>Geração operacional de caixa</td></tr>
+                <tr><td>(-) Depreciação de Equipamentos &amp; Reserva</td><td class="num bad">-R$ 4.325,00</td><td class="num">2,3%</td><td>Manutenção preventiva e câmaras</td></tr>
+                <tr style="font-weight:800;background:var(--salmon-soft)"><td>(=) LUCRO LÍQUIDO DO EXERCÍCIO</td><td class="num" style="color:var(--salmon);font-size:16px">R$ 48.200,00</td><td class="num" style="color:var(--salmon);font-size:16px">26,1%</td><td>Resultado líquido distribuível</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card" style="display:grid;gap:12px;align-content:start">
+          <h2>Ponto de Equilíbrio (Break-Even)</h2>
+          <p class="muted">Quantos pedidos sustentam 100% da operação do restaurante.</p>
+          <div class="grid" style="gap:8px">
+            <div class="card kpi" style="padding:10px">
+              <span class="eyebrow">Custos Fixos Totais</span>
+              <div class="v num" style="font-size:20px">R$ 39.800,00</div>
+            </div>
+            <div class="card kpi" style="padding:10px">
+              <span class="eyebrow">Margem Média por Pedido</span>
+              <div class="v num up" style="font-size:20px">R$ 54,74</div>
+            </div>
+            <div class="card kpi" style="padding:10px;background:var(--nori-soft)">
+              <span class="eyebrow" style="color:var(--nori)">Ponto de Equilíbrio Mensal</span>
+              <div class="v num" style="font-size:24px;color:var(--nori)">727 pedidos</div>
+              <div class="d">Apenas 28 pedidos/noite pagam toda a estrutura!</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ESTOQUE DE PESCADOS FRESCOS & RENDIMENTO -->
+    <section class="view" id="v-estoque" hidden>
+      <div class="head">
+        <div>
+          <span class="eyebrow">SUPPLY CHAIN &amp; RENDIMENTO DE PESCADOS FRESCOS</span>
+          <h1>Ficha Técnica, Rendimento do Salmão &amp; Estoque Crítico</h1>
+          <p class="muted">Controle diário de salmão fresco chileno, camarão, atum e insumos críticos. Cálculo de rendimento da carcaça e alertas de reposição para Tangará da Serra.</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <span class="pill good">Salmão Fresco 62% Rendimento</span>
+          <span class="pill">Câmara Fria Ativa</span>
+        </div>
+      </div>
+
+      <!-- CALCULADORA DE RENDIMENTO DO SALMÃO -->
+      <div class="grid g2">
+        <div class="card">
+          <h2>Engenharia de Rendimento do Salmão Inteiro</h2>
+          <p class="muted" style="margin:4px 0 12px">Simule a limpeza de uma peça de salmão fresco e veja a distribuição do custo por kg de filé limpo.</p>
+          <div class="slider">
+            <div style="display:flex;justify-content:space-between">
+              <label for="sSalmWeight">Peso do Salmão Inteiro Eviscerado (kg)</label>
+              <span class="num" id="sSalmWeightV">5,0 kg</span>
+            </div>
+            <input type="range" id="sSalmWeight" min="3.0" max="8.0" step="0.5" value="5.0">
+          </div>
+          <div class="slider" style="margin-top:10px">
+            <div style="display:flex;justify-content:space-between">
+              <label for="sSalmPrice">Preço de Compra por kg Inteiro (R$)</label>
+              <span class="num" id="sSalmPriceV">R$ 68,00/kg</span>
+            </div>
+            <input type="range" id="sSalmPrice" min="50" max="95" step="1" value="68">
+          </div>
+          <div class="grid g3" id="salmOut" style="margin-top:14px"></div>
+        </div>
+
+        <div class="card" style="display:grid;gap:10px;align-content:start">
+          <h2>Distribuição da Carcaça do Salmão</h2>
+          <div class="bars" style="margin-top:8px">
+            <div class="barrow">
+              <span><b>Filé Nobre (Sashimi/Niguiri)</b></span>
+              <div class="track"><i class="n" style="width:62%"></i></div>
+              <span class="num">62% (3,1 kg)</span>
+            </div>
+            <div class="barrow">
+              <span><b>Aparas (Hot Rolls/Temaki)</b></span>
+              <div class="track"><i style="width:20%"></i></div>
+              <span class="num">20% (1,0 kg)</span>
+            </div>
+            <div class="barrow">
+              <span><b>Cabeça/Espinhaço (Caldos)</b></span>
+              <div class="track"><i style="width:18%;background:var(--muted)"></i></div>
+              <span class="num">18% (0,9 kg)</span>
+            </div>
+          </div>
+          <div style="margin-top:12px;padding:10px;background:var(--surface2);border-radius:8px;font-size:12.5px">
+            <b>Regra de Ouro Kytto:</b> Nenhum grama de salmão é desperdiçado no Zuma. As raspas viram recheio do Hot Filadélfia e Temaki Grelhado, mantendo o aproveitamento real acima de 82%!
+          </div>
+        </div>
+      </div>
+
+      <!-- TABELA DE ESTOQUE ATUAL -->
+      <div class="card">
+        <div class="head" style="align-items:center;margin-bottom:12px">
+          <h2>Painel de Estoque de Insumos Críticos</h2>
+          <button class="btn nori" id="btnPedirEstoque">⚡ Gerar Pedido de Reposição Automático</button>
+        </div>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr><th>Insumo</th><th>Especificação</th><th class="num">Estoque Atual</th><th class="num">Mínimo</th><th>Status</th><th>Fornecedor MT</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><b>Salmão Fresco Chileno</b></td><td>Salmo Salar eviscerado fresco</td><td class="num"><b>35,0 kg</b></td><td class="num">20,0 kg</td><td><span class="pill good">OK</span></td><td>Pescados Nobres Cuiabá</td></tr>
+              <tr><td><b>Camarão Rosa GG</b></td><td>Limpo, eviscerado, congelado</td><td class="num"><b>14,0 kg</b></td><td class="num">10,0 kg</td><td><span class="pill good">OK</span></td><td>Distribuidora Mar &amp; Rio</td></tr>
+              <tr><td><b>Atum Vermelho Fresco</b></td><td>Lombo fresco de atum</td><td class="num bad"><b>6,0 kg</b></td><td class="num">8,0 kg</td><td><span class="pill warn">Repor Urgente</span></td><td>Pescados Nobres Cuiabá</td></tr>
+              <tr><td><b>Arroz Gohan Especial</b></td><td>Grão curto polido tipo 1</td><td class="num"><b>80,0 kg</b></td><td class="num">40,0 kg</td><td><span class="pill good">OK</span></td><td>Empório Oriental MT</td></tr>
+              <tr><td><b>Alga Nori Premium</b></td><td>Pacotes com 50 folhas</td><td class="num"><b>18 pct</b></td><td class="num">10 pct</td><td><span class="pill good">OK</span></td><td>Empório Oriental MT</td></tr>
+              <tr><td><b>Cream Cheese Original</b></td><td>Baldes de 4 kg para sushiman</td><td class="num"><b>12 baldes</b></td><td class="num">5 baldes</td><td><span class="pill good">OK</span></td><td>Laticínios Tangará</td></tr>
+              <tr><td><b>Embalagens Térmicas</b></td><td>Caixas seladas com visor + lacre</td><td class="num"><b>420 un</b></td><td class="num">300 un</td><td><span class="pill good">OK</span></td><td>Gráfica &amp; Embalagens MT</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
   </main>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -1466,14 +1883,291 @@ async function runStrategy() {
   toast("Estratégia formulada com sucesso pelo Motor KyttoIA 2.5 Flash!");
 }
 
+
+/* ---------- ENGENHARIA DE CARDÁPIO (MATRIZ BCG DOS 211 SKUS) ---------- */
+const BCG_DATA = ALL.map((item, idx) => {
+  let quadrante = "burro";
+  let cmv = +(item.preco * 0.325).toFixed(2);
+  let margem = +(item.preco - cmv).toFixed(2);
+  let diretriz = "Manter volume e propor combos com bebida";
+
+  if (item.cat === "Combinados" && item.preco >= 80) {
+    quadrante = "estrela";
+    cmv = +(item.preco * 0.30).toFixed(2);
+    margem = +(item.preco - cmv).toFixed(2);
+    diretriz = "Manter qualidade impecável e prioridade na montagem do sushiman";
+  } else if (item.cat === "Sashimis" || item.nome.includes("Especial") || item.preco >= 95) {
+    quadrante = "estrela";
+    diretriz = "Destaque visual no topo do cardápio e upsell pelo Zumi";
+  } else if (item.cat === "Entradas" || item.cat === "Poke" || (item.preco >= 40 && item.preco < 75)) {
+    quadrante = "quebra";
+    cmv = +(item.preco * 0.28).toFixed(2);
+    margem = +(item.preco - cmv).toFixed(2);
+    diretriz = "Alta lucratividade: recomendar ativamente na conversa do WhatsApp";
+  } else if (item.nome.includes("Vegetariano") || item.nome.includes("Cheddar") || item.preco < 25) {
+    quadrante = "cao";
+    diretriz = "Avaliar reformulação ou substituir por produto sazonal";
+  }
+
+  return {
+    ...item,
+    cmv,
+    margem,
+    quadrante,
+    diretriz
+  };
+});
+
+let engInited = false;
+function renderEngenharia() {
+  if (engInited) return;
+  engInited = true;
+
+  // Popula categorias no select
+  const cats = ["Todas as Categorias", ...Object.keys(MENU)];
+  $("engCatFilter").innerHTML = cats.map(c => `<option value="${c}">${esc(c)}</option>`).join("");
+
+  function filterEng() {
+    const q = ($("engSearch").value || "").toLowerCase().trim();
+    const selCat = $("engCatFilter").value;
+    const selBcg = $("engBcgFilter").value;
+
+    const filtered = BCG_DATA.filter(it => {
+      if (q && !it.nome.toLowerCase().includes(q)) return false;
+      if (selCat !== "Todas as Categorias" && it.cat !== selCat) return false;
+      if (selBcg !== "todos" && it.quadrante !== selBcg) return false;
+      return true;
+    });
+
+    $("engCounter").textContent = `Mostrando ${filtered.length} de 211 produtos`;
+
+    const badgeMap = {
+      estrela: '<span class="pill good">🌟 Estrela</span>',
+      burro: '<span class="pill" style="color:#3b82f6">🐎 Burro de Carga</span>',
+      quebra: '<span class="pill warn">🧩 Quebra-Cabeça</span>',
+      cao: '<span class="pill bad">🐕 Cão</span>'
+    };
+
+    $("engRows").innerHTML = filtered.map(it => `
+      <tr>
+        <td><small class="muted">${esc(it.cat)}</small></td>
+        <td><b>${esc(it.nome)}</b></td>
+        <td class="num"><b>${brl(it.preco)}</b></td>
+        <td class="num down">${brl(it.cmv)}</td>
+        <td class="num up"><b>${brl(it.margem)}</b></td>
+        <td>${badgeMap[it.quadrante] || it.quadrante}</td>
+        <td><small>${esc(it.diretriz)}</small></td>
+      </tr>
+    `).join("");
+  }
+
+  $("engSearch").addEventListener("input", filterEng);
+  $("engCatFilter").addEventListener("change", filterEng);
+  $("engBcgFilter").addEventListener("change", filterEng);
+  filterEng();
+}
+
+/* ---------- SIMULADOR RFM & COMPORTAMENTO DELIVERY ---------- */
+const RFM_SEGMENTS = [
+  { cod: "fieis", nome: "Clientes Fiéis", desc: "4+ pedidos no mês, recência < 7 dias", total: 186, ticket: 92.5, prop: "78%", canal: "WhatsApp Kytto", tag: "good" },
+  { cod: "novos", nome: "Novos Clientes", desc: "1 pedido nos últimos 15 dias", total: 412, ticket: 58.2, prop: "42%", canal: "Storefront Web", tag: "" },
+  { cod: "sumidos", nome: "Em Risco (Sumidos)", desc: "30 a 90 dias sem pedir nada", total: 538, ticket: 74.0, prop: "22%", canal: "WhatsApp Reativação", tag: "bad" },
+  { cod: "vip", nome: "Baleias / VIP Omakase", desc: "Top 10% faturamento, ticket > R$ 180", total: 94, ticket: 198.0, prop: "85%", canal: "Concierge VIP", tag: "hot" },
+  { cod: "leads", nome: "Leads da Raspadinha", desc: "Ganharam prêmio mas não compraram", total: 158, ticket: 65.0, prop: "35%", canal: "WhatsApp Boas-Vindas", tag: "warn" }
+];
+
+let rfmInited = false;
+function renderRfm() {
+  if (rfmInited) return;
+  rfmInited = true;
+
+  $("rfmCards").innerHTML = RFM_SEGMENTS.map(s => `
+    <div class="card" style="display:grid;gap:6px;padding:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <b>${esc(s.nome)}</b>
+        <span class="pill ${s.tag}">${s.total} clientes</span>
+      </div>
+      <p class="muted" style="font-size:12px">${esc(s.desc)}</p>
+      <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:12px">
+        <span>Ticket Médio: <b>${brl(s.ticket)}</b></span>
+        <span>Propensão: <b class="up">${s.prop}</b></span>
+      </div>
+    </div>
+  `).join("");
+
+  function simRfm() {
+    const rate = +$("sRfm").value;
+    $("sRfmV").textContent = rate + "%";
+
+    const base = 1388;
+    const currentOrders = Math.round(base * 0.312);
+    const targetOrders = Math.round(base * (rate / 100));
+    const extraOrders = targetOrders - currentOrders;
+    const ticket = 79.0;
+    const extraRev = extraOrders * ticket;
+    const extraYear = extraRev * 12;
+    const extraProfit = extraYear * 0.385;
+
+    $("simRfmOut").innerHTML = [
+      ["Pedidos Extras no Mês", "+" + extraOrders + " pedidos", "good"],
+      ["Receita Mensal Adicional", "+" + brl(extraRev), "good"],
+      ["Receita Anual Projetada", "+" + brl(extraYear), "good"],
+      ["Lucro Líquido Retido no Ano", "+" + brl(extraProfit), "good"]
+    ].map(([k, v, c]) => `
+      <div class="card kpi" style="padding:10px">
+        <span class="eyebrow">${k}</span>
+        <div class="v num up" style="font-size:18px">${v}</div>
+      </div>
+    `).join("");
+  }
+
+  $("sRfm").addEventListener("input", simRfm);
+  simRfm();
+
+  $("btnResgateSumidos").addEventListener("click", () => {
+    $("cMsg").value = "🍣 Oi Rodrigo, que saudade de você no Zuma! Separamos um presente exclusivo pra você hoje: R$ 15 OFF no Combo Mix + Raspadinha com prêmio garantido!\n\n👉 zumacozinhaoriental.com.br/loja/pedidos\nCupom: VOLTAZUMA";
+    updatePreview();
+    location.hash = "#campanhas";
+    toast("Campanha de resgate para 538 clientes sumidos carregada no Piloto!");
+  });
+}
+
+/* ---------- CLIMA TANGARÁ DA SERRA ---------- */
+const CLIMA_CONDITIONS = [
+  { id: "chuva", nome: "Chuva / Tempestade", temp: "22°C", ico: "⛈️", salao: -75, delivery: +145, cats: "Pratos Quentes, Lamens e Yakisobas", msg: "🌧️ Chuva em Tangará? Deixa o trânsito pra lá! Yakisoba e Hot Rolls quentinhos na sua porta com lacre térmico blindado.\n\nCupom: ZUMICHUVA" },
+  { id: "calor", nome: "Calor Intenso", temp: "37°C", ico: "☀️", salao: +10, delivery: +35, cats: "Pokes Refrescantes, Ceviches e Drinks Gelados", msg: "☀️ Calor de 37°C em Tangará? Peça um Ceviche Peruano geladinho ou nosso Poke de Salmão com Soda Italiana trincando!\n\nCupom: ZUMIREFRESCA" },
+  { id: "frio", nome: "Frente Fria", temp: "18°C", ico: "🌬️", salao: -20, delivery: +80, cats: "Teppan de Mignon, Hot Rolls e Pratos Quentes", msg: "🌬️ Noite fresquinha pede aconchego! Teppanyaki de Mignon cremoso e Hot Filadélfia em dobro para aquecer sua noite.\n\nCupom: ZUMIAQUECE" },
+  { id: "agradavel", nome: "Noite Estrelada", temp: "25°C", ico: "✨", salao: +60, delivery: +15, cats: "Deck Climatizado, Barcas de Sushi & Chopp", msg: "✨ O clima hoje está perfeito para o nosso Deck Climatizado na Av. Brasil! Reúna os amigos para a Barca Zuma e chopp gelado.\n\nCupom: ZUMIDECK" }
+];
+
+let climaInited = false;
+let currentClima = CLIMA_CONDITIONS[0];
+
+function renderClima() {
+  if (climaInited) return;
+  climaInited = true;
+
+  $("climaConditionsCards").innerHTML = CLIMA_CONDITIONS.map((c, i) => `
+    <button class="opt ${i === 0 ? 'sel' : ''}" data-clima="${c.id}" style="display:flex;align-items:center;gap:10px;text-align:left">
+      <span style="font-size:26px">${c.ico}</span>
+      <div><b>${esc(c.nome)}</b><small class="muted" style="display:block">${c.temp}</small></div>
+    </button>
+  `).join("");
+
+  document.querySelectorAll("[data-clima]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("[data-clima]").forEach(b => b.classList.remove("sel"));
+      btn.classList.add("sel");
+      currentClima = CLIMA_CONDITIONS.find(c => c.id === btn.dataset.clima) || CLIMA_CONDITIONS[0];
+      updateClimaView();
+    });
+  });
+
+  $("btnDisparoClima").addEventListener("click", () => {
+    $("cMsg").value = currentClima.msg;
+    updatePreview();
+    location.hash = "#campanhas";
+    toast("Oferta meteorológica carregada para disparo no piloto automático!");
+  });
+
+  updateClimaView();
+}
+
+function updateClimaView() {
+  $("climaImpactKpis").innerHTML = [
+    ["Impacto no Salão", (currentClima.salao >= 0 ? "+" : "") + currentClima.salao + "%", currentClima.salao >= 0 ? "good" : "bad"],
+    ["Impacto no Delivery", (currentClima.delivery >= 0 ? "+" : "") + currentClima.delivery + "%", "good"]
+  ].map(([k, v, c]) => `
+    <div class="card kpi" style="padding:10px">
+      <span class="eyebrow">${k}</span>
+      <div class="v num ${c === 'good' ? 'up' : 'down'}" style="font-size:22px">${v}</div>
+    </div>
+  `).join("");
+
+  $("climaCategoryBox").innerHTML = `<b>Categorias Recomendadas pela IA:</b> ${esc(currentClima.cats)}`;
+  $("climaMsgBox").textContent = currentClima.msg;
+}
+
+/* ---------- OMNICHANNEL ---------- */
+const OMNI_CHANNELS = [
+  { nome: "iFood Marketplace", comissao: "23,0%", pedidos: 340, fat: "R$ 24.480,00", custo: "-R$ 5.630,40", dados: "0% (Retidos)", tag: "bad" },
+  { nome: "Keeto / Kytto Delivery", comissao: "0,0% (0,99% PIX)", pedidos: 820, fat: "R$ 73.390,00", custo: "-R$ 726,56", dados: "100% no CRM", tag: "good" },
+  { nome: "WhatsApp Mascote Zumi", comissao: "0,0% (0,99% PIX)", pedidos: 640, fat: "R$ 60.288,00", custo: "-R$ 596,85", dados: "100% no CRM", tag: "good" },
+  { nome: "Salão Presencial (27 Mesas)", comissao: "0,0%", pedidos: 450, fat: "R$ 40.050,00", custo: "R$ 0,00", dados: "100% no PDV", tag: "good" }
+];
+
+let omniInited = false;
+function renderOmnichannel() {
+  if (omniInited) return;
+  omniInited = true;
+
+  $("omniChannelCards").innerHTML = OMNI_CHANNELS.map(c => `
+    <div class="card" style="display:grid;gap:8px;padding:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <b>${esc(c.nome)}</b>
+        <span class="pill ${c.tag}">${c.pedidos} pedidos/mês</span>
+      </div>
+      <div style="font-size:18px;font-weight:700;color:var(--ink)">${c.fat}</div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);border-top:1px dashed var(--line);padding-top:6px">
+        <span>Taxa: <b>${c.comissao}</b></span>
+        <span>Custo: <b class="down">${c.custo}</b></span>
+      </div>
+      <small style="font-size:11px;color:var(--muted)">Propriedade de dados: ${c.dados}</small>
+    </div>
+  `).join("");
+}
+
+/* ---------- ESTOQUE DE SALMÃO & RENDIMENTO ---------- */
+let estoqueInited = false;
+function renderEstoque() {
+  if (estoqueInited) return;
+  estoqueInited = true;
+
+  function calcSalm() {
+    const w = +$("sSalmWeight").value;
+    const p = +$("sSalmPrice").value;
+
+    $("sSalmWeightV").textContent = w.toFixed(1).replace(".", ",") + " kg";
+    $("sSalmPriceV").textContent = brl(p) + "/kg";
+
+    const totalCost = w * p;
+    const filetWeight = w * 0.62;
+    const costPerKgFilet = totalCost / filetWeight;
+
+    $("salmOut").innerHTML = [
+      ["Custo da Peça Inteira", brl(totalCost)],
+      ["Filé Limpo Obtido (62%)", filetWeight.toFixed(2).replace(".", ",") + " kg"],
+      ["Custo Efetivo do Filé", brl(costPerKgFilet) + "/kg"]
+    ].map(([k, v]) => `
+      <div class="card kpi" style="padding:10px">
+        <span class="eyebrow">${k}</span>
+        <div class="v num" style="font-size:18px;color:var(--salmon)">${v}</div>
+      </div>
+    `).join("");
+  }
+
+  $("sSalmWeight").addEventListener("input", calcSalm);
+  $("sSalmPrice").addEventListener("input", calcSalm);
+  calcSalm();
+
+  $("btnPedirEstoque").addEventListener("click", () => {
+    toast("Pedido de compra gerado e enviado para Distribuidora Pescados Nobres Cuiabá!");
+  });
+}
+
 /* ---------- roteamento ---------- */
-const VIEWS = ["cockpit", "zumi", "campanhas", "leads", "clientes", "horarios", "clube", "mercado"];
+const VIEWS = ["cockpit", "zumi", "campanhas", "leads", "clientes", "horarios", "clube", "mercado", "engenharia", "rfm", "clima", "omnichannel", "financeiro", "estoque"];
 function route() {
   const v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "cockpit";
   VIEWS.forEach(k => { $("v-" + k).hidden = k !== v; });
   document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.v === v));
   if (v === "leads" && !$("landing").innerHTML) renderLanding();
   if (v === "mercado") renderMercado();
+  if (v === "engenharia") renderEngenharia();
+  if (v === "rfm") renderRfm();
+  if (v === "clima") renderClima();
+  if (v === "omnichannel") renderOmnichannel();
+  if (v === "estoque") renderEstoque();
   window.scrollTo(0, 0);
 }
 window.addEventListener("hashchange", route);
