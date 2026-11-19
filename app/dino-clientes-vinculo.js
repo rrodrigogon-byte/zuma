@@ -32,8 +32,16 @@ function ativo(cliente) {
 export function encontrarClientePorTelefone(empresaId, telefone) {
   const chave = telefoneChave(telefone);
   if (!chave) return null;
-  const clientes = Object.values(clientesKytto.clientesPersistidos(empresaId).clientes || {});
-  return clientes.find((cliente) => ativo(cliente) && telefoneChave(cliente.telefone) === chave) || null;
+  const mapa = clientesKytto.clientesPersistidos(empresaId).clientes || {};
+  let clientes = Object.values(mapa);
+  if (clientes.length === 0) {
+    clientes = clientesKytto.listarClientes(empresaId);
+  }
+  let encontrado = clientes.find((cliente) => ativo(cliente) && telefoneChave(cliente.telefone) === chave) || null;
+  if (!encontrado) {
+    encontrado = clientes.find((cliente) => ativo(cliente) && Array.isArray(cliente.telefonesSecundarios) && cliente.telefonesSecundarios.some((t) => telefoneChave(t) === chave)) || null;
+  }
+  return encontrado;
 }
 
 export function encontrarClientePorCpf(empresaId, cpf) {
