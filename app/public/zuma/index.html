@@ -178,6 +178,9 @@
         <button onclick="switchTab('gestor-dre')" id="tab-btn-gestor-dre" class="tab-btn px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap text-zuma-muted hover:text-white">
           <span>📊</span><span>Dashboard +250%</span>
         </button>
+        <a href="operacao.html" class="px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap bg-zuma-salmon hover:bg-orange-600 text-white shadow-md">
+          <span>⚡</span><span>Central Operacional 360° (PDV, KDS, Garçom, Motoboy)</span>
+        </a>
         <a href="pilot.html" target="_blank" class="px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-600 hover:text-white">
           <span>🚀</span><span>Zuma Pilot (Tela Cheia)</span>
         </a>
@@ -1428,9 +1431,13 @@
       if (!grid) return;
 
       let filtrados = cardapioGeral.filter(p => {
-        const matchCat = categoriaAtiva === 'todos' || p.categoria_codigo === categoriaAtiva;
-        const matchSetor = setorAtivo === 'todos' || p.setor_producao === setorAtivo;
-        const matchBusca = !termo || p.nome?.toLowerCase().includes(termo) || p.descricao?.toLowerCase().includes(termo);
+        const matchCat = categoriaAtiva === 'todos' || 
+                         p.categoria_codigo === categoriaAtiva || 
+                         p.categoria_id === categoriaAtiva || 
+                         p.slug === categoriaAtiva ||
+                         (p.categoria || '').toLowerCase() === String(categoriaAtiva).toLowerCase();
+        const matchSetor = setorAtivo === 'todos' || p.setor_producao === setorAtivo || p.setor === setorAtivo;
+        const matchBusca = !termo || p.nome?.toLowerCase().includes(termo) || p.descricao?.toLowerCase().includes(termo) || String(p.codigo_pdv || p.cod_pdv || '').toLowerCase().includes(termo);
         return matchCat && matchSetor && matchBusca;
       });
 
@@ -1444,13 +1451,13 @@
       grid.innerHTML = filtrados.map(p => `
         <div class="bg-zuma-surface border border-zuma-border hover:border-zuma-salmon/60 rounded-2xl overflow-hidden flex flex-col justify-between transition-all duration-200 hover:-translate-y-1 shadow-md">
           <div class="relative h-44 bg-zuma-card overflow-hidden">
-            <img src="${p.foto_url || 'https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp'}" 
+            <img src="${p.foto_url || p.foto || 'https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp'}" 
                  alt="${p.nome}" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
                  onerror="this.src='https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp'">
             <div class="absolute top-2 left-2 bg-black/70 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] font-bold text-zuma-muted border border-white/10 uppercase">
-              ${p.setor_producao === 'sushi_bar' ? '🍣 Sushi Bar' : (p.setor_producao === 'cozinha' ? '🍲 Cozinha' : (p.setor_producao === 'bar' ? '🍹 Bar' : '🥢 Balcão'))}
+              ${(p.setor_producao || p.setor) === 'sushi_bar' ? '🍣 Sushi Bar' : ((p.setor_producao || p.setor) === 'cozinha' ? '🍲 Cozinha' : ((p.setor_producao || p.setor) === 'bar' ? '🍹 Bar' : '🥢 Balcão'))}
             </div>
-            ${p.codigo_pdv ? `<div class="absolute top-2 right-2 bg-black/60 px-1.5 py-0.5 rounded text-[10px] font-mono text-zuma-muted">${p.codigo_pdv}</div>` : ''}
+            ${(p.codigo_pdv || p.cod_pdv) ? `<div class="absolute top-2 right-2 bg-black/60 px-1.5 py-0.5 rounded text-[10px] font-mono text-zuma-muted">${p.codigo_pdv || p.cod_pdv}</div>` : ''}
           </div>
           <div class="p-4 flex-grow flex flex-col justify-between space-y-3">
             <div>

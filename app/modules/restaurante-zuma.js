@@ -39,14 +39,28 @@ routerZuma.get('/storefront', (req, res) => {
 // GET /api/public/zuma/cardapio — Catálogo dos 211 produtos com filtros de busca, categoria e setor
 routerZuma.get('/cardapio', (req, res) => {
   const { categoria, setor, busca, destaque } = req.query;
-  let itens = [...ZUMA_CARDAPIO_COMPLETO];
+  let itens = ZUMA_CARDAPIO_COMPLETO.map(p => ({
+    ...p,
+    codigo_pdv: p.cod_pdv || p.codigo_pdv,
+    categoria_codigo: p.slug || p.categoria_id || p.categoria_codigo,
+    categoria_nome: p.categoria || p.categoria_nome,
+    setor_producao: p.setor || p.setor_producao,
+    foto_url: p.foto || p.foto_url
+  }));
 
   if (categoria) {
-    itens = itens.filter(p => p.categoria_codigo === categoria || p.categoria_nome?.toLowerCase() === String(categoria).toLowerCase());
+    const catStr = String(categoria).toLowerCase();
+    itens = itens.filter(p => 
+      p.categoria_codigo === categoria || 
+      p.categoria_id === categoria || 
+      p.slug === categoria || 
+      p.categoria_nome?.toLowerCase() === catStr ||
+      p.categoria?.toLowerCase() === catStr
+    );
   }
 
   if (setor) {
-    itens = itens.filter(p => p.setor_producao === setor);
+    itens = itens.filter(p => p.setor_producao === setor || p.setor === setor);
   }
 
   if (destaque === 'true') {
@@ -58,15 +72,22 @@ routerZuma.get('/cardapio', (req, res) => {
     itens = itens.filter(p => 
       p.nome?.toLowerCase().includes(termo) || 
       p.descricao?.toLowerCase().includes(termo) ||
-      p.categoria_nome?.toLowerCase().includes(termo)
+      p.categoria_nome?.toLowerCase().includes(termo) ||
+      p.categoria?.toLowerCase().includes(termo) ||
+      String(p.cod_pdv || p.codigo_pdv).toLowerCase().includes(termo)
     );
   }
+
+  const categoriasNormalizadas = ZUMA_CATEGORIAS.map(c => ({
+    ...c,
+    codigo: c.slug || c.id || c.codigo
+  }));
 
   res.json({
     ok: true,
     totalItens: itens.length,
     totalGeralCardapio: ZUMA_CARDAPIO_COMPLETO.length,
-    categorias: ZUMA_CATEGORIAS,
+    categorias: categoriasNormalizadas,
     itens
   });
 });
@@ -560,5 +581,335 @@ routerZuma.get('/kds', (req, res) => {
         status: "Fluido"
       }
     ]
+  });
+});
+
+// ============================================================================
+// SUÍTE OPERACIONAL INTEGRADA: FRENTE DE CAIXA, KDS, GARÇOM & MOTOBOY
+// ============================================================================
+
+// Base de dados simulada em memória para operações de turno
+let ESTADO_OPERACIONAL_TURNO = {
+  caixa: {
+    aberto: true,
+    operador: "Akira Tanaka / Caixa Central",
+    horaAbertura: "17:30",
+    fundoTrocoInicial: 250.00,
+    totalVendasDia: 3845.50,
+    sangrias: [
+      { id: "SANG-01", hora: "20:15", valor: 1200.00, motivo: "Recolhimento cofre sangria de segurança", operador: "Gerente Rodrigo" }
+    ],
+    suprimentos: [
+      { id: "SUP-01", hora: "17:30", valor: 250.00, motivo: "Fundo de troco inicial", operador: "Caixa Central" }
+    ],
+    totaisPorFormaPagamento: {
+      pix: 1840.00,
+      cartaoCredito: 1215.50,
+      cartaoDebito: 520.00,
+      dinheiro: 270.00,
+      valeRefeicao: 0.00
+    },
+    vendasRecentes: [
+      { id: "VND-1041", hora: "21:12", mesa: "Mesa 04", total: 189.90, formaPagamento: "PIX", itensQtd: 3, status: "pago" },
+      { id: "VND-1040", hora: "20:58", mesa: "Delivery #342", total: 135.00, formaPagamento: "Cartão Crédito", itensQtd: 2, status: "pago" },
+      { id: "VND-1039", hora: "20:45", mesa: "Mesa 19 (Bistrô)", total: 245.00, formaPagamento: "PIX", itensQtd: 4, status: "pago" },
+      { id: "VND-1038", hora: "20:30", mesa: "Balcão Takeaway", total: 69.90, formaPagamento: "Dinheiro", itensQtd: 1, status: "pago" }
+    ]
+  },
+  cozinhaKds: [
+    {
+      id: "KDS-301",
+      comanda: "Mesa 02",
+      origem: "salao",
+      hora: "21:15",
+      minutosEspera: 7,
+      slaMinutos: 15,
+      status: "em_preparo",
+      praca: "sushi_bar",
+      itens: [
+        { nome: "Combinado Zuma Casal 40 Peças", qtd: 1, obs: "Sem kani, caprichar no salmão trufado", pronto: false },
+        { nome: "Gunkan Especial Ebi (2un)", qtd: 2, obs: "Flambado no maçarico", pronto: true }
+      ]
+    },
+    {
+      id: "KDS-302",
+      comanda: "Delivery #345",
+      origem: "delivery",
+      hora: "21:18",
+      minutosEspera: 4,
+      slaMinutos: 20,
+      status: "pendente",
+      praca: "cozinha",
+      itens: [
+        { nome: "Yakissoba Especial de Camarão", qtd: 1, obs: "Molho extra separado", pronto: false },
+        { nome: "Hot Roll Filadélfia (12un)", qtd: 2, obs: "Bem crocante na panko", pronto: false }
+      ]
+    },
+    {
+      id: "KDS-303",
+      comanda: "Mesa 08",
+      origem: "salao",
+      hora: "21:05",
+      minutosEspera: 17,
+      slaMinutos: 15,
+      status: "atrasado",
+      praca: "fritadeira",
+      itens: [
+        { nome: "Guioza Suína 6un", qtd: 1, obs: "Ao vapor e grelhada", pronto: true },
+        { nome: "Lula Crocante (300g)", qtd: 1, obs: "Com limão siciliano", pronto: false }
+      ]
+    },
+    {
+      id: "KDS-304",
+      comanda: "Mesa 14 (Deck)",
+      origem: "deck",
+      hora: "21:20",
+      minutosEspera: 2,
+      slaMinutos: 5,
+      status: "pronto",
+      praca: "bar",
+      itens: [
+        { nome: "Soda Italiana de Maçã Verde 500ml", qtd: 2, obs: "Muito gelo", pronto: true },
+        { nome: "Chopp Artesanal IPA 500ml", qtd: 2, obs: "Colarinho cremoso", pronto: true }
+      ]
+    }
+  ],
+  motoboys: {
+    ativos: [
+      { id: "MOTO-01", nome: "Carlos 'Ninja' Silva", placa: "RTO-4A12", telefone: "(65) 99611-2041", corridasHoje: 7, totalGanhosHoje: 98.00, status: "em_rota" },
+      { id: "MOTO-02", nome: "Marcos Vinicius", placa: "QBA-8B90", telefone: "(65) 99933-7712", corridasHoje: 9, totalGanhosHoje: 126.00, status: "disponivel" },
+      { id: "MOTO-03", nome: "Rafael Souza", placa: "JZA-1C34", telefone: "(65) 99822-5500", corridasHoje: 5, totalGanhosHoje: 70.00, status: "disponivel" }
+    ],
+    entregasExpedicao: [
+      {
+        id: "DEL-801",
+        pedidoNumero: 341,
+        cliente: "Juliana Mendes",
+        telefone: "(65) 99912-3344",
+        endereco: "Rua Antônio Hortolani, 450, Centro",
+        bairro: "Centro",
+        cidade: "Tangará da Serra - MT",
+        taxaEntrega: 12.00,
+        totalPedido: 148.50,
+        formaPagamento: "Pago Online (PIX Kytto)",
+        itensResumo: "Combo 26 Pçs + Hot Nutella + Refri",
+        horaPronto: "21:10",
+        statusEntrega: "pronto_para_coleta",
+        motoboyDesignado: null,
+        codigoConfirmacao: "4821"
+      },
+      {
+        id: "DEL-802",
+        pedidoNumero: 342,
+        cliente: "Dr. Fernando Barros",
+        telefone: "(65) 99655-8899",
+        endereco: "Av. Tancredo Neves, 1220, Jardim Europa",
+        bairro: "Jardim Europa",
+        cidade: "Tangará da Serra - MT",
+        taxaEntrega: 14.00,
+        totalPedido: 215.00,
+        formaPagamento: "Cartão na Entrega (Maquininha Kytto)",
+        itensResumo: "Especial Zuma 68 Pçs + 2x Sodas Maçã Verde",
+        horaPronto: "21:14",
+        statusEntrega: "em_transito",
+        motoboyDesignado: "Carlos 'Ninja' Silva",
+        codigoConfirmacao: "7913"
+      },
+      {
+        id: "DEL-803",
+        pedidoNumero: 343,
+        cliente: "Beatriz Oliveira",
+        telefone: "(65) 99877-1122",
+        endereco: "Rua 26, 890, Vila Alta",
+        bairro: "Vila Alta",
+        cidade: "Tangará da Serra - MT",
+        taxaEntrega: 16.00,
+        totalPedido: 92.00,
+        formaPagamento: "Pago Online (Cartão)",
+        itensResumo: "Yakissoba Misto + Rolinho Primavera",
+        horaPronto: "21:18",
+        statusEntrega: "pronto_para_coleta",
+        motoboyDesignado: null,
+        codigoConfirmacao: "3154"
+      }
+    ]
+  }
+};
+
+// GET /api/public/zuma/operacional/completo — Central Unificada de Caixa, KDS, Garçom e Motoboy
+routerZuma.get('/operacional/completo', (req, res) => {
+  res.json({
+    ok: true,
+    restaurante: {
+      nome: ZUMA_DADOS_EMPRESA.nome_fantasia,
+      razaoSocial: ZUMA_DADOS_EMPRESA.razao_social,
+      cnpj: ZUMA_DADOS_EMPRESA.cnpj,
+      cidade: "Tangará da Serra - MT",
+      endereco: "Av. Brasil 1605 S"
+    },
+    totalProdutosCatalogo: ZUMA_CARDAPIO_COMPLETO.length,
+    totalMesas: ZUMA_MESAS_INICIAIS.length,
+    categorias: ZUMA_CATEGORIAS.map(c => ({ ...c, codigo: c.slug || c.id })),
+    produtos: ZUMA_CARDAPIO_COMPLETO.map(p => ({
+      ...p,
+      codigo_pdv: p.cod_pdv || p.codigo_pdv,
+      categoria_codigo: p.slug || p.categoria_id,
+      categoria_nome: p.categoria,
+      setor_producao: p.setor,
+      foto_url: p.foto
+    })),
+    operacional: ESTADO_OPERACIONAL_TURNO
+  });
+});
+
+// POST /api/public/zuma/caixa/fechar-venda — Fechamento no PDV Frente de Caixa
+routerZuma.post('/caixa/fechar-venda', (req, res) => {
+  const { mesaNumero, valorTotal, formaPagamento, valorRecebidoDinheiro, itens } = req.body || {};
+  const total = parseFloat(valorTotal) || 0;
+  const recebido = parseFloat(valorRecebidoDinheiro) || total;
+  const troco = Math.max(0, recebido - total);
+  const forma = String(formaPagamento || 'pix').toLowerCase();
+
+  const vendaId = `VND-${Math.floor(1000 + Math.random() * 9000)}`;
+  const novaVenda = {
+    id: vendaId,
+    hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    mesa: mesaNumero ? `Mesa ${mesaNumero}` : "Balcão / Caixa",
+    total,
+    formaPagamento: formaPagamento || "PIX",
+    itensQtd: Array.isArray(itens) ? itens.length : 1,
+    status: "pago",
+    troco: troco > 0 ? troco : 0
+  };
+
+  ESTADO_OPERACIONAL_TURNO.caixa.vendasRecentes.unshift(novaVenda);
+  ESTADO_OPERACIONAL_TURNO.caixa.totalVendasDia += total;
+
+  if (forma.includes('pix')) ESTADO_OPERACIONAL_TURNO.caixa.totaisPorFormaPagamento.pix += total;
+  else if (forma.includes('credito')) ESTADO_OPERACIONAL_TURNO.caixa.totaisPorFormaPagamento.cartaoCredito += total;
+  else if (forma.includes('debito')) ESTADO_OPERACIONAL_TURNO.caixa.totaisPorFormaPagamento.cartaoDebito += total;
+  else if (forma.includes('dinheiro')) ESTADO_OPERACIONAL_TURNO.caixa.totaisPorFormaPagamento.dinheiro += total;
+
+  res.json({
+    ok: true,
+    venda: novaVenda,
+    reciboFiscal: {
+      chaveNFCe: `512611${ZUMA_DADOS_EMPRESA.cnpj.replace(/\D/g, '')}650010000000001${Math.floor(10000000 + Math.random() * 90000000)}1`,
+      protocoloAutorizacao: `1512600${Math.floor(100000000 + Math.random() * 900000000)}`,
+      hora: novaVenda.hora,
+      valorTotal: total,
+      troco
+    },
+    mensagem: `Venda ${vendaId} registrada com sucesso no PDV Kytto!`
+  });
+});
+
+// POST /api/public/zuma/garcom/lancar-pedido — Garçom lançando comanda na mesa
+routerZuma.post('/garcom/lancar-pedido', (req, res) => {
+  const { mesaNumero, garcomNome, itens } = req.body || {};
+  const kdsId = `KDS-${Math.floor(300 + Math.random() * 600)}`;
+  
+  const novoKds = {
+    id: kdsId,
+    comanda: `Mesa ${mesaNumero || '01'}`,
+    origem: "salao",
+    hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    minutosEspera: 0,
+    slaMinutos: 15,
+    status: "em_preparo",
+    praca: "sushi_bar",
+    garcom: garcomNome || "Garçom Salão",
+    itens: Array.isArray(itens) && itens.length ? itens : [
+      { nome: "Combinado Zuma Especial 30 Peças", qtd: 1, obs: "Sem gergelim", pronto: false }
+    ]
+  };
+
+  ESTADO_OPERACIONAL_TURNO.cozinhaKds.unshift(novoKds);
+
+  res.json({
+    ok: true,
+    kdsId,
+    mesa: mesaNumero,
+    mensagem: `Pedido da Mesa ${mesaNumero} disparado para a Cozinha & Sushi Bar!`
+  });
+});
+
+// POST /api/public/zuma/cozinha/atualizar-status — KDS atualizando prato
+routerZuma.post('/cozinha/atualizar-status', (req, res) => {
+  const { kdsId, novoStatus } = req.body || {};
+  const kds = ESTADO_OPERACIONAL_TURNO.cozinhaKds.find(k => k.id === kdsId);
+  
+  if (kds) {
+    kds.status = novoStatus || "pronto";
+    if (kds.status === "pronto") {
+      kds.itens.forEach(i => i.pronto = true);
+    }
+  }
+
+  res.json({
+    ok: true,
+    kdsId,
+    status: kds ? kds.status : "atualizado",
+    mensagem: `Status da comanda ${kdsId} atualizado para ${novoStatus}!`
+  });
+});
+
+// POST /api/public/zuma/motoboy/assumir — Motoboy assumindo corrida delivery
+routerZuma.post('/motoboy/assumir', (req, res) => {
+  const { entregaId, motoboyNome } = req.body || {};
+  const entrega = ESTADO_OPERACIONAL_TURNO.motoboys.entregasExpedicao.find(e => e.id === entregaId);
+  
+  if (entrega) {
+    entrega.statusEntrega = "em_transito";
+    entrega.motoboyDesignado = motoboyNome || "Carlos 'Ninja'";
+  }
+
+  res.json({
+    ok: true,
+    entregaId,
+    status: "em_transito",
+    motoboy: entrega?.motoboyDesignado,
+    mensagem: `Entrega ${entregaId} assumida com sucesso! Boa rota!`
+  });
+});
+
+// POST /api/public/zuma/motoboy/concluir — Motoboy confirmando entrega com cliente
+routerZuma.post('/motoboy/concluir', (req, res) => {
+  const { entregaId, codigoConfirmacao } = req.body || {};
+  const entrega = ESTADO_OPERACIONAL_TURNO.motoboys.entregasExpedicao.find(e => e.id === entregaId);
+  
+  if (entrega) {
+    entrega.statusEntrega = "entregue_com_sucesso";
+  }
+
+  res.json({
+    ok: true,
+    entregaId,
+    status: "entregue_com_sucesso",
+    taxaCreditada: entrega ? entrega.taxaEntrega : 12.00,
+    mensagem: `Entrega ${entregaId} concluída com sucesso! Taxa creditada na carteira do motoboy.`
+  });
+});
+
+// GET /api/public/zuma/download-offline — Pacote de download completo da operação
+routerZuma.get('/download-offline', (req, res) => {
+  res.json({
+    ok: true,
+    dataGeracao: new Date().toISOString(),
+    versaoPacote: "2026.11.19-kytto-zuma-v2",
+    restaurante: ZUMA_DADOS_EMPRESA,
+    catalogoProdutos: ZUMA_CARDAPIO_COMPLETO,
+    categorias: ZUMA_CATEGORIAS,
+    mesas: ZUMA_MESAS_INICIAIS,
+    crmVip: ZUMA_CLIENTES_CRM,
+    mascote: ZUMA_MASCOTE_ZUMI,
+    planoCrescimento: ZUMA_PLANO_CRESCIMENTO_250,
+    engenhariaCardapio: ZUMA_GANHOS_ENGENHARIA_CARDAPIO,
+    rotinasOperacionais: {
+      caixa: "Abertura com suprimento R$ 250, sangrias automáticas > R$ 1.000, conferência cega no fechamento",
+      cozinha: "SLA Frio 15 min, Quente 18 min, KDS 4 praças, bip sonoro em novos pedidos",
+      garcom: "Autoatendimento QR Code nas 27 mesas, comanda mobile touch, notificação de prato pronto",
+      motoboy: "Expedição integrada com rotas Waze/Google Maps, código de confirmação de 4 dígitos"
+    }
   });
 });

@@ -209,3 +209,104 @@ test('Zuma Cozinha Oriental - Módulo routerZuma e endpoints de API', async () =
   assert.ok(routerZuma, 'routerZuma deve ser exportado');
   assert.equal(typeof routerZuma, 'function', 'routerZuma deve ser um middleware Express');
 });
+
+test('Zuma Cozinha Oriental - Central Operacional 360°, PWA e Download Offline', async () => {
+  const operacaoHtmlPath = path.join(__dirname, 'public', 'zuma', 'operacao.html');
+  const manifestPath = path.join(__dirname, 'public', 'zuma', 'manifest.json');
+  const swPath = path.join(__dirname, 'public', 'zuma', 'sw.js');
+  const cardapioRealJsonPath = path.join(__dirname, 'public', 'zuma', 'cardapio-real-zuma.json');
+
+  assert.ok(fs.existsSync(operacaoHtmlPath), 'operacao.html deve existir');
+  assert.ok(fs.existsSync(manifestPath), 'manifest.json deve existir');
+  assert.ok(fs.existsSync(swPath), 'sw.js deve existir');
+  assert.ok(fs.existsSync(cardapioRealJsonPath), 'cardapio-real-zuma.json deve existir');
+
+  const operacaoHtml = fs.readFileSync(operacaoHtmlPath, 'utf8');
+  assert.ok(operacaoHtml.includes('Central Operacional 360°'), 'HTML deve conter título da estação');
+  assert.ok(operacaoHtml.includes('mod-caixa'), 'HTML deve conter módulo de Frente de Caixa');
+  assert.ok(operacaoHtml.includes('mod-cozinha'), 'HTML deve conter módulo de KDS Cozinha');
+  assert.ok(operacaoHtml.includes('mod-garcom'), 'HTML deve conter módulo do App Garçom');
+  assert.ok(operacaoHtml.includes('mod-motoboy'), 'HTML deve conter módulo do App Motoboy');
+  assert.ok(operacaoHtml.includes('baixarTudoOffline'), 'HTML deve conter função de download offline');
+
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  assert.equal(manifest.display, 'standalone');
+  assert.equal(manifest.start_url, './operacao.html');
+
+  const cardapioJson = JSON.parse(fs.readFileSync(cardapioRealJsonPath, 'utf8'));
+  assert.equal(cardapioJson.totalProdutos, 211, 'cardapio-real-zuma.json deve ter exatamente 211 produtos');
+  assert.equal(cardapioJson.totalCategorias, 23, 'cardapio-real-zuma.json deve ter exatamente 23 categorias');
+});
+
+test('Zuma Cozinha Oriental - Endpoints operacionais backend (Caixa, KDS, Garçom, Motoboy)', async () => {
+  const { routerZuma } = await import('./modules/restaurante-zuma.js');
+
+  // Mock Express helper
+  const callRoute = (method, path, body = {}, query = {}) => {
+    return new Promise((resolve) => {
+      const req = { method, url: path, body, query };
+      const res = {
+        statusCode: 200,
+        json(data) {
+          resolve({ status: this.statusCode, data });
+        },
+        status(code) {
+          this.statusCode = code;
+          return this;
+        }
+      };
+
+      // find layer matching path
+      const layer = routerZuma.stack.find(l => l.route && l.route.path === path && l.route.methods[method.toLowerCase()]);
+      if (layer) {
+        layer.route.stack[0].handle(req, res);
+      } else {
+        resolve({ status: 404, data: { error: 'Route not found' } });
+      }
+    });
+  };
+
+  // Testar /operacional/completo
+  const opRes = await callRoute('GET', '/operacional/completo');
+  assert.equal(opRes.status, 200);
+  assert.equal(opRes.data.ok, true);
+  assert.equal(opRes.data.totalProdutosCatalogo, 211);
+  assert.equal(opRes.data.totalMesas, 27);
+  assert.ok(Array.isArray(opRes.data.produtos) && opRes.data.produtos.length === 211);
+  assert.ok(Array.isArray(opRes.data.categorias) && opRes.data.categorias.length === 23);
+
+  // Testar /caixa/fechar-venda
+  const caixaRes = await callRoute('POST', '/caixa/fechar-venda', {
+    mesaNumero: 4,
+    valorTotal: 150.00,
+    formaPagamento: 'pix',
+    itens: [{ cod: '666', nome: 'Promo Combo Grelhado', qtd: 1, preco: 82.00 }]
+  });
+  assert.equal(caixaRes.status, 200);
+  assert.equal(caixaRes.data.ok, true);
+  assert.ok(caixaRes.data.venda.id.startsWith('VND-'));
+
+  // Testar /garcom/lancar-pedido
+  const garcomRes = await callRoute('POST', '/garcom/lancar-pedido', {
+    mesaNumero: 8,
+    garcomNome: 'Pedro Garçom',
+    itens: [{ nome: 'Tubo Uramaki Filadélfia', qtd: 2 }]
+  });
+  assert.equal(garcomRes.status, 200);
+  assert.equal(garcomRes.data.ok, true);
+  assert.ok(garcomRes.data.kdsId.startsWith('KDS-'));
+
+  // Testar /cozinha/atualizar-status
+  const kdsRes = await callRoute('POST', '/cozinha/atualizar-status', {
+    kdsId: garcomRes.data.kdsId,
+    novoStatus: 'pronto'
+  });
+  assert.equal(kdsRes.status, 200);
+  assert.equal(kdsRes.data.ok, true);
+
+  // Testar /download-offline
+  const downRes = await callRoute('GET', '/download-offline');
+  assert.equal(downRes.status, 200);
+  assert.equal(downRes.data.ok, true);
+  assert.equal(downRes.data.catalogoProdutos.length, 211);
+});
