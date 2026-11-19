@@ -1,0 +1,904 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+  <title>Zuma Pilot · Gestão Autônoma & IA Kytto</title>
+  <meta name="viewport-fit-sides" content="cover">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: app shell — sidebar de módulos à esquerda (vira barra no celular), área de trabalho em cartões funcionais */
+:root{
+  --bg:#F5F5F2; --surface:#FFFFFF; --surface2:#EEEDE8; --line:#DEDCD4;
+  --ink:#17181C; --muted:#62646B;
+  --salmon:#E8613A; --salmon-soft:#FBE3D9; --nori:#2E5A4C; --nori-soft:#DCEAE3;
+  --good:#2E7D4F; --warn:#B7791F; --bad:#C0392B;
+  --heat0:#EEEDE8; --heat1:#F8D6C8; --heat2:#F1A889; --heat3:#E8613A; --heat4:#A93A1C;
+  --bubble-in:#FFFFFF; --bubble-out:#DDF3E4; --chat-bg:#ECE7DE;
+  --f-display:"Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-body:"Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono:"JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#121316; --surface:#1B1D21; --surface2:#24262B; --line:#33363C;
+  --ink:#ECEBE7; --muted:#9EA0A6;
+  --salmon:#F07A52; --salmon-soft:#3A2219; --nori:#6FB39B; --nori-soft:#1C2E28;
+  --good:#5BC489; --warn:#E0A84A; --bad:#EF6B5B;
+  --heat0:#24262B; --heat1:#4A2A20; --heat2:#83402A; --heat3:#D45A33; --heat4:#FF9B73;
+  --bubble-in:#24262B; --bubble-out:#1F3A2C; --chat-bg:#17181B; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121316; --surface:#1B1D21; --surface2:#24262B; --line:#33363C;
+  --ink:#ECEBE7; --muted:#9EA0A6;
+  --salmon:#F07A52; --salmon-soft:#3A2219; --nori:#6FB39B; --nori-soft:#1C2E28;
+  --good:#5BC489; --warn:#E0A84A; --bad:#EF6B5B;
+  --heat0:#24262B; --heat1:#4A2A20; --heat2:#83402A; --heat3:#D45A33; --heat4:#FF9B73;
+  --bubble-in:#24262B; --bubble-out:#1F3A2C; --chat-bg:#17181B; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;letter-spacing:-.01em}
+h1{font-size:26px;font-weight:800}
+h2{font-size:18px;font-weight:700}
+h3{font-size:15px;font-weight:700}
+p{margin:0}
+.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+button{font:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible{outline:2px solid var(--salmon);outline-offset:2px}
+.btn{border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:8px 14px;border-radius:8px;font-weight:600}
+.btn:hover{border-color:var(--ink)}
+.btn.primary{background:var(--salmon);border-color:var(--salmon);color:#fff}
+.btn.primary:hover{filter:brightness(1.06)}
+.btn.nori{background:var(--nori);border-color:var(--nori);color:#fff}
+.btn:disabled{opacity:.55;cursor:default}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+textarea{resize:vertical;min-height:80px}
+label{font-size:12px;font-weight:600;color:var(--muted);display:grid;gap:4px}
+
+.shell{display:grid;grid-template-columns:232px 1fr;min-height:100%}
+.side{background:var(--surface);border-right:1px solid var(--line);padding:20px 14px;display:flex;flex-direction:column;gap:18px;position:sticky;top:0;height:100vh}
+.brand{display:flex;align-items:center;gap:10px;padding:0 6px}
+.brand b{font-family:var(--f-display);font-size:18px;font-weight:800;letter-spacing:.02em}
+.brand small{display:block;font-size:11px;color:var(--muted)}
+nav{display:grid;gap:2px}
+nav a{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;color:var(--ink);text-decoration:none;font-weight:500}
+nav a:hover{background:var(--surface2)}
+nav a.on{background:var(--salmon-soft);color:var(--ink);font-weight:700}
+nav a .dot{width:8px;height:8px;border-radius:50%;background:var(--line);flex:none}
+nav a.on .dot{background:var(--salmon)}
+.side .foot{margin-top:auto;font-size:12px;color:var(--muted);padding:0 6px}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:999px;background:var(--surface2);color:var(--muted);white-space:nowrap}
+.pill.good{background:var(--nori-soft);color:var(--nori)}
+.pill.hot{background:var(--salmon-soft);color:var(--salmon)}
+.pill.warn{color:var(--warn)}
+.pill.bad{color:var(--bad)}
+
+main{padding-block:24px 48px;padding-left:max(24px, env(safe-area-inset-left,0px));padding-right:max(24px, env(safe-area-inset-right,0px));min-width:0}
+.view{display:grid;gap:20px;max-width:1180px}
+.head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.head p{max-width:62ch;margin-top:4px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px;min-width:0}
+.grid{display:grid;gap:16px}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.g-main{grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);align-items:start}
+.kpi .v{font-family:var(--f-display);font-size:28px;font-weight:800;line-height:1.1}
+.kpi .d{font-size:12px;margin-top:4px}
+.up{color:var(--good)} .down{color:var(--bad)}
+.demo{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center}
+.demo::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--warn)}
+
+/* heatmap */
+.heat{display:grid;grid-template-columns:44px repeat(7,minmax(34px,1fr));gap:4px;font-size:12px}
+.heat .h{color:var(--muted);text-align:center;font-weight:600;padding-bottom:2px}
+.heat .r{color:var(--muted);font-family:var(--f-mono);font-size:11px;display:flex;align-items:center}
+.cell{height:30px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-family:var(--f-mono);font-size:11px;color:var(--ink);position:relative;border:1px solid transparent}
+.cell.closed{background:repeating-linear-gradient(135deg,var(--surface2) 0 5px,transparent 5px 10px);border-color:var(--line);color:var(--muted)}
+.cell.gap{border:2px solid var(--salmon)}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:10px;align-items:center}
+.legend i{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-3px;margin-right:4px}
+
+.feed{display:grid;gap:10px}
+.act{border:1px solid var(--line);border-radius:10px;padding:12px;display:grid;gap:6px;background:var(--surface)}
+.act .top{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}
+.act .msg{background:var(--surface2);border-radius:8px;padding:8px 10px;font-size:13px}
+.act .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.act.done{opacity:.7}
+
+/* table */
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+
+/* chat */
+.chatwrap{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px}
+.phone{background:var(--chat-bg);border:1px solid var(--line);border-radius:18px;display:flex;flex-direction:column;height:600px;overflow:hidden}
+.phone .bar{background:var(--nori);color:#fff;padding:10px 14px;display:flex;align-items:center;gap:10px}
+.phone .bar b{font-family:var(--f-display)}
+.phone .bar small{display:block;opacity:.85;font-size:11.5px}
+.msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px}
+.b{max-width:82%;padding:8px 11px;border-radius:12px;font-size:13.5px;white-space:pre-wrap;word-wrap:break-word;box-shadow:0 1px 0 rgba(0,0,0,.06)}
+.b.in{background:var(--bubble-in);align-self:flex-start;border-top-left-radius:4px}
+.b.out{background:var(--bubble-out);align-self:flex-end;border-top-right-radius:4px}
+.b.sys{align-self:center;background:transparent;box-shadow:none;color:var(--muted);font-size:12px}
+.compose{display:flex;gap:8px;padding:10px;background:var(--surface);border-top:1px solid var(--line)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 11px;font-size:12.5px;color:var(--ink)}
+.chip:hover{border-color:var(--salmon)}
+.cart li{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line)}
+.cart ul{list-style:none;padding:0;margin:0}
+.tot{display:flex;justify-content:space-between;font-weight:700;margin-top:8px;font-size:15px}
+
+/* lead capture */
+.landing{border-radius:16px;overflow:hidden;border:1px solid var(--line);background:var(--surface)}
+.landing .hero{background:var(--ink);color:var(--bg);padding:22px;display:flex;gap:16px;align-items:center}
+.landing .hero h2{font-size:22px}
+.landing .body{padding:18px;display:grid;gap:14px}
+.opts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.opt{border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--surface);text-align:left;color:var(--ink)}
+.opt.sel{border-color:var(--salmon);background:var(--salmon-soft)}
+.scratch{position:relative;height:120px;border-radius:12px;overflow:hidden;border:1px dashed var(--salmon);display:flex;align-items:center;justify-content:center;text-align:center;background:var(--salmon-soft)}
+.scratch canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
+.prize{font-family:var(--f-display);font-weight:800;font-size:20px;padding:0 12px}
+
+.cal{display:grid;gap:8px}
+.cal .ev{display:grid;grid-template-columns:76px 1fr auto;gap:10px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:10px}
+.cal .date{font-family:var(--f-mono);font-size:12px;text-align:center;background:var(--surface2);border-radius:8px;padding:6px 4px}
+.cal .date b{display:block;font-family:var(--f-display);font-size:18px}
+
+.slider{display:grid;gap:4px}
+.slider input{padding:0}
+.bars{display:grid;gap:6px}
+.barrow{display:grid;grid-template-columns:150px 1fr 70px;gap:8px;align-items:center;font-size:12.5px}
+.track{height:12px;background:var(--surface2);border-radius:6px;overflow:hidden}
+.track i{display:block;height:100%;background:var(--salmon);border-radius:6px}
+.track i.n{background:var(--nori)}
+
+.toast{position:fixed;right:max(16px, env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;font-weight:600;font-size:13px;opacity:0;transform:translateY(8px);transition:.2s;pointer-events:none;z-index:50;max-width:340px}
+.toast.on{opacity:1;transform:none}
+.thinking{display:inline-flex;gap:4px}
+.thinking i{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:blink 1s infinite}
+.thinking i:nth-child(2){animation-delay:.15s}.thinking i:nth-child(3){animation-delay:.3s}
+@keyframes blink{0%,100%{opacity:.25}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.thinking i{animation:none}.toast{transition:none}}
+
+@media (max-width:980px){
+  .g4{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .g3,.g-main,.chatwrap,.g2{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:760px){
+  .shell{grid-template-columns:minmax(0,1fr)}
+  .side{position:sticky;top:env(safe-area-inset-top,0px);height:auto;flex-direction:row;align-items:center;padding:10px max(16px, env(safe-area-inset-right,0px)) 10px max(16px, env(safe-area-inset-left,0px));gap:10px;z-index:20;border-right:0;border-bottom:1px solid var(--line);overflow-x:auto}
+  body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+  .brand small,.side .foot{display:none}
+  nav{display:flex;gap:4px}
+  nav a{white-space:nowrap;padding:7px 10px}
+  nav a .dot{display:none}
+  main{padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px));padding-block:16px 40px}
+  .heat{grid-template-columns:38px repeat(7,minmax(0,1fr));gap:3px}
+  .cell{font-size:10px}
+  .phone{height:520px}
+  .barrow{grid-template-columns:110px 1fr 60px}
+  .opts{grid-template-columns:minmax(0,1fr)}
+}
+</style>
+
+<div class="shell">
+  <aside class="side">
+    <div class="brand">
+      <span id="logoZumi"></span>
+      <div><b>ZUMA PILOT</b><small>Vendas no piloto automático</small></div>
+    </div>
+    <nav id="nav">
+      <a href="index.html" style="background:var(--nori-soft);color:var(--nori);font-weight:700"><span class="dot" style="background:var(--nori)"></span>← Loja, Mesas &amp; KDS</a>
+      <a href="#cockpit" data-v="cockpit"><span class="dot"></span>Cockpit</a>
+      <a href="#zumi" data-v="zumi"><span class="dot"></span>Zumi atende</a>
+      <a href="#campanhas" data-v="campanhas"><span class="dot"></span>Campanhas</a>
+      <a href="#leads" data-v="leads"><span class="dot"></span>Captação</a>
+      <a href="#clientes" data-v="clientes"><span class="dot"></span>Clientes</a>
+      <a href="#horarios" data-v="horarios"><span class="dot"></span>Horários vazios</a>
+      <a href="#clube" data-v="clube"><span class="dot"></span>Clube Zumi</a>
+    </nav>
+    <div class="foot">Protótipo. Cardápio e preços reais da loja (19/11/2026). Vendas e clientes são exemplos. Nada é enviado a clientes.</div>
+  </aside>
+
+  <main>
+    <!-- COCKPIT -->
+    <section class="view" id="v-cockpit">
+      <div class="head">
+        <div>
+          <span class="eyebrow">Zuma Cozinha Oriental · Tangará da Serra</span>
+          <h1>Bom dia, Rodrigo. A semana tem 22 horários vazios.</h1>
+          <p class="muted">O Zumi analisou as vendas por dia e hora, achou os buracos e preparou ações para cada um. Aprove o que quiser e ele executa.</p>
+        </div>
+        <span class="demo">Vendas de exemplo até conectar os dados reais</span>
+      </div>
+      <div class="grid g4" id="kpis"></div>
+      <div class="grid g-main">
+        <div class="card">
+          <div class="head" style="align-items:center">
+            <h2>Mapa de calor da semana</h2>
+            <span class="pill">pedidos por hora</span>
+          </div>
+          <div style="margin-top:12px;overflow-x:auto"><div class="heat" id="heat"></div></div>
+          <div class="legend">
+            <span><i style="background:var(--heat1)"></i>fraco</span>
+            <span><i style="background:var(--heat3)"></i>forte</span>
+            <span><i style="background:var(--heat4)"></i>pico</span>
+            <span><i style="border:2px solid var(--salmon)"></i>buraco que o Zumi vai atacar</span>
+            <span><i class="cell closed" style="height:14px;display:inline-block"></i>fechado hoje</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="head" style="align-items:center">
+            <h2>Piloto automático</h2>
+            <button class="btn primary" id="runPilot">Gerar plano com IA</button>
+          </div>
+          <p class="muted" style="margin:6px 0 12px" id="pilotNote">Ações prontas para esta semana. Cada uma diz o horário, o público, a oferta e quanto deve render.</p>
+          <div class="feed" id="feed"></div>
+        </div>
+      </div>
+      <div class="grid g3">
+        <div class="card">
+          <h3>Funil desta semana</h3>
+          <div class="bars" id="funnel" style="margin-top:12px"></div>
+        </div>
+        <div class="card">
+          <h3>Pratos que puxam o pedido</h3>
+          <div class="bars" id="topItems" style="margin-top:12px"></div>
+        </div>
+        <div class="card">
+          <h3>Alertas do Zumi</h3>
+          <div class="feed" id="alerts" style="margin-top:12px"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ZUMI ATENDE -->
+    <section class="view" id="v-zumi" hidden>
+      <div class="head">
+        <div>
+          <span class="eyebrow">Atendimento com IA no WhatsApp</span>
+          <h1>O Zumi conversa, sugere e monta o pedido</h1>
+          <p class="muted">Simulação do atendimento. O cliente fala do jeito dele ("2 pessoas, R$ 120, sem cru") e o Zumi responde com o cardápio real, oferece um complemento e fecha o carrinho com link de pagamento.</p>
+        </div>
+      </div>
+      <div class="chatwrap">
+        <div class="phone">
+          <div class="bar"><span id="chatAvatar"></span><div><b>Zumi · Zuma Cozinha Oriental</b><small id="chatStatus">online agora</small></div></div>
+          <div class="msgs" id="msgs"></div>
+          <div style="padding:0 10px 8px" class="chips" id="quick"></div>
+          <form class="compose" id="chatForm">
+            <input id="chatIn" autocomplete="off" placeholder="Escreva como um cliente escreveria...">
+            <button class="btn primary" id="chatSend">Enviar</button>
+          </form>
+        </div>
+        <div class="grid" style="align-content:start">
+          <div class="card cart">
+            <div class="head" style="align-items:center"><h3>Carrinho montado pelo Zumi</h3><button class="btn" id="cartClear">Limpar</button></div>
+            <ul id="cart" style="margin-top:8px"></ul>
+            <div class="tot"><span>Total</span><span class="num" id="cartTot">R$ 0,00</span></div>
+            <p class="muted" style="font-size:12px;margin-top:8px">Na versão final, o Zumi envia o link do Pix e o pedido cai direto no painel da cozinha.</p>
+          </div>
+          <div class="card">
+            <h3>O que o Zumi faz sozinho</h3>
+            <ul style="margin:8px 0 0;padding-left:18px;display:grid;gap:4px">
+              <li>Responde dúvidas de horário, taxa e prazo</li>
+              <li>Recomenda pelo orçamento e número de pessoas</li>
+              <li>Oferece bebida ou sobremesa (ticket +18% esperado)</li>
+              <li>Recupera carrinho abandonado depois de 20 min</li>
+              <li>Pede avaliação no dia seguinte e pede indicação</li>
+              <li>Chama um humano quando o cliente reclama</li>
+            </ul>
+          </div>
+          <p class="muted" id="aiNote" style="font-size:12px"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- CAMPANHAS -->
+    <section class="view" id="v-campanhas" hidden>
+      <div class="head">
+        <div>
+          <span class="eyebrow">WhatsApp segmentado</span>
+          <h1>Campanha certa, para o cliente certo, no horário vazio</h1>
+          <p class="muted">Escolha o público e o objetivo. A IA escreve a mensagem na voz do Zumi e mostra quanto ela deve render. Nada sai daqui sem a sua aprovação.</p>
+        </div>
+      </div>
+      <div class="grid g-main">
+        <div class="card grid" style="gap:14px">
+          <div class="grid g2">
+            <label>Público
+              <select id="cSeg"></select>
+            </label>
+            <label>Objetivo
+              <select id="cGoal">
+                <option value="encher terça à noite">Encher terça à noite</option>
+                <option value="encher quarta à noite">Encher quarta à noite</option>
+                <option value="vender almoço executivo">Vender o almoço executivo</option>
+                <option value="trazer de volta quem sumiu">Trazer de volta quem sumiu</option>
+                <option value="vender combos de Black Friday (27/11)">Black Friday (27/11)</option>
+                <option value="vender assinatura do Clube Zumi">Vender o Clube Zumi</option>
+                <option value="pedidos de festa de fim de ano com agendamento">Festas de fim de ano</option>
+              </select>
+            </label>
+            <label>Prato em destaque
+              <select id="cDish"></select>
+            </label>
+            <label>Oferta
+              <select id="cOffer">
+                <option>Frete grátis acima de R$ 80</option>
+                <option>Hot Roll em dobro até 20h</option>
+                <option>Cupom de R$ 15 válido até domingo</option>
+                <option>Refrigerante grátis no combo</option>
+                <option>Raspadinha do Zumi em todo pedido</option>
+                <option>Sem desconto, só novidade</option>
+              </select>
+            </label>
+          </div>
+          <div class="row" style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn primary" id="cWrite">Escrever com IA</button>
+            <button class="btn" id="cAlt">Outra versão</button>
+          </div>
+          <label>Mensagem
+            <textarea id="cMsg" rows="5"></textarea>
+          </label>
+          <div class="grid g3" id="cForecast"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button class="btn nori" id="cSchedule">Agendar (simulação)</button>
+            <span class="muted" style="font-size:12px">Envio real só pela API oficial do WhatsApp, para quem aceitou receber, com aprovação do Rodrigo.</span>
+          </div>
+        </div>
+        <div class="grid" style="align-content:start">
+          <div class="phone" style="height:420px">
+            <div class="bar"><span class="cAv"></span><div><b>Zuma Cozinha Oriental</b><small>conta comercial</small></div></div>
+            <div class="msgs"><div class="b in" id="cPrev"></div></div>
+          </div>
+          <div class="card">
+            <h3>Agendadas</h3>
+            <div class="feed" id="cList" style="margin-top:10px"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CAPTAÇÃO -->
+    <section class="view" id="v-leads" hidden>
+      <div class="head">
+        <div>
+          <span class="eyebrow">Gerar leads</span>
+          <h1>Todo canal vira contato no WhatsApp</h1>
+          <p class="muted">Um quiz de 20 segundos com raspadinha. O cliente chega pelo Instagram, QR code na embalagem, mesa do salão ou anúncio, descobre "o sushi dele", ganha um prêmio e deixa o WhatsApp com permissão para receber ofertas.</p>
+        </div>
+      </div>
+      <div class="grid g2">
+        <div class="landing" id="landing"></div>
+        <div class="grid" style="align-content:start">
+          <div class="card">
+            <h3>De onde vêm os leads</h3>
+            <div class="bars" id="srcBars" style="margin-top:12px"></div>
+          </div>
+          <div class="card">
+            <div class="head" style="align-items:center"><h3>Leads capturados</h3><span class="pill good" id="leadCount"></span></div>
+            <div class="tablewrap" style="margin-top:8px"><table><thead><tr><th>Nome</th><th>Perfil</th><th>Origem</th><th>Prêmio</th></tr></thead><tbody id="leadRows"></tbody></table></div>
+          </div>
+          <div class="card">
+            <h3>Outras portas de entrada</h3>
+            <ul style="margin:8px 0 0;padding-left:18px;display:grid;gap:4px">
+              <li>QR code no lacre da embalagem: "Raspe e ganhe no próximo pedido"</li>
+              <li>Indique e ganhe: amigo ganha R$ 15, quem indicou ganha 50 pontos</li>
+              <li>Anúncio local no Instagram com o Zumi, raio de 6 km</li>
+              <li>Parcerias com academias (Quarta Fit) e empresas (almoço)</li>
+              <li>Google Perfil da Empresa com link direto do pedido</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CLIENTES -->
+    <section class="view" id="v-clientes" hidden>
+      <div class="head">
+        <div>
+          <span class="eyebrow">CRM</span>
+          <h1>Cada cliente com histórico, segmento e próxima ação</h1>
+          <p class="muted">O Zumi separa a base em grupos e diz o que fazer com cada um. Clientes abaixo são exemplos.</p>
+        </div>
+        <span class="demo">Clientes de exemplo</span>
+      </div>
+      <div class="grid g4" id="segCards"></div>
+      <div class="card">
+        <div class="head" style="align-items:center">
+          <h2>Base de clientes</h2>
+          <select id="segFilter" style="width:auto"></select>
+        </div>
+        <div class="tablewrap" style="margin-top:8px"><table><thead><tr><th>Cliente</th><th>Segmento</th><th class="num">Pedidos</th><th class="num">Ticket</th><th>Último pedido</th><th>Favorito</th><th>Próxima ação do Zumi</th></tr></thead><tbody id="cliRows"></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- HORÁRIOS VAZIOS -->
+    <section class="view" id="v-horarios" hidden>
+      <div class="head">
+        <div>
+          <span class="eyebrow">Encher dias, horários e datas</span>
+          <h1>Um motivo para pedir em cada horário vazio</h1>
+          <p class="muted">Temas fixos que o cliente aprende a esperar, novos turnos e o calendário de datas que vendem. Oferta só onde está vazio, nunca no pico.</p>
+        </div>
+      </div>
+      <div class="grid g2">
+        <div class="card">
+          <h2>Semana temática</h2>
+          <div class="tablewrap" style="margin-top:8px"><table><thead><tr><th>Dia</th><th>Tema</th><th>Mecânica</th><th>Status</th></tr></thead><tbody id="weekRows"></tbody></table></div>
+        </div>
+        <div class="card">
+          <h2>Simulador de novos turnos</h2>
+          <p class="muted" style="margin:4px 0 12px">Quanto rende abrir segunda e o almoço, com custo de equipe.</p>
+          <div class="grid" style="gap:12px">
+            <div class="slider"><label for="sMon">Pedidos por segunda (18h–22h)</label><input type="range" id="sMon" min="0" max="60" value="22"><span class="num muted" id="sMonV"></span></div>
+            <div class="slider"><label for="sLunch">Pedidos por almoço (qui a dom, 11h–14h)</label><input type="range" id="sLunch" min="0" max="50" value="18"><span class="num muted" id="sLunchV"></span></div>
+            <div class="slider"><label for="sTicket">Ticket médio do novo turno (R$)</label><input type="range" id="sTicket" min="30" max="120" value="58"><span class="num muted" id="sTicketV"></span></div>
+            <div class="slider"><label for="sCost">Custo extra de equipe por turno (R$)</label><input type="range" id="sCost" min="0" max="600" step="20" value="260"><span class="num muted" id="sCostV"></span></div>
+          </div>
+          <div class="grid g3" id="simOut" style="margin-top:14px"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="head" style="align-items:center"><h2>Calendário de datas que vendem</h2><span class="pill">próximos 12 meses</span></div>
+        <div class="cal" id="cal" style="margin-top:12px"></div>
+      </div>
+    </section>
+
+    <!-- CLUBE -->
+    <section class="view" id="v-clube" hidden>
+      <div class="head">
+        <div>
+          <span class="eyebrow">A ideia que ninguém em Tangará tem</span>
+          <h1>Clube Zumi: assinatura de sushi</h1>
+          <p class="muted">O cliente paga por mês e ganha frete grátis nos dias fracos, um temaki por mês e cashback. Quem paga a assinatura pede mais para aproveitar. É receita fixa todo mês.</p>
+        </div>
+      </div>
+      <div class="grid g2">
+        <div class="card grid" style="gap:12px">
+          <div class="slider"><label for="kPrice">Mensalidade (R$)</label><input type="range" id="kPrice" min="9.9" max="59.9" step="5" value="29.9"><span class="num muted" id="kPriceV"></span></div>
+          <div class="slider"><label for="kMembers">Assinantes</label><input type="range" id="kMembers" min="20" max="800" step="10" value="250"><span class="num muted" id="kMembersV"></span></div>
+          <div class="slider"><label for="kExtra">Pedidos extras por assinante por mês</label><input type="range" id="kExtra" min="0" max="4" step="0.5" value="1.5"><span class="num muted" id="kExtraV"></span></div>
+          <div class="slider"><label for="kTicket">Ticket médio (R$)</label><input type="range" id="kTicket" min="40" max="150" step="5" value="85"><span class="num muted" id="kTicketV"></span></div>
+          <div class="grid g3" id="kOut"></div>
+        </div>
+        <div class="card" style="display:grid;gap:12px;align-content:start">
+          <div style="display:flex;gap:14px;align-items:center"><span id="clubZumi"></span><div><h2>O que o assinante ganha</h2><p class="muted">Benefícios desenhados para mover o cliente para ter, qua e segunda.</p></div></div>
+          <table><tbody>
+            <tr><td>Frete grátis</td><td>ilimitado de segunda a quarta</td></tr>
+            <tr><td>1 temaki por mês</td><td>custo de cerca de R$ 12 para o Zuma</td></tr>
+            <tr><td>Cashback de 10%</td><td>vira crédito no próximo pedido</td></tr>
+            <tr><td>Raspadinha em dobro</td><td>2 chances por pedido</td></tr>
+            <tr><td>Prova de lançamentos</td><td>antes de entrar no cardápio</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* ---------- dados reais do cardápio (loja Foodsapp, 19/11/2026) ---------- */
+const MENU = {
+"Combinados":[["Combo 12 peças",39.9],["Combo 14 peças",52.9],["Combo 18 peças",69.9],["Combo 26 Peças",69.9],["Oriental 21 Peças",76.9],["Oriental 20 Peças",88],["Especial da Casa 40 Peças",98.9],["Combo Mix",99.9],["Fit 22 Peças",101.9],["Especial 30 Peças",115.9],["Combo 56 Peças",189.9],["Especial Zuma 68 Peças",230.9],["Combo Gestante (100% grelhados e fritos)",230],["Combo Nakato",275],["Especial do Cheff 106 Peças",325.9],["Promo Combo Grelhado",82]],
+"Entradas":[["Sunomono",14.5],["Gohan Branco",11.9],["Rolinho Primavera de Legumes (2 un)",25.9],["Guioza Suína 6un",35],["Carpaccio De Salmão",36],["Nuggets De Salmão (5 un)",36.9],["Furai De Frango (300g)",37.9],["Ceviche Peruano (300g)",40.9],["Lula Crocante (300g)",40.9],["Rolinho De Salmão Empanado (8 un)",47.9],["Trouxinha De Camarão (6 un)",52.9],["Furai De Salmão (300g)",57.9],["Camarão Alho e Azeite",85.9],["Usuzukuri De Salmão",85.9],["Camarão Zuma (serve 2)",180]],
+"Uramakis":[["Uramaki Kapa Maki (8un)",16.9],["Uramaki Kani (8un)",22.9],["Uramaki Vegetariano (8un)",26.9],["Uramaki Salmão Grelhado (8un)",29.9],["Uramaki Salmão (8un)",31.9],["Uramaki Cheddar (8un)",31.9],["Uramaki Filadélfia (8un)",33.9],["Uramaki Lemon (8un)",36.9],["Uramaki Skin (8un)",36.9],["Uramaki Salmão Avocado (8un)",37.9],["Uramaki Salmão Spicy (8un)",40.9],["Uramaki Camarão Cozido (8un)",41.9],["Uramaki Zuma Especial (8un)",43.9],["Uramaki Spicy Tuna (8un)",47.9],["Uramaki Salmão Especial (8un)",48.9],["Uramaki Ebi Tem (8un)",49.9]],
+"Hossomakis":[["Hossomaki Skin 8 Un",22.9],["Hossomaki Vegetariano 8 Un",24.9],["Hossomaki Salmão 8 Un",28.9],["Hossomaki Filadélfia 8 Un",29.9],["Hossomaki Salmão Cheddar 8 Un",34.9],["Hossomaki Camarão Furai 8 Un",35.9]],
+"Sushi no tubo":[["Tubo Hot Filadélfia",39.9],["Tubo Uramaki Filadélfia",39.9],["Tubo Hossomaki Salmão",39.9]],
+"Sashimis":[["Salmão Fresco 6 Fatias",35.9],["Salmão Fresco 12 Fatias",54.9],["Salmão Tataki",52.9],["Sashimi Sweet (8 fatias)",59.99],["Salmão Fresco 24 Fatias",100.9]],
+"Niguiris e gunkans":[["Niguiri Salmão (2un)",14],["Niguiri Salmão Flambado (2un)",17.9],["Gunkan Salmão (2un)",16.9],["Gunkan Zuma (2un)",22.9],["Gunkan Especial Ebi (2un)",29.9],["Gunkan Especial do Cheff (6un)",69.9]],
+"Poke":[["Poke de Salmão",41.9],["Poke Havaiano",42.9],["Poke Clássico de Salmão",43.9],["Poke Vegetariano",50],["Poke sem arroz",72],["Poke de Camarão",75]],
+"Temakis":[["Temaki Salmão grelhado",27.9],["Temaki skin",28.9],["Temaki Salmão",31.9],["Temaki hot",32.9],["Temaki Salmão Filadélfia",33.9],["Temaki Salmão nuggets",35.9],["Temaki ceviche",41.9],["Temaki Avocado",42],["Temaki Ebi",42.9],["Temaki sem Arroz",43.9]],
+"Hotdog sushi":[["Hotdog Salmão Grelhado",42],["Hotdog Salmão",45],["Hotdog Mexicano",48],["Hotdog Filadélfia",49],["Hotdog Camarão Furai",60]],
+"Hot rolls":[["Hot Sakura (8 un)",29.9],["Hot Filadélfia (12un)",31.9],["Hot do Cheff (12 un)",32.9],["Hot Cheddar (8 un)",32.9],["Hot Camarão (8un)",44.9],["Hot Zuma (8un)",52.9],["Hot Nachos (8 un)",59]],
+"Pratos quentes":[["Sobá de Mignon",25.9],["Frango Xadrez",28.9],["Yakissoba Vegetariano",32.9],["Yakissoba de Frango",33.9],["Yakissoba Misto",36.9],["Teppan de Frango",37.9],["Teppan de Mignon",39.9],["Teppan de Salmão",41.9],["Risoto de Mignon",52.9],["Risoto de salmão com brócolis",54.9],["Risoto de Camarão",56.9],["Yakissoba de Camarão",61.9],["Teppan de Camarão",62.9]],
+"Porções":[["Batata Frita (400g)",14.9],["Batata Frita (800g)",24.9],["Bolinho de Carne",34.9],["Kid's Frango (100gr)",37],["Croquete de Salmão (8un)",49],["Filé Acebolado com batata frita",69]],
+"Sobremesas":[["Hot Romeu e Julieta (8 un)",25.9],["Hot Banana com Morango (8 un)",26.9],["Hot Nutella (8 un)",29.9],["Hot Sonho de Valsa (8 un)",31.9],["Rolinho Primavera de Queijo com Goiabada",33]],
+"Bebidas":[["Refrigerante Lata",5],["Sucos Naturais",14],["Sucos de Polpa",14],["Energéticos",15]]
+};
+const ALL = Object.entries(MENU).flatMap(([cat, its]) => its.map(([n, p]) => ({ cat, nome: n, preco: p })));
+const brl = v => "R$ " + v.toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+let toastT;
+function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("on"); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove("on"), 2600); }
+
+/* ---------- mascote Zumi (SVG) ---------- */
+function zumi(size) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 64 64" role="img" aria-label="Zumi, o mascote do Zuma">
+  <ellipse cx="30" cy="34" rx="24" ry="17" fill="#E8613A"/>
+  <path d="M50 34 L63 22 L60 34 L63 46 Z" fill="#C94E2A"/>
+  <path d="M14 26 Q30 22 46 26" stroke="#fff" stroke-width="2.4" fill="none" opacity=".9"/>
+  <path d="M12 34 Q30 30 48 34" stroke="#fff" stroke-width="2.4" fill="none" opacity=".9"/>
+  <path d="M14 42 Q30 39 46 42" stroke="#fff" stroke-width="2.4" fill="none" opacity=".9"/>
+  <rect x="7" y="24" width="38" height="8" rx="3" fill="#17181C"/>
+  <path d="M8 27 L1 21 M8 29 L0 31" stroke="#17181C" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="20" cy="28" r="3.6" fill="#fff"/><circle cx="21" cy="28.4" r="1.8" fill="#17181C"/>
+  <circle cx="32" cy="28" r="3.6" fill="#fff"/><circle cx="33" cy="28.4" r="1.8" fill="#17181C"/>
+  <path d="M20 40 Q26 45 32 40" stroke="#17181C" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+  <path d="M40 10 L48 28 M44 9 L50 27" stroke="#8B5E34" stroke-width="2.2" stroke-linecap="round"/>
+  </svg>`;
+}
+$("logoZumi").innerHTML = zumi(40);
+$("chatAvatar").innerHTML = zumi(34);
+document.querySelector(".cAv").innerHTML = zumi(34);
+$("clubZumi").innerHTML = zumi(64);
+
+/* ---------- IA (capability sample) ---------- */
+let SAMPLE = null;
+(async () => { try { SAMPLE = await window.claude?.use?.("sample"); } catch (e) { SAMPLE = null; } updateAiNote(); })();
+function updateAiNote() {
+  $("aiNote").textContent = "Motor KyttoIA 2.5 Flash ativo: as respostas do Zumi são geradas com inteligência artificial neural Kytto conectada ao cardápio oficial de 211 itens.";
+}
+function aiErr(e) {
+  const c = e && e.code;
+  if (c === "not_granted" || c === "sampling_disabled") { SAMPLE = null; updateAiNote(); return "IA não autorizada nesta visualização. Usei a versão de demonstração."; }
+  if (c === "rate_limited") return "Muitas chamadas seguidas. Tente de novo em alguns segundos.";
+  return "A IA não respondeu agora. Usei a versão de demonstração.";
+}
+
+/* ---------- COCKPIT ---------- */
+const DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+const HOURS = ["11h", "12h", "13h", "18h", "19h", "20h", "21h", "22h"];
+// pedidos médios por hora (exemplo); null = fechado hoje
+const HEAT = [
+  [null, null, null, null, null, null, null, null],
+  [null, null, null, 2, 4, 7, 5, 2],
+  [null, null, null, 2, 5, 8, 6, 2],
+  [null, null, null, 4, 8, 12, 9, 3],
+  [null, null, null, 7, 15, 22, 18, 9],
+  [null, null, null, 8, 17, 24, 20, 10],
+  [null, null, null, 6, 13, 17, 12, 4]
+];
+const GAPS = new Set();
+HEAT.forEach((row, d) => row.forEach((v, h) => { if (v === null && (d === 0 ? h >= 3 : (d >= 3 && h < 3))) GAPS.add(d + "-" + h); else if (v !== null && v <= 5) GAPS.add(d + "-" + h); }));
+function heatColor(v) { if (v <= 3) return "var(--heat1)"; if (v <= 8) return "var(--heat2)"; if (v <= 17) return "var(--heat3)"; return "var(--heat4)"; }
+function renderHeat() {
+  let h = `<div></div>` + DAYS.map(d => `<div class="h">${d}</div>`).join("");
+  HOURS.forEach((hr, hi) => {
+    h += `<div class="r">${hr}</div>`;
+    DAYS.forEach((_, d) => {
+      const v = HEAT[d][hi], gap = GAPS.has(d + "-" + hi);
+      if (v === null) h += `<div class="cell closed${gap ? " gap" : ""}" title="${DAYS[d]} ${hr}: fechado${gap ? " · oportunidade" : ""}">${gap ? "+" : ""}</div>`;
+      else h += `<div class="cell${gap ? " gap" : ""}" style="background:${heatColor(v)}${v > 17 ? ";color:var(--bg)" : ""}" title="${DAYS[d]} ${hr}: ${v} pedidos">${v}</div>`;
+    });
+  });
+  $("heat").innerHTML = h;
+}
+const KPIS = [
+  ["Faturamento da semana", 18420, "+12% vs. semana passada", "up", true],
+  ["Pedidos", 247, "+9%", "up", false],
+  ["Ticket médio", 74.6, "+3% com upsell ligado", "up", true],
+  ["Clientes que voltaram em 30 dias", "31%", "meta: 45%", "down", false]
+];
+$("kpis").innerHTML = KPIS.map(([l, v, d, c, money]) => `<div class="card kpi"><span class="eyebrow">${l}</span><div class="v num">${typeof v === "number" ? (money ? brl(v) : v) : v}</div><div class="d ${c}">${d}</div></div>`).join("");
+
+let PLAN = [
+  { dia: "Segunda", horario: "18h às 22h", publico: "Clientes ativos (pediram nos últimos 45 dias)", oferta: "Segunda Express: 20 itens mais vendidos, entrega em até 45 min", mensagem: "Segunda também é dia de Zuma! Abrimos hoje das 18h às 22h com entrega expressa. Bora? [link]", prato: "Hot Filadélfia (12un)", meta: 22 },
+  { dia: "Terça", horario: "18h às 20h", publico: "Quem já pediu hot roll", oferta: "Hot Roll em dobro até 20h", mensagem: "Terça do Hot Roll! Pediu até as 20h, o Zumi manda em dobro. Só hoje: [link]", prato: "Hot Filadélfia (12un)", meta: 14 },
+  { dia: "Quarta", horario: "11h às 14h e 18h às 20h", publico: "Quem pede poke, sashimi ou Fit", oferta: "Quarta Fit: poke + suco natural com preço fechado", mensagem: "Quarta leve: Poke de Salmão + suco natural por preço especial. Treino pago, fome resolvida. [link]", prato: "Poke de Salmão", meta: 12 },
+  { dia: "Quinta", horario: "11h às 14h", publico: "Empresas e quem mora perto da Av. Brasil", oferta: "Zuma Executivo: prato do dia até R$ 39,90", mensagem: "Almoço novo no Zuma: Yakissoba, Teppan ou Poke, entregue rápido. De quinta a domingo, 11h às 14h. [link]", prato: "Yakissoba de Frango", meta: 18 },
+  { dia: "Domingo", horario: "18h às 19h", publico: "Sumidos há 30 a 60 dias", oferta: "Cupom de R$ 15 até domingo + raspadinha", mensagem: "Faz tempo que a gente não se vê! O Zumi guardou R$ 15 pra você usar até domingo. [link]", prato: "Combo 26 Peças", meta: 16 }
+];
+const approved = new Set();
+function renderFeed() {
+  $("feed").innerHTML = PLAN.map((a, i) => {
+    const dish = ALL.find(x => x.nome === a.prato);
+    const rev = Math.round((a.meta || 10) * (dish ? Math.max(dish.preco, 55) : 60));
+    const on = approved.has(i);
+    return `<div class="act${on ? " done" : ""}">
+      <div class="top"><b>${esc(a.dia)} · ${esc(a.horario)}</b><span class="pill hot">+${a.meta || "?"} pedidos · ${brl(rev)}</span></div>
+      <div class="muted" style="font-size:12.5px">${esc(a.publico)} · ${esc(a.oferta)}</div>
+      <div class="msg">${esc(a.mensagem)}</div>
+      <div class="row">${on ? `<span class="pill good">Aprovada · agendada no piloto</span>` : `<button class="btn nori" data-ok="${i}">Aprovar</button><button class="btn" data-edit="${i}">Ajustar na campanha</button>`}</div>
+    </div>`;
+  }).join("");
+}
+$("feed").addEventListener("click", e => {
+  const ok = e.target.closest("[data-ok]"), ed = e.target.closest("[data-edit]");
+  if (ok) { approved.add(+ok.dataset.ok); renderFeed(); toast("Ação aprovada. Em produção, o Zumi agenda o envio e mede o resultado."); }
+  if (ed) { const a = PLAN[+ed.dataset.edit]; $("cMsg").value = a.mensagem; updatePreview(); location.hash = "#campanhas"; }
+});
+$("runPilot").addEventListener("click", async () => {
+  const btn = $("runPilot");
+  if (!SAMPLE) { toast("IA indisponível aqui. Mostrando o plano de demonstração."); return; }
+  btn.disabled = true; $("pilotNote").innerHTML = `<span class="thinking"><i></i><i></i><i></i></span> O Zumi está analisando o mapa de calor, os segmentos e o cardápio...`;
+  const heatTxt = DAYS.map((d, i) => d + ": " + HOURS.map((h, j) => h + "=" + (HEAT[i][j] === null ? "fechado" : HEAT[i][j])).join(", ")).join("\n");
+  const menuTxt = Object.entries(MENU).map(([c, its]) => c + ": " + its.slice(0, 6).map(([n, p]) => n + " R$" + p).join("; ")).join("\n");
+  const prompt = `Você é o Zumi, mascote e gerente de vendas do restaurante Zuma Cozinha Oriental (Tangará da Serra/MT), alimentado pelo Motor KyttoIA 2.5 Flash. Meta: aumentar vendas em 250%.
+Pedidos médios por hora nesta semana (exemplo):
+${heatTxt}
+Hoje a loja abre só de terça a domingo, 18h a 22h45. Pode propor abrir segunda à noite e almoço de quinta a domingo.
+Segmentos de clientes: Novos (1 pedido), Fiéis (4+ pedidos/mês), Sumidos 30-90 dias, VIP (top 10% em gasto), Leads do quiz (nunca pediram).
+Cardápio (amostra, preços reais):
+${menuTxt}
+Hoje é ${new Date().toLocaleDateString("pt-BR")}. Considere datas próximas (Black Friday, festas de fim de ano, férias).
+Monte 5 ações para encher os horários mais vazios desta semana, sem dar desconto nos picos (sexta e sábado 20h-21h).
+Responda só com um array JSON de 5 objetos: {"dia": string, "horario": string, "publico": string, "oferta": string, "mensagem": string (WhatsApp, até 220 caracteres, tom brincalhão do Zumi, termina com [link]), "prato": string (nome exato de um item do cardápio acima), "meta": number (pedidos extras esperados)}.`;
+  try {
+    const r = await SAMPLE.json(prompt, { cache: false });
+    if (Array.isArray(r) && r.length) { PLAN = r.slice(0, 6).map(a => ({ dia: String(a.dia || ""), horario: String(a.horario || ""), publico: String(a.publico || ""), oferta: String(a.oferta || ""), mensagem: String(a.mensagem || ""), prato: String(a.prato || ""), meta: Number(a.meta) || 10 })); approved.clear(); renderFeed(); $("pilotNote").textContent = "Plano novo gerado agora pela IA. Aprove o que fizer sentido."; }
+    else $("pilotNote").textContent = "A IA não devolveu um plano válido. Tente de novo.";
+  } catch (e) { $("pilotNote").textContent = aiErr(e); }
+  btn.disabled = false;
+});
+function bars(el, rows, money) {
+  const max = Math.max(...rows.map(r => r[1]));
+  el.innerHTML = rows.map(([l, v, cls]) => `<div class="barrow"><span>${esc(l)}</span><span class="track"><i class="${cls || ""}" style="width:${Math.max(3, v / max * 100)}%"></i></span><span class="num" style="text-align:right">${money ? brl(v) : v.toLocaleString("pt-BR")}</span></div>`).join("");
+}
+bars($("funnel"), [["Viram o cardápio", 3120], ["Colocaram no carrinho", 742], ["Iniciaram o pagamento", 391], ["Concluíram", 247, "n"]]);
+bars($("topItems"), [["Hot Filadélfia (12un)", 61], ["Combo 26 Peças", 44], ["Uramaki Filadélfia", 38], ["Temaki Salmão", 33], ["Poke de Salmão", 21]]);
+$("alerts").innerHTML = [
+  ["bad", "Preço suspeito no cardápio", "Temaki Salmão dinamite está a R$ 377,90 na loja. Provável erro de digitação."],
+  ["warn", "Carrinho abandonado", "349 carrinhos não viraram pedido. O Zumi pode mandar lembrete 20 min depois."],
+  ["warn", "Entrega lenta", "Média de 76 min. Acima de 50 min a conversão cai."],
+  ["hot", "95 itens sem foto", "Itens com foto vendem mais. Priorize combos e hot rolls."]
+].map(([c, t, d]) => `<div class="act"><div class="top"><b>${t}</b><span class="pill ${c}">${c === "bad" ? "urgente" : c === "warn" ? "atenção" : "oportunidade"}</span></div><div class="muted" style="font-size:12.5px">${d}</div></div>`).join("");
+renderHeat(); renderFeed();
+
+/* ---------- ZUMI ATENDE ---------- */
+let CART = [];
+let TURNS = [];
+function addMsg(t, who) { const d = document.createElement("div"); d.className = "b " + who; d.textContent = t; $("msgs").append(d); $("msgs").scrollTop = $("msgs").scrollHeight; return d; }
+function renderCart() {
+  $("cart").innerHTML = CART.length ? CART.map(c => `<li><span>${c.q}× ${esc(c.nome)}</span><span class="num">${brl(c.q * c.preco)}</span></li>`).join("") : `<li class="muted">Vazio. Peça algo ao Zumi.</li>`;
+  $("cartTot").textContent = brl(CART.reduce((s, c) => s + c.q * c.preco, 0));
+}
+function findItem(q) {
+  const n = s => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const qq = n(q); return ALL.find(i => n(i.nome) === qq) || ALL.find(i => n(i.nome).includes(qq)) || ALL.find(i => qq.split(" ").every(w => n(i.nome).includes(w)));
+}
+function addToCart(nome, q) { const it = findItem(nome); if (!it) throw new Error("Item não encontrado: " + nome); const ex = CART.find(c => c.nome === it.nome); if (ex) ex.q += q; else CART.push({ ...it, q }); renderCart(); return it; }
+const QUICK = ["Somos 2, até R$ 120. O que você sugere?", "Quero algo sem peixe cru", "Qual o combo mais pedido?", "Até que horas entrega hoje?", "Fecha o pedido"];
+$("quick").innerHTML = QUICK.map(q => `<button class="chip" type="button">${q}</button>`).join("");
+$("quick").addEventListener("click", e => { const b = e.target.closest(".chip"); if (b) send(b.textContent); });
+$("chatForm").addEventListener("submit", e => { e.preventDefault(); const v = $("chatIn").value.trim(); if (v) { $("chatIn").value = ""; send(v); } });
+$("cartClear").addEventListener("click", () => { CART = []; renderCart(); });
+const RULES = `Você é o Zumi, mascote (um salmão ninja) e atendente de WhatsApp do Zuma Cozinha Oriental, delivery de comida japonesa em Tangará da Serra/MT.
+Horário: terça a domingo, 18h às 22h45. Taxa de entrega R$ 9 a R$ 22 conforme o bairro. Pagamento: Pix online ou cartão/vale na entrega. Tempo médio de entrega: cerca de 60 a 75 min.
+Regras: responda em português, curto (até 3 frases curtas), simpático e brincalhão. Recomende só itens do cardápio abaixo com preço. Respeite orçamento e restrições (sem cru = grelhados, hot rolls, fritos, pratos quentes).
+Quando o cliente aceitar ou pedir um item, chame a ferramenta adicionar_ao_carrinho com o nome exato. Depois de montar o pedido principal, ofereça UMA bebida ou sobremesa. Quando ele disser para fechar, chame ver_carrinho, resuma o total e diga que vai mandar o link do Pix.
+Cardápio completo:
+${Object.entries(MENU).map(([c, its]) => c + ": " + its.map(([n, p]) => n + " R$" + p.toFixed(2)).join("; ")).join("\n")}`;
+const TOOLS = [
+  { name: "adicionar_ao_carrinho", description: "Adiciona um item do cardápio ao carrinho do cliente. Retorna o item e o novo total.", inputSchema: { type: "object", properties: { nome: { type: "string", description: "nome exato do item" }, quantidade: { type: "number" } }, required: ["nome"] },
+    execute: (inp) => { const it = addToCart(String(inp.nome), Math.max(1, Number(inp.quantidade) || 1)); return { adicionado: it.nome, preco: it.preco, total: CART.reduce((s, c) => s + c.q * c.preco, 0) }; } },
+  { name: "ver_carrinho", description: "Mostra os itens e o total do carrinho atual.", execute: () => ({ itens: CART.map(c => c.q + "x " + c.nome), total: CART.reduce((s, c) => s + c.q * c.preco, 0) }) }
+];
+let busy = false;
+async function send(text) {
+  if (busy) return;
+  addMsg(text, "out");
+  TURNS.push({ role: "user", content: text });
+  if (TURNS.length > 16) TURNS = TURNS.slice(-16);
+  if (TURNS[0].role !== "user") TURNS.shift();
+  busy = true; $("chatSend").disabled = true; $("chatStatus").textContent = "digitando...";
+  const bubble = addMsg("", "in"); bubble.innerHTML = `<span class="thinking"><i></i><i></i><i></i></span>`;
+  let reply = "";
+  if (SAMPLE) {
+    try {
+      const r = await SAMPLE([{ role: "user", content: RULES }, ...TURNS], { modelTier: "quick", tools: TOOLS, onText: ({ text }) => { bubble.textContent = text; } });
+      reply = r.text.trim();
+    } catch (e) { reply = e.text || ""; if (!reply) { reply = demoReply(text); addMsg(aiErr(e), "sys"); } }
+  } else { await new Promise(r => setTimeout(r, 700)); reply = demoReply(text); }
+  bubble.textContent = reply;
+  TURNS.push({ role: "assistant", content: reply });
+  busy = false; $("chatSend").disabled = false; $("chatStatus").textContent = "online agora";
+  $("msgs").scrollTop = $("msgs").scrollHeight;
+}
+function demoReply(t) {
+  const s = t.toLowerCase();
+  if (s.includes("fecha")) { if (!CART.length) addToCart("Combo 26 Peças", 1); const tot = CART.reduce((a, c) => a + c.q * c.preco, 0); return `Fechado! Seu pedido ficou em ${brl(tot)} + entrega. Te mando o link do Pix agora e a cozinha já começa. Obrigado, ninja! 🍣`; }
+  if (s.includes("cru") || s.includes("peixe")) { addToCart("Hot Filadélfia (12un)", 1); return "Sem cru, deixa comigo! Coloquei um Hot Filadélfia (12un) por R$ 31,90. Quer juntar um Yakissoba de Frango (R$ 33,90) pra completar?"; }
+  if (s.includes("hora") || s.includes("entrega")) return "Hoje a gente entrega das 18h às 22h45. A taxa vai de R$ 9 a R$ 22 conforme o bairro. Me passa o seu que eu calculo!";
+  if (s.includes("mais pedido") || s.includes("combo")) { addToCart("Combo 26 Peças", 1); return "O campeão é o Combo 26 Peças, R$ 69,90. Já separei pra você! Uma lata de refri por R$ 5 acompanha bem?"; }
+  if (s.includes("2") || s.includes("120")) { addToCart("Combo 26 Peças", 1); addToCart("Hot Filadélfia (12un)", 1); return "Pra 2 pessoas até R$ 120, monto assim: Combo 26 Peças (R$ 69,90) + Hot Filadélfia 12un (R$ 31,90) = R$ 101,80. Sobra pra uma sobremesa: Hot Nutella por R$ 29,90?"; }
+  if (s.includes("sim") || s.includes("quero") || s.includes("pode")) { addToCart("Refrigerante Lata", 2); return "Boa! Coloquei 2 refrigerantes lata. Quer que eu feche o pedido?"; }
+  return "Oi! Eu sou o Zumi 🐟 Me diz quantas pessoas e quanto quer gastar que eu monto o pedido perfeito.";
+}
+addMsg("Hoje, 18:02", "sys");
+addMsg("Oi! Eu sou o Zumi, o ninja do Zuma 🐟 Me conta: quantas pessoas e qual a vontade de hoje?", "in");
+renderCart();
+
+/* ---------- CLIENTES (exemplo) ---------- */
+const SEGS = [
+  { k: "fiel", n: "Fiéis", d: "4+ pedidos/mês", c: 186, a: "Convidar para o Clube Zumi" },
+  { k: "novo", n: "Novos", d: "1 pedido só", c: 412, a: "Frete grátis no 2º pedido em 7 dias" },
+  { k: "sumido", n: "Sumidos", d: "30 a 90 dias sem pedir", c: 538, a: "Cupom de R$ 15 no dia fraco" },
+  { k: "vip", n: "VIP", d: "top 10% em gasto", c: 94, a: "Prova de lançamento, sem desconto" },
+  { k: "lead", n: "Leads do quiz", d: "nunca pediram", c: 0, a: "Prêmio da raspadinha no 1º pedido" }
+];
+const CLIENTS = [
+  ["Ana P.", "fiel", 9, 92, "ontem", "Combo 26 Peças"], ["Bruno M.", "vip", 14, 188, "há 3 dias", "Especial Zuma 68 Peças"],
+  ["Carla S.", "sumido", 5, 71, "há 47 dias", "Temaki Salmão"], ["Diego R.", "novo", 1, 58, "há 5 dias", "Hot Filadélfia (12un)"],
+  ["Elisa T.", "sumido", 3, 64, "há 62 dias", "Poke de Salmão"], ["Fábio L.", "fiel", 7, 81, "há 2 dias", "Uramaki Filadélfia (8un)"],
+  ["Gabi N.", "novo", 1, 45, "há 6 dias", "Yakissoba de Frango"], ["Hugo A.", "vip", 11, 215, "há 4 dias", "Combo Nakato"],
+  ["Iris C.", "sumido", 6, 88, "há 35 dias", "Combo 56 Peças"], ["João V.", "fiel", 5, 67, "há 1 dia", "Hot Zuma (8un)"]
+];
+function segBy(k) { return SEGS.find(s => s.k === k); }
+function renderClients() {
+  $("segCards").innerHTML = SEGS.slice(0, 4).map(s => `<div class="card kpi"><span class="eyebrow">${s.n}</span><div class="v num">${s.c}</div><div class="d muted">${s.d}</div><div class="d" style="color:var(--salmon);font-weight:600">${s.a}</div></div>`).join("");
+  const f = $("segFilter").value || "all";
+  $("cliRows").innerHTML = CLIENTS.filter(c => f === "all" || c[1] === f).map(c => { const s = segBy(c[1]); return `<tr><td><b>${c[0]}</b></td><td><span class="pill ${c[1] === "sumido" ? "warn" : c[1] === "vip" ? "hot" : c[1] === "fiel" ? "good" : ""}">${s.n}</span></td><td class="num">${c[2]}</td><td class="num">${brl(c[3])}</td><td>${c[4]}</td><td>${esc(c[5])}</td><td>${s.a}</td></tr>`; }).join("");
+}
+$("segFilter").innerHTML = `<option value="all">Todos os segmentos</option>` + SEGS.map(s => `<option value="${s.k}">${s.n}</option>`).join("");
+$("segFilter").addEventListener("change", renderClients);
+renderClients();
+
+/* ---------- CAMPANHAS ---------- */
+$("cSeg").innerHTML = SEGS.map(s => `<option value="${s.k}">${s.n} (${s.k === "lead" ? LEADS_COUNT() : s.c})</option>`).join("");
+function LEADS_COUNT() { return (window.LEADS || []).length; }
+$("cDish").innerHTML = ALL.filter(i => i.cat !== "Bebidas").map(i => `<option>${esc(i.nome)}</option>`).join("");
+$("cDish").value = "Hot Filadélfia (12un)";
+$("cMsg").value = "Terça do Hot Roll! 🔥 Pediu até as 20h, o Zumi manda seu Hot Filadélfia em dobro. Só hoje, ninja: [link]";
+function updatePreview() {
+  $("cPrev").textContent = $("cMsg").value || "...";
+  const seg = segBy($("cSeg").value); const n = seg.k === "lead" ? Math.max(LEADS_COUNT(), 1) : seg.c;
+  const conv = { fiel: .16, novo: .09, sumido: .07, vip: .14, lead: .11 }[seg.k];
+  const dish = ALL.find(i => i.nome === $("cDish").value); const tk = Math.max(60, dish ? dish.preco * 1.6 : 70);
+  const ped = Math.round(n * conv);
+  $("cForecast").innerHTML = [["Destinatários", n], ["Pedidos esperados (48h)", ped], ["Faturamento esperado", brl(ped * tk)]].map(([l, v]) => `<div class="card kpi" style="padding:12px"><span class="eyebrow">${l}</span><div class="v num" style="font-size:22px">${v}</div></div>`).join("");
+}
+["cSeg", "cDish", "cOffer", "cGoal"].forEach(id => $(id).addEventListener("change", updatePreview));
+$("cMsg").addEventListener("input", updatePreview);
+const TEMPL = [
+  (g, d, o) => `Ei, sumido(a)! O Zumi sentiu sua falta 🐟 Pra ${g}, preparei: ${d} com ${o.toLowerCase()}. Bora? [link]`,
+  (g, d, o) => `Hoje é dia de Zuma! ${d} te esperando, e ainda tem ${o.toLowerCase()}. Corre que é só hoje: [link]`,
+  (g, d, o) => `Fome de ninja? 🥢 ${d} saindo quentinho, com ${o.toLowerCase()}. Pede aqui em 1 minuto: [link]`
+];
+let tIdx = 0;
+async function writeMsg(alt) {
+  const seg = segBy($("cSeg").value), goal = $("cGoal").value, dish = $("cDish").value, offer = $("cOffer").value;
+  if (!SAMPLE) { tIdx = (tIdx + 1) % TEMPL.length; $("cMsg").value = TEMPL[tIdx](goal, dish, offer); updatePreview(); return; }
+  const b1 = $("cWrite"), b2 = $("cAlt"); b1.disabled = b2.disabled = true; $("cPrev").innerHTML = `<span class="thinking"><i></i><i></i><i></i></span>`;
+  const prompt = `Escreva UMA mensagem de WhatsApp para clientes do Zuma Cozinha Oriental (delivery japonês em Tangará da Serra/MT), assinada pelo mascote Zumi, um salmão ninja brincalhão.
+Público: ${seg.n} (${seg.d}). Objetivo: ${goal}. Prato em destaque: ${dish}. Oferta: ${offer}.
+Regras: até 260 caracteres, português do Brasil, no máximo 2 emojis, gatilho de urgência honesto, termina com [link]. Sem aspas, sem explicação, só a mensagem.${alt ? " Faça uma versão bem diferente da anterior: " + $("cMsg").value : ""}`;
+  try { const r = await SAMPLE(prompt, { modelTier: "quick", cache: false, onText: ({ text }) => { $("cMsg").value = text; $("cPrev").textContent = text; } }); $("cMsg").value = r.text.trim(); }
+  catch (e) { toast(aiErr(e)); tIdx = (tIdx + 1) % TEMPL.length; $("cMsg").value = TEMPL[tIdx](goal, dish, offer); }
+  b1.disabled = b2.disabled = false; updatePreview();
+}
+$("cWrite").addEventListener("click", () => writeMsg(false));
+$("cAlt").addEventListener("click", () => writeMsg(true));
+const SCHED = [];
+$("cSchedule").addEventListener("click", () => {
+  const seg = segBy($("cSeg").value);
+  SCHED.unshift({ seg: seg.n, goal: $("cGoal").selectedOptions[0].text, msg: $("cMsg").value });
+  $("cList").innerHTML = SCHED.map(s => `<div class="act"><div class="top"><b>${esc(s.goal)}</b><span class="pill">${esc(s.seg)}</span></div><div class="msg">${esc(s.msg)}</div><span class="pill warn">simulação · aguardando aprovação</span></div>`).join("");
+  toast("Campanha agendada em modo simulação. Nada foi enviado.");
+});
+updatePreview();
+$("cList").innerHTML = `<p class="muted">Nenhuma ainda.</p>`;
+
+/* ---------- CAPTAÇÃO ---------- */
+window.LEADS = [
+  { nome: "Marina", perfil: "Ninja do Hot", origem: "Instagram", premio: "Refri grátis" },
+  { nome: "Paulo", perfil: "Mestre do Salmão", origem: "QR na embalagem", premio: "Frete grátis" },
+  { nome: "Lívia", perfil: "Leve e Fit", origem: "Academia parceira", premio: "R$ 15 de desconto" }
+];
+const Q = [
+  { q: "Qual é a sua vibe hoje?", o: ["Crocante e quentinho", "Fresco e leve", "Muito salmão", "Quero de tudo um pouco"] },
+  { q: "Com quem você vai comer?", o: ["Sozinho(a)", "A dois", "Família", "Galera"] },
+  { q: "Cru é com você?", o: ["Amo", "Prefiro grelhado ou frito"] }
+];
+const PERF = {
+  "Crocante e quentinho": ["Ninja do Hot", "Hot Filadélfia (12un)"], "Fresco e leve": ["Leve e Fit", "Poke de Salmão"],
+  "Muito salmão": ["Mestre do Salmão", "Salmão Fresco 12 Fatias"], "Quero de tudo um pouco": ["Explorador Zuma", "Combo 26 Peças"]
+};
+const PRIZES = ["Frete grátis", "Refri grátis", "R$ 15 de desconto", "Hot Nutella grátis", "Raspadinha em dobro"];
+let qs = { step: 0, ans: [] };
+function renderLanding() {
+  const L = $("landing");
+  let body = "";
+  if (qs.step < Q.length) {
+    const cur = Q[qs.step];
+    body = `<div><span class="eyebrow">Pergunta ${qs.step + 1} de ${Q.length}</span><h3 style="margin-top:4px">${cur.q}</h3></div><div class="opts">${cur.o.map(o => `<button class="opt" type="button" data-a="${esc(o)}">${o}</button>`).join("")}</div>`;
+  } else if (qs.step === Q.length) {
+    let p = PERF[qs.ans[0]]; if (qs.ans[2] && qs.ans[2].startsWith("Prefiro") && p[0] !== "Ninja do Hot") p = ["Ninja do Hot", "Hot Filadélfia (12un)"];
+    const big = /Família|Galera/.test(qs.ans[1]);
+    qs.perfil = p[0]; qs.prato = big ? "Combo 56 Peças" : p[1];
+    body = `<div><span class="eyebrow">Seu perfil</span><h2 style="margin-top:4px">Você é ${p[0]}!</h2><p class="muted">O Zumi indica: <b>${esc(qs.prato)}</b> (${brl(ALL.find(i => i.nome === qs.prato).preco)}).</p></div>
+      <p>Raspe para ver seu prêmio:</p><div class="scratch"><div class="prize" id="prize"></div><canvas id="scr"></canvas></div>
+      <form id="leadForm" class="grid" style="gap:10px"><label>Seu nome<input id="lName" required placeholder="Como o Zumi te chama?"></label><label>WhatsApp<input id="lPhone" required inputmode="tel" placeholder="(65) 9 0000-0000"></label>
+      <label style="display:flex;gap:8px;align-items:flex-start;font-weight:500;color:var(--ink)"><input type="checkbox" id="lOpt" required style="width:auto;margin-top:3px">Aceito receber ofertas do Zuma no WhatsApp. Posso sair quando quiser.</label>
+      <button class="btn primary">Garantir meu prêmio</button></form>`;
+  } else {
+    body = `<div style="text-align:center;display:grid;gap:10px;justify-items:center">${zumi(72)}<h2>Prêmio garantido!</h2><p class="muted">Na versão real, o Zumi manda agora no WhatsApp o cupom e o link do cardápio.</p><button class="btn" id="again" type="button">Fazer o quiz de novo</button></div>`;
+  }
+  L.innerHTML = `<div class="hero">${zumi(64)}<div><span class="eyebrow" style="color:inherit;opacity:.7">Quiz do Zumi · 20 segundos</span><h2>Descubra o seu sushi e raspe um prêmio</h2></div></div><div class="body">${body}</div>`;
+  if (qs.step === Q.length) setupScratch();
+}
+function setupScratch() {
+  qs.premio = PRIZES[Math.floor(Math.random() * PRIZES.length)];
+  $("prize").textContent = qs.premio;
+  const cv = $("scr"), r = cv.getBoundingClientRect(); cv.width = r.width; cv.height = r.height;
+  const x = cv.getContext("2d"); x.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--salmon").trim() || "#E8613A"; x.fillRect(0, 0, cv.width, cv.height);
+  x.fillStyle = "#fff"; x.font = "600 15px Inter, sans-serif"; x.textAlign = "center"; x.fillText("Raspe aqui com o dedo ou o mouse", cv.width / 2, cv.height / 2 + 5);
+  x.globalCompositeOperation = "destination-out";
+  let down = false;
+  const sc = e => { if (!down) return; const b = cv.getBoundingClientRect(); x.beginPath(); x.arc(e.clientX - b.left, e.clientY - b.top, 20, 0, 7); x.fill(); };
+  cv.addEventListener("pointerdown", e => { down = true; cv.setPointerCapture(e.pointerId); sc(e); });
+  cv.addEventListener("pointermove", sc);
+  cv.addEventListener("pointerup", () => down = false);
+  $("leadForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const nome = $("lName").value.trim().split(" ")[0];
+    window.LEADS.unshift({ nome, perfil: qs.perfil, origem: "Quiz (esta demo)", premio: qs.premio });
+    SEGS[4].c = window.LEADS.length; renderLeads(); qs.step++; renderLanding();
+    $("cSeg").innerHTML = SEGS.map(s => `<option value="${s.k}">${s.n} (${s.c})</option>`).join("");
+    toast("Lead salvo no CRM com permissão de WhatsApp (demonstração).");
+  });
+}
+$("landing").addEventListener("click", e => {
+  const b = e.target.closest("[data-a]"); if (b) { qs.ans[qs.step] = b.dataset.a; qs.step++; renderLanding(); }
+  if (e.target.id === "again") { qs = { step: 0, ans: [] }; renderLanding(); }
+});
+function renderLeads() {
+  $("leadCount").textContent = window.LEADS.length + " leads";
+  $("leadRows").innerHTML = window.LEADS.map(l => `<tr><td><b>${esc(l.nome)}</b></td><td>${esc(l.perfil)}</td><td>${esc(l.origem)}</td><td>${esc(l.premio)}</td></tr>`).join("");
+}
+bars($("srcBars"), [["Instagram (anúncio)", 142], ["QR na embalagem", 118], ["Indique e ganhe", 76], ["Academias parceiras", 39], ["Mesa do salão", 27]]);
+SEGS[4].c = window.LEADS.length;
+renderLeads();
+
+/* ---------- HORÁRIOS VAZIOS ---------- */
+const WEEK = [
+  ["Segunda", "Segunda Express", "Abre 18h–22h só delivery, 20 itens campeões, até 45 min", "novo turno"],
+  ["Terça", "Terça do Hot Roll", "Hot Roll em dobro até 20h + WhatsApp às 16h", "pronto"],
+  ["Quarta", "Quarta Fit", "Poke ou sashimi + suco natural com preço fechado", "pronto"],
+  ["Quinta", "Quinta da Rodada", "Raspadinha do Zumi em todo pedido", "pronto"],
+  ["Sexta e sábado", "Pico", "Sem desconto. Upsell, combos para grupo, entrega rápida", "proteger margem"],
+  ["Domingo", "Domingo Família", "Combo 56 Peças + sobremesa para dividir", "pronto"],
+  ["Qui a dom, 11h–14h", "Zuma Executivo", "Prato do dia até R$ 39,90 para empresas e quem mora perto", "novo turno"]
+];
+$("weekRows").innerHTML = WEEK.map(w => `<tr><td><b>${w[0]}</b></td><td>${w[1]}</td><td class="muted">${w[2]}</td><td><span class="pill ${w[3] === "pronto" ? "good" : w[3] === "novo turno" ? "hot" : ""}">${w[3]}</span></td></tr>`).join("");
+function sim() {
+  const m = +$("sMon").value, l = +$("sLunch").value, t = +$("sTicket").value, c = +$("sCost").value;
+  $("sMonV").textContent = m + " pedidos"; $("sLunchV").textContent = l + " pedidos"; $("sTicketV").textContent = brl(t); $("sCostV").textContent = brl(c) + " por turno";
+  const turns = 4 + 4 * 4; // por mês: 4 segundas + 16 almoços
+  const rev = (m * 4 + l * 16) * t; const margin = rev * .38 - c * turns;
+  $("simOut").innerHTML = [["Faturamento extra/mês", brl(rev)], ["Lucro extra/mês", brl(margin)], ["Turnos novos/mês", turns]].map(([k, v]) => `<div class="card kpi" style="padding:12px"><span class="eyebrow">${k}</span><div class="v num" style="font-size:20px;${k.startsWith("Lucro") ? `color:var(--${margin >= 0 ? "good" : "bad"})` : ""}">${v}</div></div>`).join("") + `<p class="muted" style="font-size:12px;grid-column:1/-1">Margem de contribuição assumida: 38%. Ajuste quando tiver o número real.</p>`;
+}
+["sMon", "sLunch", "sTicket", "sCost"].forEach(id => $(id).addEventListener("input", sim)); sim();
+const EVENTS = [
+  ["2026-11-27", "Black Friday", "Combo Zumi Friday: 56 peças + 2 refris, só no app, 24h", "agora"],
+  ["2026-12-24", "Véspera de Natal", "Encomendas com agendamento até 22/12 (ligar o agendamento na loja)", "preparar"],
+  ["2026-12-31", "Réveillon", "Barcas para festa sob encomenda, retirada 16h–19h", "preparar"],
+  ["2027-01-12", "Férias de janeiro", "Clube Zumi com 1º mês pela metade", "planejar"],
+  ["2027-02-09", "Carnaval", "Kit esquenta: hot rolls + energético", "planejar"],
+  ["2027-05-09", "Dia das Mães", "Combo para a família + sobremesa com cartão do Zumi", "planejar"],
+  ["2027-06-12", "Dia dos Namorados", "Jantar a dois: combo + vinho de parceiro + vela", "planejar"],
+  ["2027-06-18", "Dia do Sushi", "Rodada do Zumi com prêmio grande e live no Instagram", "planejar"]
+];
+const MES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+$("cal").innerHTML = EVENTS.map(([d, n, a, s]) => `<div class="ev"><div class="date"><b>${+d.slice(8)}</b>${MES[+d.slice(5, 7) - 1]}</div><div><b>${n}</b><div class="muted" style="font-size:12.5px">${a}</div></div><span class="pill ${s === "agora" ? "hot" : s === "preparar" ? "warn" : ""}">${s}</span></div>`).join("");
+
+/* ---------- CLUBE ---------- */
+function club() {
+  const p = +$("kPrice").value, m = +$("kMembers").value, x = +$("kExtra").value, t = +$("kTicket").value;
+  $("kPriceV").textContent = brl(p); $("kMembersV").textContent = m + " assinantes"; $("kExtraV").textContent = x.toLocaleString("pt-BR") + " pedidos"; $("kTicketV").textContent = brl(t);
+  const mrr = p * m, extra = m * x * t, cost = m * 12 + m * x * 11;
+  $("kOut").innerHTML = [["Receita da assinatura/mês", brl(mrr)], ["Vendas extras/mês", brl(extra)], ["Custo dos benefícios", brl(cost)]].map(([k, v]) => `<div class="card kpi" style="padding:12px"><span class="eyebrow">${k}</span><div class="v num" style="font-size:20px">${v}</div></div>`).join("") + `<p class="muted" style="font-size:12px;grid-column:1/-1">Custo estimado: temaki mensal R$ 12 e frete grátis R$ 11 por pedido extra.</p>`;
+}
+["kPrice", "kMembers", "kExtra", "kTicket"].forEach(id => $(id).addEventListener("input", club)); club();
+
+/* ---------- roteamento ---------- */
+const VIEWS = ["cockpit", "zumi", "campanhas", "leads", "clientes", "horarios", "clube"];
+function route() {
+  const v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "cockpit";
+  VIEWS.forEach(k => { $("v-" + k).hidden = k !== v; });
+  document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.v === v));
+  if (v === "leads" && !$("landing").innerHTML) renderLanding();
+  window.scrollTo(0, 0);
+}
+window.addEventListener("hashchange", route);
+route();
+</script>
+
+</body></html>

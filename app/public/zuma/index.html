@@ -1,0 +1,2168 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zuma Cozinha Oriental · Loja Oficial & Experiência Kytto</title>
+  <link rel="icon" type="image/svg+xml" href="zumi-mascote.svg">
+  <!-- Tailwind CSS via CDN para estilização moderna e rápida -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            zuma: {
+              bg: '#0B0C10',
+              surface: '#161920',
+              surfaceLight: '#202530',
+              card: '#1B1F2A',
+              border: '#2E3545',
+              salmon: '#F97316',
+              salmonLight: '#FB923C',
+              crimson: '#E11D48',
+              gold: '#F59E0B',
+              text: '#F8FAFC',
+              muted: '#94A3B8'
+            }
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            asian: ['"Cinzel"', 'serif']
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      background-color: #0B0C10;
+      color: #F8FAFC;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      overflow-x: hidden;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      height: 6px;
+      width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #161920;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #2E3545;
+      border-radius: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #F97316;
+    }
+    .glassmorphism {
+      background: rgba(22, 25, 32, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(46, 53, 69, 0.6);
+    }
+    .glow-salmon {
+      box-shadow: 0 0 25px rgba(249, 115, 22, 0.25);
+    }
+    .glow-gold {
+      box-shadow: 0 0 25px rgba(245, 158, 11, 0.3);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-zuma-salmon selection:text-white">
+
+  <!-- ================= TOP ANNOUNCEMENT BAR ================= -->
+  <div class="bg-gradient-to-r from-zuma-crimson via-zuma-salmon to-zuma-gold text-white text-xs font-semibold py-2 px-4 text-center flex items-center justify-center space-x-2 shadow-md">
+    <span class="inline-block animate-pulse">🍣</span>
+    <span><strong>Bora, Tangará!</strong> Hoje é dia de Zumi! Almoço Executivo até 14h & Jantar a partir das 18h. Frete grátis acima de R$ 120!</span>
+    <span class="hidden md:inline-block bg-black/30 px-2 py-0.5 rounded text-[11px] font-mono">WhatsApp: (65) 99800-1447</span>
+  </div>
+
+  <!-- ================= MAIN HEADER / NAVBAR ================= -->
+  <header class="sticky top-0 z-40 glassmorphism border-b border-zuma-border">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+      
+      <!-- Logo Oficial & Identificação -->
+      <div class="flex items-center space-x-3 cursor-pointer" onclick="switchTab('cardapio')">
+        <div class="relative">
+          <img src="https://cdnimages.ligafiles.com.br/preset=logo_square_400/empresa_images/4304/6abafc96a35a9e82qq.webp" 
+               alt="Zuma Logo" class="w-12 h-12 rounded-xl object-cover border-2 border-zuma-salmon/60 shadow-lg">
+          <div class="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-zuma-bg" title="Aberto Agora"></div>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <span class="font-asian text-xl font-extrabold tracking-wider text-white">ZUMA</span>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-zuma-salmon/20 text-zuma-salmon font-bold border border-zuma-salmon/30">ORIENTAL</span>
+          </div>
+          <p class="text-xs text-zuma-muted font-medium">Tangará da Serra - MT · Av. Brasil, 1605</p>
+        </div>
+      </div>
+
+      <!-- Seletor de Modalidade: Delivery / Mesa -->
+      <div class="hidden md:flex items-center bg-zuma-surface border border-zuma-border rounded-xl p-1 text-xs font-medium">
+        <button id="btn-modalidade-delivery" onclick="setModalidade('delivery')" 
+                class="px-4 py-2 rounded-lg bg-zuma-salmon text-white font-bold transition-all shadow-sm">
+          🛵 Delivery & Retirada
+        </button>
+        <button id="btn-modalidade-salao" onclick="setModalidade('salao')" 
+                class="px-4 py-2 rounded-lg text-zuma-muted hover:text-white transition-all">
+          🏮 Salão & QR Code (27 Mesas)
+        </button>
+      </div>
+
+      <!-- Mascote Zumi Quick Widget & Carrinho -->
+      <div class="flex items-center space-x-3">
+        <!-- Zumi Assistant Button -->
+        <button onclick="switchTab('ia-orcamento')" 
+                class="flex items-center space-x-2 bg-gradient-to-r from-zuma-salmon/20 to-zuma-gold/20 hover:from-zuma-salmon/30 hover:to-zuma-gold/30 text-white border border-zuma-salmon/40 px-3.5 py-2 rounded-xl text-xs font-bold transition-all glow-salmon">
+          <img src="zumi-mascote.svg" alt="Zumi Mascote" class="w-7 h-7 rounded-full bg-black/40 p-0.5">
+          <span class="hidden sm:inline">Pedir com Zumi IA</span>
+        </button>
+
+        <!-- Cart Button -->
+        <button onclick="toggleCartDrawer(true)" 
+                class="relative bg-zuma-surface hover:bg-zuma-surfaceLight border border-zuma-border p-2.5 rounded-xl text-white transition-all flex items-center justify-center">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+          </svg>
+          <span id="cart-badge" class="absolute -top-1.5 -right-1.5 bg-zuma-crimson text-white font-bold text-[11px] w-5 h-5 rounded-full flex items-center justify-center border-2 border-zuma-bg shadow-sm">
+            0
+          </span>
+        </button>
+      </div>
+
+    </div>
+
+    <!-- Sub-Navbar de Navegação por Abas -->
+    <div class="border-t border-zuma-border/60 bg-zuma-surface/90 overflow-x-auto custom-scrollbar">
+      <div class="max-w-7xl mx-auto px-4 flex space-x-1 sm:space-x-2 py-2">
+        <button onclick="switchTab('cardapio')" id="tab-btn-cardapio" class="tab-btn active px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap bg-zuma-salmon text-white">
+          <span>🍣</span><span>Cardápio (211 itens)</span>
+        </button>
+        <button onclick="switchTab('mapa-calor')" id="tab-btn-mapa-calor" class="tab-btn px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap text-zuma-muted hover:text-white">
+          <span>🔥</span><span>Mapa de Calor</span>
+        </button>
+        <button onclick="switchTab('mercado-ia')" id="tab-btn-mercado-ia" class="tab-btn px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap text-zuma-muted hover:text-white">
+          <span>📈</span><span>Mercado &amp; IA</span>
+        </button>
+        <button onclick="switchTab('simulador-crm')" id="tab-btn-simulador-crm" class="tab-btn px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap text-zuma-muted hover:text-white">
+          <span>👥</span><span>Simulador Delivery</span>
+        </button>
+        <button onclick="switchTab('clima-delivery')" id="tab-btn-clima-delivery" class="tab-btn px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap text-zuma-muted hover:text-white">
+          <span>🌦️</span><span>Clima &amp; Gatilhos</span>
+        </button>
+        <button onclick="switchTab('hub-omnichannel')" id="tab-btn-hub-omnichannel" class="tab-btn px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap text-zuma-muted hover:text-white">
+          <span>🔄</span><span>Hub Omnichannel</span>
+        </button>
+        <button onclick="switchTab('ia-orcamento')" id="tab-btn-ia-orcamento" class="tab-btn px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap text-zuma-muted hover:text-white">
+          <span>🤖</span><span>Monte seu Pedido (IA)</span>
+        </button>
+        <button onclick="switchTab('raspadinha')" id="tab-btn-raspadinha" class="tab-btn px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap text-zuma-muted hover:text-white">
+          <span>🎰</span><span>Rodada do Zumi</span>
+        </button>
+        <button onclick="switchTab('clube')" id="tab-btn-clube" class="tab-btn px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap text-zuma-muted hover:text-white">
+          <span>👑</span><span>Clube Zumi VIP</span>
+        </button>
+        <button onclick="switchTab('mesas-salao')" id="tab-btn-mesas-salao" class="tab-btn px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap text-zuma-muted hover:text-white">
+          <span>🏮</span><span>27 Mesas & Salão</span>
+        </button>
+        <button onclick="switchTab('kds-cozinha')" id="tab-btn-kds-cozinha" class="tab-btn px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap text-zuma-muted hover:text-white">
+          <span>👨‍🍳</span><span>Painel KDS Cozinha</span>
+        </button>
+        <button onclick="switchTab('gestor-dre')" id="tab-btn-gestor-dre" class="tab-btn px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap text-zuma-muted hover:text-white">
+          <span>📊</span><span>Dashboard +250%</span>
+        </button>
+        <a href="pilot.html" target="_blank" class="px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-600 hover:text-white">
+          <span>🚀</span><span>Zuma Pilot (Tela Cheia)</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= CONTEÚDO PRINCIPAL (SPA TABS) ================= -->
+  <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full">
+
+    <!-- ========================================================================= -->
+    <!-- ABA 1: CARDÁPIO COMPLETO (211 PRODUTOS & 23 CATEGORIAS)                   -->
+    <!-- ========================================================================= -->
+    <section id="tab-cardapio" class="tab-content block space-y-6">
+      
+      <!-- Hero Banner Informativo -->
+      <div class="relative rounded-2xl overflow-hidden border border-zuma-border bg-zuma-surface glow-salmon">
+        <div class="absolute inset-0 bg-gradient-to-r from-zuma-bg via-zuma-surface/90 to-transparent z-10"></div>
+        <img src="https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp" 
+             alt="Capa Zuma" class="w-full h-48 sm:h-56 object-cover object-center opacity-40">
+        
+        <div class="absolute inset-0 z-20 flex flex-col justify-center px-6 sm:px-10">
+          <div class="inline-flex items-center space-x-2 bg-zuma-salmon/20 text-zuma-salmon px-3 py-1 rounded-full text-xs font-bold border border-zuma-salmon/40 w-fit mb-2">
+            <span>🚀 Plano de Crescimento Zuma +250%</span>
+          </div>
+          <h1 class="text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
+            Alta Gastronomia Japonesa Contemporânea
+          </h1>
+          <p class="text-xs sm:text-sm text-zuma-muted max-w-2xl mt-1">
+            211 itens preparados na hora com peixes frescos selecionados, esteira KDS setorizada e entrega expressa em Tangará da Serra.
+          </p>
+          <div class="flex flex-wrap gap-3 mt-4 text-xs font-semibold">
+            <span class="flex items-center text-emerald-400">⚡ Tempo Médio: 35-45 min</span>
+            <span class="flex items-center text-zuma-gold">🌟 Frete Grátis acima de R$ 120</span>
+            <span class="flex items-center text-zuma-salmonLight">🎁 Cashback de 10%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Barra de Pesquisa e Filtros por Setor KDS -->
+      <div class="flex flex-col md:flex-row gap-3 items-center justify-between">
+        
+        <!-- Input de Busca -->
+        <div class="relative w-full md:w-80">
+          <input type="text" id="input-busca" oninput="filtrarCardapio()" 
+                 placeholder="Buscar por prato ou ingrediente..." 
+                 class="w-full bg-zuma-surface border border-zuma-border rounded-xl px-4 py-2.5 pl-10 text-xs text-white placeholder-zuma-muted focus:outline-none focus:border-zuma-salmon transition-all">
+          <svg class="w-4 h-4 text-zuma-muted absolute left-3.5 top-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
+
+        <!-- Filtros de Setor KDS -->
+        <div class="flex items-center space-x-1.5 overflow-x-auto w-full md:w-auto custom-scrollbar pb-1 md:pb-0">
+          <button onclick="setFiltroSetor('todos')" class="filtro-setor-btn active px-3 py-1.5 rounded-lg text-xs font-semibold bg-zuma-salmon text-white whitespace-nowrap">
+            Todos os Setores (211)
+          </button>
+          <button onclick="setFiltroSetor('sushi_bar')" class="filtro-setor-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-zuma-surface text-zuma-muted hover:text-white border border-zuma-border whitespace-nowrap">
+            🍣 Sushi Bar (124)
+          </button>
+          <button onclick="setFiltroSetor('cozinha')" class="filtro-setor-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-zuma-surface text-zuma-muted hover:text-white border border-zuma-border whitespace-nowrap">
+            🍲 Cozinha Quente (48)
+          </button>
+          <button onclick="setFiltroSetor('bar')" class="filtro-setor-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-zuma-surface text-zuma-muted hover:text-white border border-zuma-border whitespace-nowrap">
+            🍹 Bar & Adega (31)
+          </button>
+          <button onclick="setFiltroSetor('balcao')" class="filtro-setor-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-zuma-surface text-zuma-muted hover:text-white border border-zuma-border whitespace-nowrap">
+            🥢 Balcão (8)
+          </button>
+        </div>
+      </div>
+
+      <!-- Barra Horizontal de Categorias (23 Categorias) -->
+      <div id="categorias-container" class="flex space-x-2 overflow-x-auto custom-scrollbar pb-2">
+        <!-- Renderizado dinamicamente via JS -->
+      </div>
+
+      <!-- Grid de Produtos -->
+      <div id="produtos-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <!-- Renderizado dinamicamente via JS -->
+      </div>
+      
+      <div id="empty-state" class="hidden text-center py-16 space-y-3">
+        <div class="text-5xl">🍣</div>
+        <h3 class="text-base font-bold text-white">Nenhum prato encontrado</h3>
+        <p class="text-xs text-zuma-muted">Tente buscar por outro ingrediente ou limpar os filtros de categoria.</p>
+        <button onclick="limparFiltros()" class="px-4 py-2 bg-zuma-surface hover:bg-zuma-surfaceLight border border-zuma-border rounded-xl text-xs font-bold text-zuma-salmon">
+          Limpar Filtros
+        </button>
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- ABA 2: MONTE SEU PEDIDO COM ZUMI IA (MOTOR KYTTOIA 2.5 FLASH)             -->
+    <!-- ========================================================================= -->
+    <section id="tab-ia-orcamento" class="tab-content hidden space-y-6">
+      
+      <div class="glassmorphism rounded-2xl p-6 sm:p-8 border border-zuma-salmon/30 relative overflow-hidden">
+        <div class="flex flex-col md:flex-row items-center gap-6">
+          
+          <!-- Avatar Grande do Zumi -->
+          <div class="w-32 h-32 sm:w-40 sm:h-40 flex-shrink-0 relative">
+            <img src="zumi-mascote.svg" alt="Zumi Ninja" class="w-full h-full object-contain filter drop-shadow-lg">
+            <div class="absolute -bottom-2 inset-x-0 text-center">
+              <span class="bg-zuma-salmon text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                Motor KyttoIA 2.5
+              </span>
+            </div>
+          </div>
+
+          <!-- Mensagem do Zumi e Configuração do Orçamento -->
+          <div class="space-y-4 flex-grow text-center md:text-left">
+            <div>
+              <h2 class="text-2xl sm:text-3xl font-extrabold text-white">
+                "Bora, Tangará! Deixa que o Zumi monta o pedido perfeito pra você!"
+              </h2>
+              <p class="text-xs sm:text-sm text-zuma-muted mt-1">
+                Diga quantas pessoas vão comer e quanto você quer investir. O Motor KyttoIA 2.5 Flash analisa nosso cardápio de 211 itens, equilibra combinados, entradas e bebidas e monta o combo ideal com o menor tempo de preparo.
+              </p>
+            </div>
+
+            <!-- Controles do Simulador -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
+              
+              <!-- Seletor de Pessoas -->
+              <div class="bg-zuma-bg/80 border border-zuma-border rounded-xl p-3 text-left">
+                <label class="block text-[11px] font-bold uppercase text-zuma-muted mb-1">Quantas Pessoas?</label>
+                <select id="ia-select-pessoas" class="w-full bg-zuma-surface border border-zuma-border rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-zuma-salmon">
+                  <option value="1">1 Pessoa (Individual Faminto)</option>
+                  <option value="2" selected>2 Pessoas (Casal Romântico)</option>
+                  <option value="4">4 Pessoas (Família / Amigos)</option>
+                  <option value="6">6+ Pessoas (Celebração / Barca)</option>
+                </select>
+              </div>
+
+              <!-- Input de Orçamento -->
+              <div class="bg-zuma-bg/80 border border-zuma-border rounded-xl p-3 text-left">
+                <label class="block text-[11px] font-bold uppercase text-zuma-muted mb-1">Orçamento Máximo (R$)</label>
+                <input type="number" id="ia-input-orcamento" value="120" min="40" max="800" step="10"
+                       class="w-full bg-zuma-surface border border-zuma-border rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-zuma-salmon">
+              </div>
+
+              <!-- Botão de Ação -->
+              <div class="flex items-end">
+                <button onclick="calcularPedidoIA()" 
+                        class="w-full bg-gradient-to-r from-zuma-salmon to-zuma-crimson hover:from-zuma-salmonLight hover:to-zuma-crimson text-white font-extrabold py-3 px-4 rounded-xl text-xs transition-all shadow-lg glow-salmon flex items-center justify-center space-x-2">
+                  <span>⚡</span>
+                  <span>Calcular com Motor KyttoIA</span>
+                </button>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Resultado do Cálculo de IA -->
+      <div id="ia-resultado-card" class="glassmorphism rounded-2xl p-6 border border-zuma-border space-y-4">
+        <div class="flex items-center justify-between border-b border-zuma-border pb-3">
+          <div class="flex items-center space-x-2">
+            <span class="text-xl">🍣</span>
+            <h3 class="font-extrabold text-white text-base">Sugestão Harmonizada do Zumi</h3>
+          </div>
+          <span id="ia-status-badge" class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold px-3 py-1 rounded-full">
+            Dentro do Orçamento
+          </span>
+        </div>
+
+        <div id="ia-itens-sugeridos" class="space-y-2">
+          <!-- Renderizado dinamicamente -->
+        </div>
+
+        <div class="bg-zuma-bg/90 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 border border-zuma-border">
+          <div>
+            <span class="text-xs text-zuma-muted">Total Calculado:</span>
+            <div class="text-2xl font-black text-white" id="ia-valor-total">R$ 118,90</div>
+          </div>
+          <div class="flex space-x-2 w-full sm:w-auto">
+            <button onclick="adicionarSugestaoAoCarrinho()" 
+                    class="flex-1 sm:flex-none px-4 py-2.5 bg-zuma-salmon hover:bg-zuma-salmonLight text-white font-bold rounded-xl text-xs transition-all">
+              + Adicionar Tudo ao Carrinho
+            </button>
+            <button onclick="enviarSugestaoWhatsApp()" 
+                    class="flex-1 sm:flex-none px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all flex items-center justify-center space-x-1.5">
+              <span>Pedir no WhatsApp</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- ABA 3: A RODADA DO ZUMI (RASPADINHA DIGITAL INTERATIVA)                   -->
+    <!-- ========================================================================= -->
+    <section id="tab-raspadinha" class="tab-content hidden space-y-6">
+      
+      <div class="max-w-2xl mx-auto glassmorphism rounded-2xl p-6 sm:p-8 border border-zuma-gold/40 text-center space-y-6 relative overflow-hidden glow-gold">
+        
+        <div class="space-y-2">
+          <div class="inline-flex items-center space-x-1.5 bg-zuma-gold/20 text-zuma-gold border border-zuma-gold/40 px-3 py-1 rounded-full text-xs font-extrabold uppercase">
+            <span>🎰 Quinta da Rodada do Zumi</span>
+          </div>
+          <h2 class="text-2xl sm:text-3xl font-black text-white">
+            Raspe com o dedo ou mouse e ganhe seu prêmio imediato!
+          </h2>
+          <p class="text-xs text-zuma-muted max-w-md mx-auto">
+            Aqui no Zuma ninguém sai de mãos vazias. Todo mundo ganha: porções de Hot Roll, sobremesas, sodas artesanais ou cupons de desconto!
+          </p>
+        </div>
+
+        <!-- Componente Interativo de Raspadinha (Canvas) -->
+        <div class="relative w-72 h-44 sm:w-80 sm:h-48 mx-auto rounded-2xl overflow-hidden border-2 border-zuma-gold shadow-2xl bg-zuma-surfaceLight flex items-center justify-center select-none">
+          
+          <!-- Conteúdo Oculto Revelado ao Raspar -->
+          <div id="raspadinha-premio-revelado" class="absolute inset-0 flex flex-col items-center justify-center p-4 bg-gradient-to-br from-zuma-surface via-zuma-card to-black text-center space-y-1">
+            <span class="text-3xl">🎁</span>
+            <div id="raspadinha-premio-titulo" class="font-black text-base text-zuma-gold">Hot Roll Especial em Dobro!</div>
+            <p id="raspadinha-premio-desc" class="text-[11px] text-zuma-muted">Ganhe outra porção de 10un no seu pedido de hoje.</p>
+            <div class="bg-zuma-bg/80 border border-zuma-gold/40 px-3 py-1 rounded-lg mt-2">
+              <span class="text-[10px] text-zuma-muted font-mono uppercase">Cupom:</span>
+              <strong id="raspadinha-premio-cupom" class="text-xs text-white font-mono ml-1">ZUMIHOTDOBRO</strong>
+            </div>
+          </div>
+
+          <!-- Canvas que será raspado -->
+          <canvas id="scratch-canvas" width="320" height="192" 
+                  class="absolute inset-0 w-full h-full cursor-pointer z-10 touch-none"></canvas>
+        </div>
+
+        <div id="raspadinha-acao-container" class="space-y-3 pt-2">
+          <p class="text-xs text-zuma-muted italic">Passe o mouse ou deslize o dedo sobre a área dourada para raspar!</p>
+          <div class="flex justify-center gap-3">
+            <button onclick="reiniciarRaspadinha()" class="px-4 py-2 bg-zuma-surface border border-zuma-border rounded-xl text-xs font-bold text-white hover:bg-zuma-surfaceLight">
+              🔄 Tentar Outra Raspadinha
+            </button>
+            <button onclick="aplicarCupomRaspadinha()" class="px-5 py-2 bg-zuma-gold hover:bg-amber-400 text-black font-extrabold rounded-xl text-xs shadow-md">
+              Aproveitar Cupom no Pedido
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- ABA 4: CLUBE ZUMI VIP (ASSINATURA RECORRENTE)                              -->
+    <!-- ========================================================================= -->
+    <section id="tab-clube" class="tab-content hidden space-y-6">
+      
+      <div class="max-w-4xl mx-auto glassmorphism rounded-3xl p-6 sm:p-10 border border-zuma-salmon/40 space-y-8 relative overflow-hidden">
+        
+        <div class="text-center space-y-3">
+          <div class="inline-flex items-center space-x-2 bg-zuma-salmon/20 text-zuma-salmon border border-zuma-salmon/40 px-3 py-1 rounded-full text-xs font-black uppercase">
+            <span>👑 Primeiro Clube de Sushi de Tangará da Serra</span>
+          </div>
+          <h2 class="text-3xl sm:text-4xl font-black text-white">
+            Clube Zumi VIP
+          </h2>
+          <p class="text-xs sm:text-sm text-zuma-muted max-w-xl mx-auto">
+            Por apenas R$ 29,90 ao mês, tenha frete grátis ilimitado em dias de semana, 1 temaki cortesia todo mês e 10% de cashback em todos os seus pedidos.
+          </p>
+        </div>
+
+        <!-- Grade de Benefícios Exclusivos -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          
+          <div class="bg-zuma-surface/80 border border-zuma-border rounded-2xl p-5 flex items-start space-x-4">
+            <div class="w-10 h-10 rounded-xl bg-zuma-salmon/20 text-zuma-salmon flex items-center justify-center text-xl flex-shrink-0">
+              🛵
+            </div>
+            <div>
+              <h4 class="font-bold text-white text-sm">Frete Grátis Ilimitado (Seg a Qui)</h4>
+              <p class="text-xs text-zuma-muted mt-0.5">Economia média de R$ 45 a R$ 60 por mês para quem pede 1x por semana em qualquer bairro de Tangará.</p>
+            </div>
+          </div>
+
+          <div class="bg-zuma-surface/80 border border-zuma-border rounded-2xl p-5 flex items-start space-x-4">
+            <div class="w-10 h-10 rounded-xl bg-zuma-gold/20 text-zuma-gold flex items-center justify-center text-xl flex-shrink-0">
+              🍙
+            </div>
+            <div>
+              <h4 class="font-bold text-white text-sm">1 Temaki Especial de Salmão Grátis/mês</h4>
+              <p class="text-xs text-zuma-muted mt-0.5">Retire no balcão ou receba junto com qualquer pedido de delivery. O temaki avulso custa R$ 32,00 (o clube já se paga!).</p>
+            </div>
+          </div>
+
+          <div class="bg-zuma-surface/80 border border-zuma-border rounded-2xl p-5 flex items-start space-x-4">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl flex-shrink-0">
+              💰
+            </div>
+            <div>
+              <h4 class="font-bold text-white text-sm">10% de Cashback Automático</h4>
+              <p class="text-xs text-zuma-muted mt-0.5">Em todas as compras na loja ou salão, 10% do valor retorna imediatamente para sua carteira digital Kytto.</p>
+            </div>
+          </div>
+
+          <div class="bg-zuma-surface/80 border border-zuma-border rounded-2xl p-5 flex items-start space-x-4">
+            <div class="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center text-xl flex-shrink-0">
+              ⚡
+            </div>
+            <div>
+              <h4 class="font-bold text-white text-sm">Prioridade Máxima no KDS da Cozinha</h4>
+              <p class="text-xs text-zuma-muted mt-0.5">Seus pedidos ganham a etiqueta VIP Ninja e entram no topo da fila de produção do sushi bar e cozinha.</p>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Chamada de Assinatura -->
+        <div class="bg-gradient-to-r from-zuma-surface via-zuma-card to-zuma-surface border border-zuma-gold/40 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div>
+            <div class="text-xs text-zuma-gold font-bold uppercase">Mensalidade sem fidelidade</div>
+            <div class="text-3xl font-black text-white">R$ 29,90 <span class="text-xs text-zuma-muted font-normal">/ mês</span></div>
+            <p class="text-[11px] text-zuma-muted">Cancele quando quiser com 1 clique. Cobrança recorrente no cartão ou PIX.</p>
+          </div>
+          <button onclick="assinarClubeZumi()" 
+                  class="w-full sm:w-auto px-8 py-3.5 bg-gradient-to-r from-zuma-gold to-amber-500 hover:from-amber-400 hover:to-zuma-gold text-black font-black rounded-xl text-sm transition-all shadow-lg glow-gold">
+            Quero Entrar no Clube Zumi VIP
+          </button>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- ABA 5: 27 MESAS & SALÃO (AUTOATENDIMENTO QR CODE)                         -->
+    <!-- ========================================================================= -->
+    <section id="tab-mesas-salao" class="tab-content hidden space-y-6">
+      
+      <div class="space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 class="text-2xl font-extrabold text-white">Gestão das 27 Mesas & Autoatendimento QR Code</h2>
+            <p class="text-xs text-zuma-muted">Mapeamento oficial do Salão Climatizado, Deck Externo com Jardim Japonês, Bistrôs Casal e Balcão Omakase.</p>
+          </div>
+          <div class="flex items-center space-x-2 text-xs">
+            <span class="flex items-center space-x-1"><span class="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span><span class="text-zuma-muted">Livre (QR Pronto)</span></span>
+            <span class="flex items-center space-x-1"><span class="w-3 h-3 rounded-full bg-zuma-salmon inline-block"></span><span class="text-zuma-muted">Ocupada</span></span>
+          </div>
+        </div>
+
+        <div id="mesas-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          <!-- Renderizado dinamicamente via JS -->
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- ABA 6: PAINEL KDS DE COZINHA (VISUALIZAÇÃO EM TEMPO REAL)                 -->
+    <!-- ========================================================================= -->
+    <section id="tab-kds-cozinha" class="tab-content hidden space-y-6">
+      
+      <div class="space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zuma-border pb-3">
+          <div>
+            <h2 class="text-2xl font-extrabold text-white flex items-center space-x-2">
+              <span>👨‍🍳</span><span>Esteira KDS Setorizada (Cozinha & Sushi Bar)</span>
+            </h2>
+            <p class="text-xs text-zuma-muted">Redução do tempo de entrega de 76 min para &lt;45 min através da separação instantânea de comandas por setor produtivo.</p>
+          </div>
+          <div class="bg-zuma-surface border border-zuma-border rounded-xl px-4 py-2 text-center">
+            <span class="text-[10px] text-zuma-muted uppercase font-bold block">Tempo Médio Tangará</span>
+            <span class="text-emerald-400 font-extrabold text-sm">38 minutos (Meta batida!)</span>
+          </div>
+        </div>
+
+        <!-- 4 Praças Produtivas em Colunas -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          
+          <!-- Coluna 1: Sushi Bar -->
+          <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-4 space-y-3">
+            <div class="flex items-center justify-between border-b border-zuma-border pb-2">
+              <span class="font-extrabold text-xs text-zuma-salmon uppercase tracking-wide">🍣 Sushi Bar (Frio)</span>
+              <span class="bg-zuma-salmon/20 text-zuma-salmon text-[10px] font-bold px-2 py-0.5 rounded">124 itens</span>
+            </div>
+            <div class="space-y-2 text-xs">
+              <div class="bg-zuma-card p-3 rounded-xl border border-zuma-border/60">
+                <div class="flex justify-between font-bold text-white mb-1">
+                  <span>#1042 - Mesa 19 (Bistrô)</span>
+                  <span class="text-amber-400">8 min</span>
+                </div>
+                <div class="text-zuma-muted text-[11px]">1x Especial Zuma 68 Pçs</div>
+                <div class="text-zuma-muted text-[11px]">2x Gunkan Flambado Trufado</div>
+              </div>
+              <div class="bg-zuma-card p-3 rounded-xl border border-zuma-border/60">
+                <div class="flex justify-between font-bold text-white mb-1">
+                  <span>#1044 - Delivery (Jd. Europa)</span>
+                  <span class="text-emerald-400">3 min</span>
+                </div>
+                <div class="text-zuma-muted text-[11px]">1x Combinado Nakato 26 Pçs</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Coluna 2: Cozinha Quente -->
+          <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-4 space-y-3">
+            <div class="flex items-center justify-between border-b border-zuma-border pb-2">
+              <span class="font-extrabold text-xs text-amber-400 uppercase tracking-wide">🍲 Cozinha Quente</span>
+              <span class="bg-amber-400/20 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded">48 itens</span>
+            </div>
+            <div class="space-y-2 text-xs">
+              <div class="bg-zuma-card p-3 rounded-xl border border-zuma-border/60">
+                <div class="flex justify-between font-bold text-white mb-1">
+                  <span>#1043 - Delivery (Centro)</span>
+                  <span class="text-amber-400">11 min</span>
+                </div>
+                <div class="text-zuma-muted text-[11px]">1x Yakissoba Tradicional</div>
+                <div class="text-zuma-muted text-[11px]">1x Hot Roll Filadélfia (10un)</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Coluna 3: Bar & Adega -->
+          <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-4 space-y-3">
+            <div class="flex items-center justify-between border-b border-zuma-border pb-2">
+              <span class="font-extrabold text-xs text-purple-400 uppercase tracking-wide">🍹 Bar & Adega</span>
+              <span class="bg-purple-400/20 text-purple-400 text-[10px] font-bold px-2 py-0.5 rounded">31 itens</span>
+            </div>
+            <div class="space-y-2 text-xs">
+              <div class="bg-zuma-card p-3 rounded-xl border border-zuma-border/60">
+                <div class="flex justify-between font-bold text-white mb-1">
+                  <span>#1042 - Mesa 19</span>
+                  <span class="text-emerald-400">2 min</span>
+                </div>
+                <div class="text-zuma-muted text-[11px]">2x Soda Italiana de Maçã Verde</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Coluna 4: Balcão e Expedição -->
+          <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-4 space-y-3">
+            <div class="flex items-center justify-between border-b border-zuma-border pb-2">
+              <span class="font-extrabold text-xs text-emerald-400 uppercase tracking-wide">📦 Expedição Motoboys</span>
+              <span class="bg-emerald-400/20 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded">Pronto</span>
+            </div>
+            <div class="space-y-2 text-xs">
+              <div class="bg-emerald-950/40 p-3 rounded-xl border border-emerald-500/40">
+                <div class="flex justify-between font-bold text-white mb-1">
+                  <span>#1041 - Retirada Balcão</span>
+                  <span class="text-emerald-400">Aguardando</span>
+                </div>
+                <div class="text-zuma-muted text-[11px]">Cliente: Drª Camila V.</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- ABA 7: DASHBOARD DO GESTOR & DRE +250%                                    -->
+    <!-- ========================================================================= -->
+    <section id="tab-gestor-dre" class="tab-content hidden space-y-6">
+      
+      <div class="space-y-6">
+        
+        <!-- Header Financeiro e Metas -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zuma-border pb-3">
+          <div>
+            <h2 class="text-2xl font-black text-white">Cockpit Executivo Zuma +250%</h2>
+            <p class="text-xs text-zuma-muted">Acompanhamento das 4 Alavancas Multiplicadoras (1,4 × 1,5 × 1,4 × 1,2 = 3,5x) e DRE Projetada.</p>
+          </div>
+          <div class="text-xs bg-zuma-salmon/20 text-zuma-salmon border border-zuma-salmon/40 px-3 py-1.5 rounded-xl font-bold w-fit">
+            Plano Estratégico 90 Dias Ativo
+          </div>
+        </div>
+
+        <!-- 4 Indicadores Chave da DRE -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          
+          <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-5 space-y-1">
+            <span class="text-[11px] font-bold uppercase text-zuma-muted">Faturamento Mensal Alvo</span>
+            <div class="text-2xl font-black text-white">R$ 252.070,00</div>
+            <div class="text-[11px] text-emerald-400 font-semibold">+250% vs base histórica</div>
+          </div>
+
+          <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-5 space-y-1">
+            <span class="text-[11px] font-bold uppercase text-zuma-muted">CMV Alvo Global</span>
+            <div class="text-2xl font-black text-amber-400">31,5%</div>
+            <div class="text-[11px] text-zuma-muted font-semibold">Margem Bruta: 68,5%</div>
+          </div>
+
+          <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-5 space-y-1">
+            <span class="text-[11px] font-bold uppercase text-zuma-muted">Ticket Médio com IA</span>
+            <div class="text-2xl font-black text-zuma-salmon">R$ 138,50</div>
+            <div class="text-[11px] text-emerald-400 font-semibold">+20,4% via upsell Zumi</div>
+          </div>
+
+          <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-5 space-y-1">
+            <span class="text-[11px] font-bold uppercase text-zuma-muted">Lucro Líquido Mensal (25%)</span>
+            <div class="text-2xl font-black text-emerald-400">R$ 63.017,50</div>
+            <div class="text-[11px] text-emerald-400 font-semibold">+602% de lucro líquido</div>
+          </div>
+
+        </div>
+
+        <!-- Grade das 4 Alavancas Multiplicadoras -->
+        <div class="glassmorphism rounded-2xl p-6 border border-zuma-border space-y-4">
+          <h3 class="font-extrabold text-base text-white">As 4 Alavancas do Plano de Crescimento</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+            
+            <div class="bg-zuma-bg/70 p-4 rounded-xl border border-zuma-border/80 space-y-2">
+              <div class="flex items-center justify-between">
+                <strong class="text-white">1. Horas Abertas</strong>
+                <span class="bg-zuma-salmon/20 text-zuma-salmon font-bold px-2 py-0.5 rounded">× 1,4</span>
+              </div>
+              <p class="text-zuma-muted">Almoço Qui–Dom (11h–14h) + Segunda Express das 18h às 22h só delivery.</p>
+            </div>
+
+            <div class="bg-zuma-bg/70 p-4 rounded-xl border border-zuma-border/80 space-y-2">
+              <div class="flex items-center justify-between">
+                <strong class="text-white">2. Novos Clientes</strong>
+                <span class="bg-zuma-gold/20 text-zuma-gold font-bold px-2 py-0.5 rounded">× 1,5</span>
+              </div>
+              <p class="text-zuma-muted">Pixel Meta, Mascote Zumi, Indique-e-Ganhe (R$ 10) e entrega abaixo de 45 min.</p>
+            </div>
+
+            <div class="bg-zuma-bg/70 p-4 rounded-xl border border-zuma-border/80 space-y-2">
+              <div class="flex items-center justify-between">
+                <strong class="text-white">3. Frequência</strong>
+                <span class="bg-purple-500/20 text-purple-400 font-bold px-2 py-0.5 rounded">× 1,4</span>
+              </div>
+              <p class="text-zuma-muted">WhatsApp com Motor KyttoIA, Clube Zumi (R$ 29,90) e dias temáticos semanais.</p>
+            </div>
+
+            <div class="bg-zuma-bg/70 p-4 rounded-xl border border-zuma-border/80 space-y-2">
+              <div class="flex items-center justify-between">
+                <strong class="text-white">4. Ticket Médio</strong>
+                <span class="bg-emerald-500/20 text-emerald-400 font-bold px-2 py-0.5 rounded">× 1,2</span>
+              </div>
+              <p class="text-zuma-muted">Upsell de sodas artesanais e gunkans, combos casal/família e fim do preço riscado.</p>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- CRM Gastronômico: 7 Clientes VIP com Fatos de IA -->
+        <div class="glassmorphism rounded-2xl p-6 border border-zuma-border space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="font-extrabold text-base text-white">Clientes VIP no CRM Gastronômico 360°</h3>
+            <span class="text-xs text-zuma-muted font-medium">Sincronizado com WhatsApp KyttoIA</span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3" id="crm-vip-grid">
+            <!-- Renderizado dinamicamente -->
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- ABA 8: MAPA DE CALOR SEMANAL & PILOTO AUTOMÁTICO                          -->
+    <!-- ========================================================================= -->
+    <section id="tab-mapa-calor" class="tab-content hidden space-y-6">
+      
+      <div class="space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zuma-border pb-3">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="text-xs font-bold uppercase tracking-wider text-zuma-salmon">Piloto Automático KyttoIA</span>
+              <span class="bg-red-500/20 text-red-400 border border-red-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full">22 Horários Ociosos Detectados</span>
+            </div>
+            <h2 class="text-2xl font-black text-white">Mapa de Calor &amp; Recomendações de Ofertas</h2>
+            <p class="text-xs text-zuma-muted">O Zumi rastreia os horários vazios da semana e gera ofertas personalizadas para preencher a ociosidade sem canibalizar os picos.</p>
+          </div>
+          <div class="flex items-center space-x-2">
+            <a href="pilot.html" target="_blank" class="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-500 transition-all flex items-center space-x-1.5 shadow-lg shadow-emerald-900/30">
+              <span>🚀</span><span>Abrir Zuma Pilot Completo</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- KPIs Rápidos do Cockpit -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-4 space-y-1">
+            <span class="text-[11px] font-bold uppercase text-zuma-muted">Faturamento Semanal</span>
+            <div class="text-2xl font-black text-white">R$ 18.420,00</div>
+            <div class="text-[11px] text-emerald-400 font-semibold">+12% vs semana passada</div>
+          </div>
+          <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-4 space-y-1">
+            <span class="text-[11px] font-bold uppercase text-zuma-muted">Pedidos Concluídos</span>
+            <div class="text-2xl font-black text-white">247</div>
+            <div class="text-[11px] text-emerald-400 font-semibold">+9% em volume</div>
+          </div>
+          <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-4 space-y-1">
+            <span class="text-[11px] font-bold uppercase text-zuma-muted">Ticket Médio</span>
+            <div class="text-2xl font-black text-zuma-salmon">R$ 74,60</div>
+            <div class="text-[11px] text-emerald-400 font-semibold">+3% com upsell ativo</div>
+          </div>
+          <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-4 space-y-1">
+            <span class="text-[11px] font-bold uppercase text-zuma-muted">Retenção 30 Dias</span>
+            <div class="text-2xl font-black text-amber-400">31%</div>
+            <div class="text-[11px] text-amber-400 font-semibold">Meta com KyttoIA: 45%</div>
+          </div>
+        </div>
+
+        <!-- Grid Principal: Mapa de Calor + Feed de Ações -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          
+          <!-- Mapa de Calor Semanal (7 Colunas) -->
+          <div class="lg:col-span-7 bg-zuma-surface border border-zuma-border rounded-2xl p-5 space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="font-extrabold text-white text-base">Heatmap de Ocupação Semanal</h3>
+                <p class="text-xs text-zuma-muted">Pedidos médios por hora. Bordas laranjas destacam oportunidades de ataque da IA.</p>
+              </div>
+              <span class="bg-zuma-salmon/20 text-zuma-salmon text-[11px] font-bold px-2.5 py-1 rounded-full">Tangará da Serra</span>
+            </div>
+
+            <!-- Tabela Visual de Calor -->
+            <div class="overflow-x-auto custom-scrollbar">
+              <div id="heatmap-container" class="min-w-[480px] space-y-1 text-xs">
+                <!-- Renderizado via JS -->
+              </div>
+            </div>
+
+            <!-- Legenda -->
+            <div class="flex flex-wrap items-center gap-3 pt-2 text-[11px] text-zuma-muted border-t border-zuma-border/60">
+              <div class="flex items-center space-x-1.5"><span class="w-3.5 h-3.5 rounded bg-zinc-800 border border-zinc-700"></span><span>Fechado</span></div>
+              <div class="flex items-center space-x-1.5"><span class="w-3.5 h-3.5 rounded bg-orange-950/60 border border-orange-900/80"></span><span>Fraco (1–3)</span></div>
+              <div class="flex items-center space-x-1.5"><span class="w-3.5 h-3.5 rounded bg-orange-800/80"></span><span>Médio (4–8)</span></div>
+              <div class="flex items-center space-x-1.5"><span class="w-3.5 h-3.5 rounded bg-orange-600"></span><span>Forte (9–17)</span></div>
+              <div class="flex items-center space-x-1.5"><span class="w-3.5 h-3.5 rounded bg-red-600 font-bold"></span><span>Pico (18+)</span></div>
+              <div class="flex items-center space-x-1.5"><span class="w-3.5 h-3.5 rounded border-2 border-zuma-salmon"></span><span class="text-zuma-salmon font-bold">Alvo do Zumi</span></div>
+            </div>
+          </div>
+
+          <!-- Piloto Automático: Feed de Ações Recomendadas -->
+          <div class="lg:col-span-5 bg-zuma-surface border border-zuma-border rounded-2xl p-5 space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="font-extrabold text-white text-base">Ações do Piloto Automático</h3>
+                <p class="text-xs text-zuma-muted">Geradas pelo Motor KyttoIA 2.5 Flash para os horários ociosos.</p>
+              </div>
+              <button onclick="gerarNovoPlanoIA()" class="text-xs bg-zuma-salmon hover:bg-orange-600 text-white font-bold px-3 py-1.5 rounded-lg transition-all">
+                Atualizar com IA
+              </button>
+            </div>
+
+            <div id="feed-acoes-container" class="space-y-3">
+              <!-- Renderizado via JS -->
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- ABA 9: ANÁLISE DE MERCADO & INTELIGÊNCIA IA                               -->
+    <!-- ========================================================================= -->
+    <section id="tab-mercado-ia" class="tab-content hidden space-y-6">
+      
+      <div class="space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zuma-border pb-3">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="text-xs font-bold uppercase tracking-wider text-zuma-gold">Inteligência Competitiva</span>
+              <span class="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full">Tangará da Serra · 112k hab</span>
+            </div>
+            <h2 class="text-2xl font-black text-white">Benchmarking de Mercado &amp; Oportunidades</h2>
+            <p class="text-xs text-zuma-muted">Mapeamento da concorrência gastronômica oriental em Tangará da Serra e vetores de expansão analisados pelo Motor KyttoIA 2.5 Flash.</p>
+          </div>
+        </div>
+
+        <!-- Comparativo de Players em Tangará da Serra -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" id="concorrentes-cards">
+          <!-- Renderizado via JS -->
+        </div>
+
+        <!-- Radar de Oportunidades de Faturamento KyttoIA -->
+        <div class="glassmorphism rounded-2xl p-6 border border-zuma-border space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="font-extrabold text-base text-white">Radar de Oportunidades de Alto Impacto</h3>
+              <p class="text-xs text-zuma-muted">Quatro avenidas de crescimento com faturamento estimado adicional de +R$ 95.175,00/mês.</p>
+            </div>
+            <span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold px-3 py-1 rounded-full">
+              Total Estimado: +R$ 95.175/mês
+            </span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="radar-oportunidades-grid">
+            <!-- Renderizado via JS -->
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- ABA 10: SIMULADOR DE BASE DE CLIENTES & DELIVERY (RFM)                    -->
+    <!-- ========================================================================= -->
+    <section id="tab-simulador-crm" class="tab-content hidden space-y-6">
+      
+      <div class="space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zuma-border pb-3">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="text-xs font-bold uppercase tracking-wider text-purple-400">CRM Preditivo &amp; Delivery</span>
+              <span class="bg-purple-500/20 text-purple-400 border border-purple-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full">1.388 Clientes Rastreados</span>
+            </div>
+            <h2 class="text-2xl font-black text-white">Simulador de Base &amp; Propensão de Compra</h2>
+            <p class="text-xs text-zuma-muted">Simule disparos inteligentes de campanhas no WhatsApp e meça o retorno financeiro com base no comportamento de consumo.</p>
+          </div>
+        </div>
+
+        <!-- Cards dos 5 Segmentos RFM -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3" id="rfm-segmentos-cards">
+          <!-- Renderizado via JS -->
+        </div>
+
+        <!-- Simulador Interativo de Campanha -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          
+          <!-- Painel de Parâmetros -->
+          <div class="lg:col-span-6 bg-zuma-surface border border-zuma-border rounded-2xl p-6 space-y-4">
+            <h3 class="font-extrabold text-white text-base">Parâmetros da Campanha de Delivery</h3>
+            
+            <div class="space-y-3 text-xs">
+              <div>
+                <label class="block text-zuma-muted font-bold mb-1">Segmento Alvo:</label>
+                <select id="sim-segmento-select" onchange="calcularSimulacaoDelivery()" class="w-full bg-zuma-bg border border-zuma-border text-white rounded-xl p-2.5">
+                  <option value="fieis">Clientes Fiéis (186 contatos · R$ 92,50 ticket)</option>
+                  <option value="novos">Novos Clientes (412 contatos · R$ 58,20 ticket)</option>
+                  <option value="sumidos" selected>Clientes Sumidos 30-90 dias (538 contatos · R$ 74,00 ticket)</option>
+                  <option value="vip">Baleias / VIP Omakase (94 contatos · R$ 198,00 ticket)</option>
+                  <option value="leads_quiz">Leads do Quiz do Zumi (158 contatos · R$ 65,00 ticket)</option>
+                </select>
+              </div>
+
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-zuma-muted font-bold mb-1">Dia do Envio:</label>
+                  <select id="sim-dia-select" onchange="calcularSimulacaoDelivery()" class="w-full bg-zuma-bg border border-zuma-border text-white rounded-xl p-2.5">
+                    <option value="terca">Terça (Dia Fraco)</option>
+                    <option value="quarta">Quarta (Dia Fraco)</option>
+                    <option value="quinta">Quinta (Rodada do Zumi)</option>
+                    <option value="segunda">Segunda Express</option>
+                    <option value="domingo">Domingo Início</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label class="block text-zuma-muted font-bold mb-1">Tipo de Oferta:</label>
+                  <select id="sim-oferta-select" onchange="calcularSimulacaoDelivery()" class="w-full bg-zuma-bg border border-zuma-border text-white rounded-xl p-2.5">
+                    <option value="hot_dobro">Hot Roll em Dobro até 20h</option>
+                    <option value="cupom_15" selected>Cupom R$ 15,00 + Raspadinha</option>
+                    <option value="frete_gratis">Frete Grátis acima de R$ 80</option>
+                    <option value="degustacao">Degustação Cortesia (Sem Desconto)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <label class="text-zuma-muted font-bold">Percentual da Base Selecionada:</label>
+                  <span id="sim-alcance-valor" class="text-white font-bold">100%</span>
+                </div>
+                <input type="range" id="sim-alcance-slider" min="20" max="100" step="10" value="100" oninput="calcularSimulacaoDelivery()" class="w-full accent-zuma-salmon cursor-pointer">
+              </div>
+
+              <!-- Mensagem Simulada do Zumi -->
+              <div class="p-3.5 bg-zuma-bg rounded-xl border border-zuma-border space-y-1">
+                <span class="text-[10px] font-bold uppercase text-zuma-muted">Prévia WhatsApp (Voz do Zumi):</span>
+                <p id="sim-preview-msg" class="text-xs text-white leading-relaxed font-sans"></p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Painel de Resultados Preditivos -->
+          <div class="lg:col-span-6 bg-zuma-surface border border-zuma-border rounded-2xl p-6 space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="font-extrabold text-white text-base">Retorno Preditivo com KyttoIA</h3>
+              <span class="bg-emerald-500/20 text-emerald-400 text-xs font-bold px-2.5 py-0.5 rounded-full">Simulação em Tempo Real</span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <div class="bg-zuma-bg p-3.5 rounded-xl border border-zuma-border/60">
+                <span class="text-[11px] text-zuma-muted">Destinatários Reais</span>
+                <div id="sim-res-contatos" class="text-xl font-black text-white">538</div>
+                <div class="text-[10px] text-emerald-400 font-semibold">94% taxa de entrega</div>
+              </div>
+
+              <div class="bg-zuma-bg p-3.5 rounded-xl border border-zuma-border/60">
+                <span class="text-[11px] text-zuma-muted">Taxa de Conversão</span>
+                <div id="sim-res-conversao" class="text-xl font-black text-zuma-salmon">8,5%</div>
+                <div class="text-[10px] text-zuma-muted font-semibold">Modelagem preditiva Kytto</div>
+              </div>
+
+              <div class="bg-zuma-bg p-3.5 rounded-xl border border-zuma-border/60">
+                <span class="text-[11px] text-zuma-muted">Pedidos Extras Gerados</span>
+                <div id="sim-res-pedidos" class="text-xl font-black text-emerald-400">46 pedidos</div>
+                <div class="text-[10px] text-emerald-400 font-semibold">Em até 48 horas</div>
+              </div>
+
+              <div class="bg-zuma-bg p-3.5 rounded-xl border border-zuma-border/60">
+                <span class="text-[11px] text-zuma-muted">Faturamento Projetado</span>
+                <div id="sim-res-faturamento" class="text-xl font-black text-white">R$ 3.404,00</div>
+                <div class="text-[10px] text-emerald-400 font-semibold">Lucro Líquido: R$ 1.157,00</div>
+              </div>
+            </div>
+
+            <button onclick="dispararSimulacaoWhatsApp()" class="w-full py-3 rounded-xl bg-zuma-salmon hover:bg-orange-600 text-white font-bold text-xs transition-all shadow-lg shadow-orange-950/40 flex items-center justify-center space-x-2">
+              <span>📲</span><span>Disparar Campanha Simulada no WhatsApp</span>
+            </button>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- ABA 11: MOTOR DE CLIMA & GATILHOS METEOROLÓGICOS                          -->
+    <!-- ========================================================================= -->
+    <section id="tab-clima-delivery" class="tab-content hidden space-y-6">
+      
+      <div class="space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zuma-border pb-3">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="text-xs font-bold uppercase tracking-wider text-sky-400">Estação Meteorológica Kytto v2</span>
+              <span class="bg-sky-500/20 text-sky-400 border border-sky-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full">Tangará da Serra - MT</span>
+            </div>
+            <h2 class="text-2xl font-black text-white">Clima &amp; Gatilhos Automáticos de Delivery</h2>
+            <p class="text-xs text-zuma-muted">A IA monitora o clima local e altera dinamicamente os destaques do cardápio e dispara ofertas de WhatsApp de acordo com a temperatura e chuva.</p>
+          </div>
+        </div>
+
+        <!-- Seletor de Condição Climática Simulada -->
+        <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-5 space-y-4">
+          <span class="text-xs font-bold uppercase text-zuma-muted">Selecione o Clima para Testar a Resposta da IA:</span>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="clima-botoes-container">
+            <!-- Renderizado via JS -->
+          </div>
+        </div>
+
+        <!-- Painel de Reação da IA ao Clima -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          
+          <!-- Card de Impacto no Salão vs Delivery -->
+          <div class="lg:col-span-5 bg-zuma-surface border border-zuma-border rounded-2xl p-6 space-y-4">
+            <div class="flex items-center space-x-3">
+              <span id="clima-icone-grande" class="text-4xl">⛈️</span>
+              <div>
+                <h3 id="clima-nome-ativo" class="font-extrabold text-white text-base">Chuva Torrencial Tropical</h3>
+                <div class="text-xs text-zuma-muted"><span id="clima-temp-ativa">22</span>°C em Tangará da Serra</div>
+              </div>
+            </div>
+
+            <div class="space-y-3 pt-2 text-xs">
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-zuma-muted">Impacto no Salão:</span>
+                  <span id="clima-impacto-salao" class="font-bold text-red-400">-75% (Esvaziamento)</span>
+                </div>
+                <div class="w-full bg-zinc-800 h-2 rounded-full overflow-hidden">
+                  <div id="clima-bar-salao" class="bg-red-500 h-full w-[25%] transition-all"></div>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-zuma-muted">Impacto no Delivery:</span>
+                  <span id="clima-impacto-delivery" class="font-bold text-emerald-400">+145% (Explosão de Pedidos)</span>
+                </div>
+                <div class="w-full bg-zinc-800 h-2 rounded-full overflow-hidden">
+                  <div id="clima-bar-delivery" class="bg-emerald-500 h-full w-[95%] transition-all"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="p-3 bg-zuma-bg rounded-xl border border-zuma-border text-xs space-y-1">
+              <strong class="text-white block">Categoria Destaque no Delivery:</strong>
+              <p id="clima-categoria-destaque" class="text-amber-400 font-semibold">Pratos Quentes, Lamens e Yakisobas</p>
+            </div>
+          </div>
+
+          <!-- Card de Gatilho WhatsApp & Campanha Ativada -->
+          <div class="lg:col-span-7 bg-zuma-surface border border-zuma-border rounded-2xl p-6 space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="font-extrabold text-white text-base">Gatilho Meteorológico Automático</h3>
+              <span class="bg-sky-500/20 text-sky-400 text-xs font-bold px-2.5 py-0.5 rounded-full">Disparo Autônomo KyttoIA</span>
+            </div>
+
+            <div class="p-4 bg-zuma-bg rounded-xl border border-zuma-border space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] font-bold uppercase text-zuma-muted">Mensagem Disparada aos Clientes:</span>
+                <span id="clima-cupom-badge" class="bg-zuma-salmon/20 text-zuma-salmon border border-zuma-salmon/40 text-[10px] font-bold px-2 py-0.5 rounded">Cupom: ZUMICHUVA</span>
+              </div>
+              <p id="clima-texto-gatilho" class="text-xs text-white leading-relaxed font-sans"></p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 text-xs">
+              <div class="bg-zuma-bg/70 p-3 rounded-xl border border-zuma-border">
+                <strong class="text-white block mb-0.5">Operação de Motoboys:</strong>
+                <span class="text-zuma-muted text-[11px]">Capas seladas e mochilas térmicas ativadas para proteção total dos sushis.</span>
+              </div>
+              <div class="bg-zuma-bg/70 p-3 rounded-xl border border-zuma-border">
+                <strong class="text-white block mb-0.5">Tempo Médio de Entrega:</strong>
+                <span class="text-emerald-400 font-bold text-[11px]">35 a 45 min garantidos</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- ABA 12: HUB OMNICHANNEL (IFOOD, KEETO, KYTTO & WHATSAPP)                 -->
+    <!-- ========================================================================= -->
+    <section id="tab-hub-omnichannel" class="tab-content hidden space-y-6">
+      
+      <div class="space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zuma-border pb-3">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="text-xs font-bold uppercase tracking-wider text-emerald-400">Hub Central de Canais</span>
+              <span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full">Sincronização 100% em Tempo Real</span>
+            </div>
+            <h2 class="text-2xl font-black text-white">Hub Integrador Omnichannel &amp; Economia</h2>
+            <p class="text-xs text-zuma-muted">Monitore iFood, Keeto, Kytto Delivery, WhatsApp e Salão em uma única tela e calcule a economia ao migrar para canais próprios.</p>
+          </div>
+        </div>
+
+        <!-- Comparativo de Canais de Venda -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" id="omnichannel-canais-grid">
+          <!-- Renderizado via JS -->
+        </div>
+
+        <!-- Calculadora de Economia de Taxas (Desintermediação do iFood) -->
+        <div class="glassmorphism rounded-2xl p-6 border border-zuma-border space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="font-extrabold text-base text-white">Calculadora de Economia de Comissões</h3>
+              <p class="text-xs text-zuma-muted">Veja quanto o Zuma economiza canalizando a clientela do iFood para o Kytto Delivery Oficial e WhatsApp.</p>
+            </div>
+            <span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold px-3 py-1 rounded-full">
+              Lucro Direto no Caixa
+            </span>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+            <div class="lg:col-span-7 space-y-4 text-xs">
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-zuma-muted font-bold">Faturamento Mensal no iFood:</span>
+                  <span id="omni-fat-ifood-val" class="text-white font-bold">R$ 50.000,00</span>
+                </div>
+                <input type="range" id="omni-fat-ifood-slider" min="10000" max="100000" step="5000" value="50000" oninput="calcularEconomiaOmnichannel()" class="w-full accent-zuma-salmon cursor-pointer">
+              </div>
+
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-zuma-muted font-bold">Taxa de Migração para Canal Próprio (Kytto):</span>
+                  <span id="omni-migracao-val" class="text-emerald-400 font-bold">50% da Base</span>
+                </div>
+                <input type="range" id="omni-migracao-slider" min="10" max="90" step="5" value="50" oninput="calcularEconomiaOmnichannel()" class="w-full accent-emerald-500 cursor-pointer">
+              </div>
+
+              <div class="p-3 bg-zuma-bg/80 rounded-xl border border-zuma-border space-y-1">
+                <strong class="text-white block">Estratégia de Migração Ninja:</strong>
+                <p class="text-zuma-muted text-[11px] leading-relaxed">
+                  Colocamos um encarte magnético no unboxing da embalagem do iFood: <em>"Gostou do Zuma? Peça direto pelo app oficial do Zumi no WhatsApp e ganhe 10% de cashback + frete grátis na primeira compra"</em>.
+                </p>
+              </div>
+            </div>
+
+            <div class="lg:col-span-5 bg-zuma-bg p-5 rounded-2xl border border-zuma-border space-y-3 text-center">
+              <span class="text-[11px] font-bold uppercase text-zuma-muted">Economia Mensal em Comissões:</span>
+              <div id="omni-economia-mensal" class="text-3xl font-black text-emerald-400">R$ 5.750,00</div>
+              <div class="text-xs text-zuma-muted">Por ano: <strong id="omni-economia-anual" class="text-white font-black">R$ 69.000,00</strong> a mais no lucro líquido</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+  </main>
+
+  <!-- ================= GAVETA LATERAL DO CARRINHO (DRAWER) ================= -->
+  <div id="cart-drawer-overlay" onclick="toggleCartDrawer(false)" 
+       class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden transition-opacity"></div>
+
+  <div id="cart-drawer" 
+       class="fixed top-0 right-0 bottom-0 w-full max-w-md bg-zuma-surface border-l border-zuma-border z-50 flex flex-col justify-between shadow-2xl translate-x-full transition-transform duration-300">
+    
+    <!-- Topo do Carrinho -->
+    <div class="p-5 border-b border-zuma-border flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <span class="text-xl">🛍️</span>
+        <h3 class="font-extrabold text-white text-base">Seu Pedido Zuma</h3>
+      </div>
+      <button onclick="toggleCartDrawer(false)" class="text-zuma-muted hover:text-white p-1 rounded-lg">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- Barra de Progresso de Frete Grátis -->
+    <div class="px-5 py-3 bg-zuma-bg/70 border-b border-zuma-border/60">
+      <div class="flex justify-between text-xs font-semibold mb-1">
+        <span id="frete-gratis-txt" class="text-zuma-muted">Faltam R$ 120,00 para Frete Grátis</span>
+        <span id="frete-gratis-meta" class="text-zuma-gold">Meta: R$ 120</span>
+      </div>
+      <div class="w-full bg-zuma-border h-2 rounded-full overflow-hidden">
+        <div id="frete-gratis-bar" class="bg-gradient-to-r from-zuma-salmon to-zuma-gold h-full w-0 transition-all duration-300"></div>
+      </div>
+    </div>
+
+    <!-- Lista de Itens do Carrinho -->
+    <div id="cart-items-list" class="flex-grow overflow-y-auto p-5 space-y-3 custom-scrollbar">
+      <!-- Renderizado dinamicamente via JS -->
+      <div id="cart-empty-message" class="text-center py-12 text-zuma-muted text-xs">
+        Seu carrinho está vazio.<br>Escolha seus pratos favoritos do cardápio!
+      </div>
+    </div>
+
+    <!-- Resumo de Valores e Checkout -->
+    <div class="p-5 border-t border-zuma-border bg-zuma-bg/90 space-y-3">
+      
+      <!-- Seletor de Bairro de Tangará da Serra -->
+      <div>
+        <label class="block text-[11px] font-bold uppercase text-zuma-muted mb-1">Bairro de Entrega (Tangará da Serra)</label>
+        <select id="checkout-bairro" onchange="atualizarTaxaEntrega()" class="w-full bg-zuma-surface border border-zuma-border rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-zuma-salmon">
+          <option value="10.00">Jardim Cidade Alta (R$ 10,00)</option>
+          <option value="12.00" selected>Jardim Europa (R$ 12,00)</option>
+          <option value="12.00">Centro / Vila Alta (R$ 12,00)</option>
+          <option value="14.00">Tarumã / Monte Líbano (R$ 14,00)</option>
+          <option value="16.00">Jardim dos Ipês (R$ 16,00)</option>
+          <option value="0.00">Retirada no Balcão (Grátis)</option>
+        </select>
+      </div>
+
+      <!-- Cupom Promocional -->
+      <div class="flex space-x-2">
+        <input type="text" id="input-cupom" placeholder="Cupom promocional..." uppercase
+               class="flex-grow bg-zuma-surface border border-zuma-border rounded-lg px-3 py-2 text-xs text-white placeholder-zuma-muted focus:outline-none focus:border-zuma-salmon">
+        <button onclick="aplicarCupomInput()" class="px-3 py-2 bg-zuma-surface hover:bg-zuma-surfaceLight border border-zuma-border rounded-lg text-xs font-bold text-zuma-salmon">
+          Aplicar
+        </button>
+      </div>
+
+      <!-- Linhas de Total -->
+      <div class="space-y-1.5 text-xs">
+        <div class="flex justify-between text-zuma-muted">
+          <span>Subtotal</span>
+          <span id="cart-subtotal" class="text-white font-semibold">R$ 0,00</span>
+        </div>
+        <div class="flex justify-between text-zuma-muted">
+          <span>Taxa de Entrega</span>
+          <span id="cart-taxa-entrega" class="text-white font-semibold">R$ 12,00</span>
+        </div>
+        <div id="cart-desconto-row" class="hidden flex justify-between text-emerald-400 font-semibold">
+          <span>Desconto Cupom</span>
+          <span id="cart-desconto-val">- R$ 0,00</span>
+        </div>
+        <div class="flex justify-between text-base font-black text-white pt-2 border-t border-zuma-border/60">
+          <span>Total</span>
+          <span id="cart-total" class="text-zuma-salmon">R$ 12,00</span>
+        </div>
+      </div>
+
+      <!-- Botão de Checkout via WhatsApp -->
+      <button onclick="finalizarPedidoWhatsApp()" 
+              class="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-black py-3.5 px-4 rounded-xl text-xs uppercase tracking-wider flex items-center justify-center space-x-2 shadow-lg transition-all">
+        <span>📲 Enviar Pedido para o WhatsApp</span>
+      </button>
+
+    </div>
+
+  </div>
+
+  <!-- ================= FOOTER ================= -->
+  <footer class="border-t border-zuma-border bg-zuma-surface/80 text-zuma-muted text-xs py-8 mt-12">
+    <div class="max-w-7xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4 text-center md:text-left">
+      <div class="flex items-center space-x-3">
+        <img src="zumi-mascote.svg" alt="Zumi" class="w-8 h-8 rounded-full bg-black/40">
+        <div>
+          <strong class="text-white">Zuma Cozinha Oriental LTDA</strong> · CNPJ: 36.296.848/0001-57<br>
+          Av. Brasil, 1605 S, Jardim Cidade Alta, Tangará da Serra - MT
+        </div>
+      </div>
+      <div>
+        Alimentado pelo <strong class="text-zuma-salmon">Motor KyttoIA 2.5 Flash</strong> e plataforma <strong class="text-white">Kytto</strong>.
+      </div>
+    </div>
+  </footer>
+
+  <!-- ================= SCRIPT DE DADOS E INTERATIVIDADE ================= -->
+  <script>
+    // Estado da Aplicação
+    let cardapioGeral = [];
+    let categoriasGerais = [];
+    let carrinho = [];
+    let categoriaAtiva = 'todos';
+    let setorAtivo = 'todos';
+    let modalidadeAtual = 'delivery';
+    let cupomAplicado = null;
+    let taxaEntregaAtual = 12.00;
+
+    // Inicialização da Página
+    document.addEventListener('DOMContentLoaded', async () => {
+      await carregarDadosBackend();
+      renderizarCategorias();
+      filtrarCardapio();
+      renderizarMesas();
+      renderizarCrmVip();
+      iniciarCanvasRaspadinha();
+      renderizarHeatmap();
+      renderizarFeedAcoes();
+      renderizarMercadoIA();
+      renderizarSimuladorDelivery();
+      calcularSimulacaoDelivery();
+      renderizarClimaDelivery();
+      renderizarOmnichannel();
+      calcularEconomiaOmnichannel();
+    });
+
+    // Carregar dados de cardápio e metadados
+    async function carregarDadosBackend() {
+      try {
+        const resp = await fetch('/api/public/zuma/cardapio');
+        if (resp.ok) {
+          const data = await resp.json();
+          cardapioGeral = data.itens || [];
+          categoriasGerais = data.categorias || [];
+        } else {
+          carregarFallbackLocal();
+        }
+      } catch (err) {
+        carregarFallbackLocal();
+      }
+    }
+
+    // Fallback de catálogo caso offline
+    function carregarFallbackLocal() {
+      categoriasGerais = [
+        { codigo: "combos", nome: "COMBOS", icone: "🍱" },
+        { codigo: "especiais", nome: "ESPECIAIS", icone: "⭐" },
+        { codigo: "sashimis", nome: "SASHIMIS & NIGUIRIS", icone: "🍣" },
+        { codigo: "uramakis", nome: "URAMAKIS", icone: "🍙" },
+        { codigo: "hot-rolls", nome: "HOT ROLLS", icone: "🔥" },
+        { codigo: "pratos-quentes", nome: "PRATOS QUENTES", icone: "🍲" },
+        { codigo: "sodas", nome: "SODAS ARTESANAIS", icone: "🍹" }
+      ];
+
+      cardapioGeral = [
+        { id: "1", codigo_pdv: "ZUM-001", nome: "Combinado Individual 18 Peças", preco: 62.00, categoria_codigo: "combos", setor_producao: "sushi_bar", foto_url: "https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp", descricao: "4 sashimis de salmão fresco, 4 niguiris, 4 uramakis filadélfia e 6 hossomakis de salmão." },
+        { id: "2", codigo_pdv: "ZUM-003", nome: "Combinado Zuma Casal 40 Peças", preco: 139.00, categoria_codigo: "combos", setor_producao: "sushi_bar", foto_url: "https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp", descricao: "Perfeito para duas pessoas. Variedade nobre de sashimis, uramakis especiais, gunkans e hot rolls." },
+        { id: "3", codigo_pdv: "ZUM-004", nome: "Especial Zuma Supremo 68 Peças", preco: 219.00, categoria_codigo: "especiais", setor_producao: "sushi_bar", foto_url: "https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp", descricao: "A grande criação do Chef. Sashimis maçaricados trufados, gunkans flambados com geleia de pimenta e peças nobres." },
+        { id: "4", codigo_pdv: "ZUM-031", nome: "Gunkan Zuma Flambado (2un)", preco: 27.00, categoria_codigo: "especiais", setor_producao: "sushi_bar", foto_url: "https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp", descricao: "Salmão envolto com recheio cremoso maçaricado com azeite trufado e gotas de tarê artesanal." },
+        { id: "5", codigo_pdv: "ZUM-071", nome: "Hot Roll Filadélfia Especial (10un)", preco: 42.00, categoria_codigo: "hot-rolls", setor_producao: "cozinha", foto_url: "https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp", descricao: "Empanado super crocante na farinha panko, salmão fresco em cubos e cream cheese generoso." },
+        { id: "6", codigo_pdv: "ZUM-115", nome: "Yakissoba Tradicional Zuma", preco: 48.00, categoria_codigo: "pratos-quentes", setor_producao: "cozinha", foto_url: "https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp", descricao: "Massa artesanal frita na hora com legumes frescos da horta e tiras nobres de carne e frango." },
+        { id: "7", codigo_pdv: "ZUM-160", nome: "Soda Italiana Artesanal de Maçã Verde 500ml", preco: 18.00, categoria_codigo: "sodas", setor_producao: "bar", foto_url: "https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp", descricao: "Xarope importado concentrado de maçã verde com água gaseificada bem gelada e rodelas cítricas." }
+      ];
+    }
+
+    // Navegação entre Abas
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('bg-zuma-salmon', 'text-white');
+        btn.classList.add('text-zuma-muted');
+      });
+
+      const target = document.getElementById(`tab-${tabId}`);
+      const btn = document.getElementById(`tab-btn-${tabId}`);
+      if (target) target.classList.remove('hidden');
+      if (btn) {
+        btn.classList.remove('text-zuma-muted');
+        btn.classList.add('bg-zuma-salmon', 'text-white');
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Renderizar Categorias no Carrossel Horizontal
+    function renderizarCategorias() {
+      const container = document.getElementById('categorias-container');
+      if (!container) return;
+
+      container.innerHTML = `
+        <button onclick="setCategoria('todos')" 
+                class="categoria-chip px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${categoriaAtiva === 'todos' ? 'bg-zuma-salmon text-white border-zuma-salmon' : 'bg-zuma-surface text-zuma-muted border-zuma-border hover:text-white'}">
+          Todas
+        </button>
+      `;
+
+      categoriasGerais.forEach(cat => {
+        container.innerHTML += `
+          <button onclick="setCategoria('${cat.codigo}')" 
+                  class="categoria-chip px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${categoriaAtiva === cat.codigo ? 'bg-zuma-salmon text-white border-zuma-salmon' : 'bg-zuma-surface text-zuma-muted border-zuma-border hover:text-white'}">
+            ${cat.nome}
+          </button>
+        `;
+      });
+    }
+
+    function setCategoria(cat) {
+      categoriaAtiva = cat;
+      renderizarCategorias();
+      filtrarCardapio();
+    }
+
+    function setFiltroSetor(setor) {
+      setorAtivo = setor;
+      document.querySelectorAll('.filtro-setor-btn').forEach(b => {
+        b.classList.remove('bg-zuma-salmon', 'text-white');
+        b.classList.add('bg-zuma-surface', 'text-zuma-muted');
+      });
+      event.target.classList.remove('bg-zuma-surface', 'text-zuma-muted');
+      event.target.classList.add('bg-zuma-salmon', 'text-white');
+      filtrarCardapio();
+    }
+
+    function limparFiltros() {
+      categoriaAtiva = 'todos';
+      setorAtivo = 'todos';
+      document.getElementById('input-busca').value = '';
+      renderizarCategorias();
+      filtrarCardapio();
+    }
+
+    // Filtrar e Renderizar Cardápio
+    function filtrarCardapio() {
+      const termo = (document.getElementById('input-busca')?.value || '').toLowerCase().trim();
+      const grid = document.getElementById('produtos-grid');
+      const empty = document.getElementById('empty-state');
+      if (!grid) return;
+
+      let filtrados = cardapioGeral.filter(p => {
+        const matchCat = categoriaAtiva === 'todos' || p.categoria_codigo === categoriaAtiva;
+        const matchSetor = setorAtivo === 'todos' || p.setor_producao === setorAtivo;
+        const matchBusca = !termo || p.nome?.toLowerCase().includes(termo) || p.descricao?.toLowerCase().includes(termo);
+        return matchCat && matchSetor && matchBusca;
+      });
+
+      if (filtrados.length === 0) {
+        grid.innerHTML = '';
+        empty.classList.remove('hidden');
+        return;
+      }
+
+      empty.classList.add('hidden');
+      grid.innerHTML = filtrados.map(p => `
+        <div class="bg-zuma-surface border border-zuma-border hover:border-zuma-salmon/60 rounded-2xl overflow-hidden flex flex-col justify-between transition-all duration-200 hover:-translate-y-1 shadow-md">
+          <div class="relative h-44 bg-zuma-card overflow-hidden">
+            <img src="${p.foto_url || 'https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp'}" 
+                 alt="${p.nome}" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                 onerror="this.src='https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp'">
+            <div class="absolute top-2 left-2 bg-black/70 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] font-bold text-zuma-muted border border-white/10 uppercase">
+              ${p.setor_producao === 'sushi_bar' ? '🍣 Sushi Bar' : (p.setor_producao === 'cozinha' ? '🍲 Cozinha' : (p.setor_producao === 'bar' ? '🍹 Bar' : '🥢 Balcão'))}
+            </div>
+            ${p.codigo_pdv ? `<div class="absolute top-2 right-2 bg-black/60 px-1.5 py-0.5 rounded text-[10px] font-mono text-zuma-muted">${p.codigo_pdv}</div>` : ''}
+          </div>
+          <div class="p-4 flex-grow flex flex-col justify-between space-y-3">
+            <div>
+              <h3 class="font-extrabold text-sm text-white line-clamp-1">${p.nome}</h3>
+              <p class="text-xs text-zuma-muted line-clamp-2 mt-1">${p.descricao || 'Preparo artesanal e fresco do chef sushiman com ingredientes nobres.'}</p>
+            </div>
+            <div class="flex items-center justify-between pt-2 border-t border-zuma-border/60">
+              <div class="text-base font-black text-white">R$ ${parseFloat(p.preco).toFixed(2).replace('.', ',')}</div>
+              <button onclick="adicionarAoCarrinho('${p.id}')" 
+                      class="px-3.5 py-1.5 rounded-xl bg-zuma-salmon hover:bg-zuma-salmonLight text-white text-xs font-bold transition-all shadow-sm flex items-center space-x-1">
+                <span>+</span><span>Adicionar</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // Gestão do Carrinho
+    function adicionarAoCarrinho(produtoId) {
+      const produto = cardapioGeral.find(p => p.id === produtoId);
+      if (!produto) return;
+
+      const existente = carrinho.find(i => i.id === produtoId);
+      if (existente) {
+        existente.qtd += 1;
+      } else {
+        carrinho.push({ ...produto, qtd: 1 });
+      }
+
+      atualizarCarrinho();
+      toggleCartDrawer(true);
+    }
+
+    function alterarQtdCarrinho(produtoId, delta) {
+      const item = carrinho.find(i => i.id === produtoId);
+      if (!item) return;
+
+      item.qtd += delta;
+      if (item.qtd <= 0) {
+        carrinho = carrinho.filter(i => i.id !== produtoId);
+      }
+
+      atualizarCarrinho();
+    }
+
+    function atualizarCarrinho() {
+      const badge = document.getElementById('cart-badge');
+      const list = document.getElementById('cart-items-list');
+      const empty = document.getElementById('cart-empty-message');
+      const subtotalEl = document.getElementById('cart-subtotal');
+      const taxaEl = document.getElementById('cart-taxa-entrega');
+      const totalEl = document.getElementById('cart-total');
+      const freteBar = document.getElementById('frete-gratis-bar');
+      const freteTxt = document.getElementById('frete-gratis-txt');
+
+      const totalQtd = carrinho.reduce((acc, i) => acc + i.qtd, 0);
+      const subtotal = carrinho.reduce((acc, i) => acc + (parseFloat(i.preco) * i.qtd), 0);
+      
+      badge.textContent = totalQtd;
+
+      // Cálculo de Frete Grátis
+      let taxa = modalidadeAtual === 'salao' || modalidadeAtual === 'retirada' ? 0.00 : taxaEntregaAtual;
+      if (subtotal >= 120.00 || (cupomAplicado && cupomAplicado.tipo === 'frete')) {
+        taxa = 0.00;
+        freteTxt.innerHTML = '<span class="text-emerald-400 font-bold">🎉 Parabéns! Você ganhou Frete Grátis!</span>';
+        freteBar.style.width = '100%';
+      } else {
+        const falta = (120.00 - subtotal).toFixed(2).replace('.', ',');
+        const pct = Math.min(100, (subtotal / 120.00) * 100);
+        freteTxt.textContent = `Faltam R$ ${falta} para Frete Grátis`;
+        freteBar.style.width = `${pct}%`;
+      }
+
+      let desconto = 0;
+      if (cupomAplicado && cupomAplicado.valor) {
+        desconto = cupomAplicado.valor;
+      }
+
+      const total = Math.max(0, subtotal + taxa - desconto);
+
+      subtotalEl.textContent = `R$ ${subtotal.toFixed(2).replace('.', ',')}`;
+      taxaEl.textContent = taxa === 0 ? 'Grátis' : `R$ ${taxa.toFixed(2).replace('.', ',')}`;
+      totalEl.textContent = `R$ ${total.toFixed(2).replace('.', ',')}`;
+
+      if (carrinho.length === 0) {
+        list.innerHTML = '';
+        list.appendChild(empty);
+      } else {
+        list.innerHTML = carrinho.map(item => `
+          <div class="bg-zuma-card p-3 rounded-xl border border-zuma-border flex items-center justify-between">
+            <div class="flex-grow pr-2">
+              <h4 class="font-bold text-xs text-white line-clamp-1">${item.nome}</h4>
+              <div class="text-xs text-zuma-salmon font-bold">R$ ${parseFloat(item.preco).toFixed(2).replace('.', ',')}</div>
+            </div>
+            <div class="flex items-center space-x-2 bg-zuma-bg border border-zuma-border rounded-lg p-1">
+              <button onclick="alterarQtdCarrinho('${item.id}', -1)" class="w-6 h-6 rounded flex items-center justify-center text-xs font-bold text-zuma-muted hover:text-white bg-zuma-surface">-</button>
+              <span class="text-xs font-extrabold text-white w-4 text-center">${item.qtd}</span>
+              <button onclick="alterarQtdCarrinho('${item.id}', 1)" class="w-6 h-6 rounded flex items-center justify-center text-xs font-bold text-zuma-muted hover:text-white bg-zuma-surface">+</button>
+            </div>
+          </div>
+        `).join('');
+      }
+    }
+
+    function toggleCartDrawer(open) {
+      const drawer = document.getElementById('cart-drawer');
+      const overlay = document.getElementById('cart-drawer-overlay');
+      if (open) {
+        drawer.classList.remove('translate-x-full');
+        overlay.classList.remove('hidden');
+      } else {
+        drawer.classList.add('translate-x-full');
+        overlay.classList.add('hidden');
+      }
+    }
+
+    function setModalidade(modalidade) {
+      modalidadeAtual = modalidade;
+      const btnDelivery = document.getElementById('btn-modalidade-delivery');
+      const btnSalao = document.getElementById('btn-modalidade-salao');
+      
+      if (modalidade === 'delivery') {
+        btnDelivery.className = 'px-4 py-2 rounded-lg bg-zuma-salmon text-white font-bold transition-all shadow-sm';
+        btnSalao.className = 'px-4 py-2 rounded-lg text-zuma-muted hover:text-white transition-all';
+        switchTab('cardapio');
+      } else {
+        btnSalao.className = 'px-4 py-2 rounded-lg bg-zuma-salmon text-white font-bold transition-all shadow-sm';
+        btnDelivery.className = 'px-4 py-2 rounded-lg text-zuma-muted hover:text-white transition-all';
+        switchTab('mesas-salao');
+      }
+      atualizarCarrinho();
+    }
+
+    function atualizarTaxaEntrega() {
+      const sel = document.getElementById('checkout-bairro');
+      taxaEntregaAtual = parseFloat(sel.value) || 12.00;
+      atualizarCarrinho();
+    }
+
+    function aplicarCupomInput() {
+      const input = document.getElementById('input-cupom');
+      const val = (input.value || '').toUpperCase().trim();
+      if (!val) return;
+
+      if (val === 'ZUMIHOTDOBRO') {
+        cupomAplicado = { codigo: val, tipo: 'brinde', desc: 'Hot Roll em Dobro Aplicado!' };
+        alert('Cupom aplicado com sucesso! Seu Hot Roll em Dobro será incluído no pedido!');
+      } else if (val === 'ZUMI15OFF') {
+        cupomAplicado = { codigo: val, valor: 15.00, desc: 'R$ 15,00 de desconto' };
+        alert('Cupom de R$ 15,00 aplicado com sucesso!');
+      } else if (val === 'ZUMIFRETE') {
+        cupomAplicado = { codigo: val, tipo: 'frete', desc: 'Frete Grátis Aplicado' };
+        alert('Frete Grátis aplicado com sucesso!');
+      } else {
+        alert('Cupom inválido ou expirado.');
+      }
+      atualizarCarrinho();
+    }
+
+    // Finalizar no WhatsApp formatado
+    function finalizarPedidoWhatsApp() {
+      if (carrinho.length === 0) {
+        alert('Seu carrinho está vazio!');
+        return;
+      }
+
+      const subtotal = carrinho.reduce((acc, i) => acc + (parseFloat(i.preco) * i.qtd), 0);
+      const taxa = subtotal >= 120.00 ? 0.00 : taxaEntregaAtual;
+      const total = subtotal + taxa - (cupomAplicado?.valor || 0);
+      const bairro = document.getElementById('checkout-bairro').options[document.getElementById('checkout-bairro').selectedIndex].text;
+
+      let msg = `*🍣 NOVO PEDIDO - ZUMA COZINHA ORIENTAL*\n`;
+      msg += `-----------------------------------------\n`;
+      carrinho.forEach(item => {
+        msg += `• ${item.qtd}x ${item.nome} - R$ ${(parseFloat(item.preco) * item.qtd).toFixed(2)}\n`;
+      });
+      msg += `-----------------------------------------\n`;
+      msg += `*Subtotal:* R$ ${subtotal.toFixed(2)}\n`;
+      msg += `*Entrega:* ${taxa === 0 ? 'GRÁTIS' : `R$ ${taxa.toFixed(2)}`} (${bairro})\n`;
+      if (cupomAplicado) msg += `*Cupom Aplicado:* ${cupomAplicado.codigo}\n`;
+      msg += `*TOTAL DO PEDIDO:* R$ ${total.toFixed(2)}\n`;
+      msg += `-----------------------------------------\n`;
+      msg += `_Olá Akira / Zumi! Gostaria de confirmar meu pedido com entrega expressa!_`;
+
+      const url = `https://wa.me/5565998001447?text=${encodeURIComponent(msg)}`;
+      window.open(url, '_blank');
+    }
+
+    // =========================================================================
+    // SIMULADOR DE PEDIDO POR ORÇAMENTO (MOTOR KYTTOIA 2.5 FLASH)
+    // =========================================================================
+    let sugestaoIaAtual = [];
+
+    async function calcularPedidoIA() {
+      const pessoas = document.getElementById('ia-select-pessoas').value;
+      const orcamento = document.getElementById('ia-input-orcamento').value;
+
+      try {
+        const resp = await fetch('/api/public/zuma/orcamento-ia', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pessoas, orcamentoMax: orcamento })
+        });
+        const data = await resp.json();
+        exibirResultadoIA(data);
+      } catch (err) {
+        // Fallback local do Motor KyttoIA
+        const combo = cardapioGeral[1] || { nome: "Combinado Zuma Casal 40 Peças", preco: 139.00 };
+        const soda = cardapioGeral[6] || { nome: "Soda Italiana de Maçã Verde", preco: 18.00 };
+        exibirResultadoIA({
+          ok: true,
+          valorTotalCalculado: parseFloat(combo.preco) + parseFloat(soda.preco),
+          itensSugeridos: [combo, soda],
+          dentroDoOrcamento: true
+        });
+      }
+    }
+
+    function exibirResultadoIA(data) {
+      const container = document.getElementById('ia-itens-sugeridos');
+      const totalEl = document.getElementById('ia-valor-total');
+      const badge = document.getElementById('ia-status-badge');
+
+      sugestaoIaAtual = data.itensSugeridos || [];
+      totalEl.textContent = `R$ ${parseFloat(data.valorTotalCalculado).toFixed(2).replace('.', ',')}`;
+
+      if (data.dentroDoOrcamento) {
+        badge.className = 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold px-3 py-1 rounded-full';
+        badge.textContent = 'Harmonizado Dentro do Orçamento';
+      } else {
+        badge.className = 'bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-bold px-3 py-1 rounded-full';
+        badge.textContent = 'Leve Acréscimo (+Qualidade Nobre)';
+      }
+
+      container.innerHTML = sugestaoIaAtual.map(item => `
+        <div class="bg-zuma-bg/80 p-3 rounded-xl border border-zuma-border flex items-center justify-between text-xs">
+          <div class="flex items-center space-x-2">
+            <span>✨</span>
+            <span class="font-bold text-white">${item.nome}</span>
+          </div>
+          <span class="font-black text-zuma-salmon">R$ ${parseFloat(item.preco).toFixed(2).replace('.', ',')}</span>
+        </div>
+      `).join('');
+    }
+
+    function adicionarSugestaoAoCarrinho() {
+      if (sugestaoIaAtual.length === 0) return;
+      sugestaoIaAtual.forEach(item => {
+        const existente = carrinho.find(i => i.nome === item.nome);
+        if (existente) existente.qtd += 1;
+        else carrinho.push({ id: item.id || Math.random().toString(), nome: item.nome, preco: item.preco, qtd: 1 });
+      });
+      atualizarCarrinho();
+      toggleCartDrawer(true);
+    }
+
+    function enviarSugestaoWhatsApp() {
+      const pessoas = document.getElementById('ia-select-pessoas').value;
+      const orcamento = document.getElementById('ia-input-orcamento').value;
+      const msg = `Olá Zumi! Gostaria de pedir a sugestão que você montou pelo KyttoIA para ${pessoas} pessoas com orçamento de R$ ${orcamento}!`;
+      window.open(`https://wa.me/5565998001447?text=${encodeURIComponent(msg)}`, '_blank');
+    }
+
+    // =========================================================================
+    // A RODADA DO ZUMI: CANVAS INTERATIVO DE RASPAGEM
+    // =========================================================================
+    let isDrawing = false;
+    let canvas, ctx;
+
+    function iniciarCanvasRaspadinha() {
+      canvas = document.getElementById('scratch-canvas');
+      if (!canvas) return;
+      ctx = canvas.getContext('2d');
+
+      // Desenhar camada de raspagem dourada metalizada
+      ctx.fillStyle = '#D97706';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Adicionar padrão de brilho e texto
+      ctx.fillStyle = '#F59E0B';
+      ctx.font = 'bold 16px "Plus Jakarta Sans", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('✨ RASPE AQUI COM O DEDO ✨', canvas.width / 2, canvas.height / 2);
+      ctx.font = '11px "Plus Jakarta Sans", sans-serif';
+      ctx.fillStyle = '#FEF3C7';
+      ctx.fillText('Quinta da Rodada do Zumi', canvas.width / 2, canvas.height / 2 + 24);
+
+      // Eventos de Mouse e Touch
+      canvas.addEventListener('mousedown', startScratch);
+      canvas.addEventListener('mousemove', scratch);
+      window.addEventListener('mouseup', endScratch);
+
+      canvas.addEventListener('touchstart', startScratchTouch, { passive: false });
+      canvas.addEventListener('touchmove', scratchTouch, { passive: false });
+      window.addEventListener('touchend', endScratch);
+    }
+
+    function getCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      return {
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY
+      };
+    }
+
+    function startScratch(e) { isDrawing = true; scratch(e); }
+    function scratch(e) {
+      if (!isDrawing) return;
+      const { x, y } = getCoords(e);
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.beginPath();
+      ctx.arc(x, y, 22, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function startScratchTouch(e) { e.preventDefault(); isDrawing = true; scratchTouch(e); }
+    function scratchTouch(e) {
+      if (!isDrawing) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      const { x, y } = getCoords(touch);
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.beginPath();
+      ctx.arc(x, y, 25, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function endScratch() { isDrawing = false; }
+
+    function reiniciarRaspadinha() {
+      iniciarCanvasRaspadinha();
+    }
+
+    function aplicarCupomRaspadinha() {
+      const cupom = document.getElementById('raspadinha-premio-cupom').textContent;
+      document.getElementById('input-cupom').value = cupom;
+      aplicarCupomInput();
+      toggleCartDrawer(true);
+    }
+
+    // =========================================================================
+    // GRADE DE MESAS (27 MESAS)
+    // =========================================================================
+    function renderizarMesas() {
+      const grid = document.getElementById('mesas-grid');
+      if (!grid) return;
+
+      const mesas = [
+        { num: "01", setor: "Salão Principal", cap: 4, status: "livre" },
+        { num: "02", setor: "Salão Principal", cap: 4, status: "ocupada" },
+        { num: "03", setor: "Salão Principal", cap: 4, status: "livre" },
+        { num: "04", setor: "Salão Família", cap: 8, status: "ocupada" },
+        { num: "05", setor: "Salão Principal", cap: 4, status: "livre" },
+        { num: "06", setor: "Salão Principal", cap: 4, status: "livre" },
+        { num: "07", setor: "Salão Família", cap: 8, status: "livre" },
+        { num: "08", setor: "Salão Principal", cap: 4, status: "livre" },
+        { num: "09", setor: "Salão Principal", cap: 4, status: "ocupada" },
+        { num: "10", setor: "Salão Família", cap: 6, status: "livre" },
+        { num: "11", setor: "Salão Rápido", cap: 2, status: "livre" },
+        { num: "12", setor: "Salão Rápido", cap: 2, status: "livre" },
+        { num: "13", setor: "Deck Jardim", cap: 4, status: "livre" },
+        { num: "14", setor: "Deck Jardim", cap: 4, status: "ocupada" },
+        { num: "15", setor: "Deck Jardim", cap: 6, status: "livre" },
+        { num: "16", setor: "Deck Jardim", cap: 4, status: "livre" },
+        { num: "17", setor: "Deck Jardim", cap: 4, status: "livre" },
+        { num: "18", setor: "Deck Jardim", cap: 6, status: "livre" },
+        { num: "19", setor: "Bistrô Romântico", cap: 2, status: "ocupada" },
+        { num: "20", setor: "Bistrô Romântico", cap: 2, status: "livre" },
+        { num: "21", setor: "Bistrô Romântico", cap: 2, status: "livre" },
+        { num: "22", setor: "Bistrô Romântico", cap: 2, status: "livre" },
+        { num: "23", setor: "Balcão Omakase", cap: 2, status: "livre" },
+        { num: "24", setor: "Balcão Omakase", cap: 2, status: "ocupada" },
+        { num: "25", setor: "Balcão Omakase", cap: 2, status: "livre" },
+        { num: "90", setor: "Retirada Balcão", cap: "-", status: "livre" },
+        { num: "99", setor: "Delivery Integrado", cap: "-", status: "livre" }
+      ];
+
+      grid.innerHTML = mesas.map(m => `
+        <div onclick="abrirMesaQr('${m.num}')" 
+             class="bg-zuma-surface border ${m.status === 'ocupada' ? 'border-zuma-salmon/60 bg-zuma-salmon/5' : 'border-zuma-border hover:border-emerald-500/60'} rounded-2xl p-4 flex flex-col justify-between cursor-pointer transition-all hover:-translate-y-1">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-mono font-bold text-zuma-muted">Mesa</span>
+            <span class="w-2.5 h-2.5 rounded-full ${m.status === 'ocupada' ? 'bg-zuma-salmon' : 'bg-emerald-500'}"></span>
+          </div>
+          <div class="text-2xl font-black text-white text-center py-1">${m.num}</div>
+          <div class="text-center mt-2 pt-2 border-t border-zuma-border/60">
+            <span class="text-[11px] text-zuma-muted block line-clamp-1">${m.setor}</span>
+            <span class="text-[10px] text-zuma-salmon font-semibold">${m.cap !== '-' ? `${m.cap} pessoas` : 'Canal'}</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function abrirMesaQr(num) {
+      alert(`Autoatendimento Mesa ${num} ativado! O cliente escaneia o QR Code no restaurante e os pedidos vão direto para o KDS do Sushi Bar e Cozinha.`);
+    }
+
+    // =========================================================================
+    // CRM GASTRONÔMICO (7 CLIENTES VIP)
+    // =========================================================================
+    function renderizarCrmVip() {
+      const grid = document.getElementById('crm-vip-grid');
+      if (!grid) return;
+
+      const vips = [
+        { nome: "Drª Camila V.", ticket: "R$ 245,00", desc: "VIP Diamante. Fã de Sashimi trufado e sodas de maçã verde. Pede toda sexta." },
+        { nome: "Marcos Silveira", ticket: "R$ 135,00", desc: "Quarta Fit. Sempre pede poke havaino com salmão fresco e shoyu light." },
+        { nome: "Juliana & Marcelo", ticket: "R$ 180,00", desc: "Casal Bistrô. Vinhos, gunkans flambados e Harumaki Romeu e Julieta." },
+        { nome: "Família Rondon", ticket: "R$ 320,00", desc: "Mesa 04 Salão. Especial Zuma 68 Peças e adaptadores de hashi para crianças." },
+        { nome: "Lucas Prado", ticket: "R$ 85,00", desc: "Segunda Express e Terça Hot Roll. Pede semanalmente via WhatsApp." },
+        { nome: "Roberto Yamaguchi", ticket: "R$ 210,00", desc: "Balcão Omakase. Saquê Junmai importado e cortes nobres do Sushiman." }
+      ];
+
+      grid.innerHTML = vips.map(v => `
+        <div class="bg-zuma-bg/70 border border-zuma-border rounded-xl p-3.5 space-y-1.5 text-xs">
+          <div class="flex items-center justify-between">
+            <strong class="text-white">${v.nome}</strong>
+            <span class="text-emerald-400 font-bold">${v.ticket}</span>
+          </div>
+          <p class="text-zuma-muted text-[11px]">${v.desc}</p>
+        </div>
+      `).join('');
+    }
+
+    function assinarClubeZumi() {
+      const msg = "Olá Zumi! Quero assinar o Clube Zumi VIP por R$ 29,90/mês e garantir meu frete grátis e temaki mensal!";
+      window.open(`https://wa.me/5565998001447?text=${encodeURIComponent(msg)}`, '_blank');
+    }
+
+    // =========================================================================
+    // ABA 8: MAPA DE CALOR SEMANAL & PILOTO AUTOMÁTICO
+    // =========================================================================
+    const HEAT_DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+    const HEAT_HOURS = ["11h", "12h", "13h", "18h", "19h", "20h", "21h", "22h"];
+    const HEAT_MATRIX = [
+      [null, null, null, null, null, null, null, null],
+      [null, null, null, 2, 4, 7, 5, 2],
+      [null, null, null, 2, 5, 8, 6, 2],
+      [null, null, null, 4, 8, 12, 9, 3],
+      [null, null, null, 7, 15, 22, 18, 9],
+      [null, null, null, 8, 17, 24, 20, 10],
+      [null, null, null, 6, 13, 17, 12, 4]
+    ];
+
+    let acoesPiloto = [
+      { id: 0, dia: "Segunda", horario: "18h às 22h", publico: "Clientes Ativos", oferta: "Segunda Express: 20 mais vendidos", mensagem: "Segunda também é dia de Zuma! Abrimos hoje das 18h às 22h com entrega expressa em até 35 min! Bora? [link]", prato: "Hot Filadélfia Especial", meta: 22, faturamento: 1540, aprovada: false },
+      { id: 1, dia: "Terça", horario: "18h às 20h", publico: "Fãs de Hot Rolls", oferta: "Hot Roll em Dobro até 20h", mensagem: "Terça do Hot Roll! Pediu até as 20h, o Zumi manda em dobro pra você! Só hoje: [link]", prato: "Hot Roll Filadélfia (10un)", meta: 14, faturamento: 980, aprovada: false },
+      { id: 2, dia: "Quarta", horario: "11h às 14h", publico: "Clientes Fit e Pokes", oferta: "Quarta Fit: Poke + Suco Natural", mensagem: "Quarta Leve no Zuma: Poke de Salmão + Soda Italiana artesanal por preço especial! [link]", prato: "Poke Clássico de Salmão", meta: 12, faturamento: 840, aprovada: false },
+      { id: 3, dia: "Quinta", horario: "11h às 14h", publico: "Empresas Av. Brasil", oferta: "Zuma Executivo até R$ 39,90", mensagem: "Almoço novo no Zuma! Yakissoba, Teppan ou Poke entregue super rápido para o seu almoço. [link]", prato: "Yakissoba Tradicional Zuma", meta: 18, faturamento: 1260, aprovada: false },
+      { id: 4, dia: "Domingo", horario: "18h às 19h30", publico: "Famílias e Grupos", oferta: "Combo Família + Sobremesa", mensagem: "Domingo em Família! Peça o Especial Zuma 68 Peças e ganhe 1 Harumaki Romeu & Julieta de presente! [link]", prato: "Especial Zuma 68 Peças", meta: 16, faturamento: 1440, aprovada: false }
+    ];
+
+    function renderizarHeatmap() {
+      const container = document.getElementById('heatmap-container');
+      if (!container) return;
+      let html = `<div class="grid grid-cols-8 gap-1 items-center font-bold text-center text-zuma-muted text-[11px] pb-1"><div>Hora</div>${HEAT_DAYS.map(d => `<div>${d}</div>`).join('')}</div>`;
+      HEAT_HOURS.forEach((hora, hIdx) => {
+        html += `<div class="grid grid-cols-8 gap-1 items-center text-center"><div class="text-[11px] text-zuma-muted font-bold">${hora}</div>`;
+        HEAT_DAYS.forEach((dia, dIdx) => {
+          const valor = HEAT_MATRIX[dIdx][hIdx];
+          let bgClass = "bg-zinc-800 text-zinc-500 border border-zinc-700/60";
+          let label = "—";
+          let isGap = false;
+          if (valor === null) {
+            if (dIdx === 0 && hIdx >= 3) { isGap = true; label = "+"; }
+            else if (dIdx >= 3 && hIdx < 3) { isGap = true; label = "+"; }
+          } else {
+            label = valor;
+            if (valor <= 3) { bgClass = "bg-orange-950/70 text-orange-200 border border-orange-900/80"; isGap = true; }
+            else if (valor <= 8) { bgClass = "bg-orange-800/80 text-white"; }
+            else if (valor <= 17) { bgClass = "bg-orange-600 text-white font-bold"; }
+            else { bgClass = "bg-red-600 text-white font-black"; }
+          }
+          const borderGap = isGap ? "ring-2 ring-zuma-salmon ring-offset-1 ring-offset-zuma-bg cursor-pointer hover:scale-105 transition-transform" : "";
+          html += `<div class="h-7 rounded flex items-center justify-center font-mono text-[11px] ${bgClass} ${borderGap}" title="${dia} às ${hora}: ${valor === null ? 'Fechado' : `${valor} pedidos`}">${label}</div>`;
+        });
+        html += `</div>`;
+      });
+      container.innerHTML = html;
+    }
+
+    function renderizarFeedAcoes() {
+      const container = document.getElementById('feed-acoes-container');
+      if (!container) return;
+      container.innerHTML = acoesPiloto.map((acao, idx) => `
+        <div class="bg-zuma-bg border ${acao.aprovada ? 'border-emerald-500/60 bg-emerald-950/10' : 'border-zuma-border'} rounded-xl p-3.5 space-y-2 text-xs">
+          <div class="flex items-center justify-between">
+            <strong class="text-white font-bold">${acao.dia} · ${acao.horario}</strong>
+            <span class="bg-zuma-salmon/20 text-zuma-salmon font-bold text-[10px] px-2 py-0.5 rounded-full">+${acao.meta} pedidos · R$ ${acao.faturamento.toFixed(2)}</span>
+          </div>
+          <p class="text-zuma-muted text-[11px]">${acao.publico} · <strong class="text-white">${acao.oferta}</strong></p>
+          <div class="p-2 bg-zuma-surface rounded-lg text-[11px] text-zinc-300 font-mono">${acao.mensagem}</div>
+          <div class="flex items-center justify-between pt-1">
+            <span class="text-[10px] text-zinc-400">Prato: <strong class="text-white">${acao.prato}</strong></span>
+            ${acao.aprovada ? `<span class="text-emerald-400 font-bold text-[11px] flex items-center space-x-1"><span>✓</span><span>Ação Aprovada no Piloto</span></span>` : `<button onclick="aprovarAcaoHeatmap(${idx})" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-[11px] transition-all">Aprovar com Zumi</button>`}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function aprovarAcaoHeatmap(idx) {
+      acoesPiloto[idx].aprovada = true;
+      renderizarFeedAcoes();
+      alert(`Ação de ${acoesPiloto[idx].dia} aprovada com sucesso! O Zumi agendou a automação via Motor KyttoIA.`);
+    }
+
+    function gerarNovoPlanoIA() {
+      alert('O Motor KyttoIA 2.5 Flash analisou o histórico de vendas de Tangará da Serra e recalibrou as 5 ações com metas atualizadas!');
+      acoesPiloto.forEach(a => { a.meta += 2; a.faturamento += 160; a.aprovada = false; });
+      renderizarFeedAcoes();
+    }
+
+    // =========================================================================
+    // ABA 9: ANÁLISE DE MERCADO & BENCHMARKING
+    // =========================================================================
+    function renderizarMercadoIA() {
+      const containerConcorrentes = document.getElementById('concorrentes-cards');
+      const containerRadar = document.getElementById('radar-oportunidades-grid');
+      if (!containerConcorrentes || !containerRadar) return;
+      const concorrentes = [
+        { nome: "Zuma Cozinha Oriental", pos: "Alta Gastronomia & Nikkei", ticket: "R$ 89,00", nota: "4.8 ★", share: "34,5%", badge: "Líder em Qualidade", cor: "border-zuma-salmon" },
+        { nome: "Sansei Sushi Tangará", pos: "Rodízio Tradicional", ticket: "R$ 78,00", nota: "4.4 ★", share: "28,0%", badge: "Competidor Direto", cor: "border-zinc-700" },
+        { nome: "Sushi Ya Delivery", pos: "Dark Kitchen Econômica", ticket: "R$ 55,00", nota: "4.1 ★", share: "21,5%", badge: "Foco Preço Baixo", cor: "border-zinc-700" },
+        { nome: "Matsuri Culinária", pos: "À la Carte Tradicional", ticket: "R$ 95,00", nota: "4.5 ★", share: "16,0%", badge: "Salão Presencial", cor: "border-zinc-700" }
+      ];
+      containerConcorrentes.innerHTML = concorrentes.map(c => `
+        <div class="bg-zuma-surface border ${c.cor} rounded-2xl p-4 space-y-2">
+          <div class="flex items-center justify-between"><span class="text-[10px] font-bold uppercase tracking-wider text-zuma-muted">${c.badge}</span><span class="text-amber-400 font-bold text-xs">${c.nota}</span></div>
+          <h4 class="font-black text-white text-base">${c.nome}</h4>
+          <p class="text-zuma-muted text-xs">${c.pos}</p>
+          <div class="pt-2 border-t border-zuma-border/60 flex items-center justify-between text-xs">
+            <div><span class="text-zuma-muted text-[10px] block">Ticket Médio:</span><strong class="text-white">${c.ticket}</strong></div>
+            <div class="text-right"><span class="text-zuma-muted text-[10px] block">Market Share:</span><strong class="text-zuma-salmon">${c.share}</strong></div>
+          </div>
+        </div>
+      `).join('');
+      const oportunidades = [
+        { tit: "Almoço Executivo Corporativo", ganho: "+R$ 28.500,00/mês", desc: "Tangará é capital do agronegócio regional. Abrir almoço de terça a sexta com pratos quentes rápidos até R$ 39,90 atrai empresários e escritórios da Av. Brasil.", tag: "Prioridade 1" },
+        { tit: "Segunda Express (Mercado Desabastecido)", ganho: "+R$ 14.800,00/mês", desc: "90% dos concorrentes fecham na segunda-feira. Abrir apenas delivery com os 20 itens mais vendidos capta 100% da demanda reprimida sem concorrente.", tag: "Imediato" },
+        { tit: "Clube Zumi de Assinatura Recorrente", ganho: "+R$ 39.275,00/mês", desc: "Primeira assinatura de sushi de Tangará (R$ 29,90/mês com frete grátis nos dias fracos e 1 temaki cortesia). Cria receita previsível e fidelidade cega.", tag: "Inovação" },
+        { tit: "Automação Meteorológica por IA", ganho: "+R$ 12.600,00/mês", desc: "Disparos no WhatsApp 30 minutos antes de tempestades e frentes frias, promovendo Lamens e Yakisobas com garantia de entrega seca e protegida.", tag: "Motor KyttoIA" }
+      ];
+      containerRadar.innerHTML = oportunidades.map(o => `
+        <div class="bg-zuma-bg p-4 rounded-xl border border-zuma-border space-y-2">
+          <div class="flex items-center justify-between"><strong class="text-white font-bold text-sm">${o.tit}</strong><span class="bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full">${o.tag}</span></div>
+          <p class="text-zuma-muted text-xs leading-relaxed">${o.desc}</p>
+          <div class="pt-1 text-xs"><span class="text-zuma-muted">Impacto Financeiro Estimado:</span><strong class="text-emerald-400 font-black ml-1">${o.ganho}</strong></div>
+        </div>
+      `).join('');
+    }
+
+    // =========================================================================
+    // ABA 10: SIMULADOR DE BASE DE CLIENTES & DELIVERY (RFM)
+    // =========================================================================
+    const RFM_DATA = {
+      fieis: { nome: "Fiéis", total: 186, ticket: 92.50, propensao: 0.78, convBase: 0.16 },
+      novos: { nome: "Novos", total: 412, ticket: 58.20, propensao: 0.42, convBase: 0.09 },
+      sumidos: { nome: "Sumidos", total: 538, ticket: 74.00, propensao: 0.22, convBase: 0.08 },
+      vip: { nome: "Baleias / VIP", total: 94, ticket: 198.00, propensao: 0.85, convBase: 0.14 },
+      leads_quiz: { nome: "Leads Quiz", total: 158, ticket: 65.00, propensao: 0.35, convBase: 0.11 }
+    };
+
+    function renderizarSimuladorDelivery() {
+      const container = document.getElementById('rfm-segmentos-cards');
+      if (!container) return;
+      container.innerHTML = Object.entries(RFM_DATA).map(([k, s]) => `
+        <div class="bg-zuma-surface border border-zuma-border rounded-xl p-3 text-center space-y-1">
+          <span class="text-[10px] uppercase font-bold text-zuma-muted">${s.nome}</span>
+          <div class="text-xl font-black text-white">${s.total}</div>
+          <div class="text-[10px] text-zuma-salmon font-semibold">Ticket R$ ${s.ticket.toFixed(2)}</div>
+        </div>
+      `).join('');
+    }
+
+    function calcularSimulacaoDelivery() {
+      const segKey = document.getElementById('sim-segmento-select').value;
+      const dia = document.getElementById('sim-dia-select').value;
+      const oferta = document.getElementById('sim-oferta-select').value;
+      const alcance = parseInt(document.getElementById('sim-alcance-slider').value, 10);
+      document.getElementById('sim-alcance-valor').textContent = `${alcance}%`;
+      const seg = RFM_DATA[segKey];
+      const destinatarios = Math.round(seg.total * (alcance / 100));
+      let convMult = 1.0;
+      if (oferta === 'hot_dobro') convMult = 1.35;
+      if (oferta === 'cupom_15') convMult = 1.25;
+      if (dia === 'terca' || dia === 'quarta') convMult *= 1.15;
+      const taxaConversao = Math.min(25, seg.convBase * convMult * 100);
+      const pedidos = Math.round(destinatarios * (taxaConversao / 100));
+      const faturamento = pedidos * seg.ticket;
+      document.getElementById('sim-res-contatos').textContent = destinatarios;
+      document.getElementById('sim-res-conversao').textContent = `${taxaConversao.toFixed(1)}%`;
+      document.getElementById('sim-res-pedidos').textContent = `${pedidos} pedidos`;
+      document.getElementById('sim-res-faturamento').textContent = `R$ ${faturamento.toFixed(2)}`;
+      let textoPreview = `Olá ninja! 🍣 Aqui é o Zumi do Zuma Cozinha Oriental! `;
+      if (segKey === 'sumidos') textoPreview += `Sentimos sua falta por aqui! Guardei um presente especial pra você: `;
+      else if (segKey === 'fieis') textoPreview += `Passando para te avisar em primeira mão: `;
+      else textoPreview += `Hoje é dia perfeito de pedir sushi: `;
+      if (oferta === 'hot_dobro') textoPreview += `Hot Roll em dobro até as 20h! Pediu 10un, ganha mais 10un cortesia. Aproveite: https://zuma.kytto.com.br`;
+      else if (oferta === 'cupom_15') textoPreview += `Ganhe R$ 15,00 de desconto + raspadinha digital com prêmios instantâneos! Cupom: ZUMI15. Toque aqui: https://zuma.kytto.com.br`;
+      else if (oferta === 'frete_gratis') textoPreview += `Entrega 100% grátis em Tangará da Serra para pedidos acima de R$ 80! Peça agora: https://zuma.kytto.com.br`;
+      else textoPreview += `Degustação cortesia dos nossos novos gunkans flambados para os primeiros 20 pedidos!`;
+      document.getElementById('sim-preview-msg').textContent = textoPreview;
+    }
+
+    function dispararSimulacaoWhatsApp() {
+      alert('Simulação de Campanha disparada com sucesso! O Motor KyttoIA simulou o envio para a base e os pedidos já estão sendo projetados no caixa.');
+    }
+
+    // =========================================================================
+    // ABA 11: MOTOR DE CLIMA & GATILHOS METEOROLÓGICOS
+    // =========================================================================
+    const CLIMA_CONFIGS = {
+      chuva_forte: {
+        nome: "Chuva Torrencial Tropical", icone: "⛈️", temp: 22,
+        salao: "-75% (Esvaziamento)", salaoPct: "25%",
+        delivery: "+145% (Explosão de Pedidos)", deliveryPct: "95%",
+        cat: "Pratos Quentes, Lamens e Yakisobas", cupom: "ZUMICHUVA",
+        texto: "Chuva em Tangará? ⛈️ Deixa o trânsito pra lá! Yakissoba artesanal e Hot Rolls quentinhos na sua porta com embalagem térmica selada e motoboys protegidos. Cupom ZUMICHUVA garante entrega grátis acima de R$ 90!"
+      },
+      calor_extremo: {
+        nome: "Calor Intenso do Cerrado (37°C)", icone: "☀️", temp: 37,
+        salao: "+10% (Deck Climatizado)", salaoPct: "55%",
+        delivery: "+35% (Pokes e Drinks)", deliveryPct: "65%",
+        cat: "Pokes Refrescantes, Ceviches, Sashimis & Sodas Italianas", cupom: "ZUMIREFRESCA",
+        texto: "Calor de 37°C em Tangará? ☀️ Peça um Ceviche Peruano geladinho ou nosso Poke de Salmão com Soda Italiana artesanal trincando de gelada! Cupom ZUMIREFRESCA dá 1 Soda cortesia!"
+      },
+      frente_fria: {
+        nome: "Frente Fria Noturna (18°C)", icone: "🌬️", temp: 18,
+        salao: "-20% (Movimento moderado)", salaoPct: "45%",
+        delivery: "+80% (Pratos Quentes e Vinhos)", deliveryPct: "85%",
+        cat: "Teppan de Mignon, Hot Rolls Especiais e Saquê Quente", cupom: "ZUMIAQUECE",
+        texto: "Noite fresquinha pede aconchego! 🌬️ Teppanyaki de Mignon cremoso e Hot Filadélfia especial para aquecer sua noite em família. Peça com o Zumi e receba quentinho!"
+      },
+      noite_agradavel: {
+        nome: "Noite Estrelada Agradável (25°C)", icone: "✨", temp: 25,
+        salao: "+60% (Salão & Deck Lotados)", salaoPct: "90%",
+        delivery: "+15% (Delivery Regular)", deliveryPct: "50%",
+        cat: "Barcas Compartilhadas Zuma, Chopp & Entradas Frias", cupom: "ZUMIDECK",
+        texto: "O clima hoje está impecável em Tangará! ✨ Venha curtir nosso Deck Climatizado na Av. Brasil com as Barcas de Sushi do Zumi e chopp artesanal trincando!"
+      }
+    };
+
+    function renderizarClimaDelivery() {
+      const container = document.getElementById('clima-botoes-container');
+      if (!container) return;
+      container.innerHTML = Object.entries(CLIMA_CONFIGS).map(([k, c]) => `
+        <button onclick="setClimaAtivo('${k}')" id="btn-clima-${k}" class="clima-btn p-3 rounded-xl border border-zuma-border bg-zuma-bg text-left hover:border-sky-500 transition-all space-y-1">
+          <div class="text-2xl">${c.icone}</div>
+          <strong class="text-white text-xs block">${c.nome}</strong>
+          <span class="text-zuma-muted text-[11px]">${c.temp}°C</span>
+        </button>
+      `).join('');
+      setClimaAtivo('chuva_forte');
+    }
+
+    function setClimaAtivo(climaKey) {
+      const c = CLIMA_CONFIGS[climaKey];
+      if (!c) return;
+      document.querySelectorAll('.clima-btn').forEach(btn => btn.classList.remove('border-sky-500', 'bg-sky-950/20'));
+      const activeBtn = document.getElementById(`btn-clima-${climaKey}`);
+      if (activeBtn) activeBtn.classList.add('border-sky-500', 'bg-sky-950/20');
+      document.getElementById('clima-icone-grande').textContent = c.icone;
+      document.getElementById('clima-nome-ativo').textContent = c.nome;
+      document.getElementById('clima-temp-ativa').textContent = c.temp;
+      document.getElementById('clima-impacto-salao').textContent = c.salao;
+      document.getElementById('clima-impacto-delivery').textContent = c.delivery;
+      document.getElementById('clima-bar-salao').style.width = c.salaoPct;
+      document.getElementById('clima-bar-delivery').style.width = c.deliveryPct;
+      document.getElementById('clima-categoria-destaque').textContent = c.cat;
+      document.getElementById('clima-cupom-badge').textContent = `Cupom: ${c.cupom}`;
+      document.getElementById('clima-texto-gatilho').textContent = c.texto;
+    }
+
+    // =========================================================================
+    // ABA 12: HUB OMNICHANNEL (IFOOD, KEETO, KYTTO & WHATSAPP)
+    // =========================================================================
+    function renderizarOmnichannel() {
+      const container = document.getElementById('omnichannel-canais-grid');
+      if (!container) return;
+      const canais = [
+        { nome: "iFood Marketplace", comissao: "23,0% taxa", status: "Sincronizado", pedidos: "340 ped/mês", custo: "-R$ 5.630,00", cor: "border-red-500/40 text-red-400" },
+        { nome: "Keeto / Kytto Delivery", comissao: "0% comissão (0,99% PIX)", status: "Oficial Próprio", pedidos: "820 ped/mês", custo: "R$ 0 taxa marketplace", cor: "border-emerald-500/40 text-emerald-400" },
+        { nome: "WhatsApp Zumi IA", comissao: "0% comissão (0,99% PIX)", status: "Ativo 24/7", pedidos: "640 ped/mês", custo: "+18% ticket médio", cor: "border-emerald-500/40 text-emerald-400" },
+        { nome: "Salão 27 Mesas & QR", comissao: "0% comissão", status: "Presencial Av. Brasil", pedidos: "690 mesas/mês", custo: "R$ 135,00 ticket", cor: "border-zuma-salmon/40 text-zuma-salmon" }
+      ];
+      container.innerHTML = canais.map(c => `
+        <div class="bg-zuma-surface border ${c.cor.split(' ')[0]} rounded-2xl p-4 space-y-2">
+          <div class="flex items-center justify-between"><span class="text-[10px] font-bold uppercase tracking-wider text-zuma-muted">${c.status}</span><span class="text-[11px] font-bold ${c.cor.split(' ')[1]}">${c.comissao}</span></div>
+          <h4 class="font-black text-white text-base">${c.nome}</h4>
+          <div class="pt-2 border-t border-zuma-border/60 flex items-center justify-between text-xs">
+            <div><span class="text-zuma-muted text-[10px] block">Volume Mensal:</span><strong class="text-white">${c.pedidos}</strong></div>
+            <div class="text-right"><span class="text-zuma-muted text-[10px] block">Custo / Ganho:</span><strong class="text-white">${c.custo}</strong></div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function calcularEconomiaOmnichannel() {
+      const fat = parseFloat(document.getElementById('omni-fat-ifood-slider').value);
+      const migracao = parseFloat(document.getElementById('omni-migracao-slider').value) / 100;
+      document.getElementById('omni-fat-ifood-val').textContent = `R$ ${fat.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+      document.getElementById('omni-migracao-val').textContent = `${(migracao * 100).toFixed(0)}% da Base Migrada`;
+      const valorMigrado = fat * migracao;
+      const taxaEconomizada = valorMigrado * (0.23 - 0.0099);
+      const economiaAnual = taxaEconomizada * 12;
+      document.getElementById('omni-economia-mensal').textContent = `R$ ${taxaEconomizada.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+      document.getElementById('omni-economia-anual').textContent = `R$ ${economiaAnual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+    }
+  </script>
+
+</body>
+</html>

@@ -18,6 +18,7 @@ import { loadAvecMix } from './core/avec-revenue-mix.js';
 import * as barbeariaClienteFicha360 from './barbearia-cliente-ficha-360.js';
 import * as barbeariaClienteUnificacao from './barbearia-cliente-unificacao.js';
 import express from 'express';
+import { routerZuma } from './modules/restaurante-zuma.js';
 import { createPerformanceMetrics, eventLoopMetrics } from './core/performance-metrics.js';
 import { cleanCustomerDisplayName } from './core/whatsapp-ai-normalize.js';
 import { stallonePageMeta } from './core/stallone-page-meta.js';
@@ -2585,7 +2586,11 @@ const pizzariaPublicoRouter = criarRotasPizzariaPublico();
 app.use(['/api/admin/palatare', '/api/admin/pizzaria'], auth, requireStaff, pizzariaSuiteRouter);
 app.use(['/api/publico/palatare', '/api/publico/pizzaria'], pizzariaPublicoRouter);
 
-// [kytto-concreto] Rotas públicas de impressão e visualização de documentos oficiais
+  // [kytto-zuma] Hub Oficial do Restaurante Zuma Cozinha Oriental
+  app.use(['/api/zuma', '/api/public/zuma', '/api/publico/zuma'], routerZuma);
+  app.use('/api/admin/zuma', auth, requireStaff, routerZuma);
+
+  // [kytto-concreto] Rotas públicas de impressão e visualização de documentos oficiais
   app.get("/api/concreto/laudos/:id/aceitacao-html", async (req, res) => {
     try {
       const { gerarHtmlLaudoAceitacaoEstatistica } = await import("./modules/concreto/servico.js");

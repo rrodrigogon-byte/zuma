@@ -173,3 +173,39 @@ test('Zuma Cozinha Oriental - Provisionamento mock em memória', async () => {
   assert.equal(resultado.canalWhatsappProvisionado, true);
   assert.ok(queriesExecutadas.length > 10, 'Deve ter executado as queries de inserção no banco');
 });
+
+test('Zuma Cozinha Oriental - Arquivos estáticos e Web App interativa', () => {
+  const zumaHtmlPath = path.join(__dirname, 'public', 'zuma', 'index.html');
+  const zumaSvgPath = path.join(__dirname, 'public', 'zuma', 'zumi-mascote.svg');
+  const zumaPilotPath = path.join(__dirname, 'public', 'zuma', 'pilot.html');
+  assert.ok(fs.existsSync(zumaHtmlPath), 'app/public/zuma/index.html deve existir');
+  assert.ok(fs.existsSync(zumaSvgPath), 'app/public/zuma/zumi-mascote.svg deve existir');
+  assert.ok(fs.existsSync(zumaPilotPath), 'app/public/zuma/pilot.html deve existir');
+
+  const html = fs.readFileSync(zumaHtmlPath, 'utf8');
+  assert.ok(html.includes('Zuma Cozinha Oriental'), 'HTML deve conter título da loja');
+  assert.ok(html.includes('Zumi'), 'HTML deve conter referência ao mascote Zumi');
+  assert.ok(html.includes('KyttoIA'), 'HTML deve referenciar Motor KyttoIA');
+  assert.ok(html.includes('scratch-canvas'), 'HTML deve conter elemento canvas da raspadinha');
+  assert.ok(html.includes('Clube Zumi VIP'), 'HTML deve conter Clube Zumi VIP');
+  assert.ok(html.includes('27 Mesas'), 'HTML deve conter visualizador de mesas');
+  assert.ok(html.includes('tab-mapa-calor'), 'HTML deve conter aba de mapa de calor');
+  assert.ok(html.includes('tab-mercado-ia'), 'HTML deve conter aba de análise de mercado');
+  assert.ok(html.includes('tab-simulador-crm'), 'HTML deve conter aba de simulador RFM');
+  assert.ok(html.includes('tab-clima-delivery'), 'HTML deve conter aba de motor de clima');
+  assert.ok(html.includes('tab-hub-omnichannel'), 'HTML deve conter aba de hub omnichannel');
+
+  const svg = fs.readFileSync(zumaSvgPath, 'utf8');
+  assert.ok(svg.includes('<svg'), 'SVG deve ser válido');
+  assert.ok(svg.includes('ZUMI'), 'SVG deve conter o nome do mascote');
+
+  const pilot = fs.readFileSync(zumaPilotPath, 'utf8');
+  assert.ok(pilot.includes('Zuma Pilot'), 'Pilot deve conter título');
+  assert.ok(pilot.includes('KyttoIA 2.5 Flash'), 'Pilot deve citar KyttoIA 2.5 Flash');
+});
+
+test('Zuma Cozinha Oriental - Módulo routerZuma e endpoints de API', async () => {
+  const { routerZuma } = await import('./modules/restaurante-zuma.js');
+  assert.ok(routerZuma, 'routerZuma deve ser exportado');
+  assert.equal(typeof routerZuma, 'function', 'routerZuma deve ser um middleware Express');
+});
