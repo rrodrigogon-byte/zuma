@@ -21,6 +21,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "../../hooks/useToast";
 import { useAuth } from "../../lib/auth";
 import { ABAS_DO_OPERADOR } from "../../lib/perfis-menu";
+import lazyWithRetry from "../../lib/lazyWithRetry";
 import { isDinoBrandContext } from "../../lib/brand";
 import { whatsappIntegrationStatus } from "../../lib/whatsapp-integration-status";
 import BarbeariaAgendaBoard, {
@@ -54,34 +55,34 @@ import { ComprasPanel, CurvaAbcPanel } from "./dino/ComprasPanels";
 import { RepassesPanel, ReguaClubePanel } from "./dino/RepassesPanel";
 
 // Lazy loading dos módulos analíticos e relatórios para acelerar o carregamento inicial da Barbearia
-const MetasComissoesPanel = lazy(() => import("./dino/MetasComissoesPanel"));
-const DinoCarteiraClientesPanel = lazy(
+const MetasComissoesPanel = lazyWithRetry(() => import("./dino/MetasComissoesPanel"));
+const DinoCarteiraClientesPanel = lazyWithRetry(
   () => import("./dino/DinoCarteiraClientesPanel"),
 );
-const DinoRecuperacaoAtivaCockpit = lazy(
+const DinoRecuperacaoAtivaCockpit = lazyWithRetry(
   () => import("./dino/DinoRecuperacaoAtivaCockpit"),
 );
-const DinoInfluencerCockpit = lazy(
+const DinoInfluencerCockpit = lazyWithRetry(
   () => import("./dino/DinoInfluencerCockpit"),
 );
-const DinoRecuperacaoAvecPanel = lazy(
+const DinoRecuperacaoAvecPanel = lazyWithRetry(
   () => import("./dino/DinoRecuperacaoAvecPanel"),
 );
-const FiscalPanel = lazy(() => import("./fiscal/Fiscal"));
-const DinoBusinessDashboard = lazy(() => import("./DinoBusinessDashboard"));
-const DinoDashboardKytto = lazy(() => import("./dino/DinoDashboardKytto?v=2"));
-const DinoCampaignsPanel = lazy(() => import("./DinoCampaignsPanel"));
-const DinoCRMPreditivo = lazy(() => import("./dino/DinoCRMPreditivo"));
-const DinoPrecoDinamico = lazy(() => import("./dino/DinoPrecoDinamico"));
-const DinoSplitPagamento = lazy(() => import("./dino/DinoSplitPagamento"));
-const DinoEquipeDesempenho = lazy(() => import("./DinoEquipeDesempenho"));
-const BIBarbearia = lazy(() => import("./dino/BIBarbearia"));
-const ProjecaoFaturamentoPanel = lazy(
+const FiscalPanel = lazyWithRetry(() => import("./fiscal/Fiscal"));
+const DinoBusinessDashboard = lazyWithRetry(() => import("./DinoBusinessDashboard"));
+const DinoDashboardKytto = lazyWithRetry(() => import("./dino/DinoDashboardKytto?v=2"));
+const DinoCampaignsPanel = lazyWithRetry(() => import("./DinoCampaignsPanel"));
+const DinoCRMPreditivo = lazyWithRetry(() => import("./dino/DinoCRMPreditivo"));
+const DinoPrecoDinamico = lazyWithRetry(() => import("./dino/DinoPrecoDinamico"));
+const DinoSplitPagamento = lazyWithRetry(() => import("./dino/DinoSplitPagamento"));
+const DinoEquipeDesempenho = lazyWithRetry(() => import("./DinoEquipeDesempenho"));
+const BIBarbearia = lazyWithRetry(() => import("./dino/BIBarbearia"));
+const ProjecaoFaturamentoPanel = lazyWithRetry(
   () => import("./dino/ProjecaoFaturamentoPanel"),
 );
-const DinoMetasRoletaPanel = lazy(() => import("./dino/DinoMetasRoletaPanel"));
-const DinoInteligenciaVendasIa = lazy(() => import("./dino/DinoInteligenciaVendasIa"));
-const GestaoSalaoAvancada = lazy(() => import("./relatorios/dino/GestaoSalaoAvancada"));
+const DinoMetasRoletaPanel = lazyWithRetry(() => import("./dino/DinoMetasRoletaPanel"));
+const DinoInteligenciaVendasIa = lazyWithRetry(() => import("./dino/DinoInteligenciaVendasIa"));
+const GestaoSalaoAvancada = lazyWithRetry(() => import("./relatorios/dino/GestaoSalaoAvancada"));
 import ComandaNova, {
   AdicionarItensComanda,
   BuscaCliente,
@@ -663,7 +664,19 @@ export default function BarbeariaERP({ tabInicial } = {}) {
     "gerente",
   ].includes(String(user?.role || "").toLowerCase());
   // apelidos de links antigos/externos (ex.: ?tab=Fiscal) para o nome real da aba
-  const requestedTab = { Fiscal: "Notas fiscais", fiscal: "Notas fiscais", vendas: "Como Vender Mais com IA", inteligencia: "Como Vender Mais com IA" }[searchParams.get("tab")] || searchParams.get("tab");
+  const requestedTab = {
+    Fiscal: "Notas fiscais",
+    fiscal: "Notas fiscais",
+    vendas: "Como Vender Mais com IA",
+    inteligencia: "Como Vender Mais com IA",
+    carteira: "Carteira por barbeiro",
+    Carteira: "Carteira por barbeiro",
+    "carteira-por-barbeiro": "Carteira por barbeiro",
+    "carteira_por_barbeiro": "Carteira por barbeiro",
+    "carteiraporbarbeiro": "Carteira por barbeiro",
+    "Carteira de Clientes": "Carteira por barbeiro",
+    "carteira-clientes": "Carteira por barbeiro",
+  }[searchParams.get("tab")] || searchParams.get("tab");
   const requestedArea = searchParams.get("area");
   const validRequestedTab =
     TABS.some(([name]) => name === requestedTab) &&

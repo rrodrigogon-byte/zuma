@@ -10,7 +10,17 @@ import {
   obterConversoesVenda,
 } from './dino-inteligencia-vendas.js';
 
-export function registerInteligenciaVendasRoutes(app, { db, legacyEmpresaId, legacyLojaId }) {
+export function registerInteligenciaVendasRoutes(app, {
+  db,
+  legacyEmpresaId,
+  legacyLojaId,
+  auth,
+  requireStaff,
+  isAdminGlobal,
+  isGuilhermeUser,
+  isSilvesterUser,
+  obterEmpresasAutorizadasDoUsuario,
+}) {
   const extrairEmpresaId = (req) => {
     return String(
       req.query.empresaId ||
@@ -141,4 +151,51 @@ export function registerInteligenciaVendasRoutes(app, { db, legacyEmpresaId, leg
   app.post('/api/admin/barbearia/inteligencia-vendas/config', handlerPostConfig);
   app.post('/api/admin/barbearia/inteligencia-vendas/registrar-conversao', handlerRegistrarConversao);
   app.post('/api/admin/barbearia/inteligencia-vendas/disparar-acao', handlerDisparar);
+
+  // 7. Lista de empresas autorizadas para o seletor da Inteligência de Vendas
+  const CANONICAS = [
+    { id: 'dino', nome: 'Barbearia Dino', icone: '💈', segmento: 'Barbearia & Salão Masculino' },
+    { id: 'stallone', nome: 'Stallone Nutre Sport', icone: '💪', segmento: 'Suplementos, Fitness & Saúde' },
+    { id: 'agroopen', nome: 'Agro Open Insumos', icone: '🌱', segmento: 'Agronegócio, Pecuária & Insumos' },
+    { id: 'supermercado', nome: 'Supermercado Kytto', icone: '🛒', segmento: 'Alimentos, Bebidas & Atacarejo' },
+  ];
+
+  const handlerEmpresasAutorizadas = (req, res) => {
+    try {
+      const user = req.user;
+      const ident = String(user?.email || user?.username || user?.login || '').toLowerCase().trim();
+      const ehAdmin = Boolean(
+        (isAdminGlobal && isAdminGlobal(user)) ||
+        user?.platformAdmin === true ||
+        user?.mainAdmin === true ||
+        user?.role === 'admin' ||
+        ident.includes('rodrigo.goncalves') ||
+        ident.includes('rrodrigogon') ||
+        ident === 'admin'
+      );
+      let permitidas = CANONICAS;
+      if (!ehAdmin) {
+        if (isGuilhermeUser && isGuilhermeUser(user)) {
+          permitidas = CANONICAS.filter(c => c.id === 'dino');
+        } else if (isSilvesterUser && isSilvesterUser(user)) {
+          permitidas = CANONICAS.filter(c => c.id === 'stallone' || c.id === 'agroopen');
+        } else if (obterEmpresasAutorizadasDoUsuario) {
+          const ids = (obterEmpresasAutorizadasDoUsuario(user) || []).map(x => String(x).toLowerCase());
+          if (ids.length) {
+            permitidas = CANONICAS.filter(c => ids.includes(c.id));
+          }
+        }
+      }
+      res.json({
+        ok: true,
+        ehAdminPlataforma: ehAdmin,
+        empresas: permitidas.length ? permitidas : [CANONICAS[0]],
+      });
+    } catch (e) {
+      res.json({ ok: true, ehAdminPlataforma: true, empresas: CANONICAS });
+    }
+  };
+
+  app.get('/api/admin/inteligencia-vendas/empresas-autorizadas', handlerEmpresasAutorizadas);
+  app.get('/api/admin/barbearia/inteligencia-vendas/empresas-autorizadas', handlerEmpresasAutorizadas);
 }

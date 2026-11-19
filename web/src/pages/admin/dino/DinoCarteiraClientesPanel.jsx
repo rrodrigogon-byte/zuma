@@ -29,12 +29,14 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
     setLoading(true)
     try {
       const [resResumo, resLista] = await Promise.all([
-        api.get('/api/admin/barbearia/carteira-clientes/resumo'),
-        api.get(`/api/admin/barbearia/carteira-clientes?profissionalId=${encodeURIComponent(barbeiroSelecionadoId)}&filtroRetorno=${encodeURIComponent(filtroRetorno)}&busca=${encodeURIComponent(buscaDebounced)}`),
+        api.get('/api/admin/barbearia/carteira-clientes/resumo')
+          .catch(() => api.get('/api/admin/dino/carteira-clientes/resumo')),
+        api.get(`/api/admin/barbearia/carteira-clientes?profissionalId=${encodeURIComponent(barbeiroSelecionadoId)}&filtroRetorno=${encodeURIComponent(filtroRetorno)}&busca=${encodeURIComponent(buscaDebounced)}`)
+          .catch(() => api.get(`/api/admin/dino/carteira-clientes?profissionalId=${encodeURIComponent(barbeiroSelecionadoId)}&filtroRetorno=${encodeURIComponent(filtroRetorno)}&busca=${encodeURIComponent(buscaDebounced)}`)),
       ])
       setResumo(resResumo)
-      setClientes(resLista.clientes || [])
-      setProfissionais(resLista.profissionais || [])
+      setClientes(resLista?.clientes || [])
+      setProfissionais(resLista?.profissionais || [])
     } catch (err) {
       console.error('Erro ao carregar carteiras:', err)
     } finally {
@@ -53,7 +55,9 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
     setUnificando(true)
     try {
       const res = await api.post('/api/admin/barbearia/clientes/auto-unificar')
-      alert(`Varredura concluída! ${res.gruposUnificados || 0} grupo(s) de clientes duplicados foram unificados com sucesso.`)
+        .catch(() => api.post('/api/admin/barbearia/clientes/auto-unificar-duplicados'))
+        .catch(() => api.post('/api/admin/dino/clientes/auto-unificar'))
+      alert(`Varredura concluída! ${res?.gruposUnificados ?? res?.totalGrupos ?? 0} grupo(s) de clientes duplicados foram unificados com sucesso.`)
       carregarDados()
     } catch (err) {
       alert(err.response?.data?.error || err.message || "Falha na unificação automática.")
