@@ -310,3 +310,25 @@ test('Zuma Cozinha Oriental - Endpoints operacionais backend (Caixa, KDS, Garço
   assert.equal(downRes.data.ok, true);
   assert.equal(downRes.data.catalogoProdutos.length, 211);
 });
+
+test('Zuma Cozinha Oriental - Zuma Pilot Cockpit: Aba #mercado e Inteligência Competitiva KyttoIA', () => {
+  const pilotHtmlPath = path.join(__dirname, 'public', 'zuma', 'pilot.html');
+  assert.ok(fs.existsSync(pilotHtmlPath), 'pilot.html deve existir');
+
+  const html = fs.readFileSync(pilotHtmlPath, 'utf8');
+  assert.ok(html.includes('href="#mercado"'), 'Deve conter link de navegação para #mercado');
+  assert.ok(html.includes('id="v-mercado"'), 'Deve conter section view v-mercado');
+  assert.ok(html.includes('id="kpiMktShare"'), 'Deve conter KPI de Market share');
+  assert.ok(html.includes('id="mktBars"'), 'Deve conter gráfico de barras de market share');
+  assert.ok(html.includes('id="sMkt"'), 'Deve conter slider de simulação de market share');
+  assert.ok(html.includes('id="tblBenchmarking"'), 'Deve conter tabela de benchmarking');
+  assert.ok(html.includes('Sansei Sushi Tangará'), 'Deve mapear Sansei Sushi Tangará');
+  assert.ok(html.includes('Sushi Ya Delivery'), 'Deve mapear Sushi Ya Delivery');
+  assert.ok(html.includes('Matsuri Culinária Oriental'), 'Deve mapear Matsuri Culinária Oriental');
+  assert.ok(html.includes('cIfoodOrders'), 'Deve conter slider de pedidos iFood');
+  assert.ok(html.includes('btnMigrateIfood'), 'Deve conter botão de migração de clientes iFood');
+  assert.ok(html.includes('avenidasCards'), 'Deve conter 4 avenidas de crescimento (+R$ 95.175/mês)');
+  assert.ok(html.includes('btnGenStrategy'), 'Deve conter gerador de estratégias KyttoIA');
+  assert.ok(html.includes('Motor KyttoIA 2.5 Flash'), 'Deve utilizar o nome oficial Motor KyttoIA 2.5 Flash');
+  assert.ok(html.includes('"mercado"'), 'VIEWS deve incluir rota mercado');
+});
