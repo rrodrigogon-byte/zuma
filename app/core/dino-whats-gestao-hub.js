@@ -319,6 +319,7 @@ export async function configurarWhatsappGestaoDino({ dbPg = db } = {}) {
           gestor_telefone_8d: '556596722055',
           grupo_nome: GRUPO_GESTAO_DINO_INFO.nome,
           target_group_name: GRUPO_GESTAO_DINO_INFO.nome,
+          waha_group_id: process.env.WHATSAPP_GESTAO_DINO_GROUP_ID || '120363024589218900@g.us',
           relatorio_diario_autorizado: true,
           autorizacao_gestor_exigida: true,
           relatorio_diario_hora: '08:00',

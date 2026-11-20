@@ -240,8 +240,8 @@ export async function sincronizarTenantsEquipes(commerceDb) {
           if (userId && (u.isOwner || u.pgRole === 'gerente' || u.pgRole === 'admin')) {
             try {
               const accRes = await commerceDb.query(
-                `SELECT id FROM commerce_accounts WHERE email = $1 LIMIT 1`,
-                [emailPrincipal]
+                `SELECT id FROM commerce_accounts WHERE email = $1 OR (origem = 'commerce' AND origem_id = $2) LIMIT 1`,
+                [emailPrincipal, String(userId)]
               );
               let accountId = accRes.rows?.[0]?.id;
               if (!accountId) {
@@ -255,8 +255,8 @@ export async function sincronizarTenantsEquipes(commerceDb) {
                 accountId = insAcc.rows?.[0]?.id;
               } else {
                 await commerceDb.query(
-                  `UPDATE commerce_accounts SET ativo = true, nome = $1, atualizado_em = NOW() WHERE id = $2`,
-                  [u.nome, accountId]
+                  `UPDATE commerce_accounts SET ativo = true, nome = $1, email = $2, atualizado_em = NOW() WHERE id = $3`,
+                  [u.nome, emailPrincipal, accountId]
                 );
               }
               if (accountId) {
