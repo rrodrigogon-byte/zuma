@@ -349,6 +349,16 @@ export function registerAiBrainRoutes(app, deps) {
     } catch (error) { send(res, error); }
   });
 
+  app.post(`${BASE}/trex/consolidar-aprendizado`, async (req, res) => {
+    const s = await scope(req, res, 'settings.write'); if (!s) return;
+    try {
+      const { consolidateLearnedProposals, getDynamicLearnedGuidance } = await import('./core/trex-auto-learner.js');
+      const resultado = await consolidateLearnedProposals(s.empresaId);
+      const diretrizes = await getDynamicLearnedGuidance(s.empresaId);
+      res.json({ ok: true, resultado, diretrizes });
+    } catch (error) { send(res, error); }
+  });
+
   app.get(`${BASE}/propostas`, async (req, res) => {
     const s = await scope(req, res); if (!s) return;
     try { res.json({ items: await listProposals(s.empresaId, { status: String(req.query.status || 'proposto') }) }); } catch (error) { send(res, error); }

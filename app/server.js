@@ -13809,6 +13809,11 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
   inicializarDinoWhatsGestaoHub();
   iniciarAgendadorDinoGestao({ db: commerceDb });
   startAiBrainSchedulers();
+  // Auto-aprendizado contínuo do T-Rex: consolidação e auto-aprovação de diretrizes na inicialização
+  import('./core/trex-auto-learner.js')
+    .then(({ consolidateLearnedProposals }) => consolidateLearnedProposals('d0d0ac01-8e50-4b61-8c79-de4aaa916da6'))
+    .then((res) => console.log('[T-Rex Auto-Learner] Diretrizes consolidadas no boot:', res))
+    .catch((err) => console.warn('[T-Rex Auto-Learner] Aviso de inicialização:', err?.message));
   // Cobranças da barbearia: sinal vencido libera o horário (e avisa a lista de
   // espera); a cobrança do clube é gerada e enviada uma vez por hora.
   setInterval(async () => {

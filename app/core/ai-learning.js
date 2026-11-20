@@ -272,6 +272,13 @@ export async function runLearningCycle(options = {}) {
     }
 
     summary.fatosExpirados = await expireFacts(query, empresaId);
+    try {
+      const { runTrexAutoLearner } = await import('./trex-auto-learner.js');
+      const trexSummary = await runTrexAutoLearner({ empresaId, dia, query });
+      if (trexSummary?.aprovadas) summary.respostasAprovadas = trexSummary.aprovadas;
+    } catch {
+      // Falha isolada do auto-learner não aborta o ciclo principal
+    }
     await query(`UPDATE ai_learning_runs SET status = 'concluido', resumo = $2::jsonb, concluido_em = CURRENT_TIMESTAMP WHERE id = $1`, [runId, JSON.stringify(summary)]);
     return { skipped: false, ...summary };
   } catch (error) {
