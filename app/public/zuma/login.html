@@ -276,8 +276,8 @@
         nome: 'Carlos Ninja Motoboy'
       },
       admin: {
-        email: 'rodrigo.goncalves@uisa.com.br',
-        senha: '123456',
+        email: 'rrodrigogon@gmail.com',
+        senha: '#080581verdao',
         destino: 'pilot.html',
         nome: 'Rodrigo Gonçalves (Kytto Admin)'
       }
@@ -356,7 +356,7 @@
           executarEntrada(email, data.user?.nome || 'Operador Zuma', destino);
         } else {
           // Fallback operacional para os usuários cadastrados na migration 128
-          if (senha === '123456' || senha === 'zuma123' || senha === 'admin') {
+          if (senha === '123456' || senha === 'zuma123' || senha === 'admin' || senha === '#080581verdao') {
             executarEntrada(email, email.split('@')[0], destino);
           } else {
             mostrarFeedback(data.error || 'Credenciais inválidas. Use a senha 123456.', 'erro');
@@ -364,7 +364,7 @@
         }
       } catch (err) {
         // Modo offline / fallback
-        if (senha === '123456' || senha === 'zuma123') {
+        if (senha === '123456' || senha === 'zuma123' || senha === '#080581verdao') {
           executarEntrada(email, email.split('@')[0], destino);
         } else {
           mostrarFeedback('Senha incorreta. A senha padrão de PRD é 123456.', 'erro');
