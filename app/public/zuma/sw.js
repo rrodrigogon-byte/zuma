@@ -1,5 +1,5 @@
 // Service Worker - Zuma Cozinha Oriental / Kytto Station
-const CACHE_NAME = 'zuma-kytto-v4';
+const CACHE_NAME = 'zuma-kytto-v5';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -8,6 +8,7 @@ const ASSETS_TO_CACHE = [
   './login.html',
   './apps.html',
   './proprietario.html',
+  './admin-conexoes.html',
   './entregador.html',
   './garcom.html',
   './pagamentos.html',

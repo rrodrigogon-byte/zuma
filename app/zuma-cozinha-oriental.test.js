@@ -1608,7 +1608,7 @@ test('Zuma Cozinha Oriental - CRUD Completo de Cozinha KDS: Incluir, Modificar e
 
   const swPath = path.join(__dirname, 'public', 'zuma', 'sw.js');
   const swContent = fs.readFileSync(swPath, 'utf8');
-  assert.ok(swContent.includes('zuma-kytto-v3') || swContent.includes('zuma-kytto-v4'), 'Service Worker deve estar na versão v3');
+  assert.ok(swContent.includes('zuma-kytto-v3') || swContent.includes('zuma-kytto-v4') || swContent.includes('zuma-kytto-v5'), 'Service Worker deve estar na versão v3, v4 ou v5');
   assert.ok(swContent.includes('apps.html'), 'Cache do SW deve conter apps.html');
   assert.ok(swContent.includes('entregador.html'), 'Cache do SW deve conter entregador.html');
   assert.ok(swContent.includes('garcom.html'), 'Cache do SW deve conter garcom.html');
@@ -2169,4 +2169,87 @@ test('Zuma Cozinha Oriental - Gestão de Turno de Caixa PDV, Sangrias e Suprimen
 
   assert.strictEqual(sangData.ok, true);
   assert.ok(sangData.caixa.sangrias.some(s => s.valor === 250.00));
+});
+test('Zuma - Hub de Administração de Conexões e Open APIs de Concorrência', async () => {
+  const { routerZuma } = await import('./modules/restaurante-zuma.js');
+  const callRoute = (method, p, body = {}, params = {}) => {
+    return new Promise((resolve) => {
+      const [pathname] = p.split("?");
+      const req = { method, path: pathname, query: {}, body, params };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      for (const layer of routerZuma.stack) {
+        if (layer.route && layer.route.methods[method.toLowerCase()]) {
+          if (layer.match(pathname)) {
+            req.params = layer.params || params;
+            layer.route.stack[0].handle(req, res);
+            return;
+          }
+        }
+      }
+      resolve({ status: 404, data: { error: 'Route not found: ' + p } });
+    });
+  };
+
+  // 1. Listagem de todas as conexões de APIs abertas
+  const conexoesRes = await callRoute('GET', '/admin/conexoes-apis');
+  assert.equal(conexoesRes.status, 200);
+  assert.equal(conexoesRes.data.ok, true);
+  assert.equal(conexoesRes.data.hub.hubStatus.totalConexoes, 7, 'Devem existir 7 conexões no Hub de Open APIs');
+  assert.equal(conexoesRes.data.hub.hubStatus.conexoesAtivas, 7, 'Todas as 7 conexões devem estar ativas');
+  
+  const ids = conexoesRes.data.hub.conectores.map(c => c.id);
+  assert.ok(ids.includes('brasilapi_rfb'), 'Deve incluir BrasilAPI / Receita Federal');
+  assert.ok(ids.includes('openstreetmap_geointel'), 'Deve incluir OpenStreetMap / Overpass');
+  assert.ok(ids.includes('delivery_marketplaces_scrapers'), 'Deve incluir iFood / Marketplaces Scraper');
+  assert.ok(ids.includes('google_places_reputation'), 'Deve incluir Google Places & Avaliações');
+  assert.ok(ids.includes('bacen_ibge_inflacao'), 'Deve incluir Banco Central SGS');
+  assert.ok(ids.includes('cepea_pescados_cotacoes'), 'Deve incluir Cepea Pescados MT');
+  assert.ok(ids.includes('motor_kyttoia_intelligence'), 'Deve incluir Motor KyttoIA 2.5 Flash');
+
+  // 2. Teste de ping e conectividade de conexão específica
+  const testPing = await callRoute('POST', '/admin/conexoes-apis/testar', { conectorId: 'brasilapi_rfb' });
+  assert.equal(testPing.status, 200);
+  assert.equal(testPing.data.ok, true);
+  assert.equal(testPing.data.log.conectorId, 'brasilapi_rfb');
+  assert.ok(testPing.data.latenciaMs >= 0, 'Latência deve ser não-negativa');
+
+  // 3. Sincronização global de concorrência
+  const syncRes = await callRoute('POST', '/admin/conexoes-apis/sincronizar', {});
+  assert.equal(syncRes.status, 200);
+  assert.equal(syncRes.data.ok, true);
+  assert.equal(syncRes.data.totalConectoresAtualizados, 7);
+  assert.ok(syncRes.data.hubStatus.registrosProcessadosHoje > 0);
+
+  // 4. Logs de telemetria e sincronização
+  const logsRes = await callRoute('GET', '/admin/conexoes-apis/logs');
+  assert.equal(logsRes.status, 200);
+  assert.equal(logsRes.data.ok, true);
+  assert.ok(logsRes.data.logs.length >= 5, 'Deve conter histórico de logs de auditoria');
+
+  // 5. Consulta dinâmica de CNPJ via Open API (BrasilAPI ou Cache Enriquecido)
+  const cnpjZuma = await callRoute('GET', '/admin/conexoes-apis/consulta-cnpj/48912440000188');
+  assert.equal(cnpjZuma.status, 200);
+  assert.equal(cnpjZuma.data.ok, true);
+  assert.ok(cnpjZuma.data.dados.razaoSocial.toUpperCase().includes('ZUMA'), 'Razão Social deve conter ZUMA');
+  assert.ok(cnpjZuma.data.dados.socios.length >= 1, 'Deve listar sócios');
+
+  // Consulta de concorrente local (Bonsai Sushi)
+  const cnpjBonsai = await callRoute('GET', '/admin/conexoes-apis/consulta-cnpj/43466537000154');
+  assert.equal(cnpjBonsai.status, 200);
+  assert.equal(cnpjBonsai.data.ok, true);
+  assert.ok(cnpjBonsai.data.dados.razaoSocial.toUpperCase().includes('BONSAI'), 'Razão social deve conter BONSAI');
+
+  // 6. Existência física e integridade do admin-conexoes.html
+  const adminHtmlPath = path.join(__dirname, 'public', 'zuma', 'admin-conexoes.html');
+  assert.ok(fs.existsSync(adminHtmlPath), 'admin-conexoes.html deve existir');
+  const adminContent = fs.readFileSync(adminHtmlPath, 'utf8');
+  assert.ok(adminContent.includes('Conexões & Open APIs'), 'Título do Hub deve estar presente');
+  assert.ok(adminContent.includes('BrasilAPI'), 'BrasilAPI deve estar documentada');
+  assert.ok(adminContent.includes('KyttoIA'), 'Motor KyttoIA deve estar presente');
+  assert.ok(!adminContent.toLowerCase().includes('gemini'), 'Não deve exibir Gemini externamente (Diretriz Kytto)');
 });
