@@ -1,4 +1,67 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}
+/* Suporte e Estilos iOS / iPhone First */
+.mobile-controls { display: none; }
+.ios-bottom-bar { display: none; }
+
+@media (max-width: 760px) {
+  nav > div { display: none !important; }
+  .side {
+    padding: 8px 12px !important;
+    gap: 8px !important;
+  }
+  .mobile-controls {
+    display: flex !important;
+    align-items: center;
+  }
+  .mobile-controls select {
+    background: var(--surface2);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    outline: none;
+    cursor: pointer;
+    -webkit-appearance: menulist;
+  }
+  .ios-bottom-bar {
+    display: flex !important;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    padding: 6px 8px calc(8px + env(safe-area-inset-bottom, 0px));
+    justify-content: space-around;
+    z-index: 99;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 -4px 16px rgba(0,0,0,0.06);
+  }
+  .ios-tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 10px;
+    font-weight: 700;
+    gap: 2px;
+    min-width: 55px;
+    padding: 2px 4px;
+    border-radius: 8px;
+    transition: all .15s ease;
+  }
+  .ios-tab span { font-size: 18px; line-height: 1; }
+  .ios-tab.active, .ios-tab.on { color: var(--salmon) !important; font-weight: 800; }
+  main {
+    padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+</style></head><body>
   <title>Zuma Pilot · Gestão Autônoma & IA Kytto</title>
   <meta name="viewport-fit-sides" content="cover">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -210,12 +273,41 @@ tr:last-child td{border-bottom:0}
 </div>
 <div class="shell">
   <aside class="side">
+        <div class="mobile-controls">
+      <select id="mobileModuleSelect" onchange="location.hash = this.value" aria-label="Navegar entre módulos">
+        <optgroup label="Operação &amp; Vendas">
+          <option value="#cockpit">⚡ Cockpit Geral</option>
+          <option value="#zumi">💬 Zumi Atende (IA)</option>
+          <option value="#campanhas">📢 Campanhas</option>
+          <option value="#leads">🎯 Captação de Leads</option>
+          <option value="#clientes">👥 Clientes CRM</option>
+          <option value="#horarios">⏰ Horários Vazios</option>
+          <option value="#clube">👑 Clube Zumi</option>
+        </optgroup>
+        <optgroup label="🚀 Máquina de Vendas &amp; Leads">
+          <option value="#trafego">📈 Anúncios &amp; Tráfego IA</option>
+          <option value="#indicacao">🎁 Indique e Ganhe Viral</option>
+          <option value="#b2b">🌾 Zuma Agro B2B</option>
+          <option value="#recuperacao">🛒 Recuperador de Vendas</option>
+        </optgroup>
+        <optgroup label="Inteligência &amp; Gestão 360°">
+          <option value="#mercado">📊 Mercado &amp; IA 360°</option>
+          <option value="#engenharia">🍣 Engenharia Cardápio</option>
+          <option value="#rfm">👥 Simulador Clientes RFM</option>
+          <option value="#clima">🌦️ Clima Tangará</option>
+          <option value="#omnichannel">🔄 Hub Omnichannel</option>
+          <option value="#financeiro">💰 DRE &amp; Financeiro</option>
+          <option value="#estoque">🐟 Estoque Pescados</option>
+        </optgroup>
+      </select>
+    </div>
     <div class="brand">
       <span id="logoZumi"></span>
       <div><b>ZUMA PILOT</b><small>Vendas no piloto automático</small></div>
     </div>
     <nav id="nav">
       <a href="index.html" style="background:var(--nori-soft);color:var(--nori);font-weight:700"><span class="dot" style="background:var(--nori)"></span>← Loja, Mesas &amp; KDS</a>
+      <a href="login.html" style="background:#10b98120;color:var(--nori);font-weight:700"><span class="dot" style="background:var(--nori)"></span>👤 Acesso &amp; Login Unificado</a>
       <a href="operacao.html" style="background:#f9731620;color:var(--salmon);font-weight:700"><span class="dot" style="background:var(--salmon)"></span>⚡ Central 360° (PDV/KDS/Garçom/Motoboy)</a>
       <a href="erp.html" style="background:#8b5cf620;color:#c084fc;font-weight:700"><span class="dot" style="background:#a855f7"></span>💼 ERP Zuma 360° (Caixa, DRE, Pescados)</a>
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:8px 8px 2px;font-weight:700">Operação &amp; Vendas</div>
@@ -2759,6 +2851,11 @@ function route() {
   if (v === "b2b") renderB2B();
   if (v === "recuperacao") renderRecuperacao();
   if (v === "estoque") renderEstoque();
+    const sel = document.getElementById("mobileModuleSelect");
+  if (sel) sel.value = "#" + v;
+  document.querySelectorAll(".ios-tab").forEach(tab => {
+    tab.classList.toggle("active", tab.dataset.tab === v);
+  });
   window.scrollTo(0, 0);
 }
 window.addEventListener("hashchange", route);
@@ -2783,10 +2880,24 @@ route();
         } else if (href.startsWith("index.html") || href === "index.html" || href === "index") {
           el.setAttribute("href", `${basePath}/index.html${window.location.search}`);
           el.removeAttribute("target");
+        } else if (href.startsWith("login.html") || href === "login.html" || href === "login") {
+          el.setAttribute("href", `${basePath}/login.html${window.location.search}`);
+          el.removeAttribute("target");
         }
       });
     }
     window.addEventListener("DOMContentLoaded", ajustarLinksNavegacao);
     setTimeout(ajustarLinksNavegacao, 100);
   </script>
+
+  <!-- ================= BARRA INFERIOR IOS (IPHONE FIRST) ================= -->
+  <nav class="ios-bottom-bar" id="iosBottomBar">
+    <a href="#cockpit" class="ios-tab" data-tab="cockpit"><span>⚡</span><small>Cockpit</small></a>
+    <a href="#zumi" class="ios-tab" data-tab="zumi"><span>💬</span><small>Zumi IA</small></a>
+    <a href="#trafego" class="ios-tab" data-tab="trafego"><span>🚀</span><small>Vendas</small></a>
+    <a href="#mercado" class="ios-tab" data-tab="mercado"><span>📈</span><small>Gestão</small></a>
+    <a href="operacao.html" class="ios-tab"><span>🏪</span><small>Central 360</small></a>
+    <a href="login.html" class="ios-tab"><span>👤</span><small>Login</small></a>
+  </nav>
+
 </body></html>

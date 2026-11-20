@@ -423,6 +423,7 @@ test('Zuma Cozinha Oriental - Máquina de Vendas & Leads 360° (Tráfego, Indica
   assert.ok(recRes.data.reguasAutomacao.length === 3);
 });
 
+
 test('Zuma Cozinha Oriental - Módulos de Diferenciação Japonesa no Cardápio Digital', () => {
   const indexHtmlPath = path.join(__dirname, 'public', 'zuma', 'index.html');
   assert.ok(fs.existsSync(indexHtmlPath), 'index.html deve existir');
@@ -721,3 +722,32 @@ test('Zuma Cozinha Oriental - Fluxo Completo Zumi Atende via WhatsApp: Baixa em 
   assert.equal(salmaoConsolidado.saldoFinal, parseFloat((saldoSalmaoInicial - 0.530).toFixed(3)));
   assert.ok(pedidoRes.data.reciboFiscalNFCe.chaveAcesso.startsWith('51261136296848000157'), 'Chave NFC-e com CNPJ de Zuma e UF 51 MT');
 });
+
+
+test("Zuma Cozinha Oriental - Acesso Unificado login.html e Responsividade iPhone First", () => {
+  const loginPath = path.join(__dirname, "public", "zuma", "login.html");
+  const pilotPath = path.join(__dirname, "public", "zuma", "pilot.html");
+  const indexPath = path.join(__dirname, "public", "zuma", "index.html");
+
+  assert.ok(fs.existsSync(loginPath), "login.html deve existir");
+  const loginHtml = fs.readFileSync(loginPath, "utf8");
+
+  // Perfis e credenciais de PRD
+  assert.ok(loginHtml.includes("leandro@zumacozinhaoriental.com.br"), "login.html deve conter credencial de gerente");
+  assert.ok(loginHtml.includes("chef@zumacozinhaoriental.com.br"), "login.html deve conter credencial do chef sushiman");
+  assert.ok(loginHtml.includes("atendimento@zumacozinhaoriental.com.br"), "login.html deve conter credencial de atendimento");
+  assert.ok(loginHtml.includes("123456"), "login.html deve conter senha padrão de PRD");
+  assert.ok(loginHtml.includes("selecionarPerfil"), "login.html deve conter seletor rápido de perfis em 1 clique");
+  assert.ok(loginHtml.includes("viewport-fit=cover"), "login.html deve ter viewport-fit=cover para iPhone");
+  assert.ok(loginHtml.includes("env(safe-area-inset-top"), "login.html deve suportar safe area do iPhone");
+
+  // Pilot e Index com iOS First
+  const pilotHtml = fs.readFileSync(pilotPath, "utf8");
+  assert.ok(pilotHtml.includes("ios-bottom-bar"), "pilot.html deve conter barra inferior estilo iOS");
+  assert.ok(pilotHtml.includes("mobileModuleSelect"), "pilot.html deve conter seletor wheel de módulos para iPhone");
+
+  const indexHtml = fs.readFileSync(indexPath, "utf8");
+  assert.ok(indexHtml.includes("login.html"), "index.html deve ter link direto para login.html");
+  assert.ok(indexHtml.includes("cart-badge-bottom"), "index.html deve sincronizar badge na barra inferior iOS");
+});
+
