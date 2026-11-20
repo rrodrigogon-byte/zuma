@@ -34,6 +34,7 @@ const somenteDigitos = (v) => String(v ?? '').replace(/\D/g, '');
 
 export const EMPRESA_DINO_ID = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
 export const HOLDING_PALATARE_EMPRESA_ID = 'c0c0ac01-8e50-4b61-8c79-de4aaa916da0';
+export const EMPRESA_ZUMA_ID = 'c3c3ac01-8e50-4b61-8c79-de4aaa916da3';
 
 const EMPRESAS_CANONICAS_PADRAO = [
   {
@@ -516,6 +517,16 @@ export async function obterEmpresaPorId(db, empresaId) {
       criadoEm: ej.criadaEm,
       atualizadoEm: ej.atualizadaEm,
     };
+  }
+
+  const canonica = EMPRESAS_CANONICAS_PADRAO.find(e => 
+    String(e.id || "").toLowerCase() === idStr.toLowerCase() || 
+    (e.slug && String(e.slug).toLowerCase() === idStr.toLowerCase()) ||
+    (e.brandKey && String(e.brandKey).toLowerCase() === idStr.toLowerCase()) ||
+    (idStr.toLowerCase() === "zuma" && e.id === EMPRESA_ZUMA_ID)
+  );
+  if (canonica) {
+    return { ...canonica };
   }
 
   throw new ErroDominio('NOT_FOUND', 'Empresa não encontrada', 404);

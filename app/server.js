@@ -13694,6 +13694,12 @@ app.use((req, res, next) => {
     return res.sendFile(path.join(zumaPublicDir, "pilot.html"));
   }
 
+  // ERP Completo Zuma Gastronômico 360° (Caixa, DRE, Estoque Pescados, Fichas Técnicas, Mesas/Salão, Delivery/Motoboys, CRM)
+  if (p === "/erp" || p === "/erp.html" || p === "/sistema" || p === "/suite" || p === "/admin-zuma") {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    return res.sendFile(path.join(zumaPublicDir, "erp.html"));
+  }
+
   // Storefront & Cardápio Digital (Home, /cardapio, /loja, /pedidos, /barca, etc.)
   if (p === "" || p === "/" || p === "/index.html" || p === "/cardapio" || p === "/loja" || p === "/pedidos" || p === "/barca" || p === "/saque" || p === "/frescor" || p === "/eventos") {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
@@ -13730,6 +13736,11 @@ app.get(["/zuma/pilot", "/zuma/pilot.html", "/zuma/cockpit", "/zuma/gestao"], (r
   res.sendFile(path.join(zumaPublicDir, "pilot.html"));
 });
 
+app.get(["/zuma/erp", "/zuma/erp.html", "/zuma/sistema", "/zuma/suite", "/zuma/gestao-erp"], (req, res) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.sendFile(path.join(zumaPublicDir, "erp.html"));
+});
+
 // Suporte direto para /operacao e /pilot no caso de requisições de origem zuma
 app.get(["/operacao", "/operacao.html"], (req, res, next) => {
   const ref = String(req.headers.referer || "").toLowerCase();
@@ -13745,6 +13756,15 @@ app.get(["/pilot", "/pilot.html"], (req, res, next) => {
   if (isZumaHost(req) || ref.includes("zuma")) {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     return res.sendFile(path.join(zumaPublicDir, "pilot.html"));
+  }
+  next();
+});
+
+app.get(["/erp", "/erp.html"], (req, res, next) => {
+  const ref = String(req.headers.referer || "").toLowerCase();
+  if (isZumaHost(req) || ref.includes("zuma")) {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    return res.sendFile(path.join(zumaPublicDir, "erp.html"));
   }
   next();
 });

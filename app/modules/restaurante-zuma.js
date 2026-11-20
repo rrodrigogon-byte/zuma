@@ -1163,3 +1163,727 @@ routerZuma.post('/recuperacao/disparar-teste', (req, res) => {
     horarioEnvio: new Date().toLocaleTimeString('pt-BR')
   });
 });
+
+
+// =========================================================================
+// MÓDULOS DE ERP INTEGRADO ZUMA COZINHA ORIENTAL 360° (EXCLUSIVO ZUMA)
+// =========================================================================
+
+// ESTADO EM MEMÓRIA DO ERP ZUMA
+const ESTADO_ERP_ZUMA = {
+  turnoCaixa: {
+    status: "aberto",
+    turnoId: "TRN-20261120-JANTAR",
+    data: "2026-11-20",
+    tipoTurno: "Jantar (18:30 - 23:45)",
+    operador: "Matheus Silva (Supervisor de Caixa)",
+    horarioAbertura: "18:00",
+    fundoTrocoInicial: 350.00,
+    suprimentos: [
+      { id: "SUP-01", hora: "18:30", valor: 150.00, motivo: "Reforço de moedas e cédulas de R$ 5,00", operador: "Matheus Silva" }
+    ],
+    sangrias: [
+      { id: "SAN-01", hora: "21:30", valor: 800.00, motivo: "Sangria de segurança para cofre principal", operador: "Matheus Silva" },
+      { id: "SAN-02", hora: "22:15", valor: 180.00, motivo: "Pagamento urgente gelo escama para balcão de peixes", operador: "Matheus Silva" }
+    ],
+    totaisSistema: {
+      dinheiro: 1420.00,
+      pix: 3840.50,
+      cartaoCredito: 4950.00,
+      cartaoDebito: 2180.00,
+      convenioAgroB2B: 1250.00,
+      ifoodOnline: 980.00
+    },
+    conferenciaCega: null,
+    fechamento: null
+  },
+  estoquePescados: [
+    {
+      codigo: "INS-001",
+      nome: "Salmão Fresco Chileno Premium (Eviscerado c/ Cabeça)",
+      categoria: "Pescados Nobres",
+      unidade: "kg",
+      estoqueAtualKg: 48.5,
+      estoqueMinimoKg: 20.0,
+      rendimentoMedioFilePct: 58.0,
+      aparasPct: 15.0,
+      carcacaDescartePct: 27.0,
+      precoMedioKgBruto: 68.50,
+      custoKgFileLimpo: 118.10,
+      temperaturaCamaraC: -1.5,
+      temperaturaBalcaoC: 2.1,
+      loteAtual: "LT-SAL-20261119-01",
+      validadeLote: "2026-11-23",
+      fornecedor: "Pescados Pantanal & Pacífico Import",
+      statusFrescor: "Excelente (Padrão Sashimi)"
+    },
+    {
+      codigo: "INS-002",
+      nome: "Atum Vermelho Fresco (Lombo Nobre)",
+      categoria: "Pescados Nobres",
+      unidade: "kg",
+      estoqueAtualKg: 14.2,
+      estoqueMinimoKg: 6.0,
+      rendimentoMedioFilePct: 88.0,
+      aparasPct: 7.0,
+      carcacaDescartePct: 5.0,
+      precoMedioKgBruto: 92.00,
+      custoKgFileLimpo: 104.55,
+      temperaturaCamaraC: -1.8,
+      loteAtual: "LT-ATM-20261118-02",
+      validadeLote: "2026-11-22",
+      fornecedor: "Mar & Rio Pescados Nobres",
+      statusFrescor: "Excelente (Padrão Sashimi)"
+    },
+    {
+      codigo: "INS-003",
+      nome: "Peixe Branco Fresco (Robalo / Saint Peter Limpo)",
+      categoria: "Pescados Nobres",
+      unidade: "kg",
+      estoqueAtualKg: 18.0,
+      estoqueMinimoKg: 8.0,
+      rendimentoMedioFilePct: 72.0,
+      aparasPct: 12.0,
+      carcacaDescartePct: 16.0,
+      precoMedioKgBruto: 44.00,
+      custoKgFileLimpo: 61.11,
+      loteAtual: "LT-PBR-20261119-04",
+      validadeLote: "2026-11-23",
+      fornecedor: "Piscicultura Águas Claras MT",
+      statusFrescor: "Excelente"
+    },
+    {
+      codigo: "INS-004",
+      nome: "Camarão Rosa Limpo GG (Eviscerado)",
+      categoria: "Frutos do Mar",
+      unidade: "kg",
+      estoqueAtualKg: 12.5,
+      estoqueMinimoKg: 5.0,
+      rendimentoMedioFilePct: 95.0,
+      precoMedioKgBruto: 85.00,
+      custoKgFileLimpo: 89.47,
+      loteAtual: "LT-CAM-20261115-08",
+      validadeLote: "2026-12-15",
+      fornecedor: "Frutos do Mar Brasil",
+      statusFrescor: "Excelente"
+    },
+    {
+      codigo: "INS-005",
+      nome: "Arroz Japonês Especial (Grão Curto Miroku)",
+      categoria: "Grãos & Base",
+      unidade: "kg",
+      estoqueAtualKg: 160.0,
+      estoqueMinimoKg: 50.0,
+      rendimentoCozidoShariX: 2.3,
+      precoMedioKgBruto: 14.80,
+      custoKgShariTemperado: 8.90,
+      loteAtual: "LT-ARZ-20261028-11",
+      validadeLote: "2027-04-28",
+      fornecedor: "Importadora Oriental SP",
+      statusFrescor: "Ótimo"
+    },
+    {
+      codigo: "INS-006",
+      nome: "Alga Nori Premium Gold (Pacote 50 Folhas)",
+      categoria: "Secos & Insumos",
+      unidade: "pacote",
+      estoqueAtualKg: 42.0,
+      estoqueMinimoKg: 15.0,
+      rendimentoMedioFilePct: 100.0,
+      precoMedioKgBruto: 45.00,
+      loteAtual: "LT-NORI-20260910-03",
+      validadeLote: "2027-09-10",
+      fornecedor: "Importadora Oriental SP",
+      statusFrescor: "Excelente"
+    },
+    {
+      codigo: "INS-007",
+      nome: "Cream Cheese Tradicional (Balde 2kg Profissional)",
+      categoria: "Laticínios & Recheios",
+      unidade: "balde",
+      estoqueAtualKg: 28.0,
+      estoqueMinimoKg: 10.0,
+      precoMedioKgBruto: 54.00,
+      loteAtual: "LT-CC-20261105-09",
+      validadeLote: "2027-01-05",
+      fornecedor: "Distribuidora Laticínios Tangará",
+      statusFrescor: "Excelente"
+    }
+  ],
+  perdasPescados: [
+    { id: "PRD-01", data: "2026-11-19", insumo: "Salmão Fresco", qtdKg: 0.45, motivo: "Oxidação natural pós-24h balcão refrigerado", sushiman: "Kenji Sato", custoR$: 30.82 },
+    { id: "PRD-02", data: "2026-11-18", insumo: "Peixe Branco", qtdKg: 0.25, motivo: "Apara excessiva corte sashimi", sushiman: "Lucas Silva", custoR$: 11.00 }
+  ],
+  financeiroDRE: {
+    mesReferencia: "Novembro/2026",
+    receitaBrutaVendas: 184500.00,
+    deducoesImpostos: 9225.00,
+    taxasOperadorasCartao: 3874.50,
+    receitaLiquida: 171400.50,
+    cmvTotalInsumos: 55350.00, // 30.0% da bruta
+    cmvPercentual: "30.0%",
+    margemContribuicaoBruta: 116050.50,
+    margemContribuicaoPercentual: "67.7%",
+    custosPessoalSushimansGarcons: 34200.00,
+    custosFixosInstalacoesAluguelEnergia: 21500.00,
+    marketingTrafegoMetaAds: 5500.00,
+    ebitdaGerencial: 54850.50,
+    ebitdaPercentual: "29.7%",
+    depreciacaoInvestimentos: 2800.00,
+    lucroLiquidoReal: 52050.50,
+    lucroLiquidoPercentual: "28.2%"
+  },
+  contasPagar: [
+    { id: "PAG-881", fornecedor: "Pescados Pantanal LTDA", descricao: "Lote 60kg Salmão Fresco Chileno", valor: 4110.00, vencimento: "2026-11-22", categoria: "CMV Pescados", status: "a_vencer" },
+    { id: "PAG-882", fornecedor: "Distribuidora Laticínios Tangará", descricao: "Cream Cheese e Laticínios", valor: 1620.00, vencimento: "2026-11-24", categoria: "CMV Laticínios", status: "a_vencer" },
+    { id: "PAG-883", fornecedor: "Energisa Mato Grosso", descricao: "Energia Elétrica Unidade Av. Brasil 1605", valor: 3840.00, vencimento: "2026-11-25", categoria: "Custos Fixos", status: "a_vencer" },
+    { id: "PAG-884", fornecedor: "Meta Platforms Ireland", descricao: "Anúncios Instagram @zuma_orientaltga", valor: 1250.00, vencimento: "2026-11-26", categoria: "Marketing", status: "a_vencer" }
+  ],
+  contasReceber: [
+    { id: "REC-401", cliente: "Rede Stone Pagamentos", descricao: "Liquidação Vendas Cartão Crédito Turno 18-19/11", valor: 6420.00, previsaoRecebimento: "2026-11-21", taxaRetencao: 128.40, status: "confirmado" },
+    { id: "REC-402", cliente: "Grupo Scheffer Agronegócios", descricao: "Faturamento Evento Corporativo Confraternização", valor: 4850.00, previsaoRecebimento: "2026-11-25", taxaRetencao: 0.00, status: "a_receber" },
+    { id: "REC-403", cliente: "Sindicato Rural Tangará da Serra", descricao: "Jantar Fechado Diretoria Executiva", valor: 3200.00, previsaoRecebimento: "2026-11-28", taxaRetencao: 0.00, status: "a_receber" }
+  ],
+  deliveryTaxasBairrosTangara: [
+    { bairro: "Centro", taxa: 7.00, tempoMedioMin: 12, distanciaKm: 1.2, motoboyPadrao: "Carlos Ninja" },
+    { bairro: "Jardim Tangará II", taxa: 9.00, tempoMedioMin: 15, distanciaKm: 2.8, motoboyPadrao: "Marcos Flash" },
+    { bairro: "Vila Alta", taxa: 10.00, tempoMedioMin: 16, distanciaKm: 3.5, motoboyPadrao: "Carlos Ninja" },
+    { bairro: "Jardim Europa", taxa: 12.00, tempoMedioMin: 18, distanciaKm: 4.8, motoboyPadrao: "Roberto Veloz" },
+    { bairro: "Módulos 01 a 05", taxa: 11.00, tempoMedioMin: 17, distanciaKm: 4.1, motoboyPadrao: "Marcos Flash" },
+    { bairro: "Parque do Lago", taxa: 14.00, tempoMedioMin: 22, distanciaKm: 6.2, motoboyPadrao: "Roberto Veloz" },
+    { bairro: "Jardim Tarumã", taxa: 13.00, tempoMedioMin: 20, distanciaKm: 5.5, motoboyPadrao: "Carlos Ninja" },
+    { bairro: "Chácaras / Zona Rural Próxima", taxa: 25.00, tempoMedioMin: 35, distanciaKm: 12.0, motoboyPadrao: "Roberto Veloz" }
+  ]
+};
+
+// =========================================================================
+// 1. ROTAS DE CAIXA & FECHAMENTO DE TURNO
+// =========================================================================
+
+// POST /api/public/zuma/caixa/abrir-turno
+routerZuma.post('/caixa/abrir-turno', (req, res) => {
+  const { operador, fundoTroco, tipoTurno } = req.body || {};
+  ESTADO_ERP_ZUMA.turnoCaixa.status = "aberto";
+  ESTADO_ERP_ZUMA.turnoCaixa.operador = operador || "Matheus Silva";
+  ESTADO_ERP_ZUMA.turnoCaixa.fundoTrocoInicial = parseFloat(fundoTroco) || 350.00;
+  ESTADO_ERP_ZUMA.turnoCaixa.tipoTurno = tipoTurno || "Jantar (18:30 - 23:45)";
+  ESTADO_ERP_ZUMA.turnoCaixa.horarioAbertura = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  ESTADO_ERP_ZUMA.turnoCaixa.conferenciaCega = null;
+  ESTADO_ERP_ZUMA.turnoCaixa.fechamento = null;
+
+  res.json({
+    ok: true,
+    mensagem: `Turno de caixa aberto com sucesso por ${ESTADO_ERP_ZUMA.turnoCaixa.operador}!`,
+    turno: ESTADO_ERP_ZUMA.turnoCaixa
+  });
+});
+
+// POST /api/public/zuma/caixa/sangria
+routerZuma.post('/caixa/sangria', (req, res) => {
+  const { valor, motivo, operador } = req.body || {};
+  const v = parseFloat(valor) || 0;
+  if (v <= 0) return res.status(400).json({ ok: false, error: "Valor de sangria inválido" });
+
+  const sangria = {
+    id: `SAN-${String(ESTADO_ERP_ZUMA.turnoCaixa.sangrias.length + 1).padStart(2, '0')}`,
+    hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    valor: v,
+    motivo: motivo || "Sangria de segurança",
+    operador: operador || ESTADO_ERP_ZUMA.turnoCaixa.operador
+  };
+
+  ESTADO_ERP_ZUMA.turnoCaixa.sangrias.push(sangria);
+
+  res.json({
+    ok: true,
+    mensagem: `Sangria de R$ ${v.toFixed(2)} registrada com sucesso!`,
+    sangria,
+    totalSangrias: ESTADO_ERP_ZUMA.turnoCaixa.sangrias.reduce((a, b) => a + b.valor, 0)
+  });
+});
+
+// POST /api/public/zuma/caixa/suprimento
+routerZuma.post('/caixa/suprimento', (req, res) => {
+  const { valor, motivo, operador } = req.body || {};
+  const v = parseFloat(valor) || 0;
+  if (v <= 0) return res.status(400).json({ ok: false, error: "Valor de suprimento inválido" });
+
+  const suprimento = {
+    id: `SUP-${String(ESTADO_ERP_ZUMA.turnoCaixa.suprimentos.length + 1).padStart(2, '0')}`,
+    hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    valor: v,
+    motivo: motivo || "Reforço de troco",
+    operador: operador || ESTADO_ERP_ZUMA.turnoCaixa.operador
+  };
+
+  ESTADO_ERP_ZUMA.turnoCaixa.suprimentos.push(suprimento);
+
+  res.json({
+    ok: true,
+    mensagem: `Suprimento de R$ ${v.toFixed(2)} adicionado ao caixa!`,
+    suprimento
+  });
+});
+
+// POST /api/public/zuma/caixa/fechar-turno
+routerZuma.post('/caixa/fechar-turno', (req, res) => {
+  const {
+    dinheiroContado,
+    pixContado,
+    cartaoCreditoContado,
+    cartaoDebitoContado,
+    convenioContado,
+    observacoes
+  } = req.body || {};
+
+  const sist = ESTADO_ERP_ZUMA.turnoCaixa.totaisSistema;
+  const totSuprimentos = ESTADO_ERP_ZUMA.turnoCaixa.suprimentos.reduce((a, b) => a + b.valor, 0);
+  const totSangrias = ESTADO_ERP_ZUMA.turnoCaixa.sangrias.reduce((a, b) => a + b.valor, 0);
+  const saldoEsperadoDinheiro = ESTADO_ERP_ZUMA.turnoCaixa.fundoTrocoInicial + totSuprimentos + sist.dinheiro - totSangrias;
+
+  const contado = {
+    dinheiro: parseFloat(dinheiroContado) || saldoEsperadoDinheiro,
+    pix: parseFloat(pixContado) || sist.pix,
+    cartaoCredito: parseFloat(cartaoCreditoContado) || sist.cartaoCredito,
+    cartaoDebito: parseFloat(cartaoDebitoContado) || sist.cartaoDebito,
+    convenioAgroB2B: parseFloat(convenioContado) || sist.convenioAgroB2B
+  };
+
+  const diferencaDinheiro = contado.dinheiro - saldoEsperadoDinheiro;
+  const diferencaTotal = (contado.dinheiro - saldoEsperadoDinheiro) +
+                         (contado.pix - sist.pix) +
+                         (contado.cartaoCredito - sist.cartaoCredito) +
+                         (contado.cartaoDebito - sist.cartaoDebito);
+
+  const fechamento = {
+    fechadoEm: new Date().toLocaleString('pt-BR'),
+    operador: ESTADO_ERP_ZUMA.turnoCaixa.operador,
+    totalVendasBrutas: sist.dinheiro + sist.pix + sist.cartaoCredito + sist.cartaoDebito + sist.convenioAgroB2B + sist.ifoodOnline,
+    totaisSistema: sist,
+    totaisContados: contado,
+    saldoEsperadoGavetaDinheiro: saldoEsperadoDinheiro,
+    diferencaDinheiro,
+    diferencaTotal,
+    situacaoCaixa: Math.abs(diferencaTotal) < 0.05 ? "Exato / Sem Diferença" : (diferencaTotal > 0 ? `Sobra de R$ ${diferencaTotal.toFixed(2)}` : `Quebra de R$ ${Math.abs(diferencaTotal).toFixed(2)}`),
+    observacoes: observacoes || "Fechamento validado pelo supervisor de turno."
+  };
+
+  ESTADO_ERP_ZUMA.turnoCaixa.status = "fechado";
+  ESTADO_ERP_ZUMA.turnoCaixa.conferenciaCega = contado;
+  ESTADO_ERP_ZUMA.turnoCaixa.fechamento = fechamento;
+
+  res.json({
+    ok: true,
+    mensagem: "Fechamento de turno concluído com sucesso!",
+    fechamento
+  });
+});
+
+// GET /api/public/zuma/caixa/relatorio-fechamento
+routerZuma.get('/caixa/relatorio-fechamento', (req, res) => {
+  res.json({
+    ok: true,
+    empresa: "Zuma Cozinha Oriental",
+    cnpj: "36.296.848/0001-57",
+    turno: ESTADO_ERP_ZUMA.turnoCaixa
+  });
+});
+
+// GET /api/public/zuma/caixa/conferencia
+routerZuma.get('/caixa/conferencia', (req, res) => {
+  const sist = ESTADO_ERP_ZUMA.turnoCaixa.totaisSistema;
+  const totSuprimentos = ESTADO_ERP_ZUMA.turnoCaixa.suprimentos.reduce((a, b) => a + b.valor, 0);
+  const totSangrias = ESTADO_ERP_ZUMA.turnoCaixa.sangrias.reduce((a, b) => a + b.valor, 0);
+  const saldoEsperadoDinheiro = ESTADO_ERP_ZUMA.turnoCaixa.fundoTrocoInicial + totSuprimentos + sist.dinheiro - totSangrias;
+
+  res.json({
+    ok: true,
+    statusTurno: ESTADO_ERP_ZUMA.turnoCaixa.status,
+    operador: ESTADO_ERP_ZUMA.turnoCaixa.operador,
+    fundoInicial: ESTADO_ERP_ZUMA.turnoCaixa.fundoTrocoInicial,
+    totalSuprimentos: totSuprimentos,
+    totalSangrias: totSangrias,
+    saldoEsperadoGavetaDinheiro: saldoEsperadoDinheiro,
+    vendasTotaisPorForma: sist,
+    totalGeralVendido: sist.dinheiro + sist.pix + sist.cartaoCredito + sist.cartaoDebito + sist.convenioAgroB2B + sist.ifoodOnline
+  });
+});
+
+// =========================================================================
+// 2. ROTAS DE ESTOQUE ESPECIALIZADO DE PESCADOS & FICHAS TÉCNICAS (CMV)
+// =========================================================================
+
+// GET /api/public/zuma/estoque/pescados
+routerZuma.get('/estoque/pescados', (req, res) => {
+  res.json({
+    ok: true,
+    empresa: "Zuma Cozinha Oriental",
+    totalInsumosCadastrados: ESTADO_ERP_ZUMA.estoquePescados.length,
+    itens: ESTADO_ERP_ZUMA.estoquePescados,
+    perdasRecentes: ESTADO_ERP_ZUMA.perdasPescados,
+    resumoControleFrescor: {
+      conformidadeCamaraFria: "OK (-1.5°C a -1.8°C)",
+      conformidadeBalcaoSushi: "OK (2.1°C)",
+      indicePerdaMedioPescados: "0.85% (Excelente - Meta < 2.0%)",
+      proximaEntregaSalmao: "2026-11-22 08:30 (60kg Chileno Eviscerado)"
+    }
+  });
+});
+
+// POST /api/public/zuma/estoque/lancar-compra
+routerZuma.post('/estoque/lancar-compra', (req, res) => {
+  const { codigoInsumo, qtdKg, valorTotal, fornecedor, lote, validade } = req.body || {};
+  const insumo = ESTADO_ERP_ZUMA.estoquePescados.find(i => i.codigo === codigoInsumo);
+  const qtd = parseFloat(qtdKg) || 0;
+  const total = parseFloat(valorTotal) || 0;
+
+  if (insumo && qtd > 0) {
+    insumo.estoqueAtualKg += qtd;
+    insumo.loteAtual = lote || `LT-${Date.now()}`;
+    insumo.validadeLote = validade || insumo.validadeLote;
+    if (fornecedor) insumo.fornecedor = fornecedor;
+    if (total > 0) insumo.precoMedioKgBruto = total / qtd;
+  }
+
+  res.json({
+    ok: true,
+    mensagem: `Compra de ${qtd} kg lançada no estoque com sucesso!`,
+    insumoAtualizado: insumo
+  });
+});
+
+// POST /api/public/zuma/estoque/perda-peixe
+routerZuma.post('/estoque/perda-peixe', (req, res) => {
+  const { codigoInsumo, qtdKg, motivo, sushiman } = req.body || {};
+  const insumo = ESTADO_ERP_ZUMA.estoquePescados.find(i => i.codigo === codigoInsumo);
+  const qtd = parseFloat(qtdKg) || 0;
+
+  if (insumo && qtd > 0) {
+    insumo.estoqueAtualKg = Math.max(0, insumo.estoqueAtualKg - qtd);
+    const custo = qtd * (insumo.precoMedioKgBruto || 65);
+    const perda = {
+      id: `PRD-${String(ESTADO_ERP_ZUMA.perdasPescados.length + 1).padStart(2, '0')}`,
+      data: new Date().toISOString().split('T')[0],
+      insumo: insumo.nome,
+      qtdKg: qtd,
+      motivo: motivo || "Descarte de qualidade",
+      sushiman: sushiman || "Sushiman Turno",
+      custoR$: custo
+    };
+    ESTADO_ERP_ZUMA.perdasPescados.unshift(perda);
+
+    return res.json({
+      ok: true,
+      mensagem: `Registro de perda de ${qtd} kg salvo para auditoria de CMV.`,
+      perda,
+      estoqueRestanteKg: insumo.estoqueAtualKg
+    });
+  }
+
+  res.status(400).json({ ok: false, error: "Insumo ou quantidade inválida" });
+});
+
+// GET /api/public/zuma/estoque/fichas-tecnicas
+routerZuma.get('/estoque/fichas-tecnicas', (req, res) => {
+  const fichas = [
+    {
+      prato: "Combinado Individual Salmão (18 Peças)",
+      precoVenda: 62.00,
+      cmvTeoricoR$: 18.20,
+      cmvPercentual: "29.35%",
+      margemContribuicao: 43.80,
+      insumos: [
+        { item: "Filé de Salmão Limpo", qtdGramas: 160, custo: 13.50 },
+        { item: "Shari Temperado", qtdGramas: 180, custo: 1.60 },
+        { item: "Cream Cheese & Toppings", qtdGramas: 30, custo: 1.20 },
+        { item: "Embalagem / Shoyu / Wasabi / Gari", qtd: "1 kit", custo: 1.90 }
+      ]
+    },
+    {
+      prato: "Hot Roll Filadélfia Tradicional (10 Peças)",
+      precoVenda: 34.00,
+      cmvTeoricoR$: 7.80,
+      cmvPercentual: "22.94%",
+      margemContribuicao: 26.20,
+      insumos: [
+        { item: "Salmão Moído / Aparas Nobres", qtdGramas: 70, custo: 3.80 },
+        { item: "Shari Temperado", qtdGramas: 90, custo: 0.80 },
+        { item: "Nori, Farinha Panko & Óleo", qtd: "1 un", custo: 1.40 },
+        { item: "Cream Cheese & Tarê da Casa", qtdGramas: 25, custo: 1.80 }
+      ]
+    },
+    {
+      prato: "Rodízio Zuma Tangará da Serra (Por Pessoa)",
+      precoVenda: 139.90,
+      cmvTeoricoR$: 42.50,
+      cmvPercentual: "30.37%",
+      margemContribuicao: 97.40,
+      insumos: [
+        { item: "Pescados Nobres (Salmão, Atum, Peixe Branco)", qtdGramas: 380, custo: 32.00 },
+        { item: "Shari, Algas & Entradas Quentes", qtdGramas: 320, custo: 6.50 },
+        { item: "Sobremesa & Cortesia Zumi", qtd: "1 un", custo: 4.00 }
+      ]
+    }
+  ];
+
+  res.json({
+    ok: true,
+    totalFichasPadrao: fichas.length,
+    fichas
+  });
+});
+
+// =========================================================================
+// 3. ROTAS DE GESTÃO FINANCEIRA & DRE GERENCIAL
+// =========================================================================
+
+// GET /api/public/zuma/financeiro/dre
+routerZuma.get('/financeiro/dre', (req, res) => {
+  res.json({
+    ok: true,
+    empresa: "Zuma Cozinha Oriental",
+    cnpj: "36.296.848/0001-57",
+    dre: ESTADO_ERP_ZUMA.financeiroDRE
+  });
+});
+
+// GET /api/public/zuma/financeiro/contas-pagar
+routerZuma.get('/financeiro/contas-pagar', (req, res) => {
+  res.json({
+    ok: true,
+    totalTitulos: ESTADO_ERP_ZUMA.contasPagar.length,
+    totalValor: ESTADO_ERP_ZUMA.contasPagar.reduce((a, b) => a + b.valor, 0),
+    titulos: ESTADO_ERP_ZUMA.contasPagar
+  });
+});
+
+// GET /api/public/zuma/financeiro/contas-receber
+routerZuma.get('/financeiro/contas-receber', (req, res) => {
+  res.json({
+    ok: true,
+    totalTitulos: ESTADO_ERP_ZUMA.contasReceber.length,
+    totalValor: ESTADO_ERP_ZUMA.contasReceber.reduce((a, b) => a + b.valor, 0),
+    titulos: ESTADO_ERP_ZUMA.contasReceber
+  });
+});
+
+// POST /api/public/zuma/financeiro/lancar-titulo
+routerZuma.post('/financeiro/lancar-titulo', (req, res) => {
+  const { tipo, favorecido, descricao, valor, vencimento, categoria } = req.body || {};
+  const v = parseFloat(valor) || 0;
+  const t = String(tipo || 'pagar').toLowerCase();
+
+  if (t === 'pagar') {
+    const novoPagar = {
+      id: `PAG-${Math.floor(1000 + Math.random() * 9000)}`,
+      fornecedor: favorecido || "Fornecedor Local",
+      descricao: descricao || "Despesa Operacional",
+      valor: v,
+      vencimento: vencimento || new Date().toISOString().split('T')[0],
+      categoria: categoria || "Custos Operacionais",
+      status: "a_vencer"
+    };
+    ESTADO_ERP_ZUMA.contasPagar.push(novoPagar);
+    return res.json({ ok: true, mensagem: "Conta a pagar registrada!", titulo: novoPagar });
+  } else {
+    const novoReceber = {
+      id: `REC-${Math.floor(1000 + Math.random() * 9000)}`,
+      cliente: favorecido || "Cliente B2B",
+      descricao: descricao || "Faturamento Corporativo",
+      valor: v,
+      previsaoRecebimento: vencimento || new Date().toISOString().split('T')[0],
+      taxaRetencao: 0,
+      status: "a_receber"
+    };
+    ESTADO_ERP_ZUMA.contasReceber.push(novoReceber);
+    return res.json({ ok: true, mensagem: "Conta a receber registrada!", titulo: novoReceber });
+  }
+});
+
+// =========================================================================
+// 4. ROTAS DE MESAS, COMANDAS, RODÍZIO & DIVISÃO DE CONTA
+// =========================================================================
+
+// GET /api/public/zuma/mesas/detalhe/:numero
+routerZuma.get('/mesas/detalhe/:numero', (req, res) => {
+  const num = String(req.params.numero);
+  const mesa = ZUMA_MESAS_INICIAIS.find(m => String(m.numero) === num) || {
+    id: `mesa-${num}`,
+    numero: num,
+    capacidade: 4,
+    area: "Salão Principal",
+    statusOcupacao: "ocupada"
+  };
+
+  res.json({
+    ok: true,
+    mesa: {
+      ...mesa,
+      comandaAtiva: {
+        id: `CMD-M${num}-20261120`,
+        clienteNome: "Rodrigo Gonçalves",
+        qtdPessoas: 3,
+        modalidade: "Rodízio Zuma Tangará",
+        valorPorPessoa: 139.90,
+        horaAbertura: "19:40",
+        tempoPermanenciaMinutos: 45,
+        itensConsumidos: [
+          { nome: "Rodízio Zuma Especial Adulto", qtd: 3, precoUnit: 139.90, total: 419.70 },
+          { nome: "Caipirinha de Saquê com Morango", qtd: 2, precoUnit: 28.00, total: 56.00 },
+          { nome: "Cerveja Japonesa Kirin Ichiban", qtd: 3, precoUnit: 18.00, total: 54.00 },
+          { nome: "Água com Gás Prata", qtd: 2, precoUnit: 7.00, total: 14.00 }
+        ],
+        subtotal: 543.70,
+        taxaServico10Pct: 54.37,
+        totalComServico: 598.07,
+        divisao3Pessoas: (598.07 / 3).toFixed(2)
+      }
+    }
+  });
+});
+
+// POST /api/public/zuma/mesas/adicionar-item
+routerZuma.post('/mesas/adicionar-item', (req, res) => {
+  const { mesaNumero, itemNome, qtd, precoUnit, obs } = req.body || {};
+  res.json({
+    ok: true,
+    mensagem: `Item ${itemNome} (${qtd}x) adicionado à comanda da Mesa ${mesaNumero}!`,
+    item: {
+      nome: itemNome,
+      qtd: parseInt(qtd) || 1,
+      precoUnit: parseFloat(precoUnit) || 0,
+      obs: obs || ""
+    }
+  });
+});
+
+// POST /api/public/zuma/mesas/dividir-conta
+routerZuma.post('/mesas/dividir-conta', (req, res) => {
+  const { valorTotal, qtdPessoas, incluirTaxaServico } = req.body || {};
+  const totalBase = parseFloat(valorTotal) || 0;
+  const pessoas = Math.max(1, parseInt(qtdPessoas) || 1);
+  const taxa = incluirTaxaServico !== false ? totalBase * 0.10 : 0;
+  const totalFinal = totalBase + taxa;
+  const valorPorPessoa = totalFinal / pessoas;
+
+  res.json({
+    ok: true,
+    subtotal: totalBase,
+    taxaServico10Pct: taxa,
+    totalComServico: totalFinal,
+    qtdPessoas: pessoas,
+    valorPorPessoa: parseFloat(valorPorPessoa.toFixed(2)),
+    mensagemPixCopiaCola: `Pix Zuma Tangará: R$ ${valorPorPessoa.toFixed(2)} por pessoa para chave 36.296.848/0001-57`
+  });
+});
+
+// POST /api/public/zuma/mesas/transferir
+routerZuma.post('/mesas/transferir', (req, res) => {
+  const { mesaOrigem, mesaDestino, motivo } = req.body || {};
+  res.json({
+    ok: true,
+    mensagem: `Comanda da Mesa ${mesaOrigem} transferida com sucesso para a Mesa ${mesaDestino}!`,
+    detalhes: { mesaOrigem, mesaDestino, motivo: motivo || "Solicitação dos clientes" }
+  });
+});
+
+// =========================================================================
+// 5. ROTAS DE DELIVERY & TAXAS POR BAIRRO DE TANGARÁ DA SERRA
+// =========================================================================
+
+// GET /api/public/zuma/delivery/taxas-bairros
+routerZuma.get('/delivery/taxas-bairros', (req, res) => {
+  res.json({
+    ok: true,
+    cidade: "Tangará da Serra - MT",
+    origemRestaurante: "Av. Brasil, 1605-S, Jardim Cidade Alta",
+    totalBairrosMapeados: ESTADO_ERP_ZUMA.deliveryTaxasBairrosTangara.length,
+    bairros: ESTADO_ERP_ZUMA.deliveryTaxasBairrosTangara
+  });
+});
+
+// POST /api/public/zuma/delivery/despachar
+routerZuma.post('/delivery/despachar', (req, res) => {
+  const { pedidoId, clienteNome, bairro, motoboyNome, valorTotal, formaPagamento } = req.body || {};
+  const bInfo = ESTADO_ERP_ZUMA.deliveryTaxasBairrosTangara.find(b => b.bairro.toLowerCase() === String(bairro || '').toLowerCase()) || { taxa: 10.00, tempoMedioMin: 15 };
+
+  const despacho = {
+    pedidoId: pedidoId || `PED-${Math.floor(1000 + Math.random() * 9000)}`,
+    cliente: clienteNome || "Cliente Tangará",
+    bairro: bairro || "Centro",
+    taxaEntrega: bInfo.taxa,
+    previsaoEntregaMinutos: bInfo.tempoMedioMin,
+    motoboy: motoboyNome || "Carlos Ninja",
+    status: "saiu_para_entrega",
+    horarioDespacho: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    linkRastreioWhatsApp: `https://zuma.kytto.com.br/rastreio/${pedidoId}`
+  };
+
+  res.json({
+    ok: true,
+    mensagem: `Pedido ${despacho.pedidoId} despachado com sucesso para ${despacho.bairro} via ${despacho.motoboy}!`,
+    despacho
+  });
+});
+
+// POST /api/public/zuma/delivery/acerto-motoboy
+routerZuma.post('/delivery/acerto-motoboy', (req, res) => {
+  const { motoboyNome, totalCorridas, totalRecebidoDinheiro, totalRecebidoCartaoMaquininha } = req.body || {};
+  const corridas = parseInt(totalCorridas) || 8;
+  const taxaPorCorrida = 7.50; // Remuneração do motoboy por entrega
+  const valorTotalCorridasMotoboy = corridas * taxaPorCorrida;
+  const dinheiro = parseFloat(totalRecebidoDinheiro) || 340.00;
+  const repasseLiquido = dinheiro - valorTotalCorridasMotoboy;
+
+  res.json({
+    ok: true,
+    motoboy: motoboyNome || "Carlos Ninja",
+    data: new Date().toLocaleDateString('pt-BR'),
+    totalEntregasRealizadas: corridas,
+    ganhoMotoboy: valorTotalCorridasMotoboy,
+    totalDinheiroRecebidoDeClientes: dinheiro,
+    totalCartaoMaquininha: parseFloat(totalRecebidoCartaoMaquininha) || 580.00,
+    valorASerDevolvidoAoCaixa: repasseLiquido > 0 ? repasseLiquido : 0,
+    situacao: "Acerto de turno conferido e quitado com sucesso!"
+  });
+});
+
+// =========================================================================
+// 6. ROTAS DE CRM & CLUBE ZUMI
+// =========================================================================
+
+// GET /api/public/zuma/crm/clientes
+routerZuma.get('/crm/clientes', (req, res) => {
+  res.json({
+    ok: true,
+    empresa: "Zuma Cozinha Oriental",
+    totalClientesBase: ZUMA_CLIENTES_CRM.length,
+    clientes: ZUMA_CLIENTES_CRM.map(c => ({
+      ...c,
+      nivelClubeZumi: c.pedidosFeitos >= 10 ? "Black VIP" : (c.pedidosFeitos >= 5 ? "Ouro" : (c.pedidosFeitos >= 2 ? "Prata" : "Bronze")),
+      pontosClubeZumi: Math.floor(c.totalGasto || 0)
+    }))
+  });
+});
+
+// POST /api/public/zuma/crm/resgatar-premio
+routerZuma.post('/crm/resgatar-premio', (req, res) => {
+  const { clienteNome, pontosResgatados, premioEscolhido } = req.body || {};
+  res.json({
+    ok: true,
+    mensagem: `Prêmio "${premioEscolhido || 'Hot Roll Filadélfia 10un'}" resgatado com sucesso para ${clienteNome || 'Cliente'}!`,
+    voucherResgate: `ZUMI-${Math.floor(100000 + Math.random() * 900000)}`,
+    pontosDebitado: parseInt(pontosResgatados) || 150
+  });
+});
+
+// POST /api/public/zuma/crm/disparar-aniversariantes
+routerZuma.post('/crm/disparar-aniversariantes', (req, res) => {
+  res.json({
+    ok: true,
+    mensagem: "Campanha de aniversariantes de Tangará da Serra disparada com sucesso!",
+    totalDisparados: 14,
+    cupomAtivado: "NIVERZUMA",
+    beneficio: "1 Petit Gateau Oriental ou 1 Sobremesa Harumaki de Nutella cortesia em pedidos ou consumo no salão acima de R$ 90."
+  });
+});

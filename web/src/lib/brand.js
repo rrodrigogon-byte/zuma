@@ -33,6 +33,7 @@ export function isStalloneBrandContext(...contexts) {
 
 /** Marca do tenant ativo (empresaAtiva do AuthContext ou alias do storefront). */
 export function brandFromContext(...contexts) {
+  if (isZumaBrandContext(...contexts)) return 'zuma'
   if (isDinoBrandContext(...contexts)) return 'dino'
   if (isStalloneBrandContext(...contexts)) return 'stallone'
   return 'kytto'
