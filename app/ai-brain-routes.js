@@ -370,6 +370,48 @@ export function registerAiBrainRoutes(app, deps) {
     } catch (error) { send(res, error); }
   });
 
+  app.post(`${BASE}/reanalisar-historico-completo`, async (req, res) => {
+    const s = await scope(req, res, 'settings.write'); if (!s) return;
+    try {
+      const { runFullHistoricalAnalysis } = await import('./core/trex-historical-learner.js');
+      const resultado = await runFullHistoricalAnalysis({ empresaId: s.empresaId });
+      note(req, 'cerebro_ia_reanalisar_historico', resultado);
+      res.json(resultado);
+    } catch (error) { send(res, error); }
+  });
+
+  app.get(`${BASE}/estatisticas-aprendizado`, async (req, res) => {
+    const s = await scope(req, res); if (!s) return;
+    try {
+      const { db } = await import('./core/database.js');
+      const [fatosRes, resumosRes, clientesRes] = await Promise.all([
+        db.queryRead(
+          `SELECT categoria, count(*)::int as total FROM ai_customer_facts WHERE empresa_id = $1 GROUP BY categoria ORDER BY total DESC`,
+          [s.empresaId]
+        ).catch(() => ({ rows: [] })),
+        db.queryRead(
+          `SELECT resultado, count(*)::int as total FROM ai_conversation_summaries WHERE empresa_id = $1 GROUP BY resultado`,
+          [s.empresaId]
+        ).catch(() => ({ rows: [] })),
+        db.queryRead(
+          `SELECT count(distinct telefone)::int as clientes_com_fatos FROM ai_customer_facts WHERE empresa_id = $1`,
+          [s.empresaId]
+        ).catch(() => ({ rows: [{ clientes_com_fatos: 0 }] }))
+      ]);
+      const totalFatos = fatosRes.rows.reduce((acc, r) => acc + Number(r.total || 0), 0);
+      const totalResumos = resumosRes.rows.reduce((acc, r) => acc + Number(r.total || 0), 0);
+      res.json({
+        ok: true,
+        empresaId: s.empresaId,
+        totalFatos,
+        totalResumos,
+        clientesComFatos: Number(clientesRes.rows[0]?.clientes_com_fatos || 0),
+        categorias: fatosRes.rows,
+        resultadosConversas: resumosRes.rows
+      });
+    } catch (error) { send(res, error); }
+  });
+
   app.post(`${BASE}/trex/consolidar-aprendizado`, async (req, res) => {
     const s = await scope(req, res, 'settings.write'); if (!s) return;
     try {

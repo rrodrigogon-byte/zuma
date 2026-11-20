@@ -228,6 +228,15 @@ function CerebroIAWorkspace({ empresaAtiva, lojaAtiva, initialTab = 'ativacao', 
       carregar()
     } catch (error) { toast(error.message, true) } finally { setBusy('') }
   }
+  async function reanalisarHistoricoCompleto() {
+    if (!window.confirm('Deseja iniciar a reanálise completa de todo o histórico de conversas do T-Rex desde a criação? Todos os fatos, preferências, barbeiros preferidos e resumos serão gravados e consolidados no Motor KyttoIA.')) return
+    setBusy('reanalisar-historico')
+    try {
+      const out = await api.post(`${BASE}/reanalisar-historico-completo`, {})
+      toast(`Reanálise concluída com sucesso: ${out.sessoesProcessadas} sessões, ${out.mensagensProcessadas} mensagens, ${out.fatosCriados} novos fatos gravados na memória e ${out.resumosCriados} resumos consolidados!`)
+      carregar()
+    } catch (error) { toast(error.message, true) } finally { setBusy('') }
+  }
   async function decidir(item, decisao) {
     try {
       await api.post(`${BASE}/propostas/${item.id}/decisao`, { decisao, proposta: propostas.drafts[item.id] })
@@ -382,6 +391,15 @@ function CerebroIAWorkspace({ empresaAtiva, lojaAtiva, initialTab = 'ativacao', 
           </button>
           <button type="button" className="c360-btn ghost" disabled={!info.settings.ativo || Boolean(busy)} onClick={() => aprenderAgora('ontem')}>
             {busy === 'aprender-ontem' ? 'Processando…' : '📅 Processar Conversas de Ontem'}
+          </button>
+          <button
+            type="button"
+            className="c360-btn secondary"
+            style={{ backgroundColor: '#10b981', color: '#ffffff', border: 'none', fontWeight: 600 }}
+            disabled={Boolean(busy)}
+            onClick={reanalisarHistoricoCompleto}
+          >
+            {busy === 'reanalisar-historico' ? 'Reanalisando Histórico Completo…' : '🧠 Reanalisar Todo o Histórico (Motor KyttoIA)'}
           </button>
         </div>
       </section>
