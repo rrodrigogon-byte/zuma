@@ -231,6 +231,12 @@ export function estadoEmpresa(empresaId, criar = true) {
     ...(estado.configuracao || {}),
     lojas: { ...(configuracaoPadrao.lojas || {}), ...(estado.configuracao?.lojas || {}) },
   };
+  if (['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'dino', 'emp-kytto-001'].includes(String(key).toLowerCase())) {
+    const wa = String(estado.configuracao?.whatsappPublico || '').replace(/\D/g, '');
+    if (!wa || wa.includes('996722055') || wa.includes('96722055') || wa.includes('993360000') || wa.includes('93360000')) {
+      estado.configuracao.whatsappPublico = '(65) 99905-6008';
+    }
+  }
   return estado;
 }
 
@@ -1044,6 +1050,13 @@ export function atualizarConfiguracao(empresaId, dados = {}) {
   const estado = estadoEmpresa(empresaId);
   const atual = estado.configuracao;
   Object.assign(atual, calendarioNormalizado(dados, atual), configuracaoPublicaNormalizada(dados, atual));
+  const ehDino = ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'dino', 'emp-kytto-001'].includes(String(empresaId || '').toLowerCase());
+  if (ehDino) {
+    const wa = String(atual.whatsappPublico || '').replace(/\D/g, '');
+    if (!wa || wa.includes('996722055') || wa.includes('96722055') || wa.includes('993360000') || wa.includes('93360000')) {
+      atual.whatsappPublico = '(65) 99905-6008';
+    }
+  }
   save();
   return { ...atual, lojas: { ...(atual.lojas || {}) } };
 }

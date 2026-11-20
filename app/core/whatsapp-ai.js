@@ -1986,7 +1986,7 @@ export async function handleWebBookingGreetingAndHandoff(context, text, { channe
         if (codigoBuscado) {
           agendamento = lista.agendamentos.find((a) => String(a.codigo || a.id || '').toUpperCase().includes(codigoBuscado));
         }
-        if (!agendamento) {
+        if (!agendamento && !codigoBuscado) {
           agendamento = lista.agendamentos.find((a) => !['cancelado', 'nao_compareceu'].includes(String(a.status)));
         }
       }
@@ -2000,7 +2000,7 @@ export async function handleWebBookingGreetingAndHandoff(context, text, { channe
           if (codigoBuscado) {
             agendamento = todos.find((a) => String(a.codigoConfirmacao || a.codigo || a.id || '').toUpperCase().includes(codigoBuscado));
           }
-          if (!agendamento && session.telefone) {
+          if (!agendamento && !codigoBuscado && session.telefone) {
             const telLimpo = String(session.telefone).replace(/\D/g, '');
             agendamento = todos.find((a) => {
               const aTel = String(a.clienteTelefone || '').replace(/\D/g, '');

@@ -15,8 +15,13 @@ function dataLocalIso() {
   return local.toISOString().slice(0, 10)
 }
 
-function linkWhatsApp(numero, mensagem) {
-  const digitos = String(numero || '').replace(/\D/g, '')
+export const WHATSAPP_TREX_DINO = '5565999056008'
+
+function linkWhatsApp(numero, mensagem, isDino = false) {
+  let digitos = String(numero || '').replace(/\D/g, '')
+  if (isDino || !digitos || digitos.includes('996722055') || digitos.includes('96722055') || digitos.includes('993360000') || digitos.includes('93360000')) {
+    digitos = WHATSAPP_TREX_DINO
+  }
   if (!digitos) return ''
   const destino = digitos.startsWith('55') ? digitos : `55${digitos}`
   return `https://wa.me/${destino}?text=${encodeURIComponent(mensagem)}`
@@ -338,6 +343,9 @@ export default function AgendamentoOnline() {
       const res = await fetch(`${API}/api/publico/agendamento/${encodeURIComponent(slug)}`)
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data.ok) throw new Error(data.error || 'Estabelecimento não encontrado')
+      if (isDino && data.estabelecimento) {
+        data.estabelecimento.whatsapp = '(65) 99905-6008'
+      }
       setEstabelecimento(data.estabelecimento)
       const profs = data.profissionais || []
       setProfissionais(profs)
@@ -841,8 +849,8 @@ export default function AgendamentoOnline() {
                 ) : ag.status === 'agendado' || ag.status === 'confirmado' ? (
                   <p style={{ color: theme.muted, fontSize: 13 }}>Faltam menos de {ag.politicaCancelamentoHoras}h para o horário. Para mudar, fale com a barbearia pelo WhatsApp.</p>
                 ) : null}
-                {estabelecimento?.whatsapp && (
-                  <a href={linkWhatsApp(estabelecimento.whatsapp, `Olá! Sobre o meu agendamento ${ag.codigo}.`)} target="_blank" rel="noopener noreferrer" style={{ ...s.btnSecondary, display: 'block', textAlign: 'center', textDecoration: 'none' }}>💬 Falar com a barbearia</a>
+                {(estabelecimento?.whatsapp || isDino) && (
+                  <a href={linkWhatsApp(isDino ? WHATSAPP_TREX_DINO : estabelecimento?.whatsapp, `Olá! Sobre o meu agendamento ${ag.codigo}.`, isDino)} target="_blank" rel="noopener noreferrer" style={{ ...s.btnSecondary, display: 'block', textAlign: 'center', textDecoration: 'none' }}>💬 Falar com o T-Rex / Barbearia</a>
                 )}
               </div>
             )}
@@ -1446,9 +1454,9 @@ export default function AgendamentoOnline() {
           </div>
 
           {/* Botão WhatsApp com T-Rex e Atendente */}
-          {estabelecimento?.whatsapp && (
+          {(estabelecimento?.whatsapp || isDino) && (
             <a
-              href={linkWhatsApp(estabelecimento.whatsapp, `Olá! Solicitei o serviço ${servicoSel?.nome || 'agendamento'} para ${dataSel} às ${horarioSel}. Código: ${agendamento?.codigo || ''}`)}
+              href={linkWhatsApp(isDino ? WHATSAPP_TREX_DINO : estabelecimento?.whatsapp, `Olá! Solicitei o serviço ${servicoSel?.nome || 'agendamento'} para ${dataSel} às ${horarioSel}. Código: ${agendamento?.codigo || ''}`, isDino)}
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -1462,7 +1470,7 @@ export default function AgendamentoOnline() {
               }}
             >
               <span style={{ fontSize: 20 }}>💬</span>
-              <span>Falar com o estabelecimento</span>
+              <span>Falar com o T-Rex / Atendimento Barbearia</span>
             </a>
           )}
 
