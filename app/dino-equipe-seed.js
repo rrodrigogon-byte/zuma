@@ -336,6 +336,7 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
       const estado = barbeariaErpKytto.estadoEmpresa(empId, false);
       if (estado) {
         sanearProfissionaisEAgendamentosDino(estado, empId);
+        barbeariaErpKytto.garantirDuracoesServicosBarbearia(empId);
       }
 
       const profissionaisAtuais = barbeariaErpKytto.listarProfissionais(empId, { incluirInativos: true });
@@ -441,7 +442,7 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
 
       if (estado) {
         estado.configuracao = estado.configuracao || {};
-        estado.configuracao.whatsappPublico = "(65) 99672-2055";
+        estado.configuracao.whatsappPublico = "(65) 99905-6008"; // Número Oficial do T-Rex / Atendimento Barbearia Dino
         estado.configuracao.horarioFechamento = "19:00";
         if (!estado.servicos || Object.keys(estado.servicos).length === 0) {
           try {

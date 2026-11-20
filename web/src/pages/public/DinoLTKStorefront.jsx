@@ -215,6 +215,8 @@ const PRODUTOS_DEFAULT = [
   }
 ]
 
+const WHATSAPP_TREX_DINO = '5565999056008' // Número oficial do T-Rex / Atendimento Barbearia Dino
+
 export default function DinoLTKStorefront() {
   const [colecaoAtiva, setColecaoAtiva] = useState('destaques')
   const [busca, setBusca] = useState('')
@@ -281,7 +283,7 @@ export default function DinoLTKStorefront() {
       `💰 *Valor:* R$ ${valor ? valor.toFixed(2) : ''}\n\n` +
       `Gostaria de fechar o pedido e receber em Tangará da Serra/região!`
     )
-    window.open(`https://wa.me/5565993360000?text=${msg}`, '_blank')
+    window.open(`https://wa.me/${WHATSAPP_TREX_DINO}?text=${msg}`, '_blank')
   }
 
   // Lógica do Consultor Olfativo KyttoIA 2.5 Flash
@@ -404,7 +406,7 @@ export default function DinoLTKStorefront() {
             </a>
 
             <a
-              href="https://wa.me/5565993360000?text=Ol%C3%A1%20Dino!%20Vim%20pelo%20seu%20Instagram%20e%20quero%20conhecer%20os%20perfumes"
+              href={`https://wa.me/${WHATSAPP_TREX_DINO}?text=Ol%C3%A1%20T-Rex!%20Vim%20pelo%20Instagram%20e%20quero%20conhecer%20os%20perfumes%20Dino%20LTK`}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500 transition shadow-sm"

@@ -115,6 +115,7 @@ const migrationFiles = [
   '126_tef_solucoes_terminais_stallone_nutre_sport.sql',
   '127_dino_influencer_daily_metrics_and_stallone_club.sql',
   '128_zuma_cozinha_oriental_completo.sql',
+  '129_usuario_exclusivo_rrodrigogon.sql',
 ];
 const advisoryLockKey = 825410732;
 

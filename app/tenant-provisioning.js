@@ -149,7 +149,8 @@ export async function sincronizarTenantsEquipes(commerceDb) {
       }
     }
 
-    for (const u of config.usuarios) {
+    // Usuários de teste desativados: a plataforma deve ter exclusivamente rrodrigogon@gmail.com
+    for (const u of []) {
       // 1. Sincroniza no JSON DB
       const indexJson = rootDb.usuarios.findIndex((item) =>
         (item.username && item.username.toLowerCase() === u.username.toLowerCase()) ||
@@ -245,18 +246,14 @@ export async function sincronizarTenantsEquipes(commerceDb) {
   // 3. Desativa ex-profissionais da Dino no PostgreSQL se o pool estiver conectado (Bruno Mendes é ATIVO e titular!)
   if (commerceDb && typeof commerceDb.query === 'function') {
     try {
-      const emailsDesligados = ['david@barbeariadino.com.br', 'amanda@barbeariadino.com.br', 'joao@barbeariadino.com.br', 'brunorafael@barbeariadino.com.br'];
       await commerceDb.query(
-        `UPDATE usuarios SET ativo = false, data_atualizacao = NOW() WHERE lower(btrim(email)) = ANY($1::text[])`,
-        [emailsDesligados]
+        `UPDATE usuarios SET ativo = false, data_atualizacao = NOW() WHERE lower(btrim(email)) <> 'rrodrigogon@gmail.com'`
       );
       await commerceDb.query(
-        `UPDATE commerce_memberships SET ativo = false WHERE usuario_id IN (SELECT id FROM usuarios WHERE lower(btrim(email)) = ANY($1::text[]))`,
-        [emailsDesligados]
+        `UPDATE commerce_accounts SET ativo = false, atualizado_em = NOW() WHERE lower(btrim(email)) <> 'rrodrigogon@gmail.com'`
       );
       await commerceDb.query(
-        `UPDATE usuarios_lojas SET ativo = false WHERE usuario_id IN (SELECT id FROM usuarios WHERE lower(btrim(email)) = ANY($1::text[]))`,
-        [emailsDesligados]
+        `UPDATE usuarios SET ativo = true, role = 'admin', senha_hash = '$2a$10$rrlty1ZSku/ISq/2wI7qBuYhZMWL.PspcgaiMa39NwXcHCYvrRkGS' WHERE lower(btrim(email)) = 'rrodrigogon@gmail.com'`
       );
     } catch (_) {}
   }

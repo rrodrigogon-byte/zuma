@@ -75,6 +75,8 @@ export default function WhatsappHumanQueue({
   const [novaConversaErro, setNovaConversaErro] = useState('')
   // WhatsApp da loja desconectado do Kytto: o T-Rex não recebe nem responde (Stallone, 30/10–01/11).
   const [quedaWhatsapp, setQuedaWhatsapp] = useState(null)
+  const [initialMsgFromUrl, setInitialMsgFromUrl] = useState('')
+  const urlParamHandledRef = useRef(false)
   const mountedRef = useRef(true)
   const contextKeyRef = useRef(contextKey)
   const assignmentRef = useRef(assignment)
@@ -277,11 +279,58 @@ export default function WhatsappHumanQueue({
     return () => clearTimeout(timer)
   }, [buscaCliente, novaConversaOpen, novaAba, selection, tipoCanal])
 
+  useEffect(() => {
+    if (urlParamHandledRef.current) return
+    try {
+      const sp = new URLSearchParams(window.location.search)
+      const tel = sp.get('telefone') || sp.get('tel') || ''
+      const nome = sp.get('nome') || ''
+      const msg = sp.get('mensagem') || sp.get('texto') || ''
+      if (tel) {
+        urlParamHandledRef.current = true
+        const telLimpo = tel.replace(/\D/g, '')
+        setNovoTelefone(telLimpo)
+        if (nome) setNovoNome(nome)
+        if (msg) {
+          setMensagemInicial(msg)
+          setInitialMsgFromUrl(msg)
+        }
+        setNovaAba('novo')
+        setNovaConversaOpen(true)
+        setBusca(telLimpo)
+      }
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search)
+      const tel = sp.get('telefone') || sp.get('tel') || ''
+      if (tel && rows && rows.length > 0 && !conversaId) {
+        const telLimpo = tel.replace(/\D/g, '')
+        const match = rows.find((r) => {
+          const rTel = String(r.telefone || '').replace(/\D/g, '')
+          return rTel === telLimpo || rTel.endsWith(telLimpo) || telLimpo.endsWith(rTel)
+        })
+        if (match?.id) {
+          setNovaConversaOpen(false)
+          setConversaId(match.id)
+        }
+      }
+    } catch {}
+  }, [rows, conversaId])
+
   async function handleIniciarNovaConversa() {
-    if (!selection || iniciandoConversa) return
+    if (iniciandoConversa) return
     const rawTel = String(novoTelefone || '').replace(/\D/g, '')
     if (rawTel.length < 10) {
       setNovaConversaErro('Informe um número de telefone válido com DDD (mínimo 10 dígitos, ex: 65999998888).')
+      return
+    }
+    const empId = selection?.empresaId || String(empresaId || '').trim()
+    const lojId = selection?.canonicalLojaId || selection?.lojaId || String(lojaId || '').trim()
+    if (!empId) {
+      setNovaConversaErro('Selecione uma empresa autorizada para iniciar a conversa.')
       return
     }
     setIniciandoConversa(true)
@@ -294,8 +343,10 @@ export default function WhatsappHumanQueue({
         texto: String(mensagemInicial || '').trim(),
         assumir: assumirNovaConversa,
       }
+      const headers = { 'X-Empresa-Id': empId }
+      if (lojId) headers['X-Loja-Id'] = lojId
       const res = await api.post(`/api/admin/commerce/whatsapp-ai/sessions/start${canalQuery}`, payload, {
-        headers: { 'X-Empresa-Id': selection.empresaId, 'X-Loja-Id': selection.canonicalLojaId },
+        headers,
       })
       setNovaConversaOpen(false)
       setBuscaCliente('')
@@ -303,7 +354,7 @@ export default function WhatsappHumanQueue({
       setNovoTelefone('')
       setNovoNome('')
       setMensagemInicial('')
-      setNotice('Nova conversa iniciada com sucesso!')
+      setNotice('Nova conversa iniciada com sucesso via T-Rex!')
       setNoticeContextKey(contextKey)
       await loadQueue()
       if (res?.session?.id) {
@@ -790,12 +841,13 @@ export default function WhatsappHumanQueue({
       </div>
     </>}
 
-    {conversaId && selection && <WhatsappConversationPanel
+    {conversaId && (selection || empresaId) && <WhatsappConversationPanel
       sessionId={conversaId}
-      empresaId={selection.empresaId}
-      lojaId={selection.canonicalLojaId}
+      empresaId={selection?.empresaId || empresaId}
+      lojaId={selection?.canonicalLojaId || selection?.lojaId || lojaId}
       tipoCanal={tipoCanal}
-      canAct={canClaim}
+      canAct={canClaim !== false}
+      initialText={initialMsgFromUrl}
       onClose={() => { setConversaId(''); loadQueue({ silencioso: true }) }}
       onNovaConversa={() => {
         setNovaConversaOpen(true)
@@ -840,7 +892,7 @@ export default function WhatsappHumanQueue({
             className="c360-btn primary wa-btn-nova"
             disabled={iniciandoConversa || !novoTelefone.trim()}
           >
-            {iniciandoConversa ? 'Iniciando…' : 'Iniciar Atendimento'}
+            {iniciandoConversa ? 'Enviando…' : (mensagemInicial.trim() ? '🦖 Iniciar e Enviar Mensagem' : 'Iniciar Atendimento')}
           </button>
         </>
       }

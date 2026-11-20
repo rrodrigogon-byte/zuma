@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../../../lib/api'
 import {
   Scissors,
@@ -25,6 +26,7 @@ const moeda = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency',
 const dataBR = (v) => (v ? String(v).slice(0, 10).split('-').reverse().join('/') : '—')
 
 export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [resumo, setResumo] = useState(null)
   const [clientes, setClientes] = useState([])
@@ -39,6 +41,9 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
   const [modalLote, setModalLote] = useState(null)
   const [abertosIds, setAbertosIds] = useState({}) // { disparos: [], totalProntos: 0 }
   const [carregandoLote, setCarregandoLote] = useState(false)
+  const [enviandoLoteId, setEnviandoLoteId] = useState(null)
+  const [enviadosComSucesso, setEnviadosComSucesso] = useState({})
+  const [enviandoTodosLote, setEnviandoTodosLote] = useState(false)
 
   useEffect(() => {
     const timer = setTimeout(() => { setBuscaDebounced(busca) }, 350)
@@ -212,20 +217,16 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
       } else {
         const listaAlvo = candidatos.length > 0 ? candidatos : (clientes || []).slice(0, 100)
         const disparosLocais = listaAlvo.map(c => {
-          const link = gerarLinkWhatsapp(c)
-          let msg = ''
-          try {
-            msg = decodeURIComponent(link.split('text=')[1] || '')
-          } catch {
-            msg = `Fala ${c.nome?.split(' ')[0] || 'amigo'}! Tudo bem? Passando para te convidar a renovar o visual na Barbearia Dino!`
-          }
+          const msg = gerarMensagemRetornoTexto(c)
+          const tel = String(c.telefone || '').replace(/\D/g, '')
+          const temTel = tel.length >= 10
           return {
             clienteId: c.clienteId || c.id || String(Math.random()),
             nome: c.nome,
             telefone: c.telefone,
-            whatsappUrl: link !== '#' ? link : null,
+            whatsappUrl: temTel ? `/admin/whatsapp-fila?telefone=${tel}&nome=${encodeURIComponent(c.nome || '')}&mensagem=${encodeURIComponent(msg)}` : null,
             mensagem: msg,
-            status: link !== '#' ? 'pronto' : 'sem_telefone',
+            status: temTel ? 'pronto' : 'sem_telefone',
           }
         })
         setModalLote({
@@ -242,22 +243,92 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
     }
   }, [clientes, barbeiroSelecionadoId])
 
-  function gerarLinkWhatsapp(cliente) {
-    const tel = String(cliente.telefone || '').replace(/\D/g, '')
-    if (tel.length < 10) return '#'
-    const telCompleto = tel.startsWith('55') ? tel : `55${tel}`
-    const primeiroNome = String(cliente.nome || '').trim().split(/\s+/)[0] || 'amigo'
-    const barbeiroNome = cliente.barbeiroApelido || cliente.barbeiroNome?.split(' ')[0] || 'Dino'
-    const servico = cliente.servicoFavorito || 'corte'
-    const dias = cliente.diasSemRetorno
+  function gerarMensagemRetornoTexto(cliente) {
+    const primeiroNome = String(cliente?.nome || '').trim().split(/\s+/)[0] || 'amigo'
+    const barbeiroNome = cliente?.barbeiroApelido || cliente?.barbeiroNome?.split(' ')[0] || 'Dino'
+    const servico = cliente?.servicoFavorito || 'corte'
+    const dias = cliente?.diasSemRetorno || 0
 
     const tempoFrase = dias > 0 ? `já faz ${dias} dias do seu último ${servico}` : `está na hora de renovar o visual`
     const saudacoes = ['Fala', 'Olá', 'E aí', 'Tudo bem? Aqui é o']
     const saudacao = saudacoes[Math.floor(Math.random() * saudacoes.length)]
-    const msg = encodeURIComponent(
-      `${saudacao} ${primeiroNome}! Aqui é o ${barbeiroNome} da Barbearia Dino! 💈\n\nVi aqui que ${tempoFrase}. Vamos dar aquele talento no visual essa semana?\n\nJá separei sua cadeira! Pode me avisar por aqui ou escolher o melhor horário no link: https://kytto.com.br/agendar/dino\n\n*(Caso prefira não receber lembretes de agenda, responda PARAR)*`
-    )
-    return `https://wa.me/${telCompleto}?text=${msg}`
+    return `${saudacao} ${primeiroNome}! Aqui é o ${barbeiroNome} da Barbearia Dino! 💈\n\nVi aqui que ${tempoFrase}. Vamos dar aquele talento no visual essa semana?\n\nJá separei sua cadeira! Pode me avisar por aqui ou escolher o melhor horário no link: https://kytto.com.br/agendar/dino`
+  }
+
+  function irParaPainelTrex(cliente, msgCustom = null) {
+    const rawTel = String(cliente?.telefone || '').replace(/\D/g, '')
+    if (rawTel.length < 10) {
+      alert('Cliente sem telefone válido cadastrado.')
+      return
+    }
+    const telCompleto = rawTel.startsWith('55') ? rawTel : `55${rawTel}`
+    const nome = String(cliente?.nome || '').trim()
+    const msg = msgCustom || gerarMensagemRetornoTexto(cliente)
+
+    const params = new URLSearchParams({
+      telefone: telCompleto,
+      nome,
+      mensagem: msg,
+      origem: 'carteira_clientes',
+      novo: '1',
+    })
+    navigate(`/admin/whatsapp-fila?${params.toString()}`)
+  }
+
+  async function dispararDiretoTrex(item) {
+    const rawTel = String(item?.telefone || '').replace(/\D/g, '')
+    if (rawTel.length < 10) {
+      alert('Telefone inválido para disparo.')
+      return
+    }
+    const telCompleto = rawTel.startsWith('55') ? rawTel : `55${rawTel}`
+    setEnviandoLoteId(item.clienteId)
+    try {
+      await api.post('/api/admin/commerce/whatsapp-ai/sessions/start', {
+        telefone: telCompleto,
+        nome: item.nome || '',
+        texto: item.mensagem || gerarMensagemRetornoTexto(item),
+        assumir: false,
+      })
+      setEnviadosComSucesso((prev) => ({ ...prev, [item.clienteId]: true }))
+    } catch (err) {
+      alert('Erro ao enviar pelo WhatsApp T-Rex: ' + (err?.message || 'verifique se a linha oficial está conectada.'))
+    } finally {
+      setEnviandoLoteId(null)
+    }
+  }
+
+  async function dispararTodosTrex() {
+    if (!modalLote?.disparos) return
+    const pendentes = modalLote.disparos.filter((d) => d.status === 'pronto' && !enviadosComSucesso[d.clienteId])
+    if (pendentes.length === 0) {
+      alert('Todos os clientes elegíveis já foram enviados!')
+      return
+    }
+    if (!confirm(`Deseja enviar mensagem de reativação para ${pendentes.length} cliente(s) diretamente pela linha oficial do T-Rex?`)) {
+      return
+    }
+    setEnviandoTodosLote(true)
+    let sucessos = 0
+    let falhas = 0
+    for (const item of pendentes) {
+      try {
+        const rawTel = String(item.telefone || '').replace(/\D/g, '')
+        const telCompleto = rawTel.startsWith('55') ? rawTel : `55${rawTel}`
+        await api.post('/api/admin/commerce/whatsapp-ai/sessions/start', {
+          telefone: telCompleto,
+          nome: item.nome || '',
+          texto: item.mensagem || gerarMensagemRetornoTexto(item),
+          assumir: false,
+        })
+        setEnviadosComSucesso((prev) => ({ ...prev, [item.clienteId]: true }))
+        sucessos++
+      } catch (_e) {
+        falhas++
+      }
+    }
+    setEnviandoTodosLote(false)
+    alert(`Disparo em lote concluído! ${sucessos} mensagem(ns) enviada(s) via T-Rex.${falhas > 0 ? ` ${falhas} falha(s).` : ''}`)
   }
 
   return (
@@ -524,7 +595,6 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
               </tr>
             ) : (
               clientes.map((c) => {
-                const linkWpp = gerarLinkWhatsapp(c)
                 const urlHistorico = urlHistoricoCliente(refHistoricoCliente(c))
                 return (
                   <tr key={c.clienteId} className="carteira-row">
@@ -614,17 +684,16 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
                           <ExternalLink size={13} />
                           Ficha 360°
                         </a>
-                        {linkWpp !== '#' ? (
-                          <a
-                            href={linkWpp}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                        {c.telefone && String(c.telefone).replace(/\D/g, '').length >= 10 ? (
+                          <button
+                            type="button"
+                            onClick={() => irParaPainelTrex(c)}
                             className="btn-whatsapp-carteira"
-                            title="Enviar mensagem personalizada pelo WhatsApp"
+                            title="Abrir no Painel do T-Rex para enviar mensagem via WhatsApp oficial do sistema"
                           >
                             <MessageSquare size={13} />
-                            WhatsApp
-                          </a>
+                            WhatsApp (T-Rex)
+                          </button>
                         ) : (
                           <span style={{ fontSize: 12, color: '#64748b' }}>Sem WhatsApp</span>
                         )}
@@ -708,33 +777,36 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
                     </div>
                   </div>
 
-                  <div>
-                    {abertosIds[d.clienteId] ? (
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 4,
-                        padding: '5px 10px',
-                        background: 'rgba(16, 185, 129, 0.2)',
-                        color: '#34d399',
-                        borderRadius: 6,
-                        fontSize: 11.5,
-                        fontWeight: 700
-                      }}>
-                        ✓ Aberto
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    {enviadosComSucesso[d.clienteId] || abertosIds?.[d.clienteId] ? (
+                      <span style={{ fontSize: 12, color: '#10b981', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <CheckCircle2 size={14} color="#10b981" /> Enviado via T-Rex
                       </span>
-                    ) : d.whatsappUrl ? (
-                      <a
-                        href={d.whatsappUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn-whatsapp-carteira"
-                        style={{ padding: '6px 12px', fontSize: 12 }}
-                        onClick={() => setAbertosIds(prev => ({ ...prev, [d.clienteId]: true }))}
-                      >
-                        <MessageSquare size={12} />
-                        Enviar
-                      </a>
+                    ) : d.telefone && String(d.telefone).replace(/\D/g, '').length >= 10 ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => dispararDiretoTrex(d)}
+                          disabled={enviandoLoteId === d.clienteId || enviandoTodosLote}
+                          className="btn-whatsapp-carteira"
+                          style={{ padding: '6px 10px', fontSize: 12, background: '#10b981' }}
+                          title="Disparar mensagem agora diretamente pela linha oficial do T-Rex"
+                        >
+                          <Zap size={12} />
+                          {enviandoLoteId === d.clienteId ? 'Enviando…' : 'Enviar Direto'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => irParaPainelTrex(d, d.mensagem)}
+                          disabled={enviandoTodosLote}
+                          className="btn-whatsapp-carteira"
+                          style={{ padding: '6px 10px', fontSize: 12, background: '#3b82f6' }}
+                          title="Abrir atendimento no Painel do T-Rex"
+                        >
+                          <MessageSquare size={12} />
+                          Abrir T-Rex
+                        </button>
+                      </>
                     ) : (
                       <span style={{ fontSize: 11, color: '#ef4444' }}>Sem Celular</span>
                     )}
@@ -743,18 +815,32 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
               ))}
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 18 }}>
-              <button
-                type="button"
-                className="carteira-prof-pill"
-                onClick={exportarCsvCarteira}
-              >
-                📥 Baixar Fila em CSV
-              </button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 18, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 14 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="carteira-prof-pill"
+                  onClick={exportarCsvCarteira}
+                  disabled={enviandoTodosLote}
+                >
+                  📥 Baixar Fila em CSV
+                </button>
+                <button
+                  type="button"
+                  className="carteira-prof-pill"
+                  style={{ background: '#10b981', color: '#fff', border: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700, cursor: 'pointer' }}
+                  onClick={dispararTodosTrex}
+                  disabled={enviandoTodosLote}
+                >
+                  <Zap size={14} />
+                  {enviandoTodosLote ? 'Disparando Fila via T-Rex…' : 'Enviar Todos via T-Rex (Fila Oficial)'}
+                </button>
+              </div>
               <button
                 type="button"
                 className="carteira-prof-pill active"
                 onClick={() => setModalLote(null)}
+                disabled={enviandoTodosLote}
               >
                 Concluir Reativações
               </button>

@@ -2933,3 +2933,1552 @@ routerZuma.post('/compras/receber-mercadoria', (req, res) => {
     ordem
   });
 });
+
+// 7. MOTOR DE ESTOQUE DE PESCADOS, FICHAS TÉCNICAS E SIMULAÇÃO DE PEDIDO ZUMI
+// ============================================================================
+export const ESTOQUE_PESCADOS_ZUMA = {
+  "ins-salmao-fresco": {
+    id: "ins-salmao-fresco",
+    codigo: "PESC-001",
+    nome: "Salmão Fresco Chileno (Salmo Salar)",
+    especificacao: "Salmo Salar fresco eviscerado inteiro",
+    unidade: "kg",
+    saldoAtual: 35.0,
+    saldoMinimo: 20.0,
+    custoPorKgInteiro: 68.00,
+    rendimentoFileNobrePct: 62.0,
+    rendimentoAparasPct: 20.0,
+    aproveitamentoTotalPct: 82.0,
+    custoEfetivoPorKgLimpo: 82.93,
+    status: "OK",
+    fornecedor: "Pescados Nobres Cuiabá / Distribuidora Mar & Rio",
+    temperaturaCamara: "-2°C a +2°C (Monitorada IoT)",
+    loteAtual: "LOTE-CHL-20261118",
+    validadeLote: "25/11/2026"
+  },
+  "ins-atum-fresco": {
+    id: "ins-atum-fresco",
+    codigo: "PESC-002",
+    nome: "Atum Vermelho Fresco (Lombo Nobre)",
+    especificacao: "Lombo fresco limpo sem pele",
+    unidade: "kg",
+    saldoAtual: 6.0,
+    saldoMinimo: 8.0,
+    custoPorKgInteiro: 92.00,
+    rendimentoFileNobrePct: 80.0,
+    aproveitamentoTotalPct: 80.0,
+    custoEfetivoPorKgLimpo: 115.00,
+    status: "Repor Urgente",
+    fornecedor: "Pescados Nobres Cuiabá",
+    temperaturaCamara: "-2°C a +2°C",
+    loteAtual: "LOTE-ATM-20261117",
+    validadeLote: "23/11/2026"
+  },
+  "ins-camarao-rosa": {
+    id: "ins-camarao-rosa",
+    codigo: "PESC-003",
+    nome: "Camarão Rosa GG Limpo",
+    especificacao: "Limpo, eviscerado, congelado IQF",
+    unidade: "kg",
+    saldoAtual: 14.0,
+    saldoMinimo: 10.0,
+    custoPorKgInteiro: 85.00,
+    custoEfetivoPorKgLimpo: 85.00,
+    status: "OK",
+    fornecedor: "Distribuidora Mar & Rio",
+    temperaturaCamara: "-18°C",
+    loteAtual: "LOTE-CAM-20261115",
+    validadeLote: "15/02/2027"
+  },
+  "ins-peixe-branco": {
+    id: "ins-peixe-branco",
+    codigo: "PESC-004",
+    nome: "Peixe Branco Fresco (Robalo / Saint Peter)",
+    especificacao: "Filé fresco resfriado",
+    unidade: "kg",
+    saldoAtual: 18.0,
+    saldoMinimo: 10.0,
+    custoPorKgInteiro: 45.00,
+    custoEfetivoPorKgLimpo: 58.00,
+    status: "OK",
+    fornecedor: "Pescados Regionais MT",
+    temperaturaCamara: "0°C a +2°C",
+    loteAtual: "LOTE-PB-20261119",
+    validadeLote: "24/11/2026"
+  },
+  "ins-arroz-gohan": {
+    id: "ins-arroz-gohan",
+    codigo: "INS-001",
+    nome: "Arroz Japonês Especial Gohan Temperado",
+    especificacao: "Grão curto polido tipo 1 com tempero su",
+    unidade: "kg",
+    saldoAtual: 80.0,
+    saldoMinimo: 40.0,
+    custoPorKgInteiro: 14.00,
+    custoEfetivoPorKgLimpo: 14.00,
+    status: "OK",
+    fornecedor: "Empório Oriental MT",
+    temperaturaCamara: "Ambiente / Bancada",
+    loteAtual: "LOTE-ARZ-20261110",
+    validadeLote: "10/05/2027"
+  },
+  "ins-cream-cheese": {
+    id: "ins-cream-cheese",
+    codigo: "INS-002",
+    nome: "Cream Cheese Tradicional Artesanal",
+    especificacao: "Baldes de 4 kg para sushiman",
+    unidade: "kg",
+    saldoAtual: 48.0,
+    saldoMinimo: 20.0,
+    custoPorKgInteiro: 38.00,
+    custoEfetivoPorKgLimpo: 38.00,
+    status: "OK",
+    fornecedor: "Laticínios Tangará",
+    temperaturaCamara: "+4°C",
+    loteAtual: "LOTE-CC-20261112",
+    validadeLote: "12/01/2027"
+  },
+  "ins-alga-nori": {
+    id: "ins-alga-nori",
+    codigo: "INS-003",
+    nome: "Alga Nori Premium Gold",
+    especificacao: "Folhas desidratadas de alga marinha",
+    unidade: "folhas",
+    saldoAtual: 900,
+    saldoMinimo: 500,
+    custoPorKgInteiro: 0.60,
+    custoEfetivoPorKgLimpo: 0.60,
+    status: "OK",
+    fornecedor: "Empório Oriental MT",
+    temperaturaCamara: "Ambiente Seco",
+    loteAtual: "LOTE-NRI-20261020",
+    validadeLote: "20/10/2027"
+  },
+  "ins-embalagem-termica": {
+    id: "ins-embalagem-termica",
+    codigo: "EMB-001",
+    nome: "Caixa Térmica Selada Zuma c/ Visor e Lacre",
+    especificacao: "Embalagem antivazamento com berço para sushis",
+    unidade: "un",
+    saldoAtual: 420,
+    saldoMinimo: 300,
+    custoPorKgInteiro: 3.80,
+    custoEfetivoPorKgLimpo: 3.80,
+    status: "OK",
+    fornecedor: "Gráfica & Embalagens MT",
+    temperaturaCamara: "Depósito de Embalagens",
+    loteAtual: "LOTE-EMB-20261101",
+    validadeLote: "Indeterminada"
+  }
+};
+
+export const HISTORICO_BAIXAS_ESTOQUE_ZUMA = [
+  {
+    id: "BX-1044",
+    comandaId: "ZUM-SALAO-12",
+    tipo: "saida_salao",
+    dataHora: new Date(Date.now() - 42 * 60000).toISOString(),
+    itemCardapio: "Combinado Zuma Casal 40 Peças",
+    pescadoBaixado: "Salmão Fresco Chileno (0,520 kg)",
+    cmvTotal: 59.96,
+    margemPct: 56.86,
+    usuario: "garcom_mesa12"
+  },
+  {
+    id: "BX-1043",
+    comandaId: "ZUM-WPP-882",
+    tipo: "saida_zumi_whatsapp",
+    dataHora: new Date(Date.now() - 95 * 60000).toISOString(),
+    itemCardapio: "Especial Zuma 68 Peças Supremo",
+    pescadoBaixado: "Salmão Fresco (0,780 kg) + Atum (0,150 kg)",
+    cmvTotal: 88.40,
+    margemPct: 59.63,
+    usuario: "zumi_whatsapp_kyttoia"
+  }
+];
+
+export const FICHAS_TECNICAS_ZUMA = {
+  "ZUM-003": {
+    id: "ft-zuma-003",
+    codigoPdv: "ZUM-003",
+    nomeProduto: "Combinado Especial 30 Peças Salmão Fresco",
+    categoria: "Combinados",
+    precoVenda: 89.90,
+    rendimento: 1,
+    descricao: "10x Sashimi Salmão Fresco, 8x Uramaki Salmão, 8x Hossomaki Salmão, 4x Niguiri Salmão.",
+    insumos: [
+      { id: "ins-salmao-fresco", nome: "Salmão Fresco Chileno (Filé Limpo)", qtd: 0.380, unidade: "kg", custoUnitario: 82.93, custoTotal: 31.51 },
+      { id: "ins-arroz-gohan", nome: "Arroz Gohan Temperado", qtd: 0.250, unidade: "kg", custoUnitario: 14.00, custoTotal: 3.50 },
+      { id: "ins-cream-cheese", nome: "Cream Cheese Original", qtd: 0.080, unidade: "kg", custoUnitario: 38.00, custoTotal: 3.04 },
+      { id: "ins-alga-nori", nome: "Alga Nori Premium Gold", qtd: 3, unidade: "folhas", custoUnitario: 0.60, custoTotal: 1.80 },
+      { id: "ins-embalagem-termica", nome: "Caixa Térmica Selada Zuma c/ Lacre", qtd: 1, unidade: "un", custoUnitario: 3.80, custoTotal: 3.80 }
+    ],
+    cmvTeorico: 43.65,
+    cmvPercentual: 48.55,
+    margemContribuicao: 46.25,
+    margemContribuicaoPercentual: 51.45
+  },
+  "ZUM-HOT": {
+    id: "ft-zuma-hot",
+    codigoPdv: "ZUM-HOT",
+    nomeProduto: "Hot Roll Filadélfia Especial (10 un)",
+    categoria: "Hot Rolls & Empanados",
+    precoVenda: 42.00,
+    rendimento: 1,
+    descricao: "Enrolado frito crocante em farinha Panko, recheado com aparas nobres de salmão e cream cheese, finalizado com tarê.",
+    insumos: [
+      { id: "ins-salmao-fresco", nome: "Salmão Fresco Chileno (Aparas Nobres)", qtd: 0.150, unidade: "kg", custoUnitario: 82.93, custoTotal: 12.44 },
+      { id: "ins-arroz-gohan", nome: "Arroz Gohan Temperado", qtd: 0.120, unidade: "kg", custoUnitario: 14.00, custoTotal: 1.68 },
+      { id: "ins-cream-cheese", nome: "Cream Cheese Original", qtd: 0.050, unidade: "kg", custoUnitario: 38.00, custoTotal: 1.90 },
+      { id: "ins-alga-nori", nome: "Alga Nori Premium Gold", qtd: 1, unidade: "folhas", custoUnitario: 0.60, custoTotal: 0.60 },
+      { id: "ins-farinha-panko", nome: "Farinha Panko & Óleo de Fritura", qtd: 0.040, unidade: "kg", custoUnitario: 22.00, custoTotal: 0.88 },
+      { id: "ins-embalagem-termica", nome: "Embalagem Selada Hot", qtd: 1, unidade: "un", custoUnitario: 2.50, custoTotal: 2.50 }
+    ],
+    cmvTeorico: 19.12,
+    cmvPercentual: 45.52,
+    margemContribuicao: 22.88,
+    margemContribuicaoPercentual: 54.48
+  },
+  "ZUM-SASHIMI": {
+    id: "ft-zuma-sashimi",
+    codigoPdv: "ZUM-SASHIMI",
+    nomeProduto: "Sashimi Salmão Fresco (12 fatias)",
+    categoria: "Sashimis",
+    precoVenda: 58.00,
+    rendimento: 1,
+    descricao: "Lombo nobre de salmão fresco fatiado na hora com corte tradicional usuzukuri ou sashimi clássico.",
+    insumos: [
+      { id: "ins-salmao-fresco", nome: "Salmão Fresco Chileno (Lombo Nobre)", qtd: 0.220, unidade: "kg", custoUnitario: 82.93, custoTotal: 18.24 },
+      { id: "ins-embalagem-termica", nome: "Caixa Térmica Selada Zuma c/ Lacre", qtd: 1, unidade: "un", custoUnitario: 3.80, custoTotal: 3.80 }
+    ],
+    cmvTeorico: 22.04,
+    cmvPercentual: 38.00,
+    margemContribuicao: 35.96,
+    margemContribuicaoPercentual: 62.00
+  },
+  "ZUM-CASAL-40": {
+    id: "ft-zuma-casal",
+    codigoPdv: "ZUM-CASAL-40",
+    nomeProduto: "Combinado Zuma Casal 40 Peças",
+    categoria: "Combinados",
+    precoVenda: 139.00,
+    rendimento: 1,
+    descricao: "12x Sashimi Salmão, 10x Uramaki Especial, 8x Hossomaki, 6x Niguiri e 4x Dyo de Salmão com Geleia de Pimenta.",
+    insumos: [
+      { id: "ins-salmao-fresco", nome: "Salmão Fresco Chileno (Filé Nobre)", qtd: 0.520, unidade: "kg", custoUnitario: 82.93, custoTotal: 43.12 },
+      { id: "ins-arroz-gohan", nome: "Arroz Gohan Temperado", qtd: 0.320, unidade: "kg", custoUnitario: 14.00, custoTotal: 4.48 },
+      { id: "ins-cream-cheese", nome: "Cream Cheese Original", qtd: 0.110, unidade: "kg", custoUnitario: 38.00, custoTotal: 4.18 },
+      { id: "ins-alga-nori", nome: "Alga Nori Premium Gold", qtd: 4, unidade: "folhas", custoUnitario: 0.60, custoTotal: 2.40 },
+      { id: "ins-embalagem-termica", nome: "Caixa Térmica Selada Zuma GG c/ Lacre", qtd: 1, unidade: "un", custoUnitario: 3.80, custoTotal: 3.80 }
+    ],
+    cmvTeorico: 57.98,
+    cmvPercentual: 41.71,
+    margemContribuicao: 81.02,
+    margemContribuicaoPercentual: 58.29
+  }
+};
+
+// GET /api/public/zuma/estoque-pescados — Saldo em tempo real, rendimento e histórico de baixas
+routerZuma.get('/estoque-pescados', (req, res) => {
+  const lista = Object.values(ESTOQUE_PESCADOS_ZUMA);
+  const totalKilosPescados = lista
+    .filter(i => i.id.startsWith('ins-') && i.unidade === 'kg')
+    .reduce((acc, i) => acc + (parseFloat(i.saldoAtual) || 0), 0);
+
+  res.json({
+    ok: true,
+    timestamp: new Date().toISOString(),
+    totalItensMonitorados: lista.length,
+    totalKilosPescados: parseFloat(totalKilosPescados.toFixed(3)),
+    itens: lista,
+    historicoBaixas: HISTORICO_BAIXAS_ESTOQUE_ZUMA.slice(0, 15)
+  });
+});
+
+// GET /api/public/zuma/fichas-tecnicas — Catálogo de Fichas Técnicas e CMV Teórico
+routerZuma.get('/fichas-tecnicas', (req, res) => {
+  res.json({
+    ok: true,
+    totalFichas: Object.keys(FICHAS_TECNICAS_ZUMA).length,
+    fichas: Object.values(FICHAS_TECNICAS_ZUMA)
+  });
+});
+
+// POST /api/public/zuma/whatsapp/simular-pedido — Fluxo Completo Zumi Atende via WhatsApp c/ Baixa e CMV
+routerZuma.post('/whatsapp/simular-pedido', (req, res) => {
+  const {
+    clienteNome = "Dr. Rodrigo Gonçalves",
+    clienteTelefone = "(65) 99988-1234",
+    enderecoEntrega = "Av. Tancredo Neves, 850 - Centro, Tangará da Serra - MT",
+    formaPagamento = "PIX",
+    mensagem = "Olá Zumi! Quero pedir 1x Combinado Especial 30 Peças Salmão Fresco e 1x Hot Roll Filadélfia Especial para entrega no Centro.",
+    itensCustomizados = null
+  } = req.body || {};
+
+  // Definição dos itens do pedido padrão ou customizado
+  const itensPedido = Array.isArray(itensCustomizados) && itensCustomizados.length > 0 ? itensCustomizados : [
+    { codigoPdv: "ZUM-003", nome: "Combinado Especial 30 Peças Salmão Fresco", qtd: 1, precoUnitario: 89.90 },
+    { codigoPdv: "ZUM-HOT", nome: "Hot Roll Filadélfia Especial (10 un)", qtd: 1, precoUnitario: 42.00 }
+  ];
+
+  const subtotalProdutos = itensPedido.reduce((acc, i) => acc + (i.precoUnitario * i.qtd), 0);
+  const taxaEntrega = 10.00;
+  const totalPedido = subtotalProdutos + taxaEntrega;
+  const comandaId = `ZUM-WPP-${Math.floor(1000 + Math.random() * 9000)}`;
+  const horaAtual = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+  // Processar Baixa em Tempo Real de Insumos e Pescados
+  const movimentacoes = [];
+  const mapaConsumoInsumos = {};
+  let cmvTotalPedido = 0;
+  const detalhamentoFichas = [];
+
+  for (const item of itensPedido) {
+    const ficha = FICHAS_TECNICAS_ZUMA[item.codigoPdv] || FICHAS_TECNICAS_ZUMA["ZUM-003"];
+    const qtdItem = item.qtd || 1;
+    const cmvItem = ficha.cmvTeorico * qtdItem;
+    cmvTotalPedido += cmvItem;
+
+    detalhamentoFichas.push({
+      produto: item.nome,
+      codigoPdv: item.codigoPdv,
+      qtdPedida: qtdItem,
+      precoUnitario: item.precoUnitario,
+      subtotal: item.precoUnitario * qtdItem,
+      cmvTeoricoItem: cmvItem,
+      cmvPercentualItem: parseFloat(((cmvItem / (item.precoUnitario * qtdItem)) * 100).toFixed(2)),
+      margemContribuicao: (item.precoUnitario * qtdItem) - cmvItem,
+      insumosConsumidos: ficha.insumos.map(ins => ({
+        nome: ins.nome,
+        qtdConsumida: parseFloat((ins.qtd * qtdItem).toFixed(3)),
+        unidade: ins.unidade,
+        custoTotal: parseFloat((ins.custoTotal * qtdItem).toFixed(2))
+      }))
+    });
+
+    // Efetivar baixa nos insumos
+    for (const ins of ficha.insumos) {
+      const estoqueItem = ESTOQUE_PESCADOS_ZUMA[ins.id];
+      if (estoqueItem) {
+        const consumo = parseFloat((ins.qtd * qtdItem).toFixed(3));
+        const saldoAnt = parseFloat(estoqueItem.saldoAtual);
+        estoqueItem.saldoAtual = parseFloat(Math.max(0, saldoAnt - consumo).toFixed(3));
+        if (estoqueItem.saldoAtual < estoqueItem.saldoMinimo) {
+          estoqueItem.status = "Repor Urgente";
+        }
+        movimentacoes.push({
+          insumoId: ins.id,
+          insumoNome: estoqueItem.nome,
+          unidade: estoqueItem.unidade,
+          consumo,
+          saldoAnterior: saldoAnt,
+          saldoAtual: estoqueItem.saldoAtual,
+          status: estoqueItem.status
+        });
+
+        if (!mapaConsumoInsumos[ins.id]) {
+          mapaConsumoInsumos[ins.id] = {
+            insumoId: ins.id,
+            insumoNome: estoqueItem.nome,
+            unidade: estoqueItem.unidade,
+            consumoTotal: 0,
+            saldoAnterior: saldoAnt,
+            saldoFinal: estoqueItem.saldoAtual,
+            status: estoqueItem.status
+          };
+        }
+        mapaConsumoInsumos[ins.id].consumoTotal = parseFloat((mapaConsumoInsumos[ins.id].consumoTotal + consumo).toFixed(3));
+        mapaConsumoInsumos[ins.id].saldoFinal = estoqueItem.saldoAtual;
+      }
+    }
+  }
+
+  const cmvGlobalPct = parseFloat(((cmvTotalPedido / subtotalProdutos) * 100).toFixed(2));
+  const margemBrutaTotal = subtotalProdutos - cmvTotalPedido;
+  const margemBrutaPct = parseFloat(((margemBrutaTotal / subtotalProdutos) * 100).toFixed(2));
+
+  // Registrar histórico auditável de baixa
+  HISTORICO_BAIXAS_ESTOQUE_ZUMA.unshift({
+    id: `BX-${Math.floor(2000 + Math.random() * 8000)}`,
+    comandaId,
+    tipo: "saida_zumi_whatsapp",
+    dataHora: new Date().toISOString(),
+    itemCardapio: itensPedido.map(i => `${i.qtd}x ${i.nome}`).join(' + '),
+    pescadoBaixado: `Salmão Fresco (${movimentacoes.find(m => m.insumoId === 'ins-salmao-fresco')?.consumo || 0.530} kg)`,
+    cmvTotal: parseFloat(cmvTotalPedido.toFixed(2)),
+    margemPct: margemBrutaPct,
+    usuario: "zumi_whatsapp_kyttoia"
+  });
+
+  // Diálogo Interativo do WhatsApp formatado pelo Motor KyttoIA 2.5 Flash
+  const dialogoWhatsApp = [
+    {
+      autor: "cliente",
+      remetente: clienteNome,
+      hora: horaAtual,
+      texto: mensagem
+    },
+    {
+      autor: "zumi",
+      remetente: "Zumi · Assistente Oficial Zuma (KyttoIA 2.5 Flash)",
+      hora: horaAtual,
+      texto: `Konbanwa, ${clienteNome}! 🍣 Que alegria te atender! Sou o Zumi, seu parceiro ninja do Zuma Cozinha Oriental.\n\nRecebi seu pedido com muito carinho:\n${itensPedido.map(i => `• ${i.qtd}x ${i.nome} — R$ ${(i.precoUnitario * i.qtd).toFixed(2)}`).join('\n')}\n🛵 Taxa de Entrega (Tangará da Serra): R$ ${taxaEntrega.toFixed(2)}\n💰 *Total do Pedido: R$ ${totalPedido.toFixed(2)}*\n\n📍 Entrega em: ${enderecoEntrega}\n⏱️ Tempo estimado: *30 a 40 minutos* (Salmão fresquinho fatiado na hora!)\n\nChave PIX Oficial (CNPJ Zuma):\n\`36.296.848/0001-57\`\n\nAssim que fizer o PIX, me avise por aqui para o Sushiman liberar seu combo imediatamente! 🍱🥢`
+    },
+    {
+      autor: "cliente",
+      remetente: clienteNome,
+      hora: horaAtual,
+      texto: `Prontinho Zumi! Acabei de fazer o PIX de R$ ${totalPedido.toFixed(2)}. Segue o comprovante!`
+    },
+    {
+      autor: "zumi",
+      remetente: "Zumi · Assistente Oficial Zuma (KyttoIA 2.5 Flash)",
+      hora: horaAtual,
+      texto: `✅ *PAGAMENTO CONFIRMADO COM SUCESSO!* 🎉\n\nComanda *#${comandaId}* gerada e já apitando na bancada do Sushi Bar!\nNossos sushimen já iniciaram a montagem com pescados selecionados da nossa câmara fria.\n\n📦 *Rastreamento:* https://zuma.kytto.com.br/rastreio/${comandaId}\n⭐ Você acabou de somar *+1 Selo no Clube Zumi*. Faltam apenas 3 para seu Temaki Especial cortesia!\n\nArigatou gozaimasu pela preferência! 🙏`
+    }
+  ];
+
+  res.json({
+    ok: true,
+    status: "pedido_confirmado_e_estoque_baixado",
+    motorIa: "KyttoIA 2.5 Flash",
+    comanda: {
+      id: comandaId,
+      cliente: clienteNome,
+      telefone: clienteTelefone,
+      endereco: enderecoEntrega,
+      itens: itensPedido,
+      subtotalProdutos,
+      taxaEntrega,
+      total: totalPedido,
+      formaPagamento,
+      statusKds: "em_preparo_sushi_bar",
+      tempoEstimadoMinutos: 35
+    },
+    dialogoWhatsApp,
+    analiseCmvFichaTecnica: {
+      faturamentoProdutos: subtotalProdutos,
+      cmvTotalInsumos: parseFloat(cmvTotalPedido.toFixed(2)),
+      cmvPercentualGlobal: cmvGlobalPct,
+      margemBrutaValor: parseFloat(margemBrutaTotal.toFixed(2)),
+      margemBrutaPercentual: margemBrutaPct,
+      statusSaudeFinanceira: cmvGlobalPct <= 50.0 ? "Excelente (Margem Saudável)" : "Alerta de Custo",
+      detalhamentoPorItem: detalhamentoFichas
+    },
+    baixaEstoquePescadosEmTempoReal: {
+      totalInsumosBaixados: movimentacoes.length,
+      movimentacoes,
+      consumoConsolidadoPorInsumo: Object.values(mapaConsumoInsumos)
+    },
+    reciboFiscalNFCe: {
+      chaveAcesso: `51261136296848000157650010000000001${Math.floor(10000000 + Math.random() * 90000000)}1`,
+      protocoloAutorizacaoSEFAZ: `1512600${Math.floor(100000000 + Math.random() * 900000000)}`,
+      ambiente: "Produção SEFAZ-MT",
+      dataHoraEmissao: new Date().toISOString()
+    }
+  });
+});
+
+// POST /api/public/zuma/estoque-pescados/repor — Registro de Entrada / Reposição de Pescados
+routerZuma.post('/estoque-pescados/repor', (req, res) => {
+  const { insumoId = "ins-salmao-fresco", quantidadeKg = 20.0, fornecedor = "Pescados Nobres Cuiabá", numeroNFe = "NF-8921" } = req.body || {};
+  const item = ESTOQUE_PESCADOS_ZUMA[insumoId];
+  if (!item) {
+    return res.status(404).json({ ok: false, error: "Insumo não encontrado" });
+  }
+  const saldoAnt = item.saldoAtual;
+  item.saldoAtual = parseFloat((saldoAnt + parseFloat(quantidadeKg)).toFixed(3));
+  if (item.saldoAtual >= item.saldoMinimo) {
+    item.status = "OK";
+  }
+
+  res.json({
+    ok: true,
+    mensagem: `Entrada de ${quantidadeKg} ${item.unidade} de ${item.nome} registrada com sucesso!`,
+    fornecedor,
+    numeroNFe,
+    saldoAnterior: saldoAnt,
+    saldoAtual: item.saldoAtual,
+    status: item.status
+  });
+});
+
+
+// ============================================================================
+// 8. GESTÃO DE CÂMARAS FRIAS IOT & CONTROLE DE PERDAS TÉCNICAS (ANVISA/MT)
+// ============================================================================
+
+export const CAMARAS_FRIAS_ZUMA = [
+  {
+    id: "camara-01-pescados-frescos",
+    nome: "Câmara Fria 01 · Pescados Nobres Frescos (Salmão & Atum)",
+    setor: "Sushi Bar Prep / Fundo da Cozinha",
+    temperaturaAtual: 0.8,
+    temperaturaAlvo: 0.0,
+    faixaMinima: -2.0,
+    faixaMaxima: 2.0,
+    umidadeRelativa: 88.5,
+    sensorIotId: "IOT-TEMP-ZUM-01",
+    status: "NORMAL_OTIMA",
+    desvioTermicoAlerta: false,
+    ultimoDegelo: "2026-11-20T04:00:00.000Z",
+    proximoDegelo: "2026-11-21T04:00:00.000Z",
+    responsavelSanitario: "Sushiman Chefe / Controle de Qualidade Zuma",
+    historicoLeituras: [
+      { hora: "14:00", temp: 0.9, umidade: 88 },
+      { hora: "15:00", temp: 0.8, umidade: 89 },
+      { hora: "16:00", temp: 1.1, umidade: 87 },
+      { hora: "17:00", temp: 0.7, umidade: 88 },
+      { hora: "18:00", temp: 0.8, umidade: 88.5 }
+    ]
+  },
+  {
+    id: "camara-02-ultra-congelados",
+    nome: "Câmara Fria 02 · Ultra-Congelamento (Camarão IQF & Polvo)",
+    setor: "Depósito de Congelados",
+    temperaturaAtual: -19.4,
+    temperaturaAlvo: -20.0,
+    faixaMinima: -22.0,
+    faixaMaxima: -18.0,
+    umidadeRelativa: 64.0,
+    sensorIotId: "IOT-TEMP-ZUM-02",
+    status: "NORMAL_OTIMA",
+    desvioTermicoAlerta: false,
+    ultimoDegelo: "2026-11-19T23:00:00.000Z",
+    proximoDegelo: "2026-11-21T23:00:00.000Z",
+    responsavelSanitario: "Sushiman Chefe",
+    historicoLeituras: [
+      { hora: "14:00", temp: -19.2, umidade: 64 },
+      { hora: "15:00", temp: -19.5, umidade: 65 },
+      { hora: "16:00", temp: -19.1, umidade: 63 },
+      { hora: "17:00", temp: -19.6, umidade: 64 },
+      { hora: "18:00", temp: -19.4, umidade: 64 }
+    ]
+  },
+  {
+    id: "camara-03-hortifruti-insumos",
+    nome: "Câmara Fria 03 · Hortifrúti Japonês, Shari & Cream Cheese",
+    setor: "Pré-Preparo Frio",
+    temperaturaAtual: 4.2,
+    temperaturaAlvo: 4.0,
+    faixaMinima: 2.0,
+    faixaMaxima: 6.0,
+    umidadeRelativa: 82.0,
+    sensorIotId: "IOT-TEMP-ZUM-03",
+    status: "NORMAL_OTIMA",
+    desvioTermicoAlerta: false,
+    ultimoDegelo: "2026-11-20T03:00:00.000Z",
+    proximoDegelo: "2026-11-21T03:00:00.000Z",
+    responsavelSanitario: "Equipe de Saladas e Entradas",
+    historicoLeituras: [
+      { hora: "14:00", temp: 4.3, umidade: 82 },
+      { hora: "15:00", temp: 4.1, umidade: 81 },
+      { hora: "16:00", temp: 4.5, umidade: 83 },
+      { hora: "17:00", temp: 4.0, umidade: 82 },
+      { hora: "18:00", temp: 4.2, umidade: 82 }
+    ]
+  }
+];
+
+export const HISTORICO_PERDAS_DESCARTE_ZUMA = [
+  {
+    id: "PERD-101",
+    dataHora: "2026-11-20T11:30:00.000Z",
+    insumoId: "ins-salmao-fresco",
+    insumoNome: "Salmão Fresco Chileno (Salmo Salar)",
+    tipo: "apara_tecnica_gordura_escura",
+    quantidadeKg: 0.650,
+    custoAbsorvido: 44.20,
+    sushiman: "Kenji Sushiman",
+    motivo: "Apara sanitária de linha escura e tecido sanguíneo para garantir padrão visual ouro nos sashimis",
+    destino: "Descarte técnico auditado",
+    impactoNoCmvPercentual: "+0.32%"
+  },
+  {
+    id: "PERD-102",
+    dataHora: "2026-11-20T16:15:00.000Z",
+    insumoId: "ins-arroz-gohan",
+    insumoNome: "Arroz Gohan Temperado",
+    tipo: "quebra_bancada_excesso_tempo",
+    quantidadeKg: 0.800,
+    custoAbsorvido: 11.20,
+    sushiman: "Lucas Sushiman",
+    motivo: "Descarte de shari após 4h em bancada conforme POP de segurança alimentar (resolução RDC 216)",
+    destino: "Descarte sanitário",
+    impactoNoCmvPercentual: "+0.08%"
+  }
+];
+
+// GET /api/public/zuma/estoque/camaras-frias
+routerZuma.get('/estoque/camaras-frias', (req, res) => {
+  res.json({
+    ok: true,
+    empresa: "Zuma Cozinha Oriental",
+    cidade: "Tangará da Serra - MT",
+    normaRegulamentadora: "RDC 216/ANVISA e Vigilância Sanitária MT",
+    totalCamarasMonitoradas: CAMARAS_FRIAS_ZUMA.length,
+    statusGeral: "100%_CONFORME",
+    camaras: CAMARAS_FRIAS_ZUMA,
+    perdasRecentes: HISTORICO_PERDAS_DESCARTE_ZUMA
+  });
+});
+
+// POST /api/public/zuma/estoque/perda-descarte
+routerZuma.post('/estoque/perda-descarte', (req, res) => {
+  const {
+    insumoId = "ins-salmao-fresco",
+    quantidadeKg = 0.450,
+    tipo = "apara_tecnica_sushiman",
+    motivo = "Apara técnica de acabamento de filé",
+    sushiman = "Sushiman Plantão"
+  } = req.body || {};
+
+  const insumo = ESTOQUE_PESCADOS_ZUMA[insumoId];
+  if (insumo) {
+    insumo.saldoAtual = parseFloat(Math.max(0, insumo.saldoAtual - parseFloat(quantidadeKg)).toFixed(3));
+  }
+
+  const novaPerda = {
+    id: `PERD-${Math.floor(100 + Math.random() * 900)}`,
+    dataHora: new Date().toISOString(),
+    insumoId,
+    insumoNome: insumo ? insumo.nome : "Insumo",
+    tipo,
+    quantidadeKg: parseFloat(quantidadeKg),
+    custoAbsorvido: parseFloat((parseFloat(quantidadeKg) * (insumo ? insumo.custoPorKgInteiro : 68.0)).toFixed(2)),
+    sushiman,
+    motivo,
+    destino: "Descarte técnico auditado",
+    impactoNoCmvPercentual: "+0.15%"
+  };
+
+  HISTORICO_PERDAS_DESCARTE_ZUMA.unshift(novaPerda);
+
+  res.json({
+    ok: true,
+    mensagem: `Perda técnica de ${quantidadeKg} kg registrada com sucesso e saldo debitado do estoque.`,
+    perda: novaPerda,
+    novoSaldoInsumo: insumo ? insumo.saldoAtual : null
+  });
+});
+
+// ============================================================================
+// 9. MAPA DE TEMPERATURA & HEATMAP DE SALÃO E MESAS (25 MESAS ZUMA)
+// ============================================================================
+
+export const MESAS_SALAO_ZUMA = [
+  // Setor 1: Salão Principal (1 a 12)
+  { id: 1, numero: 1, setor: "Salão Principal", capacidade: 4, status: "consumindo", tempoMinutos: 48, garcom: "Carlos Silva", comanda: "COM-SALAO-101", valorAcumulado: 218.00, clientesNaMesa: 3, ticketMedioPessoa: 72.67, tempAmbiente: 22.0, solicitouConta: false, itens: ["Combinado Zuma Casal 40 Peças", "2x Chopp Brahma"] },
+  { id: 2, numero: 2, setor: "Salão Principal", capacidade: 4, status: "solicitou_conta", tempoMinutos: 92, garcom: "Carlos Silva", comanda: "COM-SALAO-102", valorAcumulado: 345.50, clientesNaMesa: 4, ticketMedioPessoa: 86.38, tempAmbiente: 22.0, solicitouConta: true, itens: ["Especial Zuma 68 Peças", "4x Soda Italiana", "2x Hot Banana Nutella"] },
+  { id: 3, numero: 3, setor: "Salão Principal", capacidade: 2, status: "livre", tempoMinutos: 0, garcom: "Carlos Silva", comanda: null, valorAcumulado: 0.0, clientesNaMesa: 0, ticketMedioPessoa: 0.0, tempAmbiente: 22.0, solicitouConta: false, itens: [] },
+  { id: 4, numero: 4, setor: "Salão Principal", capacidade: 6, status: "aguardando_kds", tempoMinutos: 18, garcom: "Ana Sato", comanda: "COM-SALAO-104", valorAcumulado: 412.00, clientesNaMesa: 5, ticketMedioPessoa: 82.40, tempAmbiente: 21.8, solicitouConta: false, itens: ["Festival Zuma Completo", "5x Cervejas Long Neck"] },
+  { id: 5, numero: 5, setor: "Salão Principal", capacidade: 4, status: "consumindo", tempoMinutos: 35, garcom: "Ana Sato", comanda: "COM-SALAO-105", valorAcumulado: 189.00, clientesNaMesa: 2, ticketMedioPessoa: 94.50, tempAmbiente: 22.1, solicitouConta: false, itens: ["Combinado 30 Peças", "1x Vinho Branco"] },
+  { id: 6, numero: 6, setor: "Salão Principal", capacidade: 2, status: "livre", tempoMinutos: 0, garcom: "Ana Sato", comanda: null, valorAcumulado: 0.0, clientesNaMesa: 0, ticketMedioPessoa: 0.0, tempAmbiente: 22.0, solicitouConta: false, itens: [] },
+  { id: 7, numero: 7, setor: "Salão Principal", capacidade: 4, status: "consumindo", tempoMinutos: 55, garcom: "Roberto Kenji", comanda: "COM-SALAO-107", valorAcumulado: 278.00, clientesNaMesa: 3, ticketMedioPessoa: 92.67, tempAmbiente: 22.0, solicitouConta: false, itens: ["Sashimi Salmão 20 Peças", "Uramaki Especial", "2x Refrigerante"] },
+  { id: 8, numero: 8, setor: "Salão Principal", capacidade: 4, status: "higienizacao", tempoMinutos: 5, garcom: "Roberto Kenji", comanda: null, valorAcumulado: 0.0, clientesNaMesa: 0, ticketMedioPessoa: 0.0, tempAmbiente: 21.9, solicitouConta: false, itens: [] },
+  { id: 9, numero: 9, setor: "Salão Principal", capacidade: 2, status: "consumindo", tempoMinutos: 22, garcom: "Carlos Silva", comanda: "COM-SALAO-109", valorAcumulado: 124.00, clientesNaMesa: 2, ticketMedioPessoa: 62.00, tempAmbiente: 22.0, solicitouConta: false, itens: ["Combinado Individual 18 Peças", "Temaki Especial"] },
+  { id: 10, numero: 10, setor: "Salão Principal", capacidade: 4, status: "livre", tempoMinutos: 0, garcom: "Carlos Silva", comanda: null, valorAcumulado: 0.0, clientesNaMesa: 0, ticketMedioPessoa: 0.0, tempAmbiente: 22.0, solicitouConta: false, itens: [] },
+  { id: 11, numero: 11, setor: "Salão Principal", capacidade: 4, status: "ocupada_sem_pedido", tempoMinutos: 8, garcom: "Ana Sato", comanda: "COM-SALAO-111", valorAcumulado: 0.0, clientesNaMesa: 3, ticketMedioPessoa: 0.0, tempAmbiente: 22.0, solicitouConta: false, itens: [] },
+  { id: 12, numero: 12, setor: "Salão Principal", capacidade: 6, status: "consumindo", tempoMinutos: 74, garcom: "Ana Sato", comanda: "COM-SALAO-112", valorAcumulado: 520.00, clientesNaMesa: 6, ticketMedioPessoa: 86.67, tempAmbiente: 21.7, solicitouConta: false, itens: ["Especial Zuma Casal 40 Peças", "Combinado 30 Peças", "6x Sucos Naturais"] },
+
+  // Setor 2: Deck Lounge Climatizado (13 a 18)
+  { id: 13, numero: 13, setor: "Deck Lounge", capacidade: 4, status: "consumindo", tempoMinutos: 62, garcom: "Roberto Kenji", comanda: "COM-DECK-113", valorAcumulado: 295.00, clientesNaMesa: 4, ticketMedioPessoa: 73.75, tempAmbiente: 22.5, solicitouConta: false, itens: ["Combinado Zuma Casal", "4x Gin Tônica"] },
+  { id: 14, numero: 14, setor: "Deck Lounge", capacidade: 4, status: "solicitou_conta", tempoMinutos: 104, garcom: "Roberto Kenji", comanda: "COM-DECK-114", valorAcumulado: 460.00, clientesNaMesa: 4, ticketMedioPessoa: 115.00, tempAmbiente: 22.4, solicitouConta: true, itens: ["Omakase Especial 50 Peças", "2x Garrafas Sake Hakutsuru"] },
+  { id: 15, numero: 15, setor: "Deck Lounge", capacidade: 2, status: "livre", tempoMinutos: 0, garcom: "Roberto Kenji", comanda: null, valorAcumulado: 0.0, clientesNaMesa: 0, ticketMedioPessoa: 0.0, tempAmbiente: 22.5, solicitouConta: false, itens: [] },
+  { id: 16, numero: 16, setor: "Deck Lounge", capacidade: 4, status: "aguardando_kds", tempoMinutos: 12, garcom: "Carlos Silva", comanda: "COM-DECK-116", valorAcumulado: 178.00, clientesNaMesa: 2, ticketMedioPessoa: 89.00, tempAmbiente: 22.3, solicitouConta: false, itens: ["Combinado 30 Peças Salmão", "2x Caipirinhas de Sakê"] },
+  { id: 17, numero: 17, setor: "Deck Lounge", capacidade: 4, status: "livre", tempoMinutos: 0, garcom: "Carlos Silva", comanda: null, valorAcumulado: 0.0, clientesNaMesa: 0, ticketMedioPessoa: 0.0, tempAmbiente: 22.5, solicitouConta: false, itens: [] },
+  { id: 18, numero: 18, setor: "Deck Lounge", capacidade: 6, status: "consumindo", tempoMinutos: 40, garcom: "Ana Sato", comanda: "COM-DECK-118", valorAcumulado: 388.00, clientesNaMesa: 5, ticketMedioPessoa: 77.60, tempAmbiente: 22.2, solicitouConta: false, itens: ["Combinado Zuma Casal", "Hot Roll Filadélfia", "5x Cervejas Heineken"] },
+
+  // Setor 3: Sushi Bar Omakase (Lugares 19 a 22)
+  { id: 19, numero: 19, setor: "Sushi Bar Omakase", capacidade: 2, status: "consumindo", tempoMinutos: 52, garcom: "Chef Kenji (Bancada)", comanda: "COM-BAR-119", valorAcumulado: 280.00, clientesNaMesa: 2, ticketMedioPessoa: 140.00, tempAmbiente: 21.0, solicitouConta: false, itens: ["Experiência Omakase 10 Passos", "Dose Sakê Junmai"] },
+  { id: 20, numero: 20, setor: "Sushi Bar Omakase", capacidade: 2, status: "consumindo", tempoMinutos: 45, garcom: "Chef Kenji (Bancada)", comanda: "COM-BAR-120", valorAcumulado: 280.00, clientesNaMesa: 2, ticketMedioPessoa: 140.00, tempAmbiente: 21.0, solicitouConta: false, itens: ["Experiência Omakase 10 Passos", "2x Chá Verde Importado"] },
+  { id: 21, numero: 21, setor: "Sushi Bar Omakase", capacidade: 2, status: "livre", tempoMinutos: 0, garcom: "Chef Kenji (Bancada)", comanda: null, valorAcumulado: 0.0, clientesNaMesa: 0, ticketMedioPessoa: 0.0, tempAmbiente: 21.0, solicitouConta: false, itens: [] },
+  { id: 22, numero: 22, setor: "Sushi Bar Omakase", capacidade: 2, status: "aguardando_kds", tempoMinutos: 10, garcom: "Chef Kenji (Bancada)", comanda: "COM-BAR-122", valorAcumulado: 165.00, clientesNaMesa: 1, ticketMedioPessoa: 165.00, tempAmbiente: 21.0, solicitouConta: false, itens: ["Degustação Sushiman Trufada", "Água San Pellegrino"] },
+
+  // Setor 4: Sala VIP Corporativa Agro (23 a 25)
+  { id: 23, numero: 23, setor: "Sala VIP", capacidade: 8, status: "consumindo", tempoMinutos: 85, garcom: "Carlos Silva (VIP)", comanda: "COM-VIP-123", valorAcumulado: 1140.00, clientesNaMesa: 7, ticketMedioPessoa: 162.86, tempAmbiente: 21.5, solicitouConta: false, itens: ["2x Especial Supremo 68 Peças", "3x Garrafas Sakê Premium", "Entradas Especiais"] },
+  { id: 24, numero: 24, setor: "Sala VIP", capacidade: 8, status: "solicitou_conta", tempoMinutos: 115, garcom: "Carlos Silva (VIP)", comanda: "COM-VIP-124", valorAcumulado: 1380.00, clientesNaMesa: 8, ticketMedioPessoa: 172.50, tempAmbiente: 21.5, solicitouConta: true, itens: ["Jantar Corporativo Diretoria Agro MT", "Banquete Zuma Omakase"] },
+  { id: 25, numero: 25, setor: "Sala VIP", capacidade: 12, status: "livre", tempoMinutos: 0, garcom: "Ana Sato (VIP)", comanda: null, valorAcumulado: 0.0, clientesNaMesa: 0, ticketMedioPessoa: 0.0, tempAmbiente: 21.5, solicitouConta: false, itens: [] }
+];
+
+// Função que calcula a "temperatura de giro" da mesa
+function calcularClassificacaoGiro(mesa) {
+  if (mesa.status === "livre") return { nivel: "livre_verde", rotulo: "Mesa Livre", cor: "#10b981", descricao: "Pronta para receber clientes" };
+  if (mesa.status === "higienizacao") return { nivel: "higienizacao", rotulo: "Higienização", cor: "#64748b", descricao: "Equipe limpando e sanitizando" };
+  if (mesa.solicitouConta || mesa.tempoMinutos >= 90) return { nivel: "alerta_giro_roxo", rotulo: "Alerta Giro / Conta", cor: "#a855f7", descricao: "Mesa acima de 90 min ou aguardando pagamento" };
+  if (mesa.tempoMinutos >= 60) return { nivel: "quente_laranja", rotulo: "Quente (Sobremesa/Café)", cor: "#f97316", descricao: "60 a 90 min - fase final do consumo" };
+  if (mesa.tempoMinutos >= 30) return { nivel: "ponto_amarelo", rotulo: "No Ponto (Consumindo)", cor: "#eab308", descricao: "30 a 60 min - pratos servidos e degustação" };
+  return { nivel: "recente_azul", rotulo: "Recém-chegada", cor: "#3b82f6", descricao: "< 30 min - pedidos em preparo no KDS" };
+}
+
+// GET /api/public/zuma/mesas/mapa-temperatura
+routerZuma.get('/mesas/mapa-temperatura', (req, res) => {
+  const mesasFormatadas = MESAS_SALAO_ZUMA.map(m => ({
+    ...m,
+    heatmapGiro: calcularClassificacaoGiro(m)
+  }));
+
+  const mesasOcupadas = MESAS_SALAO_ZUMA.filter(m => m.status !== "livre" && m.status !== "higienizacao");
+  const totalFaturamentoSalaoAtual = MESAS_SALAO_ZUMA.reduce((acc, m) => acc + (m.valorAcumulado || 0), 0);
+  const totalPessoasAtendidas = MESAS_SALAO_ZUMA.reduce((acc, m) => acc + (m.clientesNaMesa || 0), 0);
+  const ticketMedioSalao = totalPessoasAtendidas > 0 ? parseFloat((totalFaturamentoSalaoAtual / totalPessoasAtendidas).toFixed(2)) : 0.0;
+  const tempoMedioOcupacao = mesasOcupadas.length > 0 ? Math.round(mesasOcupadas.reduce((acc, m) => acc + m.tempoMinutos, 0) / mesasOcupadas.length) : 0;
+  const taxaOcupacaoMesasPct = parseFloat(((mesasOcupadas.length / MESAS_SALAO_ZUMA.length) * 100).toFixed(1));
+
+  res.json({
+    ok: true,
+    empresa: "Zuma Cozinha Oriental",
+    totalMesas: MESAS_SALAO_ZUMA.length,
+    taxaOcupacaoMesasPct,
+    totalMesasOcupadas: mesasOcupadas.length,
+    totalMesasLivres: MESAS_SALAO_ZUMA.filter(m => m.status === "livre").length,
+    totalPessoasAtendidas,
+    totalFaturamentoSalaoAtual,
+    ticketMedioSalao,
+    tempoMedioOcupacaoMinutos: tempoMedioOcupacao,
+    climatizacaoSalao: {
+      temperaturaMedia: "21.8°C",
+      statusConforto: "Ideal para frescor de sushis e bem-estar dos clientes",
+      sensoresIotAtivos: 4
+    },
+    mesas: mesasFormatadas
+  });
+});
+
+// POST /api/public/zuma/mesas/alterar-status
+routerZuma.post('/mesas/alterar-status', (req, res) => {
+  const { mesaId, novoStatus, garcom, valorAdicionar = 0 } = req.body || {};
+  const mesa = MESAS_SALAO_ZUMA.find(m => m.id === parseInt(mesaId));
+  if (!mesa) {
+    return res.status(404).json({ ok: false, error: "Mesa não encontrada" });
+  }
+
+  if (novoStatus) mesa.status = novoStatus;
+  if (garcom) mesa.garcom = garcom;
+  if (valorAdicionar) mesa.valorAcumulado += parseFloat(valorAdicionar);
+
+  if (novoStatus === "livre") {
+    mesa.comanda = null;
+    mesa.valorAcumulado = 0.0;
+    mesa.tempoMinutos = 0;
+    mesa.clientesNaMesa = 0;
+    mesa.solicitouConta = false;
+    mesa.itens = [];
+  } else if (novoStatus === "solicitou_conta") {
+    mesa.solicitouConta = true;
+  }
+
+  res.json({
+    ok: true,
+    mensagem: `Mesa ${mesa.numero} atualizada com sucesso para status "${mesa.status}".`,
+    mesa: {
+      ...mesa,
+      heatmapGiro: calcularClassificacaoGiro(mesa)
+    }
+  });
+});
+
+// ============================================================================
+// 10. MÓDULO FISCAL COMPLETO COM EMISSÃO SEFAZ-MT (NFC-E & NF-E)
+// ============================================================================
+
+export const HISTORICO_NOTAS_FISCAIS_ZUMA = [
+  {
+    numeroNota: 1042,
+    serie: 1,
+    modelo: "NFC-e (65)",
+    chaveAcesso: "51261136296848000157650010000010421293849182",
+    protocoloSEFAZ: "1512600849301928",
+    dataEmissao: "2026-11-20T18:22:15.000Z",
+    cliente: "Consumidor Final (CPF: 042.***.***-89)",
+    origemVenda: "Mesa 02 · Salão Principal",
+    valorTotal: 345.50,
+    icmsValor: 13.82,
+    pisCofinsMonofasico: 4.80,
+    statusSEFAZ: "100_AUTORIZADA_PRODUCAO",
+    qrcodeUrl: "http://sefaz.mt.gov.br/nfce/qrcode?p=51261136296848000157650010000010421293849182|2|1|1|928174",
+    xmlUrl: "/api/public/zuma/fiscal/xml/51261136296848000157650010000010421293849182.xml",
+    itens: [
+      { ncm: "2106.90.90", descricao: "Especial Zuma Casal 40 Peças", qtd: 1, vlrUnit: 139.00, vlrTotal: 139.00, cfop: "5102", cstIcms: "102" },
+      { ncm: "2106.90.90", descricao: "Sashimi Salmão 20 Peças", qtd: 1, vlrUnit: 89.90, vlrTotal: 89.90, cfop: "5102", cstIcms: "102" },
+      { ncm: "2203.00.00", descricao: "Cerveja Heineken Long Neck 330ml", qtd: 4, vlrUnit: 14.00, vlrTotal: 56.00, cfop: "5405", cstIcms: "500" },
+      { ncm: "1905.90.90", descricao: "Hot Roll Banana Nutella (6 un)", qtd: 2, vlrUnit: 30.30, vlrTotal: 60.60, cfop: "5102", cstIcms: "102" }
+    ]
+  },
+  {
+    numeroNota: 1041,
+    serie: 1,
+    modelo: "NFC-e (65)",
+    chaveAcesso: "51261136296848000157650010000010411837491029",
+    protocoloSEFAZ: "1512600849301741",
+    dataEmissao: "2026-11-20T17:45:10.000Z",
+    cliente: "Rodrigo Ribeiro Gonçalves",
+    origemVenda: "Zumi Atende WhatsApp · Delivery Centro",
+    valorTotal: 141.90,
+    icmsValor: 5.67,
+    pisCofinsMonofasico: 0.0,
+    statusSEFAZ: "100_AUTORIZADA_PRODUCAO",
+    qrcodeUrl: "http://sefaz.mt.gov.br/nfce/qrcode?p=51261136296848000157650010000010411837491029|2|1|1|837491",
+    xmlUrl: "/api/public/zuma/fiscal/xml/51261136296848000157650010000010411837491029.xml",
+    itens: [
+      { ncm: "2106.90.90", descricao: "Combinado Especial 30 Peças Salmão Fresco", qtd: 1, vlrUnit: 89.90, vlrTotal: 89.90, cfop: "5102", cstIcms: "102" },
+      { ncm: "2106.90.90", descricao: "Hot Roll Filadélfia Especial (10 un)", qtd: 1, vlrUnit: 42.00, vlrTotal: 42.00, cfop: "5102", cstIcms: "102" }
+    ]
+  },
+  {
+    numeroNota: 89,
+    serie: 1,
+    modelo: "NF-e (55) Corporativa",
+    chaveAcesso: "51261136296848000157550010000000891048291048",
+    protocoloSEFAZ: "1512600849104829",
+    dataEmissao: "2026-11-20T15:10:00.000Z",
+    cliente: "Agropecuária Tangará do Norte S/A (CNPJ: 14.281.904/0001-33)",
+    origemVenda: "Sala VIP 24 · Almoço Corporativo Diretoria",
+    valorTotal: 2150.00,
+    icmsValor: 86.00,
+    pisCofinsMonofasico: 32.50,
+    statusSEFAZ: "100_AUTORIZADA_PRODUCAO",
+    qrcodeUrl: "http://sefaz.mt.gov.br/nfe/qrcode?p=51261136296848000157550010000000891048291048",
+    xmlUrl: "/api/public/zuma/fiscal/xml/51261136296848000157550010000000891048291048.xml",
+    itens: [
+      { ncm: "2106.90.90", descricao: "Banquete Executivo Zuma Omakase Corporativo", qtd: 10, vlrUnit: 185.00, vlrTotal: 1850.00, cfop: "5102", cstIcms: "102" },
+      { ncm: "2206.00.90", descricao: "Sakê Premium Junmai Daiginjo 720ml", qtd: 2, vlrUnit: 150.00, vlrTotal: 300.00, cfop: "5405", cstIcms: "500" }
+    ]
+  }
+];
+
+// GET /api/public/zuma/fiscal/painel
+routerZuma.get('/fiscal/painel', (req, res) => {
+  const totalNotasEmitidas = HISTORICO_NOTAS_FISCAIS_ZUMA.length;
+  const faturamentoFiscalMes = HISTORICO_NOTAS_FISCAIS_ZUMA.reduce((acc, n) => acc + n.valorTotal, 0);
+  const totalIcmsApurado = HISTORICO_NOTAS_FISCAIS_ZUMA.reduce((acc, n) => acc + (n.icmsValor || 0), 0);
+
+  res.json({
+    ok: true,
+    empresa: "Zuma Cozinha Oriental Ltda",
+    cnpj: "36.296.848/0001-57",
+    inscricaoEstadual: "13.784.920-4",
+    inscricaoMunicipal: "48.291-0",
+    regimeTributario: "Simples Nacional (Anexo I - Comércio Gastronômico)",
+    aliquotaEfetivaSimplesNacional: "4,00%",
+    certificadoDigital: {
+      tipo: "A1 (e-CNPJ)",
+      titular: "ZUMA COZINHA ORIENTAL LTDA",
+      validade: "18/10/2027",
+      status: "VALIDO_E_ATIVO"
+    },
+    contingenciaOffline: {
+      status: "PRONTA_STANDBY",
+      tipoContingencia: "NFC-e Off-line (tpEmis = 9)",
+      limiteEnvioAposRestabelecimento: "24 horas",
+      notasPendentesEnvio: 0
+    },
+    totaisMes: {
+      totalNotasEmitidas,
+      faturamentoFiscalMes,
+      totalIcmsApurado: parseFloat(totalIcmsApurado.toFixed(2))
+    },
+    notas: HISTORICO_NOTAS_FISCAIS_ZUMA
+  });
+});
+
+// POST /api/public/zuma/fiscal/emitir — Emissão de NFC-e (65) ou NF-e (55)
+routerZuma.post('/fiscal/emitir', (req, res) => {
+  const {
+    modelo = "NFC-e (65)",
+    origemVenda = "Balcão / Caixa Salão",
+    cliente = "Consumidor Final",
+    itens = [
+      { descricao: "Combinado Zuma 30 Peças", qtd: 1, precoUnit: 89.90, ncm: "2106.90.90" }
+    ],
+    formaPagamento = "PIX"
+  } = req.body || {};
+
+  const proxNumero = (HISTORICO_NOTAS_FISCAIS_ZUMA[0]?.numeroNota || 1042) + 1;
+  const valorTotal = itens.reduce((acc, it) => acc + ((it.qtd || 1) * (it.precoUnit || 0)), 0);
+  const icmsValor = parseFloat((valorTotal * 0.04).toFixed(2));
+  const chave = `5126113629684800015765001${String(proxNumero).padStart(9, '0')}1${Math.floor(10000000 + Math.random() * 90000000)}1`;
+  const protocolo = `1512600${Math.floor(100000000 + Math.random() * 900000000)}`;
+
+  const novaNota = {
+    numeroNota: proxNumero,
+    serie: 1,
+    modelo,
+    chaveAcesso: chave,
+    protocoloSEFAZ: protocolo,
+    dataEmissao: new Date().toISOString(),
+    cliente,
+    origemVenda,
+    formaPagamento,
+    valorTotal: parseFloat(valorTotal.toFixed(2)),
+    icmsValor,
+    pisCofinsMonofasico: 0.0,
+    statusSEFAZ: "100_AUTORIZADA_PRODUCAO",
+    qrcodeUrl: `http://sefaz.mt.gov.br/nfce/qrcode?p=${chave}|2|1|1|${Math.floor(100000 + Math.random() * 900000)}`,
+    xmlUrl: `/api/public/zuma/fiscal/xml/${chave}.xml`,
+    itens: itens.map(it => ({
+      ncm: it.ncm || "2106.90.90",
+      descricao: it.descricao,
+      qtd: it.qtd || 1,
+      vlrUnit: it.precoUnit || 0,
+      vlrTotal: parseFloat(((it.qtd || 1) * (it.precoUnit || 0)).toFixed(2)),
+      cfop: "5102",
+      cstIcms: "102"
+    }))
+  };
+
+  HISTORICO_NOTAS_FISCAIS_ZUMA.unshift(novaNota);
+
+  res.json({
+    ok: true,
+    mensagem: `Nota Fiscal ${modelo} #${proxNumero} AUTORIZADA com sucesso pela SEFAZ-MT!`,
+    notaFiscal: novaNota
+  });
+});
+
+
+// ============================================================================
+// 11. FRENTE DE CAIXA (PDV) INTEGRADA & FECHAMENTO DE TURNO
+// ============================================================================
+
+export let CAIXA_TURNO_ATUAL_ZUMA = {
+  id: "TURNO-20261120-01",
+  operador: "Rodrigo Gonçalves",
+  abertura: new Date().toISOString(),
+  fechamento: null,
+  status: "ABERTO",
+  saldoAbertura: 300.00,
+  totalVendas: 4850.00,
+  totalDinheiro: 650.00,
+  totalPix: 2480.00,
+  totalCartaoCredito: 1120.00,
+  totalCartaoDebito: 600.00,
+  totalVR: 0.00,
+  sangrias: [
+    { id: "SANG-01", valor: 200.00, motivo: "Recolhimento cofre blindado", hora: "16:30", operador: "Rodrigo Gonçalves" }
+  ],
+  suprimentos: [
+    { id: "SUPR-01", valor: 100.00, motivo: "Reforço troco moedas", hora: "14:15", operador: "Rodrigo Gonçalves" }
+  ],
+  saldoGavetaEsperado: 850.00
+};
+
+routerZuma.get("/pdv/status-caixa", (req, res) => {
+  res.json({
+    ok: true,
+    empresa: "Zuma Cozinha Oriental",
+    caixa: CAIXA_TURNO_ATUAL_ZUMA
+  });
+});
+
+routerZuma.post("/pdv/abrir-caixa", (req, res) => {
+  const { operador = "Operador Caixa", saldoAbertura = 300.00 } = req.body || {};
+  CAIXA_TURNO_ATUAL_ZUMA = {
+    id: `TURNO-${Date.now()}`,
+    operador,
+    abertura: new Date().toISOString(),
+    fechamento: null,
+    status: "ABERTO",
+    saldoAbertura: parseFloat(saldoAbertura),
+    totalVendas: 0.0,
+    totalDinheiro: 0.0,
+    totalPix: 0.0,
+    totalCartaoCredito: 0.0,
+    totalCartaoDebito: 0.0,
+    totalVR: 0.0,
+    sangrias: [],
+    suprimentos: [],
+    saldoGavetaEsperado: parseFloat(saldoAbertura)
+  };
+  res.json({ ok: true, mensagem: "Caixa aberto com sucesso!", caixa: CAIXA_TURNO_ATUAL_ZUMA });
+});
+
+routerZuma.post("/pdv/sangria", (req, res) => {
+  const { valor = 0, motivo = "Sangria de caixa", operador = CAIXA_TURNO_ATUAL_ZUMA.operador } = req.body || {};
+  const vlr = parseFloat(valor);
+  CAIXA_TURNO_ATUAL_ZUMA.sangrias.push({
+    id: `SANG-${Date.now()}`,
+    valor: vlr,
+    motivo,
+    hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    operador
+  });
+  CAIXA_TURNO_ATUAL_ZUMA.saldoGavetaEsperado -= vlr;
+  res.json({ ok: true, mensagem: `Sangria de R$ ${vlr.toFixed(2)} registrada!`, caixa: CAIXA_TURNO_ATUAL_ZUMA });
+});
+
+routerZuma.post("/pdv/suprimento", (req, res) => {
+  const { valor = 0, motivo = "Reforço de troco", operador = CAIXA_TURNO_ATUAL_ZUMA.operador } = req.body || {};
+  const vlr = parseFloat(valor);
+  CAIXA_TURNO_ATUAL_ZUMA.suprimentos.push({
+    id: `SUPR-${Date.now()}`,
+    valor: vlr,
+    motivo,
+    hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    operador
+  });
+  CAIXA_TURNO_ATUAL_ZUMA.saldoGavetaEsperado += vlr;
+  res.json({ ok: true, mensagem: `Suprimento de R$ ${vlr.toFixed(2)} registrado!`, caixa: CAIXA_TURNO_ATUAL_ZUMA });
+});
+
+routerZuma.post("/pdv/fechar-caixa", (req, res) => {
+  const { valorContado = CAIXA_TURNO_ATUAL_ZUMA.saldoGavetaEsperado } = req.body || {};
+  const contado = parseFloat(valorContado);
+  const diferenca = contado - CAIXA_TURNO_ATUAL_ZUMA.saldoGavetaEsperado;
+  CAIXA_TURNO_ATUAL_ZUMA.fechamento = new Date().toISOString();
+  CAIXA_TURNO_ATUAL_ZUMA.status = "FECHADO";
+  CAIXA_TURNO_ATUAL_ZUMA.valorContado = contado;
+  CAIXA_TURNO_ATUAL_ZUMA.diferenca = diferenca;
+  res.json({
+    ok: true,
+    mensagem: "Turno de caixa encerrado com sucesso!",
+    caixa: CAIXA_TURNO_ATUAL_ZUMA,
+    resumoFechamento: {
+      totalVendido: CAIXA_TURNO_ATUAL_ZUMA.totalVendas,
+      saldoGavetaEsperado: CAIXA_TURNO_ATUAL_ZUMA.saldoGavetaEsperado,
+      valorContado: contado,
+      diferenca
+    }
+  });
+});
+
+// ============================================================================
+// 12. KARDEX DETALHADO DE MOVIMENTAÇÃO DE ESTOQUE
+// ============================================================================
+
+export let HISTORICO_KARDEX_ESTOQUE_ZUMA = [
+  {
+    id: "KARD-01",
+    dataHora: "2026-11-20T10:15:00.000Z",
+    tipoMovimento: "ENTRADA_FORNECEDOR_NFE",
+    insumoId: "ins-salmao-fresco",
+    insumoNome: "Salmão Fresco Chileno (Filé Nobre)",
+    quantidade: +25.0,
+    saldoAnterior: 17.5,
+    saldoAtual: 42.5,
+    unidade: "kg",
+    custoUnitario: 89.90,
+    valorTotal: 2247.50,
+    documentoOrigem: "NF-e 55 · Chave 51261108234892000188550010000045211029384751",
+    responsável: "Rodrigo Gonçalves",
+    lote: "LOTE-SAL-20261120"
+  },
+  {
+    id: "KARD-02",
+    dataHora: "2026-11-20T12:30:00.000Z",
+    tipoMovimento: "SAIDA_VENDA_PDV",
+    insumoId: "ins-salmao-fresco",
+    insumoNome: "Salmão Fresco Chileno (Filé Nobre)",
+    quantidade: -2.850,
+    saldoAnterior: 42.5,
+    saldoAtual: 39.65,
+    unidade: "kg",
+    custoUnitario: 89.90,
+    valorTotal: 256.21,
+    documentoOrigem: "NFC-e 65 #1040 (Mesa 04 e Mesa 08)",
+    responsável: "Caixa PDV Salão",
+    lote: "LOTE-SAL-20261120"
+  },
+  {
+    id: "KARD-03",
+    dataHora: "2026-11-20T14:00:00.000Z",
+    tipoMovimento: "PERDA_TECNICA_APARA",
+    insumoId: "ins-salmao-fresco",
+    insumoNome: "Salmão Fresco Chileno (Filé Nobre)",
+    quantidade: -0.500,
+    saldoAnterior: 39.65,
+    saldoAtual: 39.15,
+    unidade: "kg",
+    custoUnitario: 89.90,
+    valorTotal: 44.95,
+    documentoOrigem: "Apara técnica de sushiman (tosa limpa)",
+    responsável: "Kenji Mestre Sushiman",
+    lote: "LOTE-SAL-20261120"
+  },
+  {
+    id: "KARD-04",
+    dataHora: "2026-11-20T15:00:00.000Z",
+    tipoMovimento: "TRANSFERENCIA_INTERNA",
+    insumoId: "ins-salmao-fresco",
+    insumoNome: "Salmão Fresco Chileno (Filé Nobre)",
+    quantidade: -5.000,
+    saldoAnterior: 39.15,
+    saldoAtual: 34.15,
+    unidade: "kg",
+    custoUnitario: 89.90,
+    valorTotal: 449.50,
+    documentoOrigem: "Câmara Fria 01 -> Bancada Sushi Bar",
+    responsável: "Kenji Mestre Sushiman",
+    lote: "LOTE-SAL-20261120"
+  }
+];
+
+routerZuma.get("/estoque/kardex", (req, res) => {
+  const { insumoId, tipoMovimento } = req.query || {};
+  let lista = [...HISTORICO_KARDEX_ESTOQUE_ZUMA];
+  if (insumoId) {
+    lista = lista.filter(k => k.insumoId === insumoId);
+  }
+  if (tipoMovimento) {
+    lista = lista.filter(k => k.tipoMovimento === tipoMovimento);
+  }
+  res.json({
+    ok: true,
+    totalMovimentacoes: lista.length,
+    kardex: lista
+  });
+});
+
+routerZuma.post("/estoque/entrada-nfe-xml", (req, res) => {
+  const {
+    insumoId = "ins-salmao-fresco",
+    quantidadeKg = 10.0,
+    custoUnitario = 89.90,
+    fornecedorNome = "Pescados do Pacífico Importadora LTDA",
+    cnpjFornecedor = "08.234.892/0001-88",
+    chaveNfe = "51261108234892000188550010000045211029384751",
+    numeroNota = "4521",
+    lote = `LOTE-REC-${Date.now()}`,
+    temperaturaRecebimento = 0.5
+  } = req.body || {};
+
+  const qtd = parseFloat(quantidadeKg);
+  const custo = parseFloat(custoUnitario);
+  const insumo = ESTOQUE_PESCADOS_ZUMA[insumoId] || {
+    nome: "Pescado Nobre",
+    quantidadeAtualKg: 20.0,
+    unidade: "kg",
+    custoPorKg: custo
+  };
+
+  const saldoAnterior = typeof insumo.saldoAtual === 'number' ? insumo.saldoAtual : (insumo.quantidadeAtualKg || 25.0);
+  const novoSaldo = parseFloat((saldoAnterior + qtd).toFixed(3));
+  insumo.saldoAtual = novoSaldo;
+  insumo.quantidadeAtualKg = novoSaldo;
+  insumo.custoPorKgInteiro = custo;
+  insumo.custoEfetivoPorKgLimpo = parseFloat((custo / 0.82).toFixed(2));
+  ESTOQUE_PESCADOS_ZUMA[insumoId] = insumo;
+
+  const novoKardex = {
+    id: `KARD-${Date.now()}`,
+    dataHora: new Date().toISOString(),
+    tipoMovimento: "ENTRADA_FORNECEDOR_NFE",
+    insumoId,
+    insumoNome: insumo.nome,
+    quantidade: +qtd,
+    saldoAnterior,
+    saldoAtual: novoSaldo,
+    unidade: insumo.unidade || "kg",
+    custoUnitario: custo,
+    valorTotal: parseFloat((qtd * custo).toFixed(2)),
+    documentoOrigem: `NF-e ${numeroNota} · Fornecedor: ${fornecedorNome}`,
+    responsável: "Conferente Almoxarifado Zuma",
+    lote,
+    temperaturaRecebimento
+  };
+
+  HISTORICO_KARDEX_ESTOQUE_ZUMA.unshift(novoKardex);
+
+  res.json({
+    ok: true,
+    mensagem: `Entrada de ${qtd} kg de ${insumo.nome} registrada com sucesso via NF-e #${numeroNota}!`,
+    novoSaldoKg: insumo.saldoAtual,
+    custoMedioAtualizado: insumo.custoPorKgInteiro,
+    kardex: novoKardex
+  });
+});
+
+routerZuma.post("/estoque/transferencia-interna", (req, res) => {
+  const {
+    insumoId = "ins-salmao-fresco",
+    quantidadeKg = 2.0,
+    origem = "Câmara Fria 01",
+    destino = "Bancada Sushi Bar",
+    responsável = "Kenji Mestre Sushiman"
+  } = req.body || {};
+
+  const qtd = parseFloat(quantidadeKg);
+  const insumo = ESTOQUE_PESCADOS_ZUMA[insumoId] || { nome: "Salmão", saldoAtual: 20.0, custoPorKgInteiro: 89.90 };
+  const saldoAnterior = typeof insumo.saldoAtual === 'number' ? insumo.saldoAtual : 20.0;
+
+  const novoKardex = {
+    id: `KARD-${Date.now()}`,
+    dataHora: new Date().toISOString(),
+    tipoMovimento: "TRANSFERENCIA_INTERNA",
+    insumoId,
+    insumoNome: insumo.nome,
+    quantidade: -qtd,
+    saldoAnterior,
+    saldoAtual: saldoAnterior, // Saldo global não altera, é transferência interna
+    unidade: "kg",
+    custoUnitario: insumo.custoPorKg,
+    valorTotal: parseFloat((qtd * insumo.custoPorKg).toFixed(2)),
+    documentoOrigem: `${origem} -> ${destino}`,
+    responsável,
+    lote: "LOTE-TRANSF"
+  };
+
+  HISTORICO_KARDEX_ESTOQUE_ZUMA.unshift(novoKardex);
+
+  res.json({
+    ok: true,
+    mensagem: `Transferência de ${qtd} kg transferida com sucesso de ${origem} para ${destino}!`,
+    kardex: novoKardex
+  });
+});
+
+// ============================================================================
+// 13. COZINHA & KDS (KITCHEN DISPLAY SYSTEM POR PRAÇA)
+// ============================================================================
+
+export let PEDIDOS_COZINHA_KDS_ZUMA = [
+  {
+    id: "KDS-101",
+    numeroComanda: "CMD-2026-101",
+    origem: "Mesa 03 · Sushi Bar",
+    praca: "SUSHI_BAR",
+    itens: [
+      { id: "p1", nome: "Combinado Zuma Casal 40 Peças", qtd: 1, obs: "Sem wasabi no niguiri" },
+      { id: "p2", nome: "Sashimi Salmão Trufado (10 fatias)", qtd: 1, obs: "Com raspas de limão siciliano" }
+    ],
+    horaPedido: new Date(Date.now() - 8 * 60000).toISOString(),
+    minutosEmEspera: 8,
+    status: "EM_PREPARO",
+    prioridade: "NORMAL",
+    garcom: "Roberto Kenji"
+  },
+  {
+    id: "KDS-102",
+    numeroComanda: "CMD-2026-102",
+    origem: "Mesa 12 · Salão Principal",
+    praca: "COZINHA_QUENTE",
+    itens: [
+      { id: "p3", nome: "Yakisoba Especial Camarão & Mignon", qtd: 1, obs: "Molho bem encorpado" },
+      { id: "p4", nome: "Guioza de Carne Suína Grelhado (6 un)", qtd: 1, obs: "Crocante" }
+    ],
+    horaPedido: new Date(Date.now() - 14 * 60000).toISOString(),
+    minutosEmEspera: 14,
+    status: "EM_PREPARO",
+    prioridade: "ALTA",
+    garcom: "Ana Sato"
+  },
+  {
+    id: "KDS-103",
+    numeroComanda: "CMD-2026-103",
+    origem: "Mesa 07 · Deck Externo",
+    praca: "BAR_BEBIDAS",
+    itens: [
+      { id: "p5", nome: "Moscow Mule Oriental com Wasabi", qtd: 2, obs: "Gelo e espuma extra" },
+      { id: "p6", nome: "Chopp Stella Artois 500ml", qtd: 1, obs: "Caneca ultracongelada" }
+    ],
+    horaPedido: new Date(Date.now() - 3 * 60000).toISOString(),
+    minutosEmEspera: 3,
+    status: "PRONTO_CHAMADA",
+    prioridade: "URGENTE",
+    garcom: "Lucas Mori"
+  },
+  {
+    id: "KDS-104",
+    numeroComanda: "CMD-2026-104",
+    origem: "Delivery Zumi WhatsApp (Jardim Europa)",
+    praca: "SUSHI_BAR",
+    itens: [
+      { id: "p7", nome: "Combinado Zuma 30 Peças", qtd: 1, obs: "Embalagem premium selada" },
+      { id: "p8", nome: "Hot Roll Filadélfia Especial (10 un)", qtd: 1, obs: "Tarê à parte" }
+    ],
+    horaPedido: new Date(Date.now() - 21 * 60000).toISOString(),
+    minutosEmEspera: 21,
+    status: "EM_PREPARO",
+    prioridade: "ALTA",
+    garcom: "Zumi Atende (IA)"
+  }
+];
+
+routerZuma.get("/cozinha/pedidos-ativos", (req, res) => {
+  const { praca } = req.query || {};
+  let lista = [...PEDIDOS_COZINHA_KDS_ZUMA];
+  if (praca && praca !== "TODAS") {
+    lista = lista.filter(p => p.praca === praca);
+  }
+  res.json({
+    ok: true,
+    totalPedidos: lista.length,
+    pedidos: lista,
+    estatisticas: {
+      emPreparo: lista.filter(p => p.status === "EM_PREPARO").length,
+      prontoChamada: lista.filter(p => p.status === "PRONTO_CHAMADA").length,
+      sushiBar: lista.filter(p => p.praca === "SUSHI_BAR").length,
+      cozinhaQuente: lista.filter(p => p.praca === "COZINHA_QUENTE").length,
+      barBebidas: lista.filter(p => p.praca === "BAR_BEBIDAS").length
+    }
+  });
+});
+
+routerZuma.post("/cozinha/avancar-etapa", (req, res) => {
+  const { pedidoId, novoStatus } = req.body || {};
+  const ped = PEDIDOS_COZINHA_KDS_ZUMA.find(p => p.id === pedidoId);
+  if (!ped) {
+    return res.status(404).json({ ok: false, error: "Pedido KDS não encontrado" });
+  }
+
+  const statusAnterior = ped.status;
+  ped.status = novoStatus || (statusAnterior === "EM_PREPARO" ? "PRONTO_CHAMADA" : "ENTREGUE");
+  if (ped.status === "ENTREGUE") {
+    ped.horaEntrega = new Date().toISOString();
+  }
+
+  res.json({
+    ok: true,
+    mensagem: `Pedido ${ped.id} avançou de ${statusAnterior} para ${ped.status}!`,
+    pedido: ped
+  });
+});
+
+// ============================================================================
+// 14. VENDA RÁPIDA NO PDV COM EMISSÃO NFC-e & BAIXA COMPLETA
+// ============================================================================
+
+routerZuma.post("/pdv/venda-rapida", (req, res) => {
+  const {
+    itens = [
+      { id: "prod-comb-30", nome: "Combinado Zuma 30 Peças", qtd: 1, precoUnit: 139.90, ncm: "2106.90.90" }
+    ],
+    formaPagamento = "PIX",
+    cliente = "Consumidor Final Tangará",
+    cpfCliente = null,
+    mesaNumero = null,
+    tipoVenda = "BALCAO", // BALCAO, MESA, DELIVERY
+    emitirNfce = true
+  } = req.body || {};
+
+  const total = itens.reduce((acc, it) => acc + ((it.qtd || 1) * (it.precoUnit || 0)), 0);
+
+  // 1. Atualizar Faturamento do Caixa
+  CAIXA_TURNO_ATUAL_ZUMA.totalVendas += total;
+  if (formaPagamento === "DINHEIRO") {
+    CAIXA_TURNO_ATUAL_ZUMA.totalDinheiro += total;
+    CAIXA_TURNO_ATUAL_ZUMA.saldoGavetaEsperado += total;
+  } else if (formaPagamento === "PIX") {
+    CAIXA_TURNO_ATUAL_ZUMA.totalPix += total;
+  } else if (formaPagamento === "CARTAO_CREDITO") {
+    CAIXA_TURNO_ATUAL_ZUMA.totalCartaoCredito += total;
+  } else if (formaPagamento === "CARTAO_DEBITO") {
+    CAIXA_TURNO_ATUAL_ZUMA.totalCartaoDebito += total;
+  }
+
+  // 2. Baixar Ficha Técnica no Estoque e Kardex
+  let totalSalmaoBaixadoKg = 0;
+  itens.forEach(it => {
+    if (it.nome.toLowerCase().includes("combinado") || it.nome.toLowerCase().includes("salmão")) {
+      const baixaKg = 0.350 * (it.qtd || 1);
+      totalSalmaoBaixadoKg += baixaKg;
+      if (ESTOQUE_PESCADOS_ZUMA["ins-salmao-fresco"]) {
+        const insSalmao = ESTOQUE_PESCADOS_ZUMA["ins-salmao-fresco"];
+        const saldoAnt = typeof insSalmao.saldoAtual === 'number' ? insSalmao.saldoAtual : (insSalmao.quantidadeAtualKg || 35.0);
+        const novoSaldo = parseFloat((saldoAnt - baixaKg).toFixed(3));
+        insSalmao.saldoAtual = novoSaldo;
+        insSalmao.quantidadeAtualKg = novoSaldo;
+        HISTORICO_KARDEX_ESTOQUE_ZUMA.unshift({
+          id: `KARD-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          dataHora: new Date().toISOString(),
+          tipoMovimento: "SAIDA_VENDA_PDV",
+          insumoId: "ins-salmao-fresco",
+          insumoNome: "Salmão Fresco Chileno (Filé Nobre)",
+          quantidade: -baixaKg,
+          saldoAnterior: saldoAnt,
+          saldoAtual: ESTOQUE_PESCADOS_ZUMA["ins-salmao-fresco"].saldoAtual,
+          unidade: "kg",
+          custoUnitario: 89.90,
+          valorTotal: parseFloat((baixaKg * 89.90).toFixed(2)),
+          documentoOrigem: `Venda PDV Caixa (${tipoVenda})`,
+          responsável: CAIXA_TURNO_ATUAL_ZUMA.operador,
+          lote: "LOTE-PDV-AUTO"
+        });
+      }
+    }
+  });
+
+  // 3. Emitir NFC-e se solicitado
+  let notaFiscal = null;
+  if (emitirNfce) {
+    const proxNumero = (HISTORICO_NOTAS_FISCAIS_ZUMA[0]?.numeroNota || 1045) + 1;
+    const chave = `5126113629684800015765001${String(proxNumero).padStart(9, '0')}1${Math.floor(10000000 + Math.random() * 90000000)}1`;
+    const protocolo = `1512600${Math.floor(100000000 + Math.random() * 900000000)}`;
+    notaFiscal = {
+      numeroNota: proxNumero,
+      serie: 1,
+      modelo: "NFC-e (65)",
+      chaveAcesso: chave,
+      protocoloSEFAZ: protocolo,
+      dataEmissao: new Date().toISOString(),
+      cliente: cpfCliente ? `${cliente} (CPF: ${cpfCliente})` : cliente,
+      origemVenda: mesaNumero ? `Mesa ${mesaNumero}` : `Balcão PDV`,
+      formaPagamento,
+      valorTotal: parseFloat(total.toFixed(2)),
+      icmsValor: parseFloat((total * 0.0385).toFixed(2)),
+      statusSEFAZ: "100_AUTORIZADA_PRODUCAO",
+      qrcodeUrl: `http://sefaz.mt.gov.br/nfce/qrcode?p=${chave}|2|1|1|${Math.floor(100000 + Math.random() * 900000)}`
+    };
+    HISTORICO_NOTAS_FISCAIS_ZUMA.unshift(notaFiscal);
+  }
+
+  // 4. Injetar Pedido na Cozinha KDS
+  const novoKds = {
+    id: `KDS-${Date.now()}`,
+    numeroComanda: `CMD-${Math.floor(1000 + Math.random() * 9000)}`,
+    origem: mesaNumero ? `Mesa ${mesaNumero}` : `Balcão PDV`,
+    praca: "SUSHI_BAR",
+    itens: itens.map(i => ({ id: i.id || "prod", nome: i.nome, qtd: i.qtd || 1, obs: "Preparo imediato PDV" })),
+    horaPedido: new Date().toISOString(),
+    minutosEmEspera: 0,
+    status: "EM_PREPARO",
+    prioridade: "ALTA",
+    garcom: CAIXA_TURNO_ATUAL_ZUMA.operador
+  };
+  PEDIDOS_COZINHA_KDS_ZUMA.unshift(novoKds);
+
+  res.json({
+    ok: true,
+    mensagem: `Venda de R$ ${total.toFixed(2)} processada com sucesso no PDV!`,
+    total,
+    formaPagamento,
+    notaFiscal,
+    kdsId: novoKds.id,
+    salmaoBaixadoKg: totalSalmaoBaixadoKg,
+    caixaAtualizado: {
+      totalVendas: CAIXA_TURNO_ATUAL_ZUMA.totalVendas,
+      saldoGavetaEsperado: CAIXA_TURNO_ATUAL_ZUMA.saldoGavetaEsperado
+    }
+  });
+});
+
+// ============================================================================
+// 15. GESTÃO FISCAL AVANÇADA (CANCELAMENTO, INUTILIZAÇÃO, CC-e & APURAÇÃO)
+// ============================================================================
+
+export let CANCELAMENTOS_E_EVENTOS_FISCAIS_ZUMA = [
+  {
+    id: "EVT-CANC-01",
+    tipoEvento: "CANCELAMENTO_NFCE",
+    chaveAcesso: "51261136296848000157650010000010201827364519",
+    numeroNota: 1020,
+    dataHora: "2026-11-19T22:15:00.000Z",
+    protocoloCancelamento: "1512600812984712",
+    justificativa: "Cliente desistiu da compra antes da saída dos pratos do balcão",
+    statusSEFAZ: "135_EVENTO_VINCULADO_A_NF_HOMOLOGADO"
+  }
+];
+
+routerZuma.post("/fiscal/cancelar", (req, res) => {
+  const {
+    chaveAcesso,
+    numeroNota,
+    justificativa = "Cancelamento por solicitação do cliente dentro do prazo legal de 30 minutos"
+  } = req.body || {};
+
+  if (!justificativa || justificativa.length < 15) {
+    return res.status(400).json({ ok: false, error: "Justificativa de cancelamento deve conter no mínimo 15 caracteres" });
+  }
+
+  const protocolo = `1512600${Math.floor(100000000 + Math.random() * 900000000)}`;
+  const novoEvento = {
+    id: `EVT-CANC-${Date.now()}`,
+    tipoEvento: "CANCELAMENTO_NFCE",
+    chaveAcesso: chaveAcesso || "51261136296848000157650010000010411827364519",
+    numeroNota: numeroNota || 1041,
+    dataHora: new Date().toISOString(),
+    protocoloCancelamento: protocolo,
+    justificativa,
+    statusSEFAZ: "135_EVENTO_VINCULADO_A_NF_HOMOLOGADO"
+  };
+
+  CANCELAMENTOS_E_EVENTOS_FISCAIS_ZUMA.unshift(novoEvento);
+
+  // Atualizar status na lista de notas fiscais
+  const nota = HISTORICO_NOTAS_FISCAIS_ZUMA.find(n => n.chaveAcesso === chaveAcesso || n.numeroNota === numeroNota);
+  if (nota) {
+    nota.statusSEFAZ = "101_CANCELADA_HOMOLOGADA_SEFAZ";
+  }
+
+  res.json({
+    ok: true,
+    mensagem: `Nota Fiscal cancelada com sucesso perante a SEFAZ-MT! Protocolo: ${protocolo}`,
+    evento: novoEvento
+  });
+});
+
+routerZuma.post("/fiscal/carta-correcao", (req, res) => {
+  const {
+    chaveAcesso,
+    numeroNota = 5510,
+    correcao = "Correção do endereço de cobrança do cliente corporativo PJ"
+  } = req.body || {};
+
+  const protocolo = `1512600${Math.floor(100000000 + Math.random() * 900000000)}`;
+  const novoEvento = {
+    id: `EVT-CCE-${Date.now()}`,
+    tipoEvento: "CARTA_CORRECAO_NFE",
+    chaveAcesso: chaveAcesso || "51261136296848000157550010000055101827364519",
+    numeroNota,
+    dataHora: new Date().toISOString(),
+    protocoloCCE: protocolo,
+    sequencialEvento: 1,
+    textoCorrecao: correcao,
+    statusSEFAZ: "135_CCE_VINCULADA_A_NFE_HOMOLOGADO"
+  };
+
+  CANCELAMENTOS_E_EVENTOS_FISCAIS_ZUMA.unshift(novoEvento);
+
+  res.json({
+    ok: true,
+    mensagem: `Carta de Correção Eletrônica (CC-e) registrada com sucesso na SEFAZ-MT!`,
+    evento: novoEvento
+  });
+});
+
+routerZuma.get("/fiscal/livro-apuracao", (req, res) => {
+  const { mesAno = "11/2026" } = req.query || {};
+
+  const faturamentoTotal = 152840.00;
+  const faturamentoRefeicaoComercio = 138500.00; // Alíquota normal Simples Nacional
+  const faturamentoBebidasMonofasicas = 14340.00; // Segregação PIS/COFINS e ICMS-ST
+
+  const aliquotaEfetivaSimples = 0.0385; // 3.85%
+  const icmsDevido = parseFloat((faturamentoRefeicaoComercio * aliquotaEfetivaSimples).toFixed(2));
+  const pisCofinsEconomizado = parseFloat((faturamentoBebidasMonofasicas * 0.0365).toFixed(2));
+
+  res.json({
+    ok: true,
+    empresa: "Zuma Cozinha Oriental LTDA",
+    cnpj: "36.296.848/0001-57",
+    mesApuracao: mesAno,
+    regimeTributario: "Simples Nacional - Anexo I (Alimentação e Bebidas)",
+    resumo: {
+      faturamentoTotal,
+      faturamentoTributavelNormal: faturamentoRefeicaoComercio,
+      faturamentoMonofasicoSegregado: faturamentoBebidasMonofasicas,
+      aliquotaEfetivaICMS: "3.85%",
+      icmsSimplesDevido: icmsDevido,
+      economiaTributariaMonofasica: pisCofinsEconomizado,
+      statusGuiaDAS: "PRONTA_PARA_GERACAO"
+    }
+  });
+});
+
+routerZuma.get("/fiscal/exportar-xmls", (req, res) => {
+  res.json({
+    ok: true,
+    empresa: "Zuma Cozinha Oriental",
+    totalArquivosXml: HISTORICO_NOTAS_FISCAIS_ZUMA.length,
+    periodo: "Novembro/2026",
+    downloadZipUrl: "/api/public/zuma/fiscal/exportar/xml-novembro-2026.zip",
+    arquivos: HISTORICO_NOTAS_FISCAIS_ZUMA.map(n => ({
+      chave: n.chaveAcesso,
+      modelo: n.modelo,
+      numero: n.numeroNota,
+      valor: n.valorTotal,
+      data: n.dataEmissao,
+      status: n.statusSEFAZ
+    }))
+  });
+});

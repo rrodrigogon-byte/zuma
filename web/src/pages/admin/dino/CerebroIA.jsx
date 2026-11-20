@@ -219,12 +219,12 @@ function CerebroIAWorkspace({ empresaAtiva, lojaAtiva, initialTab = 'ativacao', 
       toast(msg); setModal(null); carregarAtivacao()
     } catch (error) { toast(error.message, true) } finally { setBusy('') }
   }
-  async function aprenderAgora() {
-    setBusy('aprender')
+  async function aprenderAgora(dia = 'hoje') {
+    setBusy(`aprender-${dia}`)
     try {
-      const out = await api.post(`${BASE}/aprender`, {})
+      const out = await api.post(`${BASE}/aprender`, { dia })
       if (out.skipped) toast(out.reason === 'cerebro_desligado' ? 'Ligue o cérebro para aprender.' : 'Este dia já foi processado.', true)
-      else toast(`Aprendizado concluído: ${out.conversas} conversas, ${out.fatosAtivos} fatos novos em uso, ${out.perguntas} perguntas para revisar.`)
+      else toast(`Aprendizado concluído (${dia === 'hoje' ? 'Hoje' : 'Ontem'}): ${out.conversas} conversas analisadas, ${out.fatosAtivos || 0} fatos novos na memória, ${out.perguntas || 0} perguntas/objeções para revisar${out.propostasAutoAprovadas ? `, ${out.propostasAutoAprovadas} padrões auto-aprovados` : ''}.`)
       carregar()
     } catch (error) { toast(error.message, true) } finally { setBusy('') }
   }
@@ -376,7 +376,14 @@ function CerebroIAWorkspace({ empresaAtiva, lojaAtiva, initialTab = 'ativacao', 
           <tbody>{info.execucoes.map((run) => <tr key={run.dia}><td>{run.dia.split('-').reverse().join('/')}</td><td><Badge tone={run.status === 'concluido' ? (run.resumo?.resumosSemIa > 0 || run.resumo?.erros > 0 ? 'warning' : 'success') : run.status === 'falhou' ? 'danger' : 'info'}>{run.status === 'concluido' && (run.resumo?.resumosSemIa > 0 || run.resumo?.erros > 0) ? 'Concluído com ressalvas' : run.status}</Badge></td>
             <td className="num">{run.resumo?.conversas ?? 0}</td><td className="num">{run.resumo?.resumosIa ?? '—'}</td><td className="num">{run.resumo?.resumosSemIa ?? '—'}</td><td className="num">{run.resumo?.erros ?? '—'}</td><td className="num">{run.resumo?.fatosAtivos ?? 0}</td><td className="num">{run.resumo?.fatosPropostos ?? 0}</td><td className="num">{run.resumo?.perguntas ?? 0}</td><td className="num">{run.resumo?.avaliadas ?? 0}</td></tr>)}</tbody>
         </table></div> : <p className="c360-empty">Ainda não rodou. Ligue o cérebro e aguarde a madrugada, ou processe o dia anterior agora.</p>}
-        <div className="dadm-actions"><button type="button" className="c360-btn ghost" disabled={!info.settings.ativo || busy === 'aprender'} onClick={aprenderAgora}>{busy === 'aprender' ? 'Processando…' : 'Processar ontem agora'}</button></div>
+        <div className="dadm-actions" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button type="button" className="c360-btn primary" disabled={!info.settings.ativo || Boolean(busy)} onClick={() => aprenderAgora('hoje')}>
+            {busy === 'aprender-hoje' ? 'Aprendendo…' : '🦖 Aprender com Conversas de Hoje'}
+          </button>
+          <button type="button" className="c360-btn ghost" disabled={!info.settings.ativo || Boolean(busy)} onClick={() => aprenderAgora('ontem')}>
+            {busy === 'aprender-ontem' ? 'Processando…' : '📅 Processar Conversas de Ontem'}
+          </button>
+        </div>
       </section>
     </>}
 

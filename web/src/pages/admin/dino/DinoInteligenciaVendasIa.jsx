@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { api, fmtR } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth';
 
@@ -42,6 +42,7 @@ function mapearIcone(nome = '') {
 export default function DinoInteligenciaVendasIa() {
   const { user, isPlatformAdmin: authIsPlatformAdmin } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   // Identificação estrita por usuário:
   // - Rodrigo Gonçalves (rodrigo.goncalves / rrodrigogon / admin): Proprietário do Sistema, visualiza TODAS as empresas.
@@ -347,9 +348,6 @@ export default function DinoInteligenciaVendasIa() {
       tel = "55" + tel;
     }
     const textoMsg = obterMensagemParaEnvio(cliente);
-    const textoEncoded = encodeURIComponent(textoMsg);
-    const urlWpp = tel ? `https://wa.me/${tel}?text=${textoEncoded}` : `https://wa.me/?text=${textoEncoded}`;
-    window.open(urlWpp, "_blank");
     try {
       await api.post(`/api/admin/inteligencia-vendas/disparar-acao?empresaId=${encodeURIComponent(empresaAtivaId)}`, {
         tipo,
@@ -364,10 +362,16 @@ export default function DinoInteligenciaVendasIa() {
           mensagem: textoMsg,
         })
       );
-      setMensagemSucesso(`Ação registrada para ${cliente.nome}! WhatsApp aberto com a mensagem selecionada.`);
-      setTimeout(() => setMensagemSucesso(""), 6000);
       carregarInteligencia(empresaAtivaId);
     } catch (_) {}
+    const params = new URLSearchParams({
+      telefone: tel,
+      nome: cliente.nome || '',
+      mensagem: textoMsg,
+      origem: 'como_vender_mais_ia',
+      novo: '1',
+    });
+    navigate(`/admin/whatsapp-fila?${params.toString()}`);
   };
 
   const copiarMensagem = (texto) => {
@@ -1529,9 +1533,16 @@ export default function DinoInteligenciaVendasIa() {
                                     type="button"
                                     onClick={() => {
                                       const tel = vaga.clienteSugerido?.telefone?.replace(/\D/g, '') || '';
+                                      const telCompleto = tel ? (tel.startsWith('55') ? tel : `55${tel}`) : '';
                                       const msg = vaga.mensagemWhatsApp || `Olá! Abriu vaga com ${vaga.profissional} ${vaga.dia} às ${vaga.horario}. Link: ${vaga.linkAgendamento}`;
-                                      const url = tel ? `https://wa.me/${tel}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
-                                      window.open(url, '_blank');
+                                      const params = new URLSearchParams({
+                                        telefone: telCompleto,
+                                        nome: vaga.clienteSugerido?.nome || '',
+                                        mensagem: msg,
+                                        origem: 'vagas_ociosas',
+                                        novo: '1',
+                                      });
+                                      navigate(`/admin/whatsapp-fila?${params.toString()}`);
                                     }}
                                     style={{
                                       padding: '9px 10px',
@@ -1580,9 +1591,16 @@ export default function DinoInteligenciaVendasIa() {
                                     type="button"
                                     onClick={() => {
                                       const tel = vaga.clienteSugerido?.telefone?.replace(/\D/g, '') || '';
+                                      const telCompleto = tel ? (tel.startsWith('55') ? tel : `55${tel}`) : '';
                                       const msg = vaga.mensagemOfertaRelampago || `Oferta Especial: 15% OFF ${vaga.dia} às ${vaga.horario} com ${vaga.profissional}! ${vaga.linkAgendamento}`;
-                                      const url = tel ? `https://wa.me/${tel}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
-                                      window.open(url, '_blank');
+                                      const params = new URLSearchParams({
+                                        telefone: telCompleto,
+                                        nome: vaga.clienteSugerido?.nome || '',
+                                        mensagem: msg,
+                                        origem: 'oferta_relampago',
+                                        novo: '1',
+                                      });
+                                      navigate(`/admin/whatsapp-fila?${params.toString()}`);
                                     }}
                                     style={{
                                       padding: '8px 10px',

@@ -323,8 +323,6 @@ export default function BarbeariaNovoAgendamentoModal({
       hora: linhasServicos[0]?.inicio,
       duracaoMinutos: linhasServicos[0]?.tempo,
       valor: Number(linhasServicos[0]?.valor) || 0,
-      permitirValorPersonalizado: true,
-      valorManual: true,
       encaixe: forcarEncaixe,
     }
 

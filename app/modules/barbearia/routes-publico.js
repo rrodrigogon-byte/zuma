@@ -47,16 +47,16 @@ function identidadePublica(slugRecebido) {
     const configuracao = dados?.configuracao || {};
     const empresa = empresaCadastrada(estado, empresaId);
     const slugConfigurado = slug(configuracao.slugPublico || configuracao.slugAgendamento);
-    const aliasDino = !explicita && solicitado === 'dino' && empresaId === EMPRESA_PADRAO_ID;
+    const aliasDino = !explicita && solicitado === 'dino' && (empresaId === EMPRESA_PADRAO_ID || empresaId === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6' || String(empresaId).toLowerCase().includes('dino'));
     if (!aliasDino && (!slugConfigurado || slugConfigurado !== solicitado)) continue;
     if (configuracao.agendamentoPublicoAtivo === false || empresa?.ativa === false) return null;
     let whatsappFinal = texto(configuracao.whatsappPublico || empresa?.telefone, 30);
     const ehDino = aliasDino || slugConfigurado === 'dino' || String(empresaId).toLowerCase().includes('dino') || String(empresaId) === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
     if (ehDino) {
-      const limpo = String(whatsappFinal || '').replace(/\D/g, '');
-      if (!limpo || limpo.includes('993360000') || limpo.includes('93360000')) {
-        whatsappFinal = '(65) 99672-2055';
-      }
+      // O canal oficial de atendimento a clientes e confirmação de agendamentos online
+      // DEVE SER O T-REX: (65) 99905-6008.
+      // O celular do gestor Guilherme Dino: (65) 99672-2055 é exclusivo para gestão interna.
+      whatsappFinal = '(65) 99905-6008';
     }
     return {
       empresaId,
@@ -81,7 +81,7 @@ function servicoPublico(item) {
     preco: Number(item.preco || 0),
     tipo_preco: item.tipoPreco || 'fixo',
     preco_rotulo: barbearia.rotuloPrecoServico(item),
-    duracao_min: Number(item.duracaoMinutos || item.duracaoMin || 30),
+    duracao_min: Number(item.duracaoMinutos || item.duracaoMin || barbearia.estimarDuracaoPorNomeServico?.(item.nome) || 30),
     profissionais_ids: Array.isArray(item.profissionaisIds) ? item.profissionaisIds : [],
     profissionaisIds: Array.isArray(item.profissionaisIds) ? item.profissionaisIds : [],
   };

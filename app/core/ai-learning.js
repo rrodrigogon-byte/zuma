@@ -112,8 +112,12 @@ export const PROPOSAL_SYSTEM = `Você redige respostas curtas (até 3 frases) pa
 Não invente preço, horário, endereço, estoque ou política: quando depender disso, escreva [CONFERIR: o que a equipe precisa preencher].
 Responda SOMENTE JSON: {"resposta":"texto"}`;
 
-function dayString(date) {
+export function dayString(date) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+}
+
+export function currentDay(now = new Date()) {
+  return dayString(now);
 }
 
 export function previousDay(now = new Date()) {
@@ -272,6 +276,13 @@ export async function runLearningCycle(options = {}) {
     }
 
     summary.fatosExpirados = await expireFacts(query, empresaId);
+    try {
+      const { runTrexAutoLearner } = await import('./trex-auto-learner.js');
+      const trexSummary = await runTrexAutoLearner({ empresaId, dia, query });
+      if (trexSummary?.aprovadas) summary.respostasAprovadas = trexSummary.aprovadas;
+    } catch {
+      // Falha isolada do auto-learner não aborta o ciclo principal
+    }
     await query(`UPDATE ai_learning_runs SET status = 'concluido', resumo = $2::jsonb, concluido_em = CURRENT_TIMESTAMP WHERE id = $1`, [runId, JSON.stringify(summary)]);
     return { skipped: false, ...summary };
   } catch (error) {
@@ -372,4 +383,96 @@ export function startAiLearningScheduler({ intervalMs = 15 * 60 * 1000 } = {}) {
   const timer = setInterval(tick, Math.max(60000, intervalMs));
   timer.unref?.();
   return timer;
+}
+
+/**
+ * Extrai e aprende fatos e resumos de uma conversa individual em tempo real.
+ * Chamado logo após encerramento de conversa ou envio pelo painel.
+ */
+export async function learnFromSingleSession({ empresaId, sessaoId, query = db.query.bind(db), router = runAiTask } = {}) {
+  if (!UUID.test(String(empresaId || '')) || !sessaoId) return null;
+  try {
+    const brain = await getBrainSettings(empresaId);
+    if (!brain?.ativo) return { skipped: true, reason: 'cerebro_desligado' };
+
+    const messages = await query(
+      `SELECT m.sessao_id, s.telefone, s.loja_id, s.status AS sessao_status, m.papel, m.conteudo, m.criado_em
+         FROM whatsapp_ai_messages m
+         JOIN whatsapp_ai_sessions s ON s.id = m.sessao_id AND s.empresa_id = m.empresa_id
+        WHERE m.empresa_id = $1 AND s.id = $2 AND m.papel IN ('user','assistant') AND m.conteudo IS NOT NULL
+        ORDER BY m.criado_em ASC`,
+      [empresaId, sessaoId],
+    );
+    if (!messages.rows?.length) return null;
+
+    const phone = memoryPhone(messages.rows[0].telefone);
+    if (!phone) return null;
+
+    const dia = currentDay();
+    const transcript = transcriptFromMessages(messages.rows);
+    const handoff = messages.rows.some(r => r.sessao_status === 'humano');
+
+    let consents = null;
+    try { consents = await whatsappConsentMap(empresaId); } catch { consents = null; }
+    const personalized = consents?.get(phone)?.personalizacao === true;
+
+    let analysis;
+    let modelo = 'heuristica';
+    try {
+      const out = await router('resumir_extrair', {
+        empresaId,
+        system: personalized ? EXTRACTION_SYSTEM : `${EXTRACTION_SYSTEM}\nEste cliente NÃO autorizou memória: devolva "fatos": [] sempre.`,
+        user: transcript,
+        json: true,
+        maxTokens: 900,
+        capCents: brain.tetoDiarioCentavos
+      });
+      if (!personalized) out.data = { ...(out.data || {}), fatos: [] };
+      analysis = sanitizeAnalysis(out.data);
+      if (!analysis.resumo) throw new Error('resumo vazio');
+      modelo = `${out.provider}:${out.model}`;
+    } catch {
+      analysis = heuristicAnalysis(messages.rows, { handoff });
+    }
+
+    if (handoff && analysis.resultado === 'duvida') analysis.resultado = 'humano';
+
+    const resumoId = await saveConversationSummary(query, {
+      empresaId,
+      lojaId: messages.rows[0].loja_id,
+      sessaoId,
+      telefone: phone,
+      dia,
+      resumo: analysis.resumo,
+      resultado: analysis.resultado,
+      sentimento: analysis.sentimento,
+      mensagens: messages.rows.length,
+      modelo,
+    });
+
+    let fatosCriados = 0;
+    if (resumoId && modelo !== 'heuristica' && personalized && Array.isArray(analysis.fatos)) {
+      const facts = await upsertFacts(query, {
+        empresaId,
+        telefone: phone,
+        facts: analysis.fatos,
+        autonomia: brain.autonomia,
+        resumoId,
+        modelo
+      });
+      fatosCriados = facts.active;
+    }
+
+    for (const pergunta of (analysis.perguntasSemResposta || [])) {
+      await upsertProposal(query, empresaId, 'faq', pergunta, { dia, trecho: pergunta });
+    }
+    for (const objecao of (analysis.objecoes || [])) {
+      await upsertProposal(query, empresaId, 'objecao', objecao, { dia, trecho: objecao });
+    }
+
+    return { ok: true, resumoId, fatosCriados, resultado: analysis.resultado, modelo };
+  } catch (err) {
+    console.warn('[learnFromSingleSession] falha silenciosa:', err?.message);
+    return { ok: false, error: err?.message };
+  }
 }

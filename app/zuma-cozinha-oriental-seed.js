@@ -48576,10 +48576,10 @@ export async function provisionarZumaRestaurante({ commerceDb } = {}) {
             p.categoria,
             p.setor,
             p.preco,
-            p.unidade,
-            p.estoque,
-            p.minimo,
-            p.ordem
+            p.unidade || 'u',
+            p.estoque ?? 50,
+            p.minimo ?? 5,
+            p.ordem || 0
           ]);
         } catch (pErr) {}
       }

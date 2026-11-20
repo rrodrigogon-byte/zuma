@@ -82,6 +82,7 @@ const ProjecaoFaturamentoPanel = lazyWithRetry(
 );
 const DinoMetasRoletaPanel = lazyWithRetry(() => import("./dino/DinoMetasRoletaPanel"));
 const DinoInteligenciaVendasIa = lazyWithRetry(() => import("./dino/DinoInteligenciaVendasIa"));
+const CerebroIA = lazyWithRetry(() => import("./dino/CerebroIA"));
 const GestaoSalaoAvancada = lazyWithRetry(() => import("./relatorios/dino/GestaoSalaoAvancada"));
 import ComandaNova, {
   AdicionarItensComanda,
@@ -114,6 +115,7 @@ import {
 
 const TABS = [
   ["Dino Influencer & Perfumaria 360°", "Cockpit diário de seguidores ganhos/perdidos, desintoxicação de following, insights diários da KyttoIA, matriz de Reels e perfumaria de luxo"],
+  ["Cérebro KyttoIA & Aprendizado", "Cérebro autônomo, auditoria de conversas WhatsApp, preferências dos clientes e evolução contínua do negócio"],
   ["Recuperação Ativa & Pacotes (T-Rex)", "Cockpit diário de reativação de clientes > 60d e simulador comercial de pacotes"],
   ["Como Vender Mais com IA", "Indicadores de vendas, combate ao churn, upsell e motor preditivo da IA"],
   ["Gestão do Salão (IA)", "Metas, entregas por profissional, blend e IA T-Rex"],
@@ -152,6 +154,7 @@ const TABS = [
   ],
   ["Vendas de revenda", "Venda, pagamento e baixa auditáveis"],
   ["Relatórios", "Indicadores operacionais"],
+  ["App do Barbeiro & Mobile", "Acesso mobile para a equipe, PWA instalável, React Native offline-first, QR Code de pareamento e sincronização"],
   ["Integrações", "WhatsApp e assistente IA"],
   ["Configuração", "Horários e políticas"],
   ["Retorno previsto", "Quem está para voltar e quem atrasou"],
@@ -190,6 +193,7 @@ const AREAS = [
       "Caixa e fechamento",
       "Prévia taxas e materiais",
       "Fila e bloqueios",
+      "App do Barbeiro & Mobile",
     ],
   },
   {
@@ -198,6 +202,7 @@ const AREAS = [
     short: "Clientes, retorno e indicação",
     tabs: [
       "Dino Influencer & Perfumaria 360°",
+      "Cérebro KyttoIA & Aprendizado",
       "Recuperação Ativa & Pacotes (T-Rex)",
       "Como Vender Mais com IA",
       "Gestão do Salão (IA)",
@@ -238,6 +243,7 @@ const AREAS = [
     short: "Comissões, metas e regras",
     tabs: [
       "Dino Influencer & Perfumaria 360°",
+      "Cérebro KyttoIA & Aprendizado",
       "Como Vender Mais com IA",
       "Recuperação de clientes (Avec)",
       "Metas & Roleta",
@@ -262,7 +268,7 @@ const AREAS = [
     id: "integracoes",
     label: "Integrações",
     short: "WhatsApp e IA controlados",
-    tabs: ["Integrações"],
+    tabs: ["Integrações", "App do Barbeiro & Mobile"],
   },
 ];
 
@@ -596,6 +602,7 @@ function rotuloPreco(servico) {
 
 // Abas que não dependem da visão geral da barbearia (cada uma busca seus próprios dados).
 const TABS_AUTONOMAS = new Set([
+  "Cérebro KyttoIA & Aprendizado",
   "Como Vender Mais com IA",
   "Gestão do Salão (IA)",
   "Painel de gestão",
@@ -669,6 +676,14 @@ export default function BarbeariaERP({ tabInicial } = {}) {
     fiscal: "Notas fiscais",
     vendas: "Como Vender Mais com IA",
     inteligencia: "Como Vender Mais com IA",
+    cerebro: "Cérebro KyttoIA & Aprendizado",
+    "cerebro-ia": "Cérebro KyttoIA & Aprendizado",
+    "cerebro_ia": "Cérebro KyttoIA & Aprendizado",
+    aprendizado: "Cérebro KyttoIA & Aprendizado",
+    "app-barbeiro": "App do Barbeiro & Mobile",
+    "app_barbeiro": "App do Barbeiro & Mobile",
+    "app-mobile": "App do Barbeiro & Mobile",
+    "mobile": "App do Barbeiro & Mobile",
     carteira: "Carteira por barbeiro",
     Carteira: "Carteira por barbeiro",
     "carteira-por-barbeiro": "Carteira por barbeiro",
@@ -8848,14 +8863,14 @@ export default function BarbeariaERP({ tabInicial } = {}) {
               <Field
                 label="Tempo por atendimento (min)"
                 full
-                hint="Duração desejada para este profissional. Dino ou qualquer barbeiro pode ter tempo próprio (ex.: 15, 30, 45 ou 60 min). Deixe vazio para usar a duração do serviço."
+                hint="Duração desejada para este profissional em serviços simples. Deixe vazio para usar rigorosamente a duração individual de cada serviço do Catálogo (ex: Corte 40 min, Barba 30 min, Combo Corte e Barba 60 min). Procedimentos combo nunca são encolhidos para menos de 60 min."
               >
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                   <input
                     type="number"
                     min="5"
                     max="480"
-                    placeholder="Padrão do serviço (30 min)"
+                    placeholder="Padrão do serviço (Catálogo ERP)"
                     value={formProf.duracaoAtendimentoMinutos || ""}
                     onChange={(event) =>
                       setFormProf((atual) => ({
@@ -8866,7 +8881,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                     style={inputStyle}
                   />
                   <div style={{ display: "flex", gap: 4 }}>
-                    {[15, 30, 45, 60].map((t) => (
+                    {[30, 40, 45, 60].map((t) => (
                       <button
                         key={t}
                         type="button"
@@ -14446,11 +14461,259 @@ export default function BarbeariaERP({ tabInicial } = {}) {
     );
   }
 
+
+  function renderAppMobile() {
+    const slug = lojaAtiva?.slug || "dino";
+    const urlPwa = `https://kytto.com.br/barbeiro/${slug}`;
+
+    return (
+      <div style={{ display: "grid", gap: 20 }}>
+        {/* Banner de Destaque */}
+        <div style={{
+          background: "linear-gradient(135deg, #1b365d 0%, #0f172a 100%)",
+          borderRadius: 16,
+          padding: "24px 28px",
+          color: "#fff",
+          boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.2)",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 16
+        }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+              <span style={{ fontSize: 28 }}>📱</span>
+              <h2 style={{ margin: 0, fontSize: 22, fontWeight: 900 }}>App do Barbeiro & Mobile Nativo</h2>
+              <span style={{ background: "#10b981", color: "#fff", fontSize: 11, fontWeight: 800, padding: "2px 10px", borderRadius: 20 }}>
+                REACT NATIVE & PWA v78
+              </span>
+            </div>
+            <p style={{ margin: 0, color: "#cbd5e1", fontSize: 13, maxWidth: 650, lineHeight: 1.5 }}>
+              Aplicativo dedicado para os profissionais da Dino Barbearia acompanharem seus agendamentos diários, comissões em tempo real, encaixes na bancada e comandas multi-profissional com funcionamento 100% offline.
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <a
+              href={urlPwa}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                background: "#10b981",
+                color: "#fff",
+                padding: "12px 20px",
+                borderRadius: 10,
+                fontWeight: 800,
+                textDecoration: "none",
+                fontSize: 13,
+                boxShadow: "0 4px 12px rgba(16, 185, 129, 0.35)"
+              }}
+            >
+              <span>🚀</span> Abrir App no Celular
+            </a>
+          </div>
+        </div>
+
+        {/* Grid de 3 Cards Principais */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 20 }}>
+          {/* Card 1: PWA e Web Mobile */}
+          <div style={{
+            background: "#fff",
+            borderRadius: 14,
+            padding: 22,
+            border: "1px solid #e2e8f0",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.04)"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+              <span style={{ fontSize: 24 }}>🌐</span>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "#0f172a" }}>App da Equipe (PWA)</h3>
+                <small style={{ color: "#64748b" }}>Acesso instantâneo sem precisar de loja</small>
+              </div>
+            </div>
+            <p style={{ fontSize: 12.5, color: "#475569", lineHeight: 1.6, marginBottom: 16 }}>
+              Os barbeiros podem acessar diretamente pelo navegador do celular e instalar o ícone direto na tela de início:
+            </p>
+            <div style={{
+              background: "#f8fafc",
+              border: "1px dashed #cbd5e1",
+              borderRadius: 8,
+              padding: "10px 14px",
+              fontSize: 12,
+              fontFamily: "monospace",
+              color: "#1e293b",
+              wordBreak: "break-all",
+              marginBottom: 16
+            }}>
+              {urlPwa}
+            </div>
+            <div style={{ background: "#f1f5f9", borderRadius: 8, padding: 12, fontSize: 12, color: "#334155" }}>
+              <strong>Instruções de Instalação:</strong>
+              <ul style={{ margin: "6px 0 0 0", paddingLeft: 18, lineHeight: 1.6 }}>
+                <li><strong>iPhone (Safari):</strong> Toque em Compartilhar ➔ "Adicionar à Tela de Início".</li>
+                <li><strong>Android (Chrome):</strong> Toque nos três pontinhos ➔ "Instalar Aplicativo".</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Card 2: App Nativo React Native Offline */}
+          <div style={{
+            background: "#fff",
+            borderRadius: 14,
+            padding: 22,
+            border: "1px solid #e2e8f0",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.04)"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+              <span style={{ fontSize: 24 }}>⚡</span>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "#0f172a" }}>React Native & SQLite</h3>
+                <small style={{ color: "#64748b" }}>Offline-First com WatermelonDB</small>
+              </div>
+            </div>
+            <p style={{ fontSize: 12.5, color: "#475569", lineHeight: 1.6, marginBottom: 16 }}>
+              O repositório possui o aplicativo móvel nativo completo em <code style={{ background: "#f1f5f9", padding: "2px 6px", borderRadius: 4 }}>/mobile</code> com sincronização resiliente:
+            </p>
+            <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#f8fafc", padding: "8px 12px", borderRadius: 6, fontSize: 12 }}>
+                <span style={{ fontWeight: 600 }}>API Pull Sincronização:</span>
+                <span style={{ color: "#10b981", fontWeight: 700 }}>GET /api/sync/pull (Ativo)</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#f8fafc", padding: "8px 12px", borderRadius: 6, fontSize: 12 }}>
+                <span style={{ fontWeight: 600 }}>API Push Contingência:</span>
+                <span style={{ color: "#10b981", fontWeight: 700 }}>POST /api/sync/push (Ativo)</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#f8fafc", padding: "8px 12px", borderRadius: 6, fontSize: 12 }}>
+                <span style={{ fontWeight: 600 }}>Grade de Agendamentos:</span>
+                <span style={{ color: "#10b981", fontWeight: 700 }}>/api/v1/barbearia/agendamentos</span>
+              </div>
+            </div>
+            <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: 8, padding: 12, fontSize: 12, color: "#065f46" }}>
+              ✓ <strong>Offline-First:</strong> Mesmo sem internet na barbearia, comandas e agendamentos são registrados no aparelho e sincronizados automaticamente assim que a conexão retornar.
+            </div>
+          </div>
+
+          {/* Card 3: Credenciais & Segurança */}
+          <div style={{
+            background: "#fff",
+            borderRadius: 14,
+            padding: 22,
+            border: "1px solid #e2e8f0",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.04)"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+              <span style={{ fontSize: 24 }}>🔒</span>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "#0f172a" }}>Credenciais & Segurança</h3>
+                <small style={{ color: "#64748b" }}>Controle de acesso e privacidade da equipe</small>
+              </div>
+            </div>
+            <p style={{ fontSize: 12.5, color: "#475569", lineHeight: 1.6, marginBottom: 16 }}>
+              Os barbeiros e atendentes utilizam a autenticação oficial protegida pelo ERP:
+            </p>
+            <div style={{ background: "#f8fafc", borderRadius: 8, padding: 12, marginBottom: 16, border: "1px solid #e2e8f0" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 12 }}>
+                <span style={{ color: "#64748b" }}>E-mail de Login:</span>
+                <span style={{ fontWeight: 700, color: "#0f172a" }}>E-mail cadastrado do profissional</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                <span style={{ color: "#64748b" }}>Senha Padrão:</span>
+                <span style={{ fontWeight: 800, color: "#10b981", background: "#ecfdf5", padding: "1px 8px", borderRadius: 4 }}>123456</span>
+              </div>
+            </div>
+            <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: 12, fontSize: 12, color: "#92400e" }}>
+              🛡️ <strong>Visão Restrita:</strong> Cada profissional visualiza exclusivamente a sua própria cadeira de atendimento, não tendo acesso a dados financeiros confidenciais da barbearia.
+            </div>
+          </div>
+        </div>
+
+        {/* Recursos Operacionais Ativos */}
+        <div style={{
+          background: "#fff",
+          borderRadius: 14,
+          padding: 24,
+          border: "1px solid #e2e8f0",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.04)"
+        }}>
+          <h3 style={{ margin: "0 0 16px 0", fontSize: 16, fontWeight: 800, color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
+            <span>⭐</span> Recursos Exclusivos Operacionais no App do Barbeiro
+          </h3>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+            <div style={{ display: "flex", gap: 12 }}>
+              <span style={{ fontSize: 20 }}>🕒</span>
+              <div>
+                <strong style={{ fontSize: 13, color: "#0f172a" }}>Grade de 15 em 15 minutos com Linha Vermelha</strong>
+                <p style={{ margin: "4px 0 0 0", fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
+                  Acompanhamento preciso com indicador visual em tempo real cortando a tela no horário atual.
+                </p>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 12 }}>
+              <span style={{ fontSize: 20 }}>✂️</span>
+              <div>
+                <strong style={{ fontSize: 13, color: "#0f172a" }}>Comandas Multi-Profissional</strong>
+                <p style={{ margin: "4px 0 0 0", fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
+                  Lançamento de pai e filho na mesma comanda com separação automática de quem executou cada serviço.
+                </p>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 12 }}>
+              <span style={{ fontSize: 20 }}>🎟️</span>
+              <div>
+                <strong style={{ fontSize: 13, color: "#0f172a" }}>Pacotes Mesmo Vencidos</strong>
+                <p style={{ margin: "4px 0 0 0", fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
+                  Permite abater procedimentos de pacotes de clientes mantendo o histórico e cobrando R$ 0,00 adicional.
+                </p>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 12 }}>
+              <span style={{ fontSize: 20 }}>💳</span>
+              <div>
+                <strong style={{ fontSize: 13, color: "#0f172a" }}>Crediário com Limite de R$ 500,00</strong>
+                <p style={{ margin: "4px 0 0 0", fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
+                  Controle de carnê e limite disponível por cliente na Ficha 360 do ERP e no aplicativo móvel.
+                </p>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 12 }}>
+              <span style={{ fontSize: 20 }}>💬</span>
+              <div>
+                <strong style={{ fontSize: 13, color: "#0f172a" }}>Edição de Mensagem WhatsApp</strong>
+                <p style={{ margin: "4px 0 0 0", fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
+                  O barbeiro pode personalizar a mensagem carinhosa antes do T-Rex disparar a recuperação pelo WhatsApp.
+                </p>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 12 }}>
+              <span style={{ fontSize: 20 }}>🎱</span>
+              <div>
+                <strong style={{ fontSize: 13, color: "#0f172a" }}>Aviso de Recepção & Sinuca</strong>
+                <p style={{ margin: "4px 0 0 0", fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
+                  Quando o cliente avisa "Tô chegando" no WhatsApp, a bancada é alertada e o cliente acolhido no lounge.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   function renderConteudo() {
     if (tab === "Gestão do Salão (IA)") {
       return (
         <Suspense fallback={<Card style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>Carregando Gestão do Salão & Metas IA…</Card>}>
           <GestaoSalaoAvancada />
+        </Suspense>
+      );
+    }
+    if (tab === "Cérebro KyttoIA & Aprendizado") {
+      return (
+        <Suspense fallback={<Card style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>Carregando Cérebro KyttoIA & Aprendizado…</Card>}>
+          <CerebroIA />
         </Suspense>
       );
     }
@@ -14602,6 +14865,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
       window.location.href = "/admin/relatorios/dino";
       return null;
     }
+    if (tab === "App do Barbeiro & Mobile") return renderAppMobile();
     if (tab === "Integrações") return renderIntegracoes();
     if (tab === "Retorno previsto") return <RetornosPanel lojaId={lojaAtiva?.id || ""} />;
     if (tab === "Lista de espera") return <ListaEsperaPanel />;

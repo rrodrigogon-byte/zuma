@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { presenceConfirmIntent, shouldAskPersonalization, buildWhatsappAiSystemPrompt } from './core/whatsapp-ai.js';
+import { presenceConfirmIntent, isArrivalIntent, shouldAskPersonalization, buildWhatsappAiSystemPrompt } from './core/whatsapp-ai.js';
 
 test('T-Rex RV: Reconhecimento abrangente e veloz de confirmações de presença', () => {
   const casosValidos = [
@@ -19,8 +19,6 @@ test('T-Rex RV: Reconhecimento abrangente e veloz de confirmações de presença
     'com certeza',
     'estarei ai',
     'vou sim',
-    'to a caminho',
-    'chegando',
     '👍',
     '💈',
     '✂️',
@@ -39,12 +37,18 @@ test('T-Rex RV: Reconhecimento abrangente e veloz de confirmações de presença
     'cancela',
     'remarcar para outro dia',
     'tem horário mais tarde?',
-    'quanto custa o corte?'
+    'quanto custa o corte?',
+    'to a caminho',
+    'chegando'
   ];
 
   for (const texto of casosNegativos) {
     assert.equal(presenceConfirmIntent(texto), false, `NÃO deveria reconhecer como confirmação: "${texto}"`);
   }
+
+  // Garantir que aviso de chegada imediata é reconhecido por isArrivalIntent
+  assert.equal(isArrivalIntent('to a caminho'), true, 'Deveria reconhecer to a caminho como chegada imediata');
+  assert.equal(isArrivalIntent('chegando'), true, 'Deveria reconhecer chegando como chegada imediata');
 });
 
 test('T-Rex RV: Supressão de perguntas de preferências que atrasam o atendimento', () => {

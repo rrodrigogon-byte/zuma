@@ -149,6 +149,70 @@ export async function recordLearningProposal({ empresaId, tipo, chave, titulo, p
 /**
  * Auto-aprova padrões aprendidos de alta frequência (recorrência >= 2)
  */
+/**
+ * Dicionário de conhecimento e resolução de objeções operacionais do Motor KyttoIA para Barbearia Dino.
+ * Preenche e homologa automaticamente propostas identificadas pelo auto-learner.
+ */
+export const DINO_LEARNED_KNOWLEDGE = {
+  // Objeções de agenda e horários
+  'horario indisponivel': 'Quando o horário solicitado estiver ocupado, nunca dê resposta negativa. Apresente imediatamente os 2 horários livres mais próximos daquele dia com indicação do barbeiro (Bruno, Nati ou Dino) e ofereça o link online: https://kytto.com.br/agendar/dino.',
+  'sem horario disponivel': 'Ofereça imediatamente as melhores alternativas de horários disponíveis no turno seguinte ou no dia útil seguinte, destacando a possibilidade de entrar na lista de espera ou conferir a grade online.',
+  'falta horario': 'Apresente os próximos 2 horários disponíveis com nossa equipe e oriente o agendamento antecipado pelo link https://kytto.com.br/agendar/dino para garantir a vaga de costume.',
+  'indisponibilidade horario': 'Ofereça alternativas próximas com Bruno ou Nati e, se o cliente preferir o Mestre Dino, informe os horários livres dele ou a modalidade VIP noturna.',
+  'indisponibilidade profissional': 'Se o barbeiro de costume estiver com agenda lotada ou ausente (ex: Dino em viagem seg/ter), acolha o cliente, apresente os mestres ativos (Bruno e Nati) que cortam no mesmo padrão de excelência, ou agende para a data de retorno do barbeiro.',
+
+  // Objeções de rotina do cliente
+  'viagem': 'Deseje uma excelente viagem ao cliente com acolhimento e calor humano, e já sugira agendar o retorno para a semana em que ele voltar para garantir o visual alinhado sem filas.',
+  'imprevisto': 'Acolha o imprevisto com empatia sincera ("Sem problemas, imprevistos acontecem!"), remova a pendência sem qualquer atrito e ofereça reagendar para quando a rotina dele normalizar.',
+  'atraso': 'Em caso de aviso de atraso de 5 a 15 min, confirme que a equipe o aguarda com tranquilidade; se o atraso for superior a 20 min, consulte a possibilidade de pequeno ajuste de horário ou encaixe com outro mestre da equipe.',
+  'preco alto': 'Destaque o padrão premium da casa: toalha quente, produtos importados, ambiente climatizado com sinuca e café, e apresente o Clube de Assinatura Dino (economia de até 30% para clientes assíduos com corte ilimitado).',
+
+  // Dúvidas frequentes de clientes (FAQ)
+  'ate quando meu pacote': 'Clientes com pacote ou plano ativo podem consultar as sessões e a validade direto pelo WhatsApp ou agendar normalmente no link https://kytto.com.br/agendar/dino — o sistema reconhece a assinatura pelo telefone e não cobra nada a mais no agendamento.',
+  'como meu pacote faco agendamento pelo link normalmente': 'Sim! Quem é assinante do pacote pode agendar normalmente tanto pelo WhatsApp quanto pelo link oficial (https://kytto.com.br/agendar/dino). O sistema abate automaticamente da sua assinatura ativa vinculada ao seu número de telefone.',
+  'mesa sinuca essas coisas': 'A Barbearia Dino conta com estrutura completa: ambiente 100% climatizado, mesa de sinuca para relaxar antes ou depois do corte, café cortesia e bebidas geladas para sua comodidade.',
+  'bebida': 'Temos café expresso cortesia e refrigerador com bebidas e cervejas geladas para você degustar e relaxar enquanto dá um talento no visual.',
+  'algum outro local cidade faz visagismo': 'Na Barbearia Dino somos pioneiros e especialistas em visagismo masculino em Cuiabá, desenhando corte e barba em harmonia perfeita com o formato do rosto e autoridade do cliente.',
+  'quanto tempo mais ou menos ele gasta fazer barba': 'A barba tradicional na Barbearia Dino leva entre 30 e 40 minutos, realizada com protocolo completo de toalha quente, massagem facial, óleos essenciais e navalha descartável.',
+  'quem pode me atender hoje': 'Nossa equipe ativa conta com Bruno, Nati e o Mestre Dino. Os horários livres em tempo real podem ser consultados e reservados na hora em https://kytto.com.br/agendar/dino.',
+  'se for so cabelo': 'O Corte Masculino individual custa R$ 90,00 com Bruno ou Nati (~45 min) e R$ 300,00 diurno com o Mestre Dino. Agende online em https://kytto.com.br/agendar/dino.',
+  'poderia tambem me mandar numero responsavel conversar melhor sobre': 'Nosso canal oficial no WhatsApp recebe as mensagens para a gerência e para o Mestre Dino. Por favor, envie o resumo da sua solicitação por aqui que encaminhamos imediatamente para a diretoria retornar.'
+};
+
+/**
+ * Consolida, sintetiza e aprova as propostas capturadas pelo auto-learner com base no conhecimento oficial da Dino Barbearia.
+ */
+export async function consolidateLearnedProposals(empresaId, { query = db.query.bind(db) } = {}) {
+  if (!UUID_REGEX.test(String(empresaId || ''))) return { atualizadas: 0, aprovadas: 0 };
+
+  let atualizadas = 0;
+  for (const [chavePattern, propostaTexto] of Object.entries(DINO_LEARNED_KNOWLEDGE)) {
+    const res = await query(
+      `UPDATE ai_learning_proposals
+          SET proposta = $3, status = 'aprovado', decidido_por = 'kyttoia_auto_learner', decidido_em = CURRENT_TIMESTAMP, atualizado_em = CURRENT_TIMESTAMP
+        WHERE empresa_id = $1
+          AND (chave = $2 OR chave ILIKE '%' || $2 || '%' OR titulo ILIKE '%' || $2 || '%')
+          AND (proposta IS NULL OR proposta ILIKE '%[CONFERIR%' OR status = 'proposto')
+        RETURNING id`,
+      [empresaId, chavePattern, propostaTexto]
+    );
+    atualizadas += res.rows.length;
+  }
+
+  const autoApp = await query(
+    `UPDATE ai_learning_proposals
+        SET status = 'aprovado', decidido_por = 'kyttoia_auto_learner', decidido_em = CURRENT_TIMESTAMP, atualizado_em = CURRENT_TIMESTAMP
+      WHERE empresa_id = $1
+        AND status = 'proposto'
+        AND proposta IS NOT NULL
+        AND proposta NOT ILIKE '%[CONFERIR%'
+      RETURNING id`,
+    [empresaId]
+  );
+
+  return { atualizadas, aprovadas: autoApp.rows.length };
+}
+
 export async function autoApproveHighConfidenceLearnings(empresaId, { query = db.query.bind(db) } = {}) {
   if (!UUID_REGEX.test(String(empresaId || ''))) return 0;
   const res = await query(
@@ -278,5 +342,7 @@ export default {
   recordLearningProposal,
   autoApproveHighConfidenceLearnings,
   getDynamicLearnedGuidance,
-  runTrexAutoLearner
+  runTrexAutoLearner,
+  consolidateLearnedProposals,
+  DINO_LEARNED_KNOWLEDGE
 };

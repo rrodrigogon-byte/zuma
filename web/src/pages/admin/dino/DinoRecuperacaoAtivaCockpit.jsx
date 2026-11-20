@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../../../lib/api'
 import {
   Users,
@@ -24,6 +25,7 @@ import {
 const moeda = (val) => Number(val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 export default function DinoRecuperacaoAtivaCockpit() {
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [elegiveis, setElegiveis] = useState([])
   const [totalElegiveis, setTotalElegiveis] = useState(0)
@@ -345,10 +347,21 @@ Além da economia garantida, você já deixa seus horários fixos travados no m�
                     {copiadoId === (cli.cliente_id || idx) ? 'Copiado' : 'Copiar'}
                   </button>
 
-                  <a
-                    href={`https://wa.me/${String(cli.telefone || '').replace(/\D/g, '')}?text=${encodeURIComponent(`Fala, ${cli.nome?.split(' ')[0] || 'Amigo'}! Tudo bem por aí? Aqui é o T-Rex da Barbearia Dino! 💈🦖\n\nNotei aqui que faz um tempinho que você não vem dar aquele talento no visual com a nossa equipe! Como estão as coisas?\n\nPreparamos uma condição especial de boas-vindas para o seu retorno nesta semana com corte ou barba: café gourmet cortesia e concorre a sorteios na roleta! 🎁\n\nQue dia fica melhor pra você passar aqui: quinta, sexta ou sábado?\n👉 https://kytto.com.br/agendar/dino`)}`}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const tel = String(cli.telefone || '').replace(/\D/g, '')
+                      const telCompleto = tel ? (tel.startsWith('55') ? tel : `55${tel}`) : ''
+                      const msg = `Fala, ${cli.nome?.split(' ')[0] || 'Amigo'}! Tudo bem por aí? Aqui é o T-Rex da Barbearia Dino! 💈🦖\n\nNotei aqui que faz um tempinho que você não vem dar aquele talento no visual com a nossa equipe! Como estão as coisas?\n\nPreparamos uma condição especial de boas-vindas para o seu retorno nesta semana com corte ou barba: café gourmet cortesia e concorre a sorteios na roleta! 🎁\n\nQue dia fica melhor pra você passar aqui: quinta, sexta ou sábado?\n👉 https://kytto.com.br/agendar/dino`
+                      const params = new URLSearchParams({
+                        telefone: telCompleto,
+                        nome: cli.nome || '',
+                        mensagem: msg,
+                        origem: 'recuperacao_ativa',
+                        novo: '1',
+                      })
+                      navigate(`/admin/whatsapp-fila?${params.toString()}`)
+                    }}
                     style={{
                       padding: '6px 10px',
                       borderRadius: '6px',
@@ -363,9 +376,10 @@ Além da economia garantida, você já deixa seus horários fixos travados no m�
                       alignItems: 'center',
                       gap: '4px'
                     }}
+                    title="Abrir no Painel do T-Rex para enviar via WhatsApp oficial do sistema"
                   >
-                    <Send size={12} /> WhatsApp
-                  </a>
+                    <Send size={12} /> WhatsApp (T-Rex)
+                  </button>
                 </div>
               </div>
             ))}

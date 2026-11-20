@@ -77,7 +77,6 @@
 </head>
 <body class="min-h-screen flex flex-col antialiased selection:bg-zuma-salmon selection:text-white">
 
-  <!-- ================= TOP SWITCHER UNIFICADO KYTTO ================= -->
   <div class="bg-black/95 border-b border-white/10 px-3 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2 text-xs sticky top-0 z-50 backdrop-blur-md">
     <div class="flex items-center space-x-2">
       <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -111,7 +110,6 @@
     <span class="hidden md:inline-block bg-black/30 px-2 py-0.5 rounded text-[11px] font-mono">WhatsApp: (65) 99800-1447</span>
   </div>
 
-  <!-- ================= MAIN HEADER / NAVBAR ================= -->
   <header class="sticky top-0 z-40 glassmorphism border-b border-zuma-border">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
       
@@ -152,6 +150,11 @@
           <span class="hidden sm:inline">Pedir com Zumi IA</span>
         </button>
 
+        <!-- Botão Entrar / Login Operacional -->
+        <a href="login.html" title="Acesso &amp; Login Operacional Zuma"
+           class="bg-zuma-surface hover:bg-zuma-surfaceLight border border-zuma-border p-2 rounded-xl text-white transition-all flex items-center justify-center text-xs font-bold space-x-1">
+          <span>👤</span><span class="hidden sm:inline">Entrar</span>
+        </a>
         <!-- Cart Button -->
         <button onclick="toggleCartDrawer(true)" 
                 class="relative bg-zuma-surface hover:bg-zuma-surfaceLight border border-zuma-border p-2.5 rounded-xl text-white transition-all flex items-center justify-center">
@@ -239,12 +242,9 @@
     </div>
   </header>
 
-  <!-- ================= CONTEÚDO PRINCIPAL (SPA TABS) ================= -->
   <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full">
 
-    <!-- ========================================================================= -->
     <!-- ABA 1: CARDÁPIO COMPLETO (211 PRODUTOS & 23 CATEGORIAS)                   -->
-    <!-- ========================================================================= -->
     <section id="tab-cardapio" class="tab-content block space-y-6">
       
       <!-- Hero Banner Informativo -->
@@ -271,7 +271,6 @@
         </div>
       </div>
 
-            <!-- ================= BANNER INSTAGRAM OFICIAL & RODÍZIO ZUMA ================= -->
       <div class="bg-gradient-to-r from-purple-950/60 via-pink-950/40 to-zuma-surface border border-pink-500/30 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row items-center justify-between gap-4 shadow-lg glow-salmon">
         <div class="flex items-center space-x-4">
           <div class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-500 via-pink-500 to-purple-600 flex items-center justify-center text-white text-3xl shadow-md shrink-0">
@@ -388,9 +387,7 @@
 
     </section>
 
-    <!-- ========================================================================= -->
     <!-- ABA 2: MONTE SEU PEDIDO COM ZUMI IA (MOTOR KYTTOIA 2.5 FLASH)             -->
-    <!-- ========================================================================= -->
     <section id="tab-ia-orcamento" class="tab-content hidden space-y-6">
       
       <div class="glassmorphism rounded-2xl p-6 sm:p-8 border border-zuma-salmon/30 relative overflow-hidden">
@@ -489,9 +486,7 @@
 
     </section>
 
-    <!-- ========================================================================= -->
     <!-- ABA 3: A RODADA DO ZUMI (RASPADINHA DIGITAL INTERATIVA)                   -->
-    <!-- ========================================================================= -->
     <section id="tab-raspadinha" class="tab-content hidden space-y-6">
       
       <div class="max-w-2xl mx-auto glassmorphism rounded-2xl p-6 sm:p-8 border border-zuma-gold/40 text-center space-y-6 relative overflow-hidden glow-gold">
@@ -543,9 +538,7 @@
 
     </section>
 
-    <!-- ========================================================================= -->
     <!-- ABA 4: CLUBE ZUMI VIP (ASSINATURA RECORRENTE)                              -->
-    <!-- ========================================================================= -->
     <section id="tab-clube" class="tab-content hidden space-y-6">
       
       <div class="max-w-4xl mx-auto glassmorphism rounded-3xl p-6 sm:p-10 border border-zuma-salmon/40 space-y-8 relative overflow-hidden">
@@ -624,9 +617,7 @@
 
     </section>
 
-    <!-- ========================================================================= -->
     <!-- ABA 5: 27 MESAS & SALÃO (AUTOATENDIMENTO QR CODE)                         -->
-    <!-- ========================================================================= -->
     <section id="tab-mesas-salao" class="tab-content hidden space-y-6">
       
       <div class="space-y-4">
@@ -648,9 +639,7 @@
 
     </section>
 
-    <!-- ========================================================================= -->
     <!-- ABA 6: PAINEL KDS DE COZINHA (VISUALIZAÇÃO EM TEMPO REAL)                 -->
-    <!-- ========================================================================= -->
     <section id="tab-kds-cozinha" class="tab-content hidden space-y-6">
       
       <div class="space-y-4">
@@ -752,9 +741,7 @@
 
     </section>
 
-    <!-- ========================================================================= -->
     <!-- ABA 7: DASHBOARD DO GESTOR & DRE +250%                                    -->
-    <!-- ========================================================================= -->
     <section id="tab-gestor-dre" class="tab-content hidden space-y-6">
       
       <div class="space-y-6">
@@ -855,9 +842,7 @@
 
     </section>
 
-    <!-- ========================================================================= -->
     <!-- ABA 8: MAPA DE CALOR SEMANAL & PILOTO AUTOMÁTICO                          -->
-    <!-- ========================================================================= -->
     <section id="tab-mapa-calor" class="tab-content hidden space-y-6">
       
       <div class="space-y-6">
@@ -955,9 +940,7 @@
 
     </section>
 
-    <!-- ========================================================================= -->
     <!-- ABA 9: ANÁLISE DE MERCADO & INTELIGÊNCIA IA                               -->
-    <!-- ========================================================================= -->
     <section id="tab-mercado-ia" class="tab-content hidden space-y-6">
       
       <div class="space-y-6">
@@ -997,9 +980,7 @@
 
     </section>
 
-    <!-- ========================================================================= -->
     <!-- ABA 10: SIMULADOR DE BASE DE CLIENTES & DELIVERY (RFM)                    -->
-    <!-- ========================================================================= -->
     <section id="tab-simulador-crm" class="tab-content hidden space-y-6">
       
       <div class="space-y-6">
@@ -1121,9 +1102,7 @@
 
     </section>
 
-    <!-- ========================================================================= -->
     <!-- ABA 11: MOTOR DE CLIMA & GATILHOS METEOROLÓGICOS                          -->
-    <!-- ========================================================================= -->
     <section id="tab-clima-delivery" class="tab-content hidden space-y-6">
       
       <div class="space-y-6">
@@ -1220,9 +1199,7 @@
 
     </section>
 
-    <!-- ========================================================================= -->
     <!-- ABA 12: HUB OMNICHANNEL (IFOOD, KEETO, KYTTO & WHATSAPP)                 -->
-    <!-- ========================================================================= -->
     <section id="tab-hub-omnichannel" class="tab-content hidden space-y-6">
       
       <div class="space-y-6">
@@ -1292,7 +1269,6 @@
 
     </section>
 
-    <!-- ================= ABA INDIQUE E GANHE (MEMBER GET MEMBER) ================= -->
     <section id="tab-indique-ganhe" class="tab-content hidden space-y-6">
       <div class="bg-gradient-to-r from-zuma-surface via-zuma-card to-zuma-surface p-6 sm:p-8 rounded-2xl border border-zuma-border relative overflow-hidden">
         <div class="max-w-3xl space-y-4">
@@ -1367,7 +1343,6 @@
       </div>
     </section>
 
-    <!-- ================= ABA OFERTAS & CUPONS VIP ================= -->
     <section id="tab-ofertas-vip" class="tab-content hidden space-y-6">
       <div class="bg-gradient-to-r from-zuma-surface via-zuma-card to-zuma-surface p-6 sm:p-8 rounded-2xl border border-zuma-border">
         <div class="max-w-3xl space-y-2">
@@ -1410,7 +1385,6 @@
       </div>
     </section>
 
-    <!-- ================= ABA ZUMA AGRO B2B (CORPORATIVO) ================= -->
     <section id="tab-zuma-agro" class="tab-content hidden space-y-6">
       <div class="bg-gradient-to-r from-zuma-surface via-zuma-card to-zuma-surface p-6 sm:p-8 rounded-2xl border border-zuma-border">
         <div class="max-w-3xl space-y-3">
@@ -1468,9 +1442,7 @@
     </section>
 
   
-    <!-- ========================================================================= -->
     <!-- ABA: MONTE SUA BARCA / COMBINADO DOS SONHOS (SUSHIMAN BUILDER 360)       -->
-    <!-- ========================================================================= -->
     <section id="tab-monte-barca" class="tab-content hidden space-y-6">
       <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-6 glow-salmon">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zuma-border/60 pb-6">
@@ -1603,9 +1575,7 @@
       </div>
     </section>
 
-    <!-- ========================================================================= -->
     <!-- ABA: CARTA DE SAQUÊS & HARMONIZAÇÃO DO SOMMELIER                          -->
-    <!-- ========================================================================= -->
     <section id="tab-sommelier-saque" class="tab-content hidden space-y-6">
       <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-6 glow-gold">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zuma-border/60 pb-6">
@@ -1751,9 +1721,7 @@
       </div>
     </section>
 
-    <!-- ========================================================================= -->
     <!-- ABA: SELO DE FRESCOR & RASTREABILIDADE DA CADEIA FRIA                     -->
-    <!-- ========================================================================= -->
     <section id="tab-rastreabilidade-frescor" class="tab-content hidden space-y-6">
       <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-6 glow-salmon">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zuma-border/60 pb-6">
@@ -1836,9 +1804,7 @@
       </div>
     </section>
 
-    <!-- ========================================================================= -->
     <!-- ABA: BUFFET & EVENTOS SUSHI (CALCULADORA DE NEGÓCIOS CORPORATIVOS)        -->
-    <!-- ========================================================================= -->
     <section id="tab-eventos-buffet" class="tab-content hidden space-y-6">
       <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-6 glow-salmon">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zuma-border/60 pb-6">
@@ -1965,7 +1931,6 @@
 
   </main>
 
-  <!-- ================= GAVETA LATERAL DO CARRINHO (DRAWER) ================= -->
   <div id="cart-drawer-overlay" onclick="toggleCartDrawer(false)" 
        class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden transition-opacity"></div>
 
@@ -2059,7 +2024,6 @@
 
   </div>
 
-  <!-- ================= FOOTER ================= -->
   <footer class="border-t border-zuma-border bg-zuma-surface/80 text-zuma-muted text-xs py-8 mt-12">
     <div class="max-w-7xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4 text-center md:text-left">
       <div class="flex items-center space-x-3">
@@ -2075,7 +2039,6 @@
     </div>
   </footer>
 
-  <!-- ================= SCRIPT DE DADOS E INTERATIVIDADE ================= -->
   <script>
     // Estado da Aplicação
     let cardapioGeral = [];
@@ -2602,9 +2565,6 @@
       window.open(url, '_blank');
     }
 
-    // =========================================================================
-    // SIMULADOR DE PEDIDO POR ORÇAMENTO (MOTOR KYTTOIA 2.5 FLASH)
-    // =========================================================================
     let sugestaoIaAtual = [];
 
     async function calcularPedidoIA() {
@@ -2677,9 +2637,7 @@
       window.open(`https://wa.me/5565998001447?text=${encodeURIComponent(msg)}`, '_blank');
     }
 
-    // =========================================================================
     // A RODADA DO ZUMI: CANVAS INTERATIVO DE RASPAGEM
-    // =========================================================================
     let isDrawing = false;
     let canvas, ctx;
 
@@ -2756,9 +2714,7 @@
       toggleCartDrawer(true);
     }
 
-    // =========================================================================
     // GRADE DE MESAS (27 MESAS)
-    // =========================================================================
     function renderizarMesas() {
       const grid = document.getElementById('mesas-grid');
       if (!grid) return;
@@ -2813,9 +2769,7 @@
       alert(`Autoatendimento Mesa ${num} ativado! O cliente escaneia o QR Code no restaurante e os pedidos vão direto para o KDS do Sushi Bar e Cozinha.`);
     }
 
-    // =========================================================================
     // CRM GASTRONÔMICO (7 CLIENTES VIP)
-    // =========================================================================
     function renderizarCrmVip() {
       const grid = document.getElementById('crm-vip-grid');
       if (!grid) return;
@@ -2845,9 +2799,7 @@
       window.open(`https://wa.me/5565998001447?text=${encodeURIComponent(msg)}`, '_blank');
     }
 
-    // =========================================================================
     // ABA 8: MAPA DE CALOR SEMANAL & PILOTO AUTOMÁTICO
-    // =========================================================================
     const HEAT_DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
     const HEAT_HOURS = ["11h", "12h", "13h", "18h", "19h", "20h", "21h", "22h"];
     const HEAT_MATRIX = [
@@ -2928,9 +2880,7 @@
       renderizarFeedAcoes();
     }
 
-    // =========================================================================
     // ABA 9: ANÁLISE DE MERCADO & BENCHMARKING
-    // =========================================================================
     function renderizarMercadoIA() {
       const containerConcorrentes = document.getElementById('concorrentes-cards');
       const containerRadar = document.getElementById('radar-oportunidades-grid');
@@ -2967,9 +2917,7 @@
       `).join('');
     }
 
-    // =========================================================================
     // ABA 10: SIMULADOR DE BASE DE CLIENTES & DELIVERY (RFM)
-    // =========================================================================
     const RFM_DATA = {
       fieis: { nome: "Fiéis", total: 186, ticket: 92.50, propensao: 0.78, convBase: 0.16 },
       novos: { nome: "Novos", total: 412, ticket: 58.20, propensao: 0.42, convBase: 0.09 },
@@ -3024,9 +2972,7 @@
       alert('Simulação de Campanha disparada com sucesso! O Motor KyttoIA simulou o envio para a base e os pedidos já estão sendo projetados no caixa.');
     }
 
-    // =========================================================================
     // ABA 11: MOTOR DE CLIMA & GATILHOS METEOROLÓGICOS
-    // =========================================================================
     const CLIMA_CONFIGS = {
       chuva_forte: {
         nome: "Chuva Torrencial Tropical", icone: "⛈️", temp: 22,
@@ -3089,9 +3035,7 @@
       document.getElementById('clima-texto-gatilho').textContent = c.texto;
     }
 
-    // =========================================================================
     // ABA 12: HUB OMNICHANNEL (IFOOD, KEETO, KYTTO & WHATSAPP)
-    // =========================================================================
     function renderizarOmnichannel() {
       const container = document.getElementById('omnichannel-canais-grid');
       if (!container) return;
@@ -3125,9 +3069,7 @@
       document.getElementById('omni-economia-anual').textContent = `R$ ${economiaAnual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
     }
   
-    // =========================================================================
     // DIFERENCIAIS EXCLUSIVOS CULINÁRIA JAPONESA ZUMA & KYTTO
-    // =========================================================================
 
     // Adição manual de itens externos (Saquês, Bebidas e Combos)
     function adicionarAoCarrinhoManual(id, nome, preco, categoria) {
@@ -3705,9 +3647,7 @@
   </script>
 
 
-  <!-- ========================================================================= -->
   <!-- MODAL DE DETALHES DO PRODUTO & CUSTOMIZAÇÃO DO SUSHIMAN                   -->
-  <!-- ========================================================================= -->
   <div id="modal-customizacao-sushi" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
     <div class="bg-zuma-surface border border-zuma-border rounded-2xl max-w-xl w-full max-h-[92vh] overflow-y-auto custom-scrollbar p-6 space-y-4 shadow-2xl">
       
@@ -3837,11 +3777,33 @@
         } else if (href.startsWith("index.html") || href === "index.html" || href === "index") {
           el.setAttribute("href", `${basePath}/index.html${window.location.search}`);
           el.removeAttribute("target");
+        } else if (href.startsWith("login.html") || href === "login.html" || href === "login") {
+          el.setAttribute("href", `${basePath}/login.html${window.location.search}`);
+          el.removeAttribute("target");
         }
       });
     }
     window.addEventListener("DOMContentLoaded", ajustarLinksNavegacao);
     setTimeout(ajustarLinksNavegacao, 100);
   </script>
+  <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-zuma-surface/95 backdrop-blur-md border-t border-zuma-border py-2 px-3 flex justify-around items-center z-40" style="padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px))">
+    <button onclick="switchTab('cardapio')" class="flex flex-col items-center text-zuma-salmon font-bold text-[10px]">
+      <span class="text-lg">🍣</span><span>Cardápio</span>
+    </button>
+    <button onclick="switchTab('ia-orcamento')" class="flex flex-col items-center text-zuma-muted hover:text-white font-bold text-[10px]">
+      <span class="text-lg">🤖</span><span>Zumi IA</span>
+    </button>
+    <button onclick="switchTab('indique-ganhe')" class="flex flex-col items-center text-zuma-muted hover:text-white font-bold text-[10px]">
+      <span class="text-lg">🎁</span><span>Indique</span>
+    </button>
+    <button onclick="toggleCartDrawer(true)" class="flex flex-col items-center text-zuma-muted hover:text-white font-bold text-[10px] relative">
+      <span class="text-lg">🛍️</span><span>Carrinho</span>
+      <span id="cart-badge-bottom" class="absolute -top-1 right-2 bg-zuma-crimson text-white text-[9px] font-black rounded-full w-4 h-4 flex items-center justify-center">0</span>
+    </button>
+    <a href="login.html" class="flex flex-col items-center text-zuma-muted hover:text-white font-bold text-[10px]">
+      <span class="text-lg">👤</span><span>Entrar</span>
+    </a>
+  </nav>
+
 </body>
 </html>
