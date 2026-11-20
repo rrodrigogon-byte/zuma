@@ -145,6 +145,18 @@
         <button onclick="switchTab('cardapio')" id="tab-btn-cardapio" class="tab-btn active px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap bg-zuma-salmon text-white">
           <span>🍣</span><span>Cardápio (211 itens)</span>
         </button>
+        <button onclick="switchTab('monte-barca')" id="tab-btn-monte-barca" class="tab-btn px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap text-zuma-muted hover:text-white">
+          <span>🍱</span><span>Monte sua Barca</span>
+        </button>
+        <button onclick="switchTab('sommelier-saque')" id="tab-btn-sommelier-saque" class="tab-btn px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap text-zuma-muted hover:text-white">
+          <span>🍶</span><span>Carta de Saquês &amp; Harmonização</span>
+        </button>
+        <button onclick="switchTab('rastreabilidade-frescor')" id="tab-btn-rastreabilidade-frescor" class="tab-btn px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap text-zuma-muted hover:text-white">
+          <span>❄️</span><span>Selo de Frescor &amp; Cadeia Fria</span>
+        </button>
+        <button onclick="switchTab('eventos-buffet')" id="tab-btn-eventos-buffet" class="tab-btn px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap text-zuma-muted hover:text-white">
+          <span>🎉</span><span>Buffet &amp; Eventos Sushi</span>
+        </button>
         <button onclick="switchTab('mapa-calor')" id="tab-btn-mapa-calor" class="tab-btn px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap text-zuma-muted hover:text-white">
           <span>🔥</span><span>Mapa de Calor</span>
         </button>
@@ -1362,6 +1374,502 @@
       </div>
     </section>
 
+  
+    <!-- ========================================================================= -->
+    <!-- ABA: MONTE SUA BARCA / COMBINADO DOS SONHOS (SUSHIMAN BUILDER 360)       -->
+    <!-- ========================================================================= -->
+    <section id="tab-monte-barca" class="tab-content hidden space-y-6">
+      <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-6 glow-salmon">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zuma-border/60 pb-6">
+          <div>
+            <div class="inline-flex items-center space-x-2 bg-zuma-salmon/20 text-zuma-salmon px-3 py-1 rounded-full text-xs font-bold border border-zuma-salmon/30 mb-2">
+              <span>🍱 Experiência Exclusiva Sushiman Zuma</span>
+            </div>
+            <h2 class="text-2xl font-black text-white">Monte seu Combinado ou Barca Personalizada</h2>
+            <p class="text-xs text-zuma-muted mt-1">Escolha o tamanho da sua barca e selecione exatamente as peças nobres que você ama, com cálculo em tempo real.</p>
+          </div>
+          <div class="flex items-center space-x-3 bg-zuma-bg border border-zuma-border px-4 py-3 rounded-xl">
+            <span class="text-xs text-zuma-muted font-medium">Capacidade:</span>
+            <span id="barca-contador-pecas" class="text-lg font-black text-zuma-salmon">0 / 32 Peças</span>
+          </div>
+        </div>
+
+        <!-- Seletor de Tamanho da Barca -->
+        <div class="mt-6 space-y-3">
+          <label class="block text-xs font-bold text-white uppercase tracking-wider">1. Escolha o Tamanho da Barca / Combinado:</label>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <button onclick="selecionarTamanhoBarca('individual', 16, 69.90)" id="btn-tamanho-individual" 
+                    class="btn-tamanho-barca p-4 rounded-xl border border-zuma-border bg-zuma-card hover:border-zuma-salmon text-left transition-all">
+              <div class="flex justify-between items-start">
+                <span class="text-sm font-bold text-white">Barca Individual</span>
+                <span class="text-xs bg-zuma-surface px-2 py-0.5 rounded text-zuma-muted font-mono">16 Peças</span>
+              </div>
+              <p class="text-[11px] text-zuma-muted mt-1">Ideal para 1 pessoa</p>
+              <div class="text-base font-black text-white mt-3">R$ 69,90</div>
+            </button>
+
+            <button onclick="selecionarTamanhoBarca('casal', 32, 139.90)" id="btn-tamanho-casal" 
+                    class="btn-tamanho-barca p-4 rounded-xl border-2 border-zuma-salmon bg-zuma-salmon/10 text-left transition-all">
+              <div class="flex justify-between items-start">
+                <span class="text-sm font-bold text-white">Barca Casal Nobre ⭐</span>
+                <span class="text-xs bg-zuma-salmon text-white px-2 py-0.5 rounded font-mono font-bold">32 Peças</span>
+              </div>
+              <p class="text-[11px] text-zuma-muted mt-1">Mais pedida · 2 pessoas</p>
+              <div class="text-base font-black text-zuma-salmon mt-3">R$ 139,90</div>
+            </button>
+
+            <button onclick="selecionarTamanhoBarca('familia', 50, 199.90)" id="btn-tamanho-familia" 
+                    class="btn-tamanho-barca p-4 rounded-xl border border-zuma-border bg-zuma-card hover:border-zuma-salmon text-left transition-all">
+              <div class="flex justify-between items-start">
+                <span class="text-sm font-bold text-white">Barca Família Zuma</span>
+                <span class="text-xs bg-zuma-surface px-2 py-0.5 rounded text-zuma-muted font-mono">50 Peças</span>
+              </div>
+              <p class="text-[11px] text-zuma-muted mt-1">Ideal para 3 a 4 pessoas</p>
+              <div class="text-base font-black text-white mt-3">R$ 199,90</div>
+            </button>
+
+            <button onclick="selecionarTamanhoBarca('imperial', 72, 289.90)" id="btn-tamanho-imperial" 
+                    class="btn-tamanho-barca p-4 rounded-xl border border-zuma-border bg-zuma-card hover:border-zuma-salmon text-left transition-all">
+              <div class="flex justify-between items-start">
+                <span class="text-sm font-bold text-white">Imperial Omakase 👑</span>
+                <span class="text-xs bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded font-mono font-bold">72 Peças</span>
+              </div>
+              <p class="text-[11px] text-zuma-muted mt-1">Peças Trufadas & Flambadas</p>
+              <div class="text-base font-black text-amber-400 mt-3">R$ 289,90</div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Barra de Progresso Visual de Montagem -->
+        <div class="mt-6 bg-zuma-bg p-4 rounded-xl border border-zuma-border">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-xs font-bold text-white">Status da Montagem da Barca:</span>
+            <span id="barca-status-texto" class="text-xs text-amber-400 font-bold">Selecione mais peças para completar a barca</span>
+          </div>
+          <div class="w-full h-3 bg-zuma-surface rounded-full overflow-hidden flex">
+            <div id="bar-progresso-crus" style="width: 0%" class="bg-blue-500 transition-all duration-300" title="Peças Cruas"></div>
+            <div id="bar-progresso-especiais" style="width: 0%" class="bg-amber-500 transition-all duration-300" title="Especiais do Chef"></div>
+            <div id="bar-progresso-fritos" style="width: 0%" class="bg-red-500 transition-all duration-300" title="Hot Rolls e Fritos"></div>
+            <div id="bar-progresso-leves" style="width: 0%" class="bg-emerald-500 transition-all duration-300" title="Uramakis e Hossomakis"></div>
+          </div>
+          <div class="flex flex-wrap gap-4 mt-2 text-[11px] text-zuma-muted">
+            <span class="flex items-center"><span class="w-2.5 h-2.5 rounded-full bg-blue-500 mr-1.5"></span>Crus (<span id="count-crus">0</span>)</span>
+            <span class="flex items-center"><span class="w-2.5 h-2.5 rounded-full bg-amber-500 mr-1.5"></span>Especiais Flambados (<span id="count-especiais">0</span>)</span>
+            <span class="flex items-center"><span class="w-2.5 h-2.5 rounded-full bg-red-500 mr-1.5"></span>Hot Rolls & Fritos (<span id="count-fritos">0</span>)</span>
+            <span class="flex items-center"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500 mr-1.5"></span>Uramakis & Makis (<span id="count-leves">0</span>)</span>
+          </div>
+        </div>
+
+        <!-- Lista de Peças Nobres para Seleção -->
+        <div class="mt-6 space-y-3">
+          <label class="block text-xs font-bold text-white uppercase tracking-wider">2. Selecione as Peças da Barca:</label>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3" id="lista-pecas-barca">
+            <!-- Gerado dinamicamente via JS -->
+          </div>
+        </div>
+
+        <!-- Toppings e Acabamento do Sushiman -->
+        <div class="mt-6 space-y-3">
+          <label class="block text-xs font-bold text-white uppercase tracking-wider">3. Escolha o Topping & Finalização Nobre:</label>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <label class="flex items-center space-x-3 p-3 bg-zuma-card border border-zuma-border rounded-xl cursor-pointer hover:border-zuma-salmon">
+              <input type="radio" name="topping-barca" value="trufado" class="text-zuma-salmon focus:ring-zuma-salmon">
+              <div>
+                <div class="text-xs font-bold text-white">Azeite Trufado Italiano (+R$ 6,00)</div>
+                <div class="text-[10px] text-zuma-muted">Aroma nobre de trufas brancas</div>
+              </div>
+            </label>
+            <label class="flex items-center space-x-3 p-3 bg-zuma-card border border-zuma-border rounded-xl cursor-pointer hover:border-zuma-salmon">
+              <input type="radio" name="topping-barca" value="flor_sal" checked class="text-zuma-salmon focus:ring-zuma-salmon">
+              <div>
+                <div class="text-xs font-bold text-white">Flor de Sal &amp; Raspas de Limão Siciliano</div>
+                <div class="text-[10px] text-emerald-400 font-bold">Grátis da Casa</div>
+              </div>
+            </label>
+            <label class="flex items-center space-x-3 p-3 bg-zuma-card border border-zuma-border rounded-xl cursor-pointer hover:border-zuma-salmon">
+              <input type="radio" name="topping-barca" value="geleia_pimenta" class="text-zuma-salmon focus:ring-zuma-salmon">
+              <div>
+                <div class="text-xs font-bold text-white">Geleia de Pimenta Artesanal</div>
+                <div class="text-[10px] text-emerald-400 font-bold">Grátis da Casa</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Botão Final de Adicionar ao Carrinho -->
+        <div class="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-zuma-border/60">
+          <div>
+            <div class="text-xs text-zuma-muted">Valor Total da Barca:</div>
+            <div id="barca-preco-total" class="text-2xl font-black text-white">R$ 139,90</div>
+          </div>
+          <button onclick="adicionarBarcaAoCarrinho()" id="btn-add-barca" 
+                  class="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-zuma-salmon hover:bg-zuma-salmonLight text-white font-extrabold text-sm transition-all shadow-lg flex items-center justify-center space-x-2">
+            <span>🍣</span><span>Adicionar Barca Personalizada ao Carrinho</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- ABA: CARTA DE SAQUÊS & HARMONIZAÇÃO DO SOMMELIER                          -->
+    <!-- ========================================================================= -->
+    <section id="tab-sommelier-saque" class="tab-content hidden space-y-6">
+      <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-6 glow-gold">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zuma-border/60 pb-6">
+          <div>
+            <div class="inline-flex items-center space-x-2 bg-amber-500/20 text-amber-400 px-3 py-1 rounded-full text-xs font-bold border border-amber-500/30 mb-2">
+              <span>🍶 Curadoria do Sommelier Zuma</span>
+            </div>
+            <h2 class="text-2xl font-black text-white">Carta de Saquês Japoneses &amp; Harmonização Gastronômica</h2>
+            <p class="text-xs text-zuma-muted mt-1">Eleve sua experiência de sushi com saquês importados puros, cervejas japonesas de amargor seco e guia de temperatura de serviço.</p>
+          </div>
+          <div class="bg-zuma-bg border border-zuma-border px-4 py-3 rounded-xl flex items-center space-x-3 text-xs">
+            <span class="text-emerald-400 font-bold">🌡️ Temperaturas:</span>
+            <span class="text-blue-400">Reishu (5°C)</span>
+            <span class="text-slate-400">Jo-on (18°C)</span>
+            <span class="text-orange-400">Atsukan (45°C)</span>
+          </div>
+        </div>
+
+        <!-- Grid de Saquês e Bebidas Nobres -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
+          
+          <!-- Card Saquê 1 -->
+          <div class="bg-zuma-card border border-zuma-border rounded-2xl p-4 flex flex-col justify-between hover:border-amber-500/60 transition-all">
+            <div class="space-y-2">
+              <div class="flex justify-between items-start">
+                <span class="text-xs bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded font-bold uppercase">Super Premium · Daiginjo</span>
+                <span class="text-xs text-zuma-muted font-mono">720ml</span>
+              </div>
+              <h3 class="font-black text-white text-base">Hakutsuru Junmai Daiginjo</h3>
+              <p class="text-xs text-zuma-muted">Polimento de 50% do grão de arroz. Notas florais refinadas de pera asiática e melão. Harmonização suprema com Sashimi de Salmão Trufado e Omakase.</p>
+              <div class="text-[11px] text-blue-400 font-semibold">❄️ Servir bem gelado a 5°C (Reishu) em taça de vinho branco</div>
+            </div>
+            <div class="flex items-center justify-between pt-4 mt-4 border-t border-zuma-border/60">
+              <div class="text-lg font-black text-white">R$ 289,00</div>
+              <button onclick="adicionarAoCarrinhoManual('saque-junmai-daiginjo', 'Hakutsuru Junmai Daiginjo 720ml', 289.00, 'bar')" 
+                      class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-extrabold text-xs transition-all shadow-sm">
+                + Incluir no Pedido
+              </button>
+            </div>
+          </div>
+
+          <!-- Card Saquê 2 -->
+          <div class="bg-zuma-card border border-zuma-border rounded-2xl p-4 flex flex-col justify-between hover:border-amber-500/60 transition-all">
+            <div class="space-y-2">
+              <div class="flex justify-between items-start">
+                <span class="text-xs bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded font-bold uppercase">Tokubetsu Junmai</span>
+                <span class="text-xs text-zuma-muted font-mono">750ml</span>
+              </div>
+              <h3 class="font-black text-white text-base">Gekkeikan Black &amp; Gold</h3>
+              <p class="text-xs text-zuma-muted">Blend exclusivo encorpado com notas de maçã verde e sutil herbáceo. Harmoniza com perfeição com Uramakis especiais, Gunkans flambados e Robata de Salmão.</p>
+              <div class="text-[11px] text-slate-300 font-semibold">🍶 Servir gelado (8°C) ou à temperatura ambiente (18°C)</div>
+            </div>
+            <div class="flex items-center justify-between pt-4 mt-4 border-t border-zuma-border/60">
+              <div class="text-lg font-black text-white">R$ 169,00</div>
+              <button onclick="adicionarAoCarrinhoManual('saque-gekkeikan-gold', 'Gekkeikan Black & Gold 750ml', 169.00, 'bar')" 
+                      class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-extrabold text-xs transition-all shadow-sm">
+                + Incluir no Pedido
+              </button>
+            </div>
+          </div>
+
+          <!-- Card Saquê 3 -->
+          <div class="bg-zuma-card border border-zuma-border rounded-2xl p-4 flex flex-col justify-between hover:border-amber-500/60 transition-all">
+            <div class="space-y-2">
+              <div class="flex justify-between items-start">
+                <span class="text-xs bg-pink-500/20 text-pink-400 px-2 py-0.5 rounded font-bold uppercase">Nigori Não Filtrado</span>
+                <span class="text-xs text-zuma-muted font-mono">300ml</span>
+              </div>
+              <h3 class="font-black text-white text-base">Hakutsuru Sayuri Nigori</h3>
+              <p class="text-xs text-zuma-muted">Textura aveludada e cremosa como seda, sabor levemente adocicado. Ideal para acompanhar pratos picantes, Hot Rolls com geleia de pimenta e sobremesas orientais.</p>
+              <div class="text-[11px] text-pink-400 font-semibold">🌸 Servir muito gelado (4°C) · Agitar antes de servir</div>
+            </div>
+            <div class="flex items-center justify-between pt-4 mt-4 border-t border-zuma-border/60">
+              <div class="text-lg font-black text-white">R$ 95,00</div>
+              <button onclick="adicionarAoCarrinhoManual('saque-sayuri-nigori', 'Hakutsuru Sayuri Nigori 300ml', 95.00, 'bar')" 
+                      class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-extrabold text-xs transition-all shadow-sm">
+                + Incluir no Pedido
+              </button>
+            </div>
+          </div>
+
+          <!-- Card Saquê 4 -->
+          <div class="bg-zuma-card border border-zuma-border rounded-2xl p-4 flex flex-col justify-between hover:border-amber-500/60 transition-all">
+            <div class="space-y-2">
+              <div class="flex justify-between items-start">
+                <span class="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded font-bold uppercase">Nacional Premium</span>
+                <span class="text-xs text-zuma-muted font-mono">740ml</span>
+              </div>
+              <h3 class="font-black text-white text-base">Azuma Kirin Dourado</h3>
+              <p class="text-xs text-zuma-muted">O clássico absoluto das celebrações brasileiras. Excelente tanto puro em ochoko quanto para fazer saquerinhas refrescantes de morango, abacaxi ou kiwi.</p>
+              <div class="text-[11px] text-emerald-400 font-semibold">🍸 Perfeito para Saquerinhas e consumo descontraído</div>
+            </div>
+            <div class="flex items-center justify-between pt-4 mt-4 border-t border-zuma-border/60">
+              <div class="text-lg font-black text-white">R$ 58,00</div>
+              <button onclick="adicionarAoCarrinhoManual('saque-azuma-dourado', 'Azuma Kirin Dourado 740ml', 58.00, 'bar')" 
+                      class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-extrabold text-xs transition-all shadow-sm">
+                + Incluir no Pedido
+              </button>
+            </div>
+          </div>
+
+          <!-- Card Cerveja Japonesa 1 -->
+          <div class="bg-zuma-card border border-zuma-border rounded-2xl p-4 flex flex-col justify-between hover:border-amber-500/60 transition-all">
+            <div class="space-y-2">
+              <div class="flex justify-between items-start">
+                <span class="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded font-bold uppercase">Cerveja Japonesa</span>
+                <span class="text-xs text-zuma-muted font-mono">Long Neck 330ml</span>
+              </div>
+              <h3 class="font-black text-white text-base">Asahi Super Dry</h3>
+              <p class="text-xs text-zuma-muted">A cerveja número 1 do Japão. Produzida pelo método Karakuchi com amargor seco e final incrivelmente límpido que reseta o paladar entre cada corte de sashimi.</p>
+              <div class="text-[11px] text-blue-400 font-semibold">🍺 Estupidamente gelada (0°C a 2°C)</div>
+            </div>
+            <div class="flex items-center justify-between pt-4 mt-4 border-t border-zuma-border/60">
+              <div class="text-lg font-black text-white">R$ 22,00</div>
+              <button onclick="adicionarAoCarrinhoManual('cerveja-asahi-super-dry', 'Asahi Super Dry 330ml', 22.00, 'bar')" 
+                      class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-extrabold text-xs transition-all shadow-sm">
+                + Incluir no Pedido
+              </button>
+            </div>
+          </div>
+
+          <!-- Card Cerveja Japonesa 2 -->
+          <div class="bg-zuma-card border border-zuma-border rounded-2xl p-4 flex flex-col justify-between hover:border-amber-500/60 transition-all">
+            <div class="space-y-2">
+              <div class="flex justify-between items-start">
+                <span class="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded font-bold uppercase">Cerveja Japonesa</span>
+                <span class="text-xs text-zuma-muted font-mono">Long Neck 330ml</span>
+              </div>
+              <h3 class="font-black text-white text-base">Sapporo Premium</h3>
+              <p class="text-xs text-zuma-muted">Cerveja lendária fundada em 1876 em Hokkaido. Sabor maltado aveludado com espuma densa, parceira ideal de pratos quentes como Yakissoba e Hot Roll Crocante.</p>
+              <div class="text-[11px] text-blue-400 font-semibold">🍺 Servir a 3°C com colarinho de 2 dedos</div>
+            </div>
+            <div class="flex items-center justify-between pt-4 mt-4 border-t border-zuma-border/60">
+              <div class="text-lg font-black text-white">R$ 24,00</div>
+              <button onclick="adicionarAoCarrinhoManual('cerveja-sapporo-premium', 'Sapporo Premium 330ml', 24.00, 'bar')" 
+                      class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-extrabold text-xs transition-all shadow-sm">
+                + Incluir no Pedido
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- ABA: SELO DE FRESCOR & RASTREABILIDADE DA CADEIA FRIA                     -->
+    <!-- ========================================================================= -->
+    <section id="tab-rastreabilidade-frescor" class="tab-content hidden space-y-6">
+      <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-6 glow-salmon">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zuma-border/60 pb-6">
+          <div>
+            <div class="inline-flex items-center space-x-2 bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold border border-emerald-500/30 mb-2">
+              <span>❄️ Padrão Internacional HACCP &amp; SIM</span>
+            </div>
+            <h2 class="text-2xl font-black text-white">Painel de Frescor &amp; Rastreabilidade do Pescado</h2>
+            <p class="text-xs text-zuma-muted mt-1">Garantia absoluta de origem, temperatura monitorada e toalete sanitário dos peixes servidos na Zuma Cozinha Oriental.</p>
+          </div>
+          <div class="bg-emerald-950/40 border border-emerald-500/40 px-4 py-3 rounded-xl flex items-center space-x-3">
+            <div class="w-3 h-3 rounded-full bg-emerald-400 animate-pulse"></div>
+            <div>
+              <div class="text-xs font-extrabold text-emerald-300">Cadeia Fria 100% Homologada</div>
+              <div class="text-[10px] text-emerald-400/80">Temperatura Atual do Balcão: 1.4°C</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4 Indicadores de Rastreabilidade -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+          <div class="bg-zuma-card p-4 rounded-xl border border-zuma-border">
+            <div class="text-[11px] text-zuma-muted uppercase font-bold">Lote do Pescado</div>
+            <div class="text-lg font-black text-white mt-1">#SAL-CHL-2026-884</div>
+            <p class="text-[11px] text-emerald-400 mt-2 font-medium">Salmão Fresco do Pacífico (Puerto Montt - Chile)</p>
+          </div>
+          <div class="bg-zuma-card p-4 rounded-xl border border-zuma-border">
+            <div class="text-[11px] text-zuma-muted uppercase font-bold">Data de Chegada em TGA</div>
+            <div class="text-lg font-black text-white mt-1">Hoje · 14:30h</div>
+            <p class="text-[11px] text-emerald-400 mt-2 font-medium">Transporte refrigerado sem congelamento prévio</p>
+          </div>
+          <div class="bg-zuma-card p-4 rounded-xl border border-zuma-border">
+            <div class="text-[11px] text-zuma-muted uppercase font-bold">Câmara Frigorífica</div>
+            <div class="text-lg font-black text-emerald-400 mt-1">1.4°C (Safe Zone)</div>
+            <p class="text-[11px] text-zuma-muted mt-2">Faixa ideal: 0.0°C a 3.0°C com degelo seco</p>
+          </div>
+          <div class="bg-zuma-card p-4 rounded-xl border border-zuma-border">
+            <div class="text-[11px] text-zuma-muted uppercase font-bold">Sushiman Responsável</div>
+            <div class="text-lg font-black text-white mt-1">Chef Akira &amp; Equipe</div>
+            <p class="text-[11px] text-zuma-muted mt-2">Cortes Deba e Yanagiba esterilizadas</p>
+          </div>
+        </div>
+
+        <!-- Checklist de Garantia Organoléptica e Sanitária -->
+        <div class="mt-6 bg-zuma-bg p-6 rounded-xl border border-zuma-border space-y-4">
+          <h3 class="text-sm font-extrabold text-white flex items-center space-x-2">
+            <span>🛡️</span><span>Compromisso Sanitário &amp; Transparência para o Cliente:</span>
+          </h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div class="flex items-start space-x-2 bg-zuma-surface p-3 rounded-lg border border-zuma-border/60">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <div>
+                <strong class="text-white">Peixe 100% Fresco Nunca Congelado:</strong>
+                <p class="text-zuma-muted mt-0.5">Mantém a elasticidade da carne, brilho cristalino e preserva o teor de ácidos graxos ômega-3 sem perda de água celular.</p>
+              </div>
+            </div>
+            <div class="flex items-start space-x-2 bg-zuma-surface p-3 rounded-lg border border-zuma-border/60">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <div>
+                <strong class="text-white">Arroz Japonês Temperado Diariamente (Shari):</strong>
+                <p class="text-zuma-muted mt-0.5">Grão curto especial Koshihikari com aceto suave de arroz, servido à temperatura corporal (36°C) como manda a tradição de Tóquio.</p>
+              </div>
+            </div>
+            <div class="flex items-start space-x-2 bg-zuma-surface p-3 rounded-lg border border-zuma-border/60">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <div>
+                <strong class="text-white">Higienização e Esterilização Contínua:</strong>
+                <p class="text-zuma-muted mt-0.5">Bancadas e facas higienizadas a cada troca de corte, garantindo zero contaminação cruzada para alérgicos.</p>
+              </div>
+            </div>
+            <div class="flex items-start space-x-2 bg-zuma-surface p-3 rounded-lg border border-zuma-border/60">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <div>
+                <strong class="text-white">Embalagens Térmicas Lacradas para Delivery:</strong>
+                <p class="text-zuma-muted mt-0.5">Separadores que mantêm pratos frios isolados de pratos quentes (Hot Roll), para que a comida chegue intacta à sua mesa.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- ABA: BUFFET & EVENTOS SUSHI (CALCULADORA DE NEGÓCIOS CORPORATIVOS)        -->
+    <!-- ========================================================================= -->
+    <section id="tab-eventos-buffet" class="tab-content hidden space-y-6">
+      <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-6 glow-salmon">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zuma-border/60 pb-6">
+          <div>
+            <div class="inline-flex items-center space-x-2 bg-zuma-salmon/20 text-zuma-salmon px-3 py-1 rounded-full text-xs font-bold border border-zuma-salmon/30 mb-2">
+              <span>🎉 Gastronomia Japonesa em Alto Padrão</span>
+            </div>
+            <h2 class="text-2xl font-black text-white">Calculadora de Eventos, Jantares Privativos &amp; Barcas Corporativas</h2>
+            <p class="text-xs text-zuma-muted mt-1">Planeje o sushi perfeito para sua confraternização de empresa, aniversário ou casamento em Tangará da Serra com orçamento instantâneo.</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+          
+          <!-- Coluna 1 e 2: Parâmetros do Evento -->
+          <div class="lg:col-span-2 space-y-5 bg-zuma-card p-6 rounded-xl border border-zuma-border">
+            
+            <!-- Slider de Convidados -->
+            <div>
+              <div class="flex justify-between items-center mb-2">
+                <label class="text-xs font-bold text-white uppercase tracking-wider">Número de Convidados:</label>
+                <span id="evento-badge-convidados" class="text-lg font-black text-zuma-salmon">25 pessoas</span>
+              </div>
+              <input type="range" id="evento-range-convidados" min="10" max="150" value="25" step="5" oninput="atualizarCalculoEvento()" 
+                     class="w-full h-2 bg-zuma-surface rounded-lg appearance-none cursor-pointer accent-zuma-salmon">
+              <div class="flex justify-between text-[10px] text-zuma-muted mt-1">
+                <span>10 convidados</span>
+                <span>50 convidados</span>
+                <span>100 convidados</span>
+                <span>150+ convidados</span>
+              </div>
+            </div>
+
+            <!-- Tipo de Celebração -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label class="block text-xs font-bold text-zuma-muted mb-1">Tipo de Evento:</label>
+                <select id="evento-select-tipo" onchange="atualizarCalculoEvento()" 
+                        class="w-full bg-zuma-surface border border-zuma-border rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-zuma-salmon">
+                  <option value="corporativo">Reunião de Diretoria / Corporativo</option>
+                  <option value="aniversario">Aniversário / Jantar Privado</option>
+                  <option value="casamento">Casamento / Noivado VIP</option>
+                  <option value="confraternizacao">Confraternização de Fim de Ano</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-zuma-muted mb-1">Formato do Serviço:</label>
+                <select id="evento-select-formato" onchange="atualizarCalculoEvento()" 
+                        class="w-full bg-zuma-surface border border-zuma-border rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-zuma-salmon">
+                  <option value="barcas">Barcas Decorativas Gigantes na Mesa</option>
+                  <option value="volante">Finger Food Volante com Garçons</option>
+                  <option value="sushiman_vivo">Sushiman ao Vivo (Live Cooking)</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-zuma-muted mb-1">Perfil do Cardápio:</label>
+                <select id="evento-select-perfil" onchange="atualizarCalculoEvento()" 
+                        class="w-full bg-zuma-surface border border-zuma-border rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-zuma-salmon">
+                  <option value="equilibrado">Equilibrado (50% Cru / 50% Grelhado &amp; Hot)</option>
+                  <option value="crus_nobres">Premium (70% Sashimis, Niguiris &amp; Gunkans)</option>
+                  <option value="sem_crus">100% Cozidos &amp; Grelhados (Sem peixe cru)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Inclusão de Bebidas Japonesas -->
+            <div class="pt-4 border-t border-zuma-border/60">
+              <label class="block text-xs font-bold text-white mb-2">Opcionais de Bebidas e Estrutura:</label>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <label class="flex items-center space-x-2 cursor-pointer bg-zuma-surface p-2.5 rounded-lg border border-zuma-border">
+                  <input type="checkbox" id="check-saque-open" onchange="atualizarCalculoEvento()" class="rounded text-zuma-salmon focus:ring-zuma-salmon">
+                  <span class="text-slate-200">Open Saquê Dourado &amp; Saquerinhas</span>
+                </label>
+                <label class="flex items-center space-x-2 cursor-pointer bg-zuma-surface p-2.5 rounded-lg border border-zuma-border">
+                  <input type="checkbox" id="check-cerveja-asahi" onchange="atualizarCalculoEvento()" class="rounded text-zuma-salmon focus:ring-zuma-salmon">
+                  <span class="text-slate-200">Cervejas Japonesas Asahi / Kirin</span>
+                </label>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Coluna 3: Orçamento e Proposta -->
+          <div class="bg-zuma-bg p-6 rounded-xl border border-zuma-border flex flex-col justify-between space-y-4">
+            <div>
+              <div class="text-xs font-bold uppercase text-zuma-muted tracking-wider">Proposta de Dimensionamento:</div>
+              <div class="mt-4 space-y-2.5 text-xs">
+                <div class="flex justify-between py-1 border-b border-zuma-border/40">
+                  <span class="text-zuma-muted">Total de Peças:</span>
+                  <span id="evento-total-pecas" class="font-bold text-white">450 peças (18/convidado)</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-zuma-border/40">
+                  <span class="text-zuma-muted">Barcas de Apresentação:</span>
+                  <span id="evento-total-barcas" class="font-bold text-white">5 Barcas Grandes (90 peças)</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-zuma-border/40">
+                  <span class="text-zuma-muted">Equipe Recomendada:</span>
+                  <span id="evento-total-equipe" class="font-bold text-white">1 Sushiman + 1 Auxiliar</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-zuma-border/40">
+                  <span class="text-zuma-muted">Insumos e Acessórios:</span>
+                  <span class="font-bold text-emerald-400">Inclusos (Hashis, molheiras, tarê)</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="pt-4 border-t border-zuma-border/60">
+              <div class="text-xs text-zuma-muted">Investimento Total Estimado:</div>
+              <div id="evento-valor-total" class="text-3xl font-black text-zuma-salmon mt-1">R$ 1.950,00</div>
+              <div id="evento-valor-pix" class="text-[11px] text-emerald-400 font-bold mt-1">Ou R$ 1.794,00 à vista no PIX (-8% desc)</div>
+              
+              <button onclick="solicitarOrcamentoEventoWhatsApp()" 
+                      class="w-full mt-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs transition-all shadow-md flex items-center justify-center space-x-2">
+                <span>📲</span><span>Solicitar Proposta Formal via WhatsApp</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <!-- ================= GAVETA LATERAL DO CARRINHO (DRAWER) ================= -->
@@ -1489,7 +1997,7 @@
     // Inicialização da Página
     document.addEventListener('DOMContentLoaded', async () => {
       await carregarDadosBackend();
-      renderizarCategorias();
+      renderizarCategorias(); renderizarPecasBarca(); atualizarResumoBarca(); atualizarCalculoEvento();
       filtrarCardapio();
       renderizarMesas();
       renderizarCrmVip();
@@ -1650,19 +2158,22 @@
 
       empty.classList.add('hidden');
       grid.innerHTML = filtrados.map(p => `
-        <div class="bg-zuma-surface border border-zuma-border hover:border-zuma-salmon/60 rounded-2xl overflow-hidden flex flex-col justify-between transition-all duration-200 hover:-translate-y-1 shadow-md">
+        <div onclick="abrirModalCustomizacao('${p.id}')" class="bg-zuma-surface border border-zuma-border hover:border-zuma-salmon/60 rounded-2xl overflow-hidden flex flex-col justify-between transition-all duration-200 hover:-translate-y-1 shadow-md cursor-pointer group">
           <div class="relative h-44 bg-zuma-card overflow-hidden">
             <img src="${p.foto_url || p.foto || 'https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp'}" 
-                 alt="${p.nome}" class="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                 alt="${p.nome}" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                  onerror="this.src='https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp'">
             <div class="absolute top-2 left-2 bg-black/70 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] font-bold text-zuma-muted border border-white/10 uppercase">
               ${(p.setor_producao || p.setor) === 'sushi_bar' ? '🍣 Sushi Bar' : ((p.setor_producao || p.setor) === 'cozinha' ? '🍲 Cozinha' : ((p.setor_producao || p.setor) === 'bar' ? '🍹 Bar' : '🥢 Balcão'))}
             </div>
             ${(p.codigo_pdv || p.cod_pdv) ? `<div class="absolute top-2 right-2 bg-black/60 px-1.5 py-0.5 rounded text-[10px] font-mono text-zuma-muted">${p.codigo_pdv || p.cod_pdv}</div>` : ''}
+            <div class="absolute bottom-2 right-2 bg-black/80 backdrop-blur text-[10px] font-bold text-zuma-salmon px-2 py-0.5 rounded border border-zuma-salmon/40 opacity-0 group-hover:opacity-100 transition-opacity">
+              ⚙️ Personalizar
+            </div>
           </div>
           <div class="p-4 flex-grow flex flex-col justify-between space-y-3">
             <div>
-              <h3 class="font-extrabold text-sm text-white line-clamp-1">${p.nome}</h3>
+              <h3 class="font-extrabold text-sm text-white line-clamp-1 group-hover:text-zuma-salmon transition-colors">${p.nome}</h3>
               <p class="text-xs text-zuma-muted line-clamp-2 mt-1">${p.descricao || 'Preparo artesanal e fresco do chef sushiman com ingredientes nobres.'}</p>
             </div>
             <div class="flex items-center justify-between pt-2 border-t border-zuma-border/60">
@@ -1674,7 +2185,7 @@
                   <div class="text-base font-black text-white">R$ ${parseFloat(p.preco).toFixed(2).replace('.', ',')}</div>
                 `}
               </div>
-              <button onclick="adicionarAoCarrinho('${p.id}')" 
+              <button onclick="event.stopPropagation(); adicionarAoCarrinho('${p.id}')" 
                       class="px-3.5 py-1.5 rounded-xl bg-zuma-salmon hover:bg-zuma-salmonLight text-white text-xs font-bold transition-all shadow-sm flex items-center space-x-1 active:scale-95">
                 <span>+</span><span>Adicionar</span>
               </button>
@@ -1764,7 +2275,8 @@
           <div class="bg-zuma-card p-3 rounded-xl border border-zuma-border flex items-center justify-between">
             <div class="flex-grow pr-2">
               <h4 class="font-bold text-xs text-white line-clamp-1">${item.nome}</h4>
-              <div class="text-xs text-zuma-salmon font-bold">R$ ${(item.preco_promocional && parseFloat(item.preco_promocional) > 0 && parseFloat(item.preco_promocional) < parseFloat(item.preco) ? parseFloat(item.preco_promocional) : parseFloat(item.preco)).toFixed(2).replace('.', ',')}</div>
+              ${item.detalhes ? `<div class="text-[10px] text-zuma-muted line-clamp-1 mt-0.5">${item.detalhes}</div>` : ''}
+              <div class="text-xs text-zuma-salmon font-bold mt-0.5">R$ ${(item.preco_promocional && parseFloat(item.preco_promocional) > 0 && parseFloat(item.preco_promocional) < parseFloat(item.preco) ? parseFloat(item.preco_promocional) : parseFloat(item.preco)).toFixed(2).replace('.', ',')}</div>
             </div>
             <div class="flex items-center space-x-2 bg-zuma-bg border border-zuma-border rounded-lg p-1">
               <button onclick="alterarQtdCarrinho('${item.id}', -1)" class="w-6 h-6 rounded flex items-center justify-center text-xs font-bold text-zuma-muted hover:text-white bg-zuma-surface">-</button>
@@ -1852,6 +2364,9 @@
       msg += `-----------------------------------------\n`;
       carrinho.forEach(item => {
         msg += `• ${item.qtd}x ${item.nome} - R$ ${(parseFloat(item.preco) * item.qtd).toFixed(2)}\n`;
+        if (item.detalhes) {
+          msg += `   ↳ _${item.detalhes}_\n`;
+        }
       });
       msg += `-----------------------------------------\n`;
       msg += `*Subtotal:* R$ ${subtotal.toFixed(2)}\n`;
@@ -2387,7 +2902,555 @@
       document.getElementById('omni-economia-mensal').textContent = `R$ ${taxaEconomizada.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
       document.getElementById('omni-economia-anual').textContent = `R$ ${economiaAnual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
     }
+  
+    // =========================================================================
+    // DIFERENCIAIS EXCLUSIVOS CULINÁRIA JAPONESA ZUMA & KYTTO
+    // =========================================================================
+
+    // Adição manual de itens externos (Saquês, Bebidas e Combos)
+    function adicionarAoCarrinhoManual(id, nome, preco, categoria) {
+      const existente = carrinho.find(i => i.id === id);
+      if (existente) {
+        existente.qtd++;
+      } else {
+        carrinho.push({
+          id: id,
+          nome: nome,
+          preco: preco,
+          qtd: 1,
+          categoria: categoria || 'bar'
+        });
+      }
+      atualizarCarrinho();
+      toggleCartDrawer(true);
+    }
+
+    // -------------------------------------------------------------------------
+    // 1. CONSTRUTOR DE BARCA PERSONALIZADA (SUSHIMAN BUILDER 360)
+    // -------------------------------------------------------------------------
+    let barcaConfig = {
+      tipo: 'casal',
+      capacidade: 32,
+      precoBase: 139.90,
+      pecas: {
+        'sashimi_salmao': 8,
+        'niguiri_salmao': 4,
+        'niguiri_macaricado': 4,
+        'jou_jou_geleia': 4,
+        'hot_filadelfia': 8,
+        'uramaki_filadelfia': 4
+      },
+      topping: 'flor_sal'
+    };
+
+    const catalogoPecasBarca = [
+      // Crus
+      { id: 'sashimi_salmao', nome: 'Sashimi de Salmão Fresco', grupo: 'crus', max: 16, tag: 'Fresco' },
+      { id: 'sashimi_tataki', nome: 'Sashimi Tataki Selado', grupo: 'crus', max: 12, tag: 'Selado' },
+      { id: 'niguiri_salmao', nome: 'Niguiri Salmão Clássico', grupo: 'crus', max: 12, tag: 'Tradicional' },
+      { id: 'niguiri_macaricado', nome: 'Niguiri Salmão Maçaricado', grupo: 'crus', max: 12, tag: 'Flambado' },
+      { id: 'gunkan_creamcheese', nome: 'Gunkan Salmão & Cream Cheese', grupo: 'crus', max: 8, tag: 'Cremoso' },
+      // Especiais do Chef
+      { id: 'jou_jou_geleia', nome: 'Dyo / Jou Jou com Geleia de Pimenta', grupo: 'especiais', max: 8, tag: 'Chef' },
+      { id: 'jou_jou_maracuja', nome: 'Dyo Salmão com Calda de Maracujá', grupo: 'especiais', max: 8, tag: 'Refrescante' },
+      { id: 'niguiri_trufado', nome: 'Niguiri Salmão Trufado Flor de Sal', grupo: 'especiais', max: 8, tag: 'Nobre' },
+      { id: 'gunkan_crispy', nome: 'Gunkan Salmão com Alho Poró Crispy', grupo: 'especiais', max: 8, tag: 'Crocante' },
+      // Hot Rolls & Fritos
+      { id: 'hot_filadelfia', nome: 'Hot Roll Filadélfia Tradicional', grupo: 'fritos', max: 16, tag: 'Quente' },
+      { id: 'hot_couve', nome: 'Hot Roll com Couve Crispy & Tarê', grupo: 'fritos', max: 12, tag: 'Crocante' },
+      { id: 'harumaki_salmao', nome: 'Mini Harumaki Crocante de Salmão', grupo: 'fritos', max: 8, tag: 'Frito' },
+      // Makis e Uramakis
+      { id: 'uramaki_filadelfia', nome: 'Uramaki Filadélfia & Gergelim', grupo: 'leves', max: 12, tag: 'Clássico' },
+      { id: 'uramaki_skin', nome: 'Uramaki Skin com Tarê & Gergelim', grupo: 'leves', max: 12, tag: 'Crocante' },
+      { id: 'hossomaki_salmao', nome: 'Hossomaki Salmão Maki Tradicional', grupo: 'leves', max: 12, tag: 'Leve' }
+    ];
+
+    function selecionarTamanhoBarca(tipo, cap, preco) {
+      barcaConfig.tipo = tipo;
+      barcaConfig.capacidade = cap;
+      barcaConfig.precoBase = preco;
+
+      document.querySelectorAll('.btn-tamanho-barca').forEach(btn => {
+        btn.classList.remove('border-2', 'border-zuma-salmon', 'bg-zuma-salmon/10');
+        btn.classList.add('border', 'border-zuma-border', 'bg-zuma-card');
+      });
+      const ativo = document.getElementById(`btn-tamanho-${tipo}`);
+      if (ativo) {
+        ativo.classList.remove('border', 'border-zuma-border', 'bg-zuma-card');
+        ativo.classList.add('border-2', 'border-zuma-salmon', 'bg-zuma-salmon/10');
+      }
+
+      // Se excedeu a capacidade atual, reduz proporcionalmente
+      let totalPecas = Object.values(barcaConfig.pecas).reduce((a, b) => a + b, 0);
+      if (totalPecas > cap) {
+        barcaConfig.pecas = { 'sashimi_salmao': Math.floor(cap * 0.4), 'hot_filadelfia': Math.floor(cap * 0.3), 'niguiri_salmao': Math.floor(cap * 0.3) };
+      }
+
+      renderizarPecasBarca();
+      atualizarResumoBarca();
+    }
+
+    function renderizarPecasBarca() {
+      const container = document.getElementById('lista-pecas-barca');
+      if (!container) return;
+
+      container.innerHTML = catalogoPecasBarca.map(item => {
+        const qtdAtual = barcaConfig.pecas[item.id] || 0;
+        let badgeCor = 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+        if (item.grupo === 'especiais') badgeCor = 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+        if (item.grupo === 'fritos') badgeCor = 'bg-red-500/20 text-red-400 border-red-500/30';
+        if (item.grupo === 'leves') badgeCor = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+
+        return `
+          <div class="bg-zuma-card p-3 rounded-xl border border-zuma-border flex items-center justify-between hover:border-zuma-salmon/40 transition-all">
+            <div class="flex-grow pr-2">
+              <div class="flex items-center space-x-2">
+                <span class="text-[9px] px-1.5 py-0.2 rounded font-bold uppercase border ${badgeCor}">${item.tag}</span>
+                <h4 class="font-bold text-xs text-white line-clamp-1">${item.nome}</h4>
+              </div>
+              <div class="text-[10px] text-zuma-muted mt-0.5">Máx: ${item.max} peças</div>
+            </div>
+            <div class="flex items-center space-x-2 bg-zuma-surface border border-zuma-border rounded-lg p-1">
+              <button onclick="alterarPecaBarca('${item.id}', -2)" class="w-6 h-6 rounded flex items-center justify-center text-xs font-bold text-zuma-muted hover:text-white bg-zuma-bg transition-colors">-</button>
+              <span class="text-xs font-black text-white w-5 text-center">${qtdAtual}</span>
+              <button onclick="alterarPecaBarca('${item.id}', 2)" class="w-6 h-6 rounded flex items-center justify-center text-xs font-bold text-zuma-muted hover:text-white bg-zuma-bg transition-colors">+</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function alterarPecaBarca(pecaId, delta) {
+      const itemDef = catalogoPecasBarca.find(p => p.id === pecaId);
+      if (!itemDef) return;
+
+      const atual = barcaConfig.pecas[pecaId] || 0;
+      const totalAtual = Object.values(barcaConfig.pecas).reduce((a, b) => a + b, 0);
+
+      let novo = atual + delta;
+      if (novo < 0) novo = 0;
+      if (novo > itemDef.max) novo = itemDef.max;
+
+      const deltaEfetivo = novo - atual;
+      if (deltaEfetivo > 0 && (totalAtual + deltaEfetivo) > barcaConfig.capacidade) {
+        alert(`Capacidade máxima desta barca é de ${barcaConfig.capacidade} peças! Remova outras peças ou faça upgrade de tamanho.`);
+        return;
+      }
+
+      if (novo === 0) {
+        delete barcaConfig.pecas[pecaId];
+      } else {
+        barcaConfig.pecas[pecaId] = novo;
+      }
+
+      renderizarPecasBarca();
+      atualizarResumoBarca();
+    }
+
+    function atualizarResumoBarca() {
+      let totalCrus = 0;
+      let totalEspeciais = 0;
+      let totalFritos = 0;
+      let totalLeves = 0;
+
+      for (const [id, qtd] of Object.entries(barcaConfig.pecas)) {
+        const def = catalogoPecasBarca.find(p => p.id === id);
+        if (!def) continue;
+        if (def.grupo === 'crus') totalCrus += qtd;
+        else if (def.grupo === 'especiais') totalEspeciais += qtd;
+        else if (def.grupo === 'fritos') totalFritos += qtd;
+        else if (def.grupo === 'leves') totalLeves += qtd;
+      }
+
+      const totalPecas = totalCrus + totalEspeciais + totalFritos + totalLeves;
+      const cap = barcaConfig.capacidade;
+
+      const contador = document.getElementById('barca-contador-pecas');
+      if (contador) contador.textContent = `${totalPecas} / ${cap} Peças`;
+
+      const barCrus = document.getElementById('bar-progresso-crus');
+      const barEspeciais = document.getElementById('bar-progresso-especiais');
+      const barFritos = document.getElementById('bar-progresso-fritos');
+      const barLeves = document.getElementById('bar-progresso-leves');
+
+      if (barCrus) barCrus.style.width = `${(totalCrus / cap) * 100}%`;
+      if (barEspeciais) barEspeciais.style.width = `${(totalEspeciais / cap) * 100}%`;
+      if (barFritos) barFritos.style.width = `${(totalFritos / cap) * 100}%`;
+      if (barLeves) barLeves.style.width = `${(totalLeves / cap) * 100}%`;
+
+      const cCrus = document.getElementById('count-crus');
+      const cEsp = document.getElementById('count-especiais');
+      const cFri = document.getElementById('count-fritos');
+      const cLev = document.getElementById('count-leves');
+
+      if (cCrus) cCrus.textContent = totalCrus;
+      if (cEsp) cEsp.textContent = totalEspeciais;
+      if (cFri) cFri.textContent = totalFritos;
+      if (cLev) cLev.textContent = totalLeves;
+
+      const statusTxt = document.getElementById('barca-status-texto');
+      const btnAdd = document.getElementById('btn-add-barca');
+
+      if (totalPecas === cap) {
+        if (statusTxt) {
+          statusTxt.textContent = '✓ Barca completa e balanceada pelo sushiman!';
+          statusTxt.className = 'text-xs text-emerald-400 font-bold';
+        }
+        if (btnAdd) btnAdd.disabled = false;
+      } else if (totalPecas < cap) {
+        if (statusTxt) {
+          statusTxt.textContent = `Faltam ${cap - totalPecas} peças para completar sua barca`;
+          statusTxt.className = 'text-xs text-amber-400 font-bold';
+        }
+      }
+
+      // Preço com Topping
+      const toppingRadio = document.querySelector('input[name="topping-barca"]:checked')?.value || 'flor_sal';
+      let precoFinal = barcaConfig.precoBase;
+      if (toppingRadio === 'trufado') precoFinal += 6.00;
+
+      const precoTotalEl = document.getElementById('barca-preco-total');
+      if (precoTotalEl) {
+        precoTotalEl.textContent = `R$ ${precoFinal.toFixed(2).replace('.', ',')}`;
+      }
+    }
+
+    function adicionarBarcaAoCarrinho() {
+      const totalPecas = Object.values(barcaConfig.pecas).reduce((a, b) => a + b, 0);
+      if (totalPecas < barcaConfig.capacidade) {
+        alert(`Sua barca tem ${totalPecas} de ${barcaConfig.capacidade} peças. Adicione mais peças para fechar a barca!`);
+        return;
+      }
+
+      const toppingRadio = document.querySelector('input[name="topping-barca"]:checked')?.value || 'flor_sal';
+      let toppingNome = 'Flor de Sal & Limão Siciliano';
+      let adicional = 0;
+      if (toppingRadio === 'trufado') {
+        toppingNome = 'Azeite Trufado Italiano (+R$ 6,00)';
+        adicional = 6.00;
+      } else if (toppingRadio === 'geleia_pimenta') {
+        toppingNome = 'Geleia de Pimenta Biquinho';
+      }
+
+      const detalhesArray = [];
+      for (const [id, qtd] of Object.entries(barcaConfig.pecas)) {
+        const def = catalogoPecasBarca.find(p => p.id === id);
+        if (def) detalhesArray.push(`${qtd}x ${def.nome}`);
+      }
+      detalhesArray.push(`Topping: ${toppingNome}`);
+
+      const itemBarca = {
+        id: `barca-personalizada-${Date.now()}`,
+        nome: `Barca Customizada do Sushiman (${barcaConfig.capacidade} Peças)`,
+        detalhes: detalhesArray.join(', '),
+        preco: barcaConfig.precoBase + adicional,
+        qtd: 1,
+        categoria: 'combinados'
+      };
+
+      carrinho.push(itemBarca);
+      atualizarCarrinho();
+      toggleCartDrawer(true);
+    }
+
+    // -------------------------------------------------------------------------
+    // 2. CALCULADORA DE BUFFET CORPORATIVO & EVENTOS PRIVATIVOS
+    // -------------------------------------------------------------------------
+    function atualizarCalculoEvento() {
+      const convidados = parseInt(document.getElementById('evento-range-convidados')?.value || 25);
+      const tipo = document.getElementById('evento-select-tipo')?.value || 'corporativo';
+      const formato = document.getElementById('evento-select-formato')?.value || 'barcas';
+      const perfil = document.getElementById('evento-select-perfil')?.value || 'equilibrado';
+      const openSaque = document.getElementById('check-saque-open')?.checked || false;
+      const cervejaAsahi = document.getElementById('check-cerveja-asahi')?.checked || false;
+
+      const badge = document.getElementById('evento-badge-convidados');
+      if (badge) badge.textContent = `${convidados} pessoas`;
+
+      const pecasPorPessoa = perfil === 'crus_nobres' ? 20 : 18;
+      const totalPecas = convidados * pecasPorPessoa;
+
+      const barcasGrandes = Math.ceil(totalPecas / 90);
+      let equipeTexto = '1 Sushiman';
+      if (convidados > 80) equipeTexto = '3 Sushimen + 2 Auxiliares';
+      else if (convidados > 40) equipeTexto = '2 Sushimen + 1 Auxiliar';
+      else if (convidados > 20) equipeTexto = '1 Sushiman + 1 Auxiliar';
+
+      let precoPorPessoa = 78.00;
+      if (perfil === 'crus_nobres') precoPorPessoa = 98.00;
+      if (perfil === 'sem_crus') precoPorPessoa = 68.00;
+      if (formato === 'sushiman_vivo') precoPorPessoa += 20.00;
+      if (openSaque) precoPorPessoa += 35.00;
+      if (cervejaAsahi) precoPorPessoa += 28.00;
+
+      const total = convidados * precoPorPessoa;
+      const totalPix = total * 0.92;
+
+      const elPecas = document.getElementById('evento-total-pecas');
+      const elBarcas = document.getElementById('evento-total-barcas');
+      const elEquipe = document.getElementById('evento-total-equipe');
+      const elTotal = document.getElementById('evento-valor-total');
+
+      if (elPecas) elPecas.textContent = `${totalPecas} peças (${pecasPorPessoa}/convidado)`;
+      if (elBarcas) elBarcas.textContent = `${barcasGrandes} Barcas Grandes (${Math.round(totalPecas/barcasGrandes)} peças/cada)`;
+      if (elEquipe) elEquipe.textContent = equipeTexto;
+      if (elTotal) elTotal.textContent = `R$ ${total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+      const descPixEl = document.getElementById('evento-valor-pix');
+      if (descPixEl) {
+        descPixEl.textContent = `Ou R$ ${totalPix.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} à vista no PIX (-8% desc)`;
+      }
+    }
+
+    function solicitarOrcamentoEventoWhatsApp() {
+      const convidados = document.getElementById('evento-range-convidados')?.value || 25;
+      const tipo = document.getElementById('evento-select-tipo')?.options[document.getElementById('evento-select-tipo').selectedIndex].text;
+      const formato = document.getElementById('evento-select-formato')?.options[document.getElementById('evento-select-formato').selectedIndex].text;
+      const perfil = document.getElementById('evento-select-perfil')?.options[document.getElementById('evento-select-perfil').selectedIndex].text;
+      const totalPecas = document.getElementById('evento-total-pecas')?.textContent;
+      const valorTotal = document.getElementById('evento-valor-total')?.textContent;
+
+      const texto = `🍣 *SOLICITAÇÃO DE PROPOSTA DE BUFFET / EVENTO JAPONÊS* 🍣%0A` +
+        `-----------------------------------------%0A` +
+        `👤 *Convidados:* ${convidados} pessoas%0A` +
+        `🏢 *Tipo de Evento:* ${encodeURIComponent(tipo)}%0A` +
+        `🥢 *Formato do Serviço:* ${encodeURIComponent(formato)}%0A` +
+        `🍱 *Perfil Gastronômico:* ${encodeURIComponent(perfil)}%0A` +
+        `📊 *Volume Estimado:* ${encodeURIComponent(totalPecas)}%0A` +
+        `💰 *Investimento Estimado:* ${encodeURIComponent(valorTotal)}%0A` +
+        `-----------------------------------------%0A` +
+        `_Olá Equipe Zuma! Gostaria de consultar disponibilidade de data para Tangará da Serra e formalizar a contratação!_`;
+
+      window.open(`https://wa.me/5565998001447?text=${texto}`, '_blank');
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. MODAL DE DETALHES & CUSTOMIZAÇÃO DO SUSHIMAN
+    // -------------------------------------------------------------------------
+    let produtoModalAtivo = null;
+    let customizacaoModal = {
+      ponto: 'cru',
+      arroz: 'tradicional',
+      quantidade: 1
+    };
+
+    function abrirModalCustomizacao(produtoId) {
+      const produto = cardapioGeral.find(p => p.id === produtoId);
+      if (!produto) return;
+      produtoModalAtivo = produto;
+      customizacaoModal.quantidade = 1;
+      customizacaoModal.ponto = 'cru';
+      customizacaoModal.arroz = 'tradicional';
+
+      document.getElementById('modal-produto-nome').textContent = produto.nome;
+      document.getElementById('modal-produto-descricao').textContent = produto.descricao || 'Preparo artesanal com pescados frescos e ingredientes nobres selecionados pelo sushiman.';
+      document.getElementById('modal-produto-sku').textContent = produto.codigo_pdv || produto.cod_pdv || `ZUM-${produto.id}`;
+      document.getElementById('modal-produto-badge').textContent = (produto.setor_producao === 'sushi_bar' || produto.setor === 'sushi_bar') ? '🍣 Sushi Bar' : '🍲 Cozinha Quente';
+      document.getElementById('modal-produto-foto').src = produto.foto_url || produto.foto || 'https://alloydeliveryimages.ligafiles.com.br/loja_images/4212/69b490b2917fe4lx5c.webp';
+
+      const precoFinal = (produto.preco_promocional && produto.preco_promocional > 0 && produto.preco_promocional < produto.preco) ? produto.preco_promocional : produto.preco;
+      document.getElementById('modal-produto-preco').textContent = `R$ ${parseFloat(precoFinal).toFixed(2).replace('.', ',')}`;
+
+      const promoBadge = document.getElementById('modal-produto-promocional');
+      if (promoBadge) {
+        if (produto.preco_promocional && produto.preco_promocional > 0 && produto.preco_promocional < produto.preco) {
+          promoBadge.classList.remove('hidden');
+        } else {
+          promoBadge.classList.add('hidden');
+        }
+      }
+
+      document.getElementById('modal-qtd').textContent = '1';
+      document.getElementById('modal-custom-obs').value = '';
+      setCustomizacao('ponto', 'cru');
+      setCustomizacao('arroz', 'tradicional');
+
+      document.getElementById('modal-customizacao-sushi').classList.remove('hidden');
+    }
+
+    function fecharModalCustomizacao() {
+      document.getElementById('modal-customizacao-sushi').classList.add('hidden');
+      produtoModalAtivo = null;
+    }
+
+    function setCustomizacao(campo, valor) {
+      if (campo === 'ponto') {
+        customizacaoModal.ponto = valor;
+        document.querySelectorAll('.opt-ponto-btn').forEach(btn => {
+          btn.classList.remove('border-zuma-salmon', 'bg-zuma-salmon/10', 'text-white');
+          btn.classList.add('border-zuma-border', 'bg-zuma-card', 'text-zuma-muted');
+        });
+        const ativo = document.getElementById(`opt-ponto-${valor.replace('_', '-')}`);
+        if (ativo) {
+          ativo.classList.remove('border-zuma-border', 'bg-zuma-card', 'text-zuma-muted');
+          ativo.classList.add('border-zuma-salmon', 'bg-zuma-salmon/10', 'text-white');
+        }
+      } else if (campo === 'arroz') {
+        customizacaoModal.arroz = valor;
+        document.querySelectorAll('.opt-arroz-btn').forEach(btn => {
+          btn.classList.remove('border-zuma-salmon', 'bg-zuma-salmon/10', 'text-white');
+          btn.classList.add('border-zuma-border', 'bg-zuma-card', 'text-zuma-muted');
+        });
+        const ativo = document.getElementById(`opt-arroz-${valor.replace('_', '')}`);
+        if (ativo) {
+          ativo.classList.remove('border-zuma-border', 'bg-zuma-card', 'text-zuma-muted');
+          ativo.classList.add('border-zuma-salmon', 'bg-zuma-salmon/10', 'text-white');
+        }
+      }
+    }
+
+    function alterarQtdModal(delta) {
+      let q = customizacaoModal.quantidade + delta;
+      if (q < 1) q = 1;
+      if (q > 20) q = 20;
+      customizacaoModal.quantidade = q;
+      document.getElementById('modal-qtd').textContent = q;
+    }
+
+    function confirmarCustomizacaoModal() {
+      if (!produtoModalAtivo) return;
+      const isTrufado = document.getElementById('check-mod-trufado')?.checked || false;
+      const isFlorSal = document.getElementById('check-mod-florsal')?.checked || false;
+      const isTare = document.getElementById('check-mod-tare')?.checked || false;
+      const isPimenta = document.getElementById('check-mod-pimenta')?.checked || false;
+      const obs = document.getElementById('modal-custom-obs')?.value.trim() || '';
+
+      let adicionaisPreco = 0;
+      if (isTrufado) adicionaisPreco += 4.00;
+
+      const precoBase = (produtoModalAtivo.preco_promocional && produtoModalAtivo.preco_promocional > 0 && produtoModalAtivo.preco_promocional < produtoModalAtivo.preco) ? produtoModalAtivo.preco_promocional : produtoModalAtivo.preco;
+      const precoFinalUnit = parseFloat(precoBase) + adicionaisPreco;
+
+      const detalhes = [];
+      detalhes.push(`Ponto: ${customizacaoModal.ponto === 'cru' ? 'Fresco Cru' : (customizacaoModal.ponto === 'macaricado' ? 'Levemente Maçaricado' : 'Bem Maçaricado')}`);
+      detalhes.push(`Arroz: ${customizacaoModal.arroz === 'tradicional' ? 'Shari Tradicional' : (customizacaoModal.arroz === 'integral' ? 'Integral Fit' : 'Sem Arroz / Low Carb')}`);
+      if (isTrufado) detalhes.push('+ Trufado');
+      if (isFlorSal) detalhes.push('+ Flor de Sal');
+      if (isTare) detalhes.push('+ Tarê');
+      if (isPimenta) detalhes.push('+ Geleia Pimenta');
+      if (obs) detalhes.push(`Obs: ${obs}`);
+
+      const itemPersonalizado = {
+        id: `${produtoModalAtivo.id}-custom-${Date.now()}`,
+        nome: produtoModalAtivo.nome,
+        detalhes: detalhes.join(' · '),
+        preco: precoFinalUnit,
+        qtd: customizacaoModal.quantidade,
+        foto_url: produtoModalAtivo.foto_url || produtoModalAtivo.foto
+      };
+
+      carrinho.push(itemPersonalizado);
+      atualizarCarrinho();
+      fecharModalCustomizacao();
+      toggleCartDrawer(true);
+    }
+
   </script>
+
+
+  <!-- ========================================================================= -->
+  <!-- MODAL DE DETALHES DO PRODUTO & CUSTOMIZAÇÃO DO SUSHIMAN                   -->
+  <!-- ========================================================================= -->
+  <div id="modal-customizacao-sushi" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-zuma-surface border border-zuma-border rounded-2xl max-w-xl w-full max-h-[92vh] overflow-y-auto custom-scrollbar p-6 space-y-4 shadow-2xl">
+      
+      <!-- Topo com Botão Fechar -->
+      <div class="flex justify-between items-start">
+        <div class="flex items-center space-x-2">
+          <span id="modal-produto-badge" class="px-2.5 py-0.5 rounded text-[10px] font-bold uppercase bg-zuma-salmon/20 text-zuma-salmon border border-zuma-salmon/30">Sushi Bar</span>
+          <span id="modal-produto-sku" class="text-[11px] font-mono text-zuma-muted">ZUM-001</span>
+        </div>
+        <button onclick="fecharModalCustomizacao()" class="text-zuma-muted hover:text-white p-1 rounded-lg hover:bg-zuma-card text-lg">✕</button>
+      </div>
+
+      <!-- Imagem do Prato -->
+      <div class="relative h-56 rounded-xl overflow-hidden bg-zuma-card">
+        <img id="modal-produto-foto" src="" alt="Produto" class="w-full h-full object-cover">
+        <div class="absolute bottom-2 left-2 bg-black/70 backdrop-blur px-2.5 py-1 rounded text-xs font-bold text-white flex items-center space-x-1">
+          <span>❄️</span><span>Peixe Fresco Selecionado do Dia</span>
+        </div>
+      </div>
+
+      <!-- Título, Descrição e Preço -->
+      <div>
+        <h3 id="modal-produto-nome" class="text-xl font-black text-white">Nome do Produto</h3>
+        <p id="modal-produto-descricao" class="text-xs text-zuma-muted mt-1">Descrição completa dos ingredientes nobres.</p>
+        <div class="flex items-center space-x-3 mt-3">
+          <span id="modal-produto-preco" class="text-2xl font-black text-white">R$ 0,00</span>
+          <span id="modal-produto-promocional" class="hidden text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">Promoção do Dia</span>
+        </div>
+      </div>
+
+      <!-- Opções do Sushiman -->
+      <div class="space-y-3 pt-3 border-t border-zuma-border/60">
+        
+        <!-- Ponto do Peixe -->
+        <div>
+          <label class="block text-xs font-bold text-white uppercase tracking-wider mb-1.5">Ponto do Peixe:</label>
+          <div class="grid grid-cols-3 gap-2">
+            <button onclick="setCustomizacao('ponto', 'cru')" id="opt-ponto-cru" class="opt-ponto-btn p-2 rounded-lg border border-zuma-salmon bg-zuma-salmon/10 text-white text-xs font-bold text-center">Fresco Cru</button>
+            <button onclick="setCustomizacao('ponto', 'macaricado')" id="opt-ponto-macaricado" class="opt-ponto-btn p-2 rounded-lg border border-zuma-border bg-zuma-card text-zuma-muted text-xs font-bold text-center">Levemente Maçaricado</button>
+            <button onclick="setCustomizacao('ponto', 'bem_passado')" id="opt-ponto-bem-passado" class="opt-ponto-btn p-2 rounded-lg border border-zuma-border bg-zuma-card text-zuma-muted text-xs font-bold text-center">Bem Maçaricado</button>
+          </div>
+        </div>
+
+        <!-- Tipo de Arroz -->
+        <div>
+          <label class="block text-xs font-bold text-white uppercase tracking-wider mb-1.5">Preparo do Arroz Shari:</label>
+          <div class="grid grid-cols-3 gap-2">
+            <button onclick="setCustomizacao('arroz', 'tradicional')" id="opt-arroz-tradicional" class="opt-arroz-btn p-2 rounded-lg border border-zuma-salmon bg-zuma-salmon/10 text-white text-xs font-bold text-center">Tradicional Japonês</button>
+            <button onclick="setCustomizacao('arroz', 'integral')" id="opt-arroz-integral" class="opt-arroz-btn p-2 rounded-lg border border-zuma-border bg-zuma-card text-zuma-muted text-xs font-bold text-center">Integral Fit</button>
+            <button onclick="setCustomizacao('arroz', 'low_carb')" id="opt-arroz-lowcarb" class="opt-arroz-btn p-2 rounded-lg border border-zuma-border bg-zuma-card text-zuma-muted text-xs font-bold text-center">Sem Arroz (Low Carb)</button>
+          </div>
+        </div>
+
+        <!-- Finalização Nobre -->
+        <div>
+          <label class="block text-xs font-bold text-white uppercase tracking-wider mb-1.5">Finalização Especial:</label>
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <label class="flex items-center space-x-2 bg-zuma-card p-2 rounded-lg border border-zuma-border cursor-pointer">
+              <input type="checkbox" id="check-mod-trufado" class="text-zuma-salmon focus:ring-zuma-salmon rounded">
+              <span class="text-white">Azeite Trufado (+R$ 4,00)</span>
+            </label>
+            <label class="flex items-center space-x-2 bg-zuma-card p-2 rounded-lg border border-zuma-border cursor-pointer">
+              <input type="checkbox" id="check-mod-florsal" checked class="text-zuma-salmon focus:ring-zuma-salmon rounded">
+              <span class="text-white">Flor de Sal &amp; Limão Siciliano</span>
+            </label>
+            <label class="flex items-center space-x-2 bg-zuma-card p-2 rounded-lg border border-zuma-border cursor-pointer">
+              <input type="checkbox" id="check-mod-tare" class="text-zuma-salmon focus:ring-zuma-salmon rounded">
+              <span class="text-white">Gota de Tarê Artesanal</span>
+            </label>
+            <label class="flex items-center space-x-2 bg-zuma-card p-2 rounded-lg border border-zuma-border cursor-pointer">
+              <input type="checkbox" id="check-mod-pimenta" class="text-zuma-salmon focus:ring-zuma-salmon rounded">
+              <span class="text-white">Geleia de Pimenta Biquinho</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Observações -->
+        <div>
+          <label class="block text-xs font-bold text-white uppercase tracking-wider mb-1">Observações para o Sushiman:</label>
+          <input type="text" id="modal-custom-obs" placeholder="Ex: Sem gergelim, caprichar no gengibre..." 
+                 class="w-full bg-zuma-bg border border-zuma-border rounded-xl px-3 py-2 text-xs text-white placeholder-zuma-muted focus:outline-none focus:border-zuma-salmon">
+        </div>
+
+      </div>
+
+      <!-- Rodapé do Modal -->
+      <div class="flex items-center justify-between pt-4 border-t border-zuma-border/60">
+        <div class="flex items-center space-x-2 bg-zuma-bg border border-zuma-border rounded-xl p-1">
+          <button onclick="alterarQtdModal(-1)" class="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white bg-zuma-surface">-</button>
+          <span id="modal-qtd" class="w-8 text-center font-black text-white text-sm">1</span>
+          <button onclick="alterarQtdModal(1)" class="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white bg-zuma-surface">+</button>
+        </div>
+        <button onclick="confirmarCustomizacaoModal()" 
+                class="px-6 py-3 rounded-xl bg-zuma-salmon hover:bg-zuma-salmonLight text-white font-black text-xs transition-all shadow-md flex items-center space-x-1.5">
+          <span>🍣</span><span>Adicionar com Preferências</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
 
 </body>
 </html>
