@@ -1921,3 +1921,252 @@ test("Zuma Cozinha Oriental - Central ERP PWA (erp.html): CRUD Dinâmico de Card
   assert.ok(content.includes("abrirModalAjusteRapidoPrompt"), "Deve conter função de ajuste rápido de estoque");
   assert.ok(content.includes("carregarCardapioDinamicoErp"), "Deve conter inicialização de cardápio dinâmico");
 });
+
+test('Zuma Cozinha Oriental - CRUD Completo de Fichas Técnicas e Matriz BCG KyttoIA', async () => {
+  const { routerZuma, FICHAS_TECNICAS_ZUMA } = await import('./modules/restaurante-zuma.js');
+
+  // 1. Criar Ficha Técnica via POST
+  const fakeReqPost = {
+    body: {
+      codigoPdv: "ZUM-TEST-FT",
+      nomeProduto: "Uramaki Especial Trufado c/ Vieira Fresca",
+      categoria: "Especiais Omakase",
+      precoVenda: 75.00,
+      rendimento: 1,
+      descricao: "Uramaki maçaricado com lâmina de vieira e azeite trufado",
+      insumos: [
+        { id: "ins-salmao-fresco", nome: "Salmão Fresco", qtd: 0.120, unidade: "kg", custoUnitario: 82.93 },
+        { id: "ins-arroz-gohan", nome: "Arroz Gohan", qtd: 0.100, unidade: "kg", custoUnitario: 14.00 }
+      ]
+    }
+  };
+  let postStatusCode = 200;
+  let postData = null;
+  const fakeResPost = {
+    status: (c) => { postStatusCode = c; return fakeResPost; },
+    json: (d) => { postData = d; return fakeResPost; }
+  };
+  const postHandler = routerZuma.stack.find(s => s.route && s.route.methods.post && s.route.path.includes('/fichas-tecnicas')).route.stack[0].handle;
+  postHandler(fakeReqPost, fakeResPost);
+
+  assert.strictEqual(postStatusCode, 201);
+  assert.strictEqual(postData.ok, true);
+  assert.strictEqual(postData.ficha.codigoPdv, "ZUM-TEST-FT");
+  assert.strictEqual(postData.ficha.nomeProduto, "Uramaki Especial Trufado c/ Vieira Fresca");
+  assert.ok(postData.ficha.cmvTeorico > 0);
+  assert.ok(postData.ficha.margemContribuicao > 0);
+
+  // 2. Modificar Ficha Técnica via PUT
+  const fakeReqPut = {
+    params: { id: "ZUM-TEST-FT" },
+    body: {
+      nomeProduto: "Uramaki Especial Trufado c/ Vieira Fresca Premium",
+      precoVenda: 82.00
+    }
+  };
+  let putData = null;
+  const fakeResPut = {
+    json: (d) => { putData = d; return fakeResPut; }
+  };
+  const putHandler = routerZuma.stack.find(s => s.route && s.route.methods.put && s.route.path.includes('/fichas-tecnicas/:id')).route.stack[0].handle;
+  putHandler(fakeReqPut, fakeResPut);
+
+  assert.strictEqual(putData.ok, true);
+  assert.strictEqual(putData.ficha.precoVenda, 82.00);
+
+  // 3. Matriz BCG
+  let bcgData = null;
+  const fakeResBcg = {
+    json: (d) => { bcgData = d; return fakeResBcg; }
+  };
+  const bcgHandler = routerZuma.stack.find(s => s.route && s.route.methods.get && s.route.path === '/fichas-tecnicas/matriz-bcg').route.stack[0].handle;
+  bcgHandler({}, fakeResBcg);
+
+  assert.strictEqual(bcgData.ok, true);
+  assert.ok(bcgData.matrizBcg.estrelas.total > 0);
+  assert.ok(bcgData.matrizBcg.burrosDeCarga.total > 0);
+
+  // 4. Excluir Ficha Técnica via DELETE
+  const fakeReqDel = { params: { id: "ZUM-TEST-FT" } };
+  let delData = null;
+  const fakeResDel = {
+    json: (d) => { delData = d; return fakeResDel; }
+  };
+  const delHandler = routerZuma.stack.find(s => s.route && s.route.methods.delete && s.route.path.includes('/fichas-tecnicas/:id')).route.stack[0].handle;
+  delHandler(fakeReqDel, fakeResDel);
+
+  assert.strictEqual(delData.ok, true);
+  assert.strictEqual(FICHAS_TECNICAS_ZUMA["ZUM-TEST-FT"], undefined);
+});
+
+test('Zuma Cozinha Oriental - CRUD Completo de Reservas e Hostess Fila de Espera', async () => {
+  const { routerZuma } = await import('./modules/restaurante-zuma.js');
+
+  // 1. Criar Reserva via POST /reservas
+  const fakeReqPost = {
+    body: {
+      clienteNome: "Dra. Mariana Zang",
+      telefoneWhatsapp: "(65) 99888-7711",
+      data: "2026-11-21",
+      hora: "20:30",
+      qtdPessoas: 4,
+      setorDesejado: "Tatame VIP 01",
+      observacoes: "Comemoração de aniversário"
+    }
+  };
+  let postStatusCode = 200;
+  let postData = null;
+  const fakeResPost = {
+    status: (c) => { postStatusCode = c; return fakeResPost; },
+    json: (d) => { postData = d; return fakeResPost; }
+  };
+  const postHandler = routerZuma.stack.find(s => s.route && s.route.methods.post && s.route.path === '/reservas').route.stack[0].handle;
+  postHandler(fakeReqPost, fakeResPost);
+
+  assert.strictEqual(postStatusCode, 201);
+  assert.strictEqual(postData.ok, true);
+  assert.strictEqual(postData.reserva.clienteNome, "Dra. Mariana Zang");
+  const reservaId = postData.reserva.id;
+
+  // 2. Modificar Reserva via PUT /reservas/:id
+  const fakeReqPut = {
+    params: { id: reservaId },
+    body: {
+      qtdPessoas: 6,
+      status: "confirmada"
+    }
+  };
+  let putData = null;
+  const fakeResPut = {
+    json: (d) => { putData = d; return fakeResPut; }
+  };
+  const putHandler = routerZuma.stack.find(s => s.route && s.route.methods.put && s.route.path === '/reservas/:id').route.stack[0].handle;
+  putHandler(fakeReqPut, fakeResPut);
+
+  assert.strictEqual(putData.ok, true);
+  assert.strictEqual(putData.reserva.qtdPessoas, 6);
+
+  // 3. Excluir Reserva via DELETE /reservas/:id
+  const fakeReqDel = { params: { id: reservaId } };
+  let delData = null;
+  const fakeResDel = {
+    json: (d) => { delData = d; return fakeResDel; }
+  };
+  const delHandler = routerZuma.stack.find(s => s.route && s.route.methods.delete && s.route.path === '/reservas/:id').route.stack[0].handle;
+  delHandler(fakeReqDel, fakeResDel);
+
+  assert.strictEqual(delData.ok, true);
+  assert.strictEqual(delData.reserva.id, reservaId);
+});
+
+test('Zuma Cozinha Oriental - Módulo de Compras, Reposição e Fornecedores Pescados', async () => {
+  const { routerZuma } = await import('./modules/restaurante-zuma.js');
+
+  // 1. Sugestões de Compras
+  let sugestoesData = null;
+  const fakeResSug = {
+    json: (d) => { sugestoesData = d; return fakeResSug; }
+  };
+  const sugHandler = routerZuma.stack.find(s => s.route && s.route.methods.get && s.route.path === '/compras/sugestoes').route.stack[0].handle;
+  sugHandler({}, fakeResSug);
+
+  assert.strictEqual(sugestoesData.ok, true);
+  assert.ok(sugestoesData.totalSugestoes > 0);
+  assert.ok(sugestoesData.valorTotalEstimadoCompras > 0);
+
+  // 2. Lançar Ordem de Compra
+  const fakeReqPost = {
+    body: {
+      fornecedor: "Pescados Pantanal Cuiabá",
+      itens: [
+        { insumo: "Salmão Fresco Chileno (Filé Limpo)", qtdKg: 50.0, precoKg: 82.93 }
+      ],
+      condicaoPagamento: "Boleto 14 dias"
+    }
+  };
+  let postStatusCode = 200;
+  let postData = null;
+  const fakeResPost = {
+    status: (c) => { postStatusCode = c; return fakeResPost; },
+    json: (d) => { postData = d; return fakeResPost; }
+  };
+  const postHandler = routerZuma.stack.find(s => s.route && s.route.methods.post && s.route.path === '/compras/lancar-ordem').route.stack[0].handle;
+  postHandler(fakeReqPost, fakeResPost);
+
+  assert.strictEqual(postStatusCode, 201);
+  assert.strictEqual(postData.ok, true);
+  const ordemId = postData.ordemCompra.id;
+
+  // 3. Receber Mercadoria da Ordem
+  const fakeReqPut = {
+    params: { id: ordemId },
+    body: {
+      numeroNotaFiscalFornecedor: "NF-99201",
+      temperaturaConferenciaC: 1.5
+    }
+  };
+  let putData = null;
+  const fakeResPut = {
+    json: (d) => { putData = d; return fakeResPut; }
+  };
+  const putHandler = routerZuma.stack.find(s => s.route && s.route.methods.put && s.route.path === '/compras/pedidos/:id/receber').route.stack[0].handle;
+  putHandler(fakeReqPut, fakeResPut);
+
+  assert.strictEqual(putData.ok, true);
+  assert.strictEqual(putData.ordem.status, "recebido");
+
+  // 4. Cancelar/Excluir Ordem de Compra
+  const fakeReqDel = { params: { id: ordemId } };
+  let delData = null;
+  const fakeResDel = {
+    json: (d) => { delData = d; return fakeResDel; }
+  };
+  const delHandler = routerZuma.stack.find(s => s.route && s.route.methods.delete && s.route.path === '/compras/pedidos/:id').route.stack[0].handle;
+  delHandler(fakeReqDel, fakeResDel);
+
+  assert.strictEqual(delData.ok, true);
+  assert.strictEqual(delData.ordem.id, ordemId);
+});
+
+test('Zuma Cozinha Oriental - Gestão de Turno de Caixa PDV, Sangrias e Suprimentos', async () => {
+  const { routerZuma, CAIXA_TURNO_ATUAL_ZUMA } = await import('./modules/restaurante-zuma.js');
+
+  // 1. Status do Caixa
+  let statusData = null;
+  const fakeResStatus = {
+    json: (d) => { statusData = d; return fakeResStatus; }
+  };
+  const statusHandler = routerZuma.stack.find(s => s.route && s.route.methods.get && s.route.path === '/caixa/status-atual').route.stack[0].handle;
+  statusHandler({}, fakeResStatus);
+
+  assert.strictEqual(statusData.ok, true);
+  assert.strictEqual(statusData.empresa, "Zuma Cozinha Oriental");
+
+  // 2. Registrar Suprimento de Troco
+  const fakeReqSupr = {
+    body: { valor: 150.00, motivo: "Reforço troco sábado", operador: "Rodrigo Gonçalves" }
+  };
+  let suprData = null;
+  const fakeResSupr = {
+    json: (d) => { suprData = d; return fakeResSupr; }
+  };
+  const suprHandler = routerZuma.stack.find(s => s.route && s.route.methods.post && s.route.path === '/pdv/suprimento').route.stack[0].handle;
+  suprHandler(fakeReqSupr, fakeResSupr);
+
+  assert.strictEqual(suprData.ok, true);
+  assert.ok(suprData.caixa.suprimentos.some(s => s.valor === 150.00));
+
+  // 3. Registrar Sangria de Segurança
+  const fakeReqSang = {
+    body: { valor: 250.00, motivo: "Sangria periódica cofre", operador: "Rodrigo Gonçalves" }
+  };
+  let sangData = null;
+  const fakeResSang = {
+    json: (d) => { sangData = d; return fakeResSang; }
+  };
+  const sangHandler = routerZuma.stack.find(s => s.route && s.route.methods.post && s.route.path === '/pdv/sangria').route.stack[0].handle;
+  sangHandler(fakeReqSang, fakeResSang);
+
+  assert.strictEqual(sangData.ok, true);
+  assert.ok(sangData.caixa.sangrias.some(s => s.valor === 250.00));
+});

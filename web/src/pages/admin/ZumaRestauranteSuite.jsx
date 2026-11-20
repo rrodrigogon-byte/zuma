@@ -58,6 +58,9 @@ const TABS = [
   { id: 'financeiro', label: 'DRE & Financeiro', icon: DollarSign, badge: 'CMV & Margens' },
   { id: 'crm', label: 'Clientes & Clube Zumi', icon: Users, badge: 'Fidelidade' },
   { id: 'delivery', label: 'Delivery & Canais', icon: Truck, badge: 'Omnichannel' },
+  { id: 'fichas', label: 'Fichas & Matriz BCG', icon: FileText, badge: 'CMV & Margens' },
+  { id: 'reservas', label: 'Reservas & Hostess', icon: Calendar, badge: 'Fila Digital' },
+  { id: 'compras', label: 'Compras & Cotação', icon: Package, badge: 'Fornecedores' },
   { id: 'pilot', label: 'Pilot Inteligente', icon: ExternalLink, badge: 'Completo' },
 ];
 
@@ -4091,6 +4094,425 @@ export default function ZumaRestauranteSuite() {
       )}
 
       {/* 8. ABA PILOT EMBUTIDO COMPLETO */}
+      
+      {/* ========================================================================= */}
+      {/* ABA: FICHAS TÉCNICAS & MATRIZ BCG */}
+      {/* ========================================================================= */}
+      {abaAtiva === 'fichas' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Header & Ação de Incluir */}
+          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 16, padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14 }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                <span style={{ fontSize: 24 }}>🍱</span>
+                <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#ffffff' }}>
+                  Fichas Técnicas & Engenharia de Cardápio (Matriz BCG)
+                </h2>
+                <span style={{ background: '#059669', color: '#ffffff', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 6 }}>
+                  CMV Médio da Casa: 29.8%
+                </span>
+              </div>
+              <p style={{ margin: 0, fontSize: 13, color: '#94a3b8' }}>
+                Composição em gramas de pescados nobres, rendimento e rentabilidade com cálculo em tempo real pelo Motor KyttoIA 2.5 Flash.
+              </p>
+            </div>
+            <button
+              onClick={abrirNovaFicha}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '10px 18px',
+                background: 'linear-gradient(135deg, #E63946 0%, #D62828 100%)',
+                border: 'none',
+                borderRadius: 10,
+                color: '#ffffff',
+                fontSize: 13,
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(230, 57, 70, 0.35)'
+              }}
+            >
+              <Plus size={16} /> ➕ Nova Ficha Técnica
+            </button>
+          </div>
+
+          {/* Quadrantes Matriz BCG */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+            <div style={{ background: '#1e293b', border: '2px solid #eab308', borderRadius: 14, padding: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <strong style={{ color: '#fef08a', fontSize: 15 }}>⭐ Estrelas (Alto Lucro / Alto Giro)</strong>
+                <span style={{ background: '#ca8a04', color: '#ffffff', fontSize: 11, fontWeight: 800, padding: '2px 6px', borderRadius: 4 }}>3 Itens</span>
+              </div>
+              <p style={{ fontSize: 12, color: '#cbd5e1', lineHeight: 1.5, marginBottom: 12 }}>
+                • <strong>Combo VIP 60 Peças</strong> (R$ 219,90 · Margem 69.0%)<br />
+                • <strong>Sashimi Salmão Trufado</strong> (R$ 64,90 · Margem 71.5%)<br />
+                • <strong>Uramaki Ebi Especial</strong> (R$ 52,90 · Margem 72.0%)
+              </p>
+              <div style={{ background: '#0f172a', padding: 8, borderRadius: 8, fontSize: 11, color: '#fde047' }}>
+                💡 <em>Recomendação KyttoIA:</em> Manter destaque visual no cardápio digital e fotos em alta definição.
+              </div>
+            </div>
+
+            <div style={{ background: '#1e293b', border: '2px solid #3b82f6', borderRadius: 14, padding: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <strong style={{ color: '#93c5fd', fontSize: 15 }}>🐎 Burros de Carga (Alto Giro / Margem Média)</strong>
+                <span style={{ background: '#2563eb', color: '#ffffff', fontSize: 11, fontWeight: 800, padding: '2px 6px', borderRadius: 4 }}>3 Itens</span>
+              </div>
+              <p style={{ fontSize: 12, color: '#cbd5e1', lineHeight: 1.5, marginBottom: 12 }}>
+                • <strong>Rodízio Zuma Adulto</strong> (R$ 139,90 · Volume 840/mês)<br />
+                • <strong>Temaki Salmão Filadélfia</strong> (R$ 36,90 · Volume 760/mês)<br />
+                • <strong>Hot Roll Filadélfia</strong> (R$ 38,90 · Volume 920/mês)
+              </p>
+              <div style={{ background: '#0f172a', padding: 8, borderRadius: 8, fontSize: 11, color: '#93c5fd' }}>
+                💡 <em>Recomendação KyttoIA:</em> Controlar desperdício e aproveitar aparas nobres de salmão fresco.
+              </div>
+            </div>
+
+            <div style={{ background: '#1e293b', border: '2px solid #10b981', borderRadius: 14, padding: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <strong style={{ color: '#a7f3d0', fontSize: 15 }}>💎 Oportunidades (Alto Lucro / Baixo Giro)</strong>
+                <span style={{ background: '#059669', color: '#ffffff', fontSize: 11, fontWeight: 800, padding: '2px 6px', borderRadius: 4 }}>3 Itens</span>
+              </div>
+              <p style={{ fontSize: 12, color: '#cbd5e1', lineHeight: 1.5, marginBottom: 12 }}>
+                • <strong>Tartar de Atum c/ Foie Gras</strong> (R$ 78,00 · Margem 70.0%)<br />
+                • <strong>Carpaccio de Polvo Ponzu</strong> (R$ 72,00 · Margem 70.0%)<br />
+                • <strong>Saquê Hakutsuru Junmai</strong> (R$ 280,00 · Margem 60.7%)
+              </p>
+              <div style={{ background: '#0f172a', padding: 8, borderRadius: 8, fontSize: 11, color: '#a7f3d0' }}>
+                💡 <em>Recomendação KyttoIA:</em> Treinar garçons para sugerir na comanda como harmonização VIP.
+              </div>
+            </div>
+
+            <div style={{ background: '#1e293b', border: '2px solid #ef4444', borderRadius: 14, padding: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <strong style={{ color: '#fca5a5', fontSize: 15 }}>⚠️ Cães / Abacaxis (Baixo Lucro / Baixo Giro)</strong>
+                <span style={{ background: '#dc2626', color: '#ffffff', fontSize: 11, fontWeight: 800, padding: '2px 6px', borderRadius: 4 }}>2 Itens</span>
+              </div>
+              <p style={{ fontSize: 12, color: '#cbd5e1', lineHeight: 1.5, marginBottom: 12 }}>
+                • <strong>Niguiri Saint Peter Simples</strong> (R$ 18,00 · 42 vendas/mês)<br />
+                • <strong>Yakisoba Vegetariano</strong> (R$ 38,00 · 35 vendas/mês)
+              </p>
+              <div style={{ background: '#0f172a', padding: 8, borderRadius: 8, fontSize: 11, color: '#fca5a5' }}>
+                💡 <em>Recomendação KyttoIA:</em> Substituir por Robalo com raspas de limão cravo ou Shimeji na manteiga.
+              </div>
+            </div>
+          </div>
+
+          {/* Tabela de Fichas Técnicas */}
+          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 16, overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #334155', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#ffffff' }}>
+                📋 Fichas Técnicas Cadastradas ({fichasLista.length})
+              </h3>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: '#1e293b', borderBottom: '1px solid #334155', color: '#94a3b8' }}>
+                    <th style={{ padding: '12px 16px' }}>Código PDV</th>
+                    <th style={{ padding: '12px 16px' }}>Produto</th>
+                    <th style={{ padding: '12px 16px' }}>Categoria</th>
+                    <th style={{ padding: '12px 16px' }}>Preço Venda</th>
+                    <th style={{ padding: '12px 16px' }}>CMV Teórico</th>
+                    <th style={{ padding: '12px 16px' }}>Margem Bruta</th>
+                    <th style={{ padding: '12px 16px' }}>Ações</th>
+                  </tr>
+                </thead>
+                <tbody style={{ divideY: '1px solid #334155' }}>
+                  {fichasLista.map(f => (
+                    <tr key={f.codigoPdv} style={{ borderBottom: '1px solid #1e293b' }}>
+                      <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontWeight: 700, color: '#38bdf8' }}>{f.codigoPdv}</td>
+                      <td style={{ padding: '12px 16px', fontWeight: 700, color: '#ffffff' }}>
+                        {f.nomeProduto}
+                        <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>{f.insumosResumo}</div>
+                      </td>
+                      <td style={{ padding: '12px 16px', color: '#cbd5e1' }}>{f.categoria}</td>
+                      <td style={{ padding: '12px 16px', fontWeight: 800, color: '#10b981' }}>R$ {Number(f.precoVenda).toFixed(2)}</td>
+                      <td style={{ padding: '12px 16px', color: '#f59e0b', fontWeight: 700 }}>
+                        R$ {Number(f.cmvTeorico).toFixed(2)} ({Number(f.cmvPercentual).toFixed(1)}%)
+                      </td>
+                      <td style={{ padding: '12px 16px', color: '#38bdf8', fontWeight: 700 }}>
+                        R$ {Number(f.margemContribuicao).toFixed(2)}
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button
+                            onClick={() => abrirEditarFicha(f)}
+                            style={{ padding: '6px 10px', background: '#334155', border: 'none', borderRadius: 6, color: '#ffffff', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                          >
+                            <Edit size={13} /> Editar
+                          </button>
+                          <button
+                            onClick={() => excluirFicha(f.codigoPdv)}
+                            style={{ padding: '6px 10px', background: 'rgba(239, 68, 68, 0.2)', border: '1px solid #ef4444', borderRadius: 6, color: '#f87171', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                          >
+                            <Trash2 size={13} /> Excluir
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ABA: RESERVAS & HOSTESS FILA DIGITAL */}
+      {/* ========================================================================= */}
+      {abaAtiva === 'reservas' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Header & Ação de Nova Reserva */}
+          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 16, padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14 }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                <span style={{ fontSize: 24 }}>🛎️</span>
+                <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#ffffff' }}>
+                  Hostess Virtual · Reservas & Fila de Espera Digital
+                </h2>
+                <span style={{ background: '#3b82f6', color: '#ffffff', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 6 }}>
+                  3 Tatames VIP Disponíveis
+                </span>
+              </div>
+              <p style={{ margin: 0, fontSize: 13, color: '#94a3b8' }}>
+                Gestão de chegadas, chamadas automáticas via WhatsApp pelo Zumi e acomodação em mesas físicas em 1 clique.
+              </p>
+            </div>
+            <button
+              onClick={abrirNovaReserva}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '10px 18px',
+                background: 'linear-gradient(135deg, #E63946 0%, #D62828 100%)',
+                border: 'none',
+                borderRadius: 10,
+                color: '#ffffff',
+                fontSize: 13,
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(230, 57, 70, 0.35)'
+              }}
+            >
+              <Plus size={16} /> ➕ Nova Reserva
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
+            {/* Coluna Fila de Espera */}
+            <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 16, padding: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, borderBottom: '1px solid #334155', pb: 10 }}>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>⏳</span> Fila de Espera ao Vivo ({filaEsperaLista.length})
+                </h3>
+                <span style={{ fontSize: 11, color: '#94a3b8' }}>Tempo Médio: 15 min</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {filaEsperaLista.map(f => (
+                  <div key={f.id} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 12, padding: 14 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <strong style={{ color: '#ffffff', fontSize: 14 }}>#{f.posicao} · {f.clienteNome}</strong>
+                      <span style={{ background: '#334155', color: '#cbd5e1', fontSize: 11, padding: '2px 6px', borderRadius: 4 }}>
+                        👥 {f.qtdPessoas} pessoas
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 10 }}>
+                      Telefone: {f.telefoneWhatsapp} | Preferência: {f.preferenciaSetor}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        onClick={() => chamarClienteFila(f)}
+                        style={{ flex: 1, padding: '8px 10px', background: '#059669', border: 'none', borderRadius: 8, color: '#ffffff', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
+                      >
+                        <Phone size={13} /> Chamar no WhatsApp
+                      </button>
+                      <button
+                        onClick={() => acomodarClienteFila(f)}
+                        style={{ flex: 1, padding: '8px 10px', background: '#2563eb', border: 'none', borderRadius: 8, color: '#ffffff', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
+                      >
+                        <Check size={13} /> Acomodar na Mesa
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Coluna Reservas do Dia */}
+            <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 16, padding: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, borderBottom: '1px solid #334155', pb: 10 }}>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>📅</span> Reservas Confirmadas ({reservasLista.length})
+                </h3>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {reservasLista.map(r => (
+                  <div key={r.id} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 12, padding: 14 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <strong style={{ color: '#ffffff', fontSize: 14 }}>{r.clienteNome}</strong>
+                      <span style={{ background: '#059669', color: '#ffffff', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 4 }}>
+                        {r.hora} · {r.data}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#cbd5e1', marginBottom: 4 }}>
+                      Setor: <strong>{r.setorDesejado}</strong> (Mesa {r.mesaNumero}) · 👥 {r.qtdPessoas} pessoas
+                    </div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic', marginBottom: 10 }}>
+                      "{r.observacoes}"
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                      <button
+                        onClick={() => cancelarReserva(r.id)}
+                        style={{ padding: '6px 12px', background: 'rgba(239, 68, 68, 0.2)', border: '1px solid #ef4444', borderRadius: 6, color: '#f87171', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                      >
+                        Cancelar Reserva
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ABA: COMPRAS & COTAÇÃO DE FORNECEDORES */}
+      {/* ========================================================================= */}
+      {abaAtiva === 'compras' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Header */}
+          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 16, padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14 }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                <span style={{ fontSize: 24 }}>🛒</span>
+                <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#ffffff' }}>
+                  Automação de Compras & Cotação com Fornecedores
+                </h2>
+                <span style={{ background: '#ea580c', color: '#ffffff', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 6 }}>
+                  R$ 7.226,85 Sugerido para Reposição
+                </span>
+              </div>
+              <p style={{ margin: 0, fontSize: 13, color: '#94a3b8' }}>
+                Algoritmo de cálculo de ponto de pedido para o fim de semana com fornecedores de Cuiabá, SP e Tangará da Serra.
+              </p>
+            </div>
+            <button
+              onClick={() => abrirNovaCompra()}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '10px 18px',
+                background: 'linear-gradient(135deg, #E63946 0%, #D62828 100%)',
+                border: 'none',
+                borderRadius: 10,
+                color: '#ffffff',
+                fontSize: 13,
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(230, 57, 70, 0.35)'
+              }}
+            >
+              <Plus size={16} /> 🛒 Emitir Ordem de Compra
+            </button>
+          </div>
+
+          {/* Cards de Sugestões de Reposição */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+            {comprasSugestoesLista.map(sug => (
+              <div key={sug.codigo} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 14, padding: 18, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <span style={{ background: sug.criticidade === 'ALTA' ? '#dc2626' : '#d97706', color: '#ffffff', fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 4 }}>
+                      {sug.criticidade} CRITICIDADE
+                    </span>
+                    <span style={{ fontSize: 12, color: '#94a3b8', fontFamily: 'monospace' }}>{sug.codigo}</span>
+                  </div>
+                  <strong style={{ color: '#ffffff', fontSize: 15, display: 'block', marginBottom: 6 }}>{sug.insumo}</strong>
+                  <div style={{ fontSize: 12, color: '#cbd5e1', marginBottom: 4 }}>
+                    Saldo Atual: <strong style={{ color: '#f87171' }}>{sug.saldoAtualKg} {sug.unidade}</strong> (Mínimo: {sug.estoqueMinimoKg} {sug.unidade})
+                  </div>
+                  <div style={{ fontSize: 12, color: '#10b981', fontWeight: 700, marginBottom: 8 }}>
+                    Sugerido Comprar: +{sug.sugestaoCompraKg} {sug.unidade} (~R$ {sug.valorTotalEstimado.toFixed(2)})
+                  </div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 12 }}>
+                    Fornecedor: <em>{sug.fornecedor}</em>
+                  </div>
+                </div>
+                <button
+                  onClick={() => abrirNovaCompra(sug)}
+                  style={{ width: '100%', padding: '8px 12px', background: '#334155', border: 'none', borderRadius: 8, color: '#ffffff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Criar Pedido Deste Insumo
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Ordens de Compra Emitidas */}
+          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 16, overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #334155' }}>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#ffffff' }}>
+                📦 Histórico de Ordens de Compra ({ordensCompraLista.length})
+              </h3>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: '#1e293b', borderBottom: '1px solid #334155', color: '#94a3b8' }}>
+                    <th style={{ padding: '12px 16px' }}>Ordem ID</th>
+                    <th style={{ padding: '12px 16px' }}>Fornecedor</th>
+                    <th style={{ padding: '12px 16px' }}>Emissão</th>
+                    <th style={{ padding: '12px 16px' }}>Valor Total</th>
+                    <th style={{ padding: '12px 16px' }}>Condição</th>
+                    <th style={{ padding: '12px 16px' }}>Status</th>
+                    <th style={{ padding: '12px 16px' }}>Ação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ordensCompraLista.map(o => (
+                    <tr key={o.id} style={{ borderBottom: '1px solid #1e293b' }}>
+                      <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontWeight: 700, color: '#38bdf8' }}>{o.id}</td>
+                      <td style={{ padding: '12px 16px', color: '#ffffff', fontWeight: 600 }}>{o.fornecedor}</td>
+                      <td style={{ padding: '12px 16px', color: '#cbd5e1' }}>{o.dataEmissao}</td>
+                      <td style={{ padding: '12px 16px', color: '#10b981', fontWeight: 800 }}>R$ {Number(o.valorTotal).toFixed(2)}</td>
+                      <td style={{ padding: '12px 16px', color: '#94a3b8' }}>{o.condicaoPagamento}</td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <span style={{
+                          background: o.status === 'recebido' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(234, 179, 8, 0.2)',
+                          color: o.status === 'recebido' ? '#34d399' : '#fde047',
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 700
+                        }}>
+                          {o.status.toUpperCase()}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        {o.status !== 'recebido' && (
+                          <button
+                            onClick={() => receberOrdemCompra(o.id)}
+                            style={{ padding: '6px 12px', background: '#059669', border: 'none', borderRadius: 6, color: '#ffffff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                          >
+                            Dar Entrada
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {abaAtiva === 'pilot' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={{
@@ -5278,6 +5700,254 @@ export default function ZumaRestauranteSuite() {
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
                 <button type="button" onClick={() => setModalAjusteEstoque(null)} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid #475569', borderRadius: 8, color: '#cbd5e1', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Cancelar</button>
                 <button type="submit" style={{ padding: '8px 18px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', border: 'none', borderRadius: 8, color: '#ffffff', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Salvar Ajuste</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      
+      {/* ========================================================================= */}
+      {/* MODAL: FICHA TÉCNICA (INCLUIR / EDITAR) */}
+      {/* ========================================================================= */}
+      {modalFicha && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.8)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
+          <div style={{ background: '#1e293b', border: '1px solid rgba(230, 57, 70, 0.5)', borderRadius: 16, width: '100%', maxWidth: 500, padding: 24, boxShadow: '0 20px 40px rgba(0, 0, 0, 0.7)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, paddingBottom: 12, borderBottom: '1px solid #334155' }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#ffffff' }}>
+                {modalFicha.isNovo ? '➕ Nova Ficha Técnica' : '✏️ Editar Ficha Técnica'}
+              </h3>
+              <button onClick={() => setModalFicha(null)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={20} /></button>
+            </div>
+            <form onSubmit={salvarFichaSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Código PDV *</label>
+                  <input
+                    type="text"
+                    required
+                    value={modalFicha.ficha.codigoPdv}
+                    onChange={e => setModalFicha({ ...modalFicha, ficha: { ...modalFicha.ficha, codigoPdv: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Nome do Prato *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ex: Combinado Especial 30 Peças"
+                    value={modalFicha.ficha.nomeProduto}
+                    onChange={e => setModalFicha({ ...modalFicha, ficha: { ...modalFicha.ficha, nomeProduto: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  />
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Categoria</label>
+                  <select
+                    value={modalFicha.ficha.categoria}
+                    onChange={e => setModalFicha({ ...modalFicha, ficha: { ...modalFicha.ficha, categoria: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  >
+                    <option value="Combinados">Combinados</option>
+                    <option value="Sashimis">Sashimis</option>
+                    <option value="Hot Rolls & Empanados">Hot Rolls & Empanados</option>
+                    <option value="Temakis">Temakis</option>
+                    <option value="Pratos Quentes & Wok">Pratos Quentes & Wok</option>
+                    <option value="Sobremesas Orientais">Sobremesas Orientais</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Preço Venda (R$) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={modalFicha.ficha.precoVenda}
+                    onChange={e => setModalFicha({ ...modalFicha, ficha: { ...modalFicha.ficha, precoVenda: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Insumos e Proporções em Gramas</label>
+                <textarea
+                  rows={3}
+                  value={modalFicha.ficha.insumosTexto}
+                  onChange={e => setModalFicha({ ...modalFicha, ficha: { ...modalFicha.ficha, insumosTexto: e.target.value } })}
+                  placeholder="Ex: Salmão Chileno (380g), Arroz Gohan (250g), Cream Cheese (80g)"
+                  style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13, resize: 'vertical' }}
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+                <button type="button" onClick={() => setModalFicha(null)} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid #475569', borderRadius: 8, color: '#cbd5e1', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Cancelar</button>
+                <button type="submit" style={{ padding: '8px 18px', background: '#E63946', border: 'none', borderRadius: 8, color: '#ffffff', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Salvar Ficha Técnica</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: RESERVA HOSTESS */}
+      {/* ========================================================================= */}
+      {modalReserva && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.8)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
+          <div style={{ background: '#1e293b', border: '1px solid rgba(230, 57, 70, 0.5)', borderRadius: 16, width: '100%', maxWidth: 480, padding: 24, boxShadow: '0 20px 40px rgba(0, 0, 0, 0.7)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, paddingBottom: 12, borderBottom: '1px solid #334155' }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#ffffff' }}>
+                📅 Nova Reserva · Zuma Salão & Tatame VIP
+              </h3>
+              <button onClick={() => setModalReserva(null)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={20} /></button>
+            </div>
+            <form onSubmit={salvarReservaSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Nome do Cliente *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Dra. Mariana Zang"
+                  value={modalReserva.reserva.clienteNome}
+                  onChange={e => setModalReserva({ ...modalReserva, reserva: { ...modalReserva.reserva, clienteNome: e.target.value } })}
+                  style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Telefone WhatsApp *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="(65) 9"
+                    value={modalReserva.reserva.telefoneWhatsapp}
+                    onChange={e => setModalReserva({ ...modalReserva, reserva: { ...modalReserva.reserva, telefoneWhatsapp: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Qtd. Pessoas</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={modalReserva.reserva.qtdPessoas}
+                    onChange={e => setModalReserva({ ...modalReserva, reserva: { ...modalReserva.reserva, qtdPessoas: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  />
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Data</label>
+                  <input
+                    type="date"
+                    value={modalReserva.reserva.data}
+                    onChange={e => setModalReserva({ ...modalReserva, reserva: { ...modalReserva.reserva, data: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Horário</label>
+                  <input
+                    type="time"
+                    value={modalReserva.reserva.hora}
+                    onChange={e => setModalReserva({ ...modalReserva, reserva: { ...modalReserva.reserva, hora: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Setor Desejado</label>
+                <select
+                  value={modalReserva.reserva.setorDesejado}
+                  onChange={e => setModalReserva({ ...modalReserva, reserva: { ...modalReserva.reserva, setorDesejado: e.target.value } })}
+                  style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                >
+                  <option value="Tatame VIP 01">Tatame VIP 01 (Reservado)</option>
+                  <option value="Tatame VIP 02">Tatame VIP 02 (Reservado)</option>
+                  <option value="Deck Panorâmico">Deck Panorâmico Climatizado</option>
+                  <option value="Salão Principal">Salão Principal</option>
+                  <option value="Sushi Bar Omakase">Sushi Bar Omakase</option>
+                </select>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+                <button type="button" onClick={() => setModalReserva(null)} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid #475569', borderRadius: 8, color: '#cbd5e1', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Cancelar</button>
+                <button type="submit" style={{ padding: '8px 18px', background: '#E63946', border: 'none', borderRadius: 8, color: '#ffffff', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Confirmar Reserva</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: ORDEM DE COMPRA */}
+      {/* ========================================================================= */}
+      {modalCompra && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.8)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
+          <div style={{ background: '#1e293b', border: '1px solid rgba(230, 57, 70, 0.5)', borderRadius: 16, width: '100%', maxWidth: 480, padding: 24, boxShadow: '0 20px 40px rgba(0, 0, 0, 0.7)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, paddingBottom: 12, borderBottom: '1px solid #334155' }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#ffffff' }}>
+                🛒 Emitir Ordem de Compra · Fornecedores
+              </h3>
+              <button onClick={() => setModalCompra(null)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={20} /></button>
+            </div>
+            <form onSubmit={salvarCompraSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Fornecedor Homologado</label>
+                <select
+                  value={modalCompra.fornecedor}
+                  onChange={e => setModalCompra({ ...modalCompra, fornecedor: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                >
+                  <option value="Pescados Pantanal Cuiabá">Pescados Pantanal Cuiabá (Pescados Nobres)</option>
+                  <option value="Mar del Sur Pescados Nobres">Mar del Sur Pescados Nobres (Atum & Polvo)</option>
+                  <option value="Distribuidora Oriente SP">Distribuidora Oriente SP (Algas, Arroz & Shoyu)</option>
+                  <option value="Distribuidora Laticínios MT">Distribuidora Laticínios MT (Cream Cheese)</option>
+                  <option value="Atacadão Tangará da Serra">Atacadão Tangará da Serra (Secos & Descartáveis)</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Insumo Principal *</label>
+                <input
+                  type="text"
+                  required
+                  value={modalCompra.insumo}
+                  onChange={e => setModalCompra({ ...modalCompra, insumo: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Qtd (kg ou un) *</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    required
+                    value={modalCompra.qtdKg}
+                    onChange={e => setModalCompra({ ...modalCompra, qtdKg: parseFloat(e.target.value) || 0 })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Preço Unitário (R$) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={modalCompra.precoKg}
+                    onChange={e => setModalCompra({ ...modalCompra, precoKg: parseFloat(e.target.value) || 0 })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  />
+                </div>
+              </div>
+              <div style={{ background: '#0f172a', padding: '10px 14px', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: '#94a3b8' }}>Valor Total da Ordem:</span>
+                <strong style={{ fontSize: 15, color: '#10b981' }}>R$ {(modalCompra.qtdKg * modalCompra.precoKg).toFixed(2)}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+                <button type="button" onClick={() => setModalCompra(null)} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid #475569', borderRadius: 8, color: '#cbd5e1', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Cancelar</button>
+                <button type="submit" style={{ padding: '8px 18px', background: '#E63946', border: 'none', borderRadius: 8, color: '#ffffff', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Emitir Ordem de Compra</button>
               </div>
             </form>
           </div>

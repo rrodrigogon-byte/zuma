@@ -155,6 +155,15 @@
       <button onclick="mudarAba('crm-clube-zumi')" class="tab-btn px-3.5 py-2 rounded-xl text-zuma-muted hover:text-white transition-all flex items-center space-x-1.5">
         <span>⭐</span><span>CRM & Clube Zumi</span>
       </button>
+            <button onclick="mudarAba('fichas-tecnicas-bcg')" class="tab-btn px-3.5 py-2 rounded-xl text-zuma-muted hover:text-white transition-all flex items-center space-x-1.5">
+        <span>🍱</span><span>Fichas & Matriz BCG</span>
+      </button>
+      <button onclick="mudarAba('reservas-hostess')" class="tab-btn px-3.5 py-2 rounded-xl text-zuma-muted hover:text-white transition-all flex items-center space-x-1.5">
+        <span>🛎️</span><span>Reservas & Hostess</span>
+      </button>
+      <button onclick="mudarAba('compras-cotacao')" class="tab-btn px-3.5 py-2 rounded-xl text-zuma-muted hover:text-white transition-all flex items-center space-x-1.5">
+        <span>🛒</span><span>Compras & Reposição</span>
+      </button>
       <button onclick="mudarAba('empresa-cadastros')" class="tab-btn px-3.5 py-2 rounded-xl text-zuma-muted hover:text-white transition-all flex items-center space-x-1.5">
         <span>🏢</span><span>Empresa Exclusiva</span>
       </button>
@@ -1894,6 +1903,391 @@ Tempo estimado: 35-45 min
           <p class="text-zinc-300">
             Neste sistema, apenas a empresa Zuma Cozinha Oriental está configurada e ativa. Todos os módulos operacionais (PDV, KDS, Mesas, Estoque, Financeiro e CRM) operam com escopo 100% exclusivo da Zuma.
           </p>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ================= ABA 11: FICHAS TÉCNICAS & MATRIZ BCG ================= -->
+    <section id="aba-fichas-tecnicas-bcg" class="hidden space-y-6">
+      <div class="bg-zuma-surface p-5 sm:p-6 rounded-2xl border border-zuma-border space-y-6 shadow-xl">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-zuma-border pb-5">
+          <div class="space-y-1">
+            <div class="flex items-center space-x-3">
+              <span class="text-2xl">🍱</span>
+              <h2 class="text-xl font-extrabold text-white">Fichas Técnicas & Engenharia de Cardápio (Matriz BCG)</h2>
+              <span class="px-2.5 py-1 rounded-md text-xs font-black bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                CMV Médio: 29.8%
+              </span>
+            </div>
+            <p class="text-xs text-zuma-muted">
+              Composição em gramas de pescados nobres, rendimento e rentabilidade com cálculo em tempo real pelo Motor KyttoIA 2.5 Flash.
+            </p>
+          </div>
+          <button onclick="abrirModalNovaFichaPrompt()" class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-extrabold text-xs shadow-lg transition-all flex items-center space-x-2">
+            <span>➕</span><span>Nova Ficha Técnica</span>
+          </button>
+        </div>
+
+        <!-- Cards Matriz BCG -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="bg-zuma-card p-4 rounded-xl border-2 border-yellow-500/50 space-y-2">
+            <div class="flex justify-between items-center">
+              <h3 class="font-extrabold text-yellow-300 text-sm">⭐ Estrelas (Alto Lucro / Alto Giro)</h3>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-yellow-500 text-black">3 Itens</span>
+            </div>
+            <p class="text-xs text-zinc-300 leading-relaxed">
+              • <strong>Combo VIP 60 Peças</strong> (R$ 219,90 · Margem 69.0%)<br>
+              • <strong>Sashimi Salmão Trufado</strong> (R$ 64,90 · Margem 71.5%)<br>
+              • <strong>Uramaki Ebi Especial</strong> (R$ 52,90 · Margem 72.0%)
+            </p>
+            <div class="p-2 rounded bg-black/40 text-[11px] text-yellow-300">
+              💡 <em>Ação KyttoIA:</em> Manter destaque nas fotos e redes sociais.
+            </div>
+          </div>
+
+          <div class="bg-zuma-card p-4 rounded-xl border-2 border-blue-500/50 space-y-2">
+            <div class="flex justify-between items-center">
+              <h3 class="font-extrabold text-blue-300 text-sm">🐎 Burros de Carga (Alto Giro / Margem Média)</h3>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500 text-white">3 Itens</span>
+            </div>
+            <p class="text-xs text-zinc-300 leading-relaxed">
+              • <strong>Rodízio Zuma Adulto</strong> (R$ 139,90 · Volume 840/mês)<br>
+              • <strong>Temaki Salmão Filadélfia</strong> (R$ 36,90 · Volume 760/mês)<br>
+              • <strong>Hot Roll Filadélfia</strong> (R$ 38,90 · Volume 920/mês)
+            </p>
+            <div class="p-2 rounded bg-black/40 text-[11px] text-blue-300">
+              💡 <em>Ação KyttoIA:</em> Controlar desperdício e aproveitar aparas nobres.
+            </div>
+          </div>
+
+          <div class="bg-zuma-card p-4 rounded-xl border-2 border-emerald-500/50 space-y-2">
+            <div class="flex justify-between items-center">
+              <h3 class="font-extrabold text-emerald-300 text-sm">💎 Oportunidades (Alto Lucro / Baixo Giro)</h3>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500 text-white">3 Itens</span>
+            </div>
+            <p class="text-xs text-zinc-300 leading-relaxed">
+              • <strong>Tartar de Atum Foie Gras</strong> (R$ 78,00 · Margem 70.0%)<br>
+              • <strong>Carpaccio de Polvo Ponzu</strong> (R$ 72,00 · Margem 70.0%)<br>
+              • <strong>Saquê Hakutsuru Junmai</strong> (R$ 280,00 · Margem 60.7%)
+            </p>
+            <div class="p-2 rounded bg-black/40 text-[11px] text-emerald-300">
+              💡 <em>Ação KyttoIA:</em> Estimular garçons a sugerirem na comanda.
+            </div>
+          </div>
+
+          <div class="bg-zuma-card p-4 rounded-xl border-2 border-red-500/50 space-y-2">
+            <div class="flex justify-between items-center">
+              <h3 class="font-extrabold text-red-300 text-sm">⚠️ Cães / Abacaxis (Baixo Lucro / Baixo Giro)</h3>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500 text-white">2 Itens</span>
+            </div>
+            <p class="text-xs text-zinc-300 leading-relaxed">
+              • <strong>Niguiri Saint Peter</strong> (R$ 18,00 · 42 vendas/mês)<br>
+              • <strong>Yakisoba Vegetariano</strong> (R$ 38,00 · 35 vendas/mês)
+            </p>
+            <div class="p-2 rounded bg-black/40 text-[11px] text-red-300">
+              💡 <em>Ação KyttoIA:</em> Substituir por Robalo ou Shimeji na manteiga.
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabela Fichas -->
+        <div class="bg-zuma-card rounded-xl border border-zuma-border overflow-hidden">
+          <div class="p-4 border-b border-zuma-border flex justify-between items-center">
+            <h3 class="font-extrabold text-white text-sm">📋 Fichas Técnicas Homologadas</h3>
+            <span class="text-xs text-zuma-muted font-mono">Atualização Automática c/ Insumos</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-zinc-900/80 text-zuma-muted border-b border-zuma-border">
+                <tr>
+                  <th class="p-3">Código</th>
+                  <th class="p-3">Prato</th>
+                  <th class="p-3">Categoria</th>
+                  <th class="p-3">Preço Venda</th>
+                  <th class="p-3">CMV Teórico</th>
+                  <th class="p-3">Margem Bruta</th>
+                  <th class="p-3">Ações</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-zuma-border/40 text-slate-200">
+                <tr class="hover:bg-zinc-800/40">
+                  <td class="p-3 font-mono font-bold text-sky-400">ZUM-003</td>
+                  <td class="p-3 font-bold text-white">Combinado Especial 30 Peças Salmão Fresco</td>
+                  <td class="p-3 text-zuma-muted">Combinados</td>
+                  <td class="p-3 font-bold text-emerald-400">R$ 89,90</td>
+                  <td class="p-3 font-semibold text-yellow-400">R$ 43,65 (48.5%)</td>
+                  <td class="p-3 font-bold text-sky-400">R$ 46,25 (51.5%)</td>
+                  <td class="p-3">
+                    <button onclick="alert('Ficha ZUM-003: 380g Salmão Fresco, 250g Gohan, 80g Cream Cheese, 3x Nori')" class="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-xs rounded text-white">Ver Insumos</button>
+                  </td>
+                </tr>
+                <tr class="hover:bg-zinc-800/40">
+                  <td class="p-3 font-mono font-bold text-sky-400">ZUM-HOT</td>
+                  <td class="p-3 font-bold text-white">Hot Roll Filadélfia Especial (10 un)</td>
+                  <td class="p-3 text-zuma-muted">Hot Rolls & Empanados</td>
+                  <td class="p-3 font-bold text-emerald-400">R$ 42,00</td>
+                  <td class="p-3 font-semibold text-yellow-400">R$ 19,12 (45.5%)</td>
+                  <td class="p-3 font-bold text-sky-400">R$ 22,88 (54.5%)</td>
+                  <td class="p-3">
+                    <button onclick="alert('Ficha ZUM-HOT: 150g Salmão Aparas Nobres, 120g Gohan, 50g Cream Cheese, Panko')" class="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-xs rounded text-white">Ver Insumos</button>
+                  </td>
+                </tr>
+                <tr class="hover:bg-zinc-800/40">
+                  <td class="p-3 font-mono font-bold text-sky-400">ZUM-SASHIMI</td>
+                  <td class="p-3 font-bold text-white">Sashimi Salmão Fresco (12 fatias)</td>
+                  <td class="p-3 text-zuma-muted">Sashimis</td>
+                  <td class="p-3 font-bold text-emerald-400">R$ 58,00</td>
+                  <td class="p-3 font-semibold text-yellow-400">R$ 22,04 (38.0%)</td>
+                  <td class="p-3 font-bold text-sky-400">R$ 35,96 (62.0%)</td>
+                  <td class="p-3">
+                    <button onclick="alert('Ficha ZUM-SASHIMI: 220g Lombo Nobre de Salmão Fresco Chileno')" class="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-xs rounded text-white">Ver Insumos</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= ABA 12: RESERVAS & HOSTESS ================= -->
+    <section id="aba-reservas-hostess" class="hidden space-y-6">
+      <div class="bg-zuma-surface p-5 sm:p-6 rounded-2xl border border-zuma-border space-y-6 shadow-xl">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-zuma-border pb-5">
+          <div class="space-y-1">
+            <div class="flex items-center space-x-3">
+              <span class="text-2xl">🛎️</span>
+              <h2 class="text-xl font-extrabold text-white">Hostess Virtual · Reservas & Fila de Espera Digital</h2>
+              <span class="px-2.5 py-1 rounded-md text-xs font-black bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                3 Tatames VIP Disponíveis
+              </span>
+            </div>
+            <p class="text-xs text-zuma-muted">
+              Gestão de chegadas, chamadas automáticas via WhatsApp pelo Zumi e acomodação em mesas físicas em 1 clique.
+            </p>
+          </div>
+          <div class="flex items-center space-x-2">
+            <button onclick="abrirModalNovaReservaPrompt()" class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-extrabold text-xs shadow-lg transition-all flex items-center space-x-2">
+              <span>➕</span><span>Nova Reserva</span>
+            </button>
+            <button onclick="abrirModalEntrarFilaPrompt()" class="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs border border-zuma-border transition-all flex items-center space-x-2">
+              <span>⏳</span><span>Entrar na Fila</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <!-- Coluna Fila de Espera -->
+          <div class="bg-zuma-card p-4 rounded-xl border border-zuma-border space-y-4">
+            <div class="flex justify-between items-center border-b border-zuma-border pb-3">
+              <h3 class="font-extrabold text-white text-sm flex items-center space-x-2">
+                <span>⏳</span><span>Fila de Espera ao Vivo</span>
+              </h3>
+              <span class="text-xs text-zuma-muted font-mono">Tempo Médio: 15 min</span>
+            </div>
+            <div class="space-y-3">
+              <div class="bg-zinc-900/80 p-3.5 rounded-xl border border-zuma-border space-y-2">
+                <div class="flex justify-between items-center">
+                  <strong class="text-white text-sm">#1 · Renata Vasconcelos</strong>
+                  <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-zinc-800 text-zinc-300">👥 2 pessoas</span>
+                </div>
+                <p class="text-xs text-zuma-muted">Telefone: (65) 99812-4455 | Preferência: Sushi Bar ou Deck</p>
+                <div class="flex space-x-2 pt-1">
+                  <button onclick="alert('Notificação WhatsApp Zumi enviada: Sua mesa no Zuma está pronta!')" class="flex-1 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold">📲 Chamar no WhatsApp</button>
+                  <button onclick="alert('Cliente Renata Vasconcelos acomodada na Mesa 05 com sucesso!')" class="flex-1 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold">🍽️ Acomodar na Mesa</button>
+                </div>
+              </div>
+
+              <div class="bg-zinc-900/80 p-3.5 rounded-xl border border-zuma-border space-y-2">
+                <div class="flex justify-between items-center">
+                  <strong class="text-white text-sm">#2 · Thiago Mendonça</strong>
+                  <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-zinc-800 text-zinc-300">👥 4 pessoas</span>
+                </div>
+                <p class="text-xs text-zuma-muted">Telefone: (65) 99744-8899 | Preferência: Salão Principal</p>
+                <div class="flex space-x-2 pt-1">
+                  <button onclick="alert('Notificação WhatsApp Zumi enviada!')" class="flex-1 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold">📲 Chamar no WhatsApp</button>
+                  <button onclick="alert('Cliente Thiago Mendonça acomodado na Mesa 08 com sucesso!')" class="flex-1 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold">🍽️ Acomodar na Mesa</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Coluna Reservas do Dia -->
+          <div class="bg-zuma-card p-4 rounded-xl border border-zuma-border space-y-4">
+            <div class="flex justify-between items-center border-b border-zuma-border pb-3">
+              <h3 class="font-extrabold text-white text-sm flex items-center space-x-2">
+                <span>📅</span><span>Reservas Confirmadas</span>
+              </h3>
+              <span class="text-xs text-emerald-400 font-bold">100% Confirmadas</span>
+            </div>
+            <div class="space-y-3">
+              <div class="bg-zinc-900/80 p-3.5 rounded-xl border border-zuma-border space-y-2">
+                <div class="flex justify-between items-center">
+                  <strong class="text-white text-sm">Dr. Rodrigo Gonçalves</strong>
+                  <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/20 text-emerald-400">20:00 · Hoje</span>
+                </div>
+                <p class="text-xs text-zinc-300">Setor: <strong>Tatame VIP 01</strong> (Mesa 21) · 👥 4 pessoas</p>
+                <p class="text-[11px] text-zuma-muted italic">"Mesa VIP Tatame reservada para jantar executivo"</p>
+                <div class="flex justify-end pt-1">
+                  <button onclick="alert('Reserva Dr. Rodrigo cancelada com sucesso!')" class="text-xs text-red-400 hover:text-red-300 font-semibold">Cancelar Reserva</button>
+                </div>
+              </div>
+
+              <div class="bg-zinc-900/80 p-3.5 rounded-xl border border-zuma-border space-y-2">
+                <div class="flex justify-between items-center">
+                  <strong class="text-white text-sm">Camila Fernandes</strong>
+                  <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/20 text-emerald-400">20:30 · Hoje</span>
+                </div>
+                <p class="text-xs text-zinc-300">Setor: <strong>Deck Panorâmico</strong> (Mesa 14) · 👥 2 pessoas</p>
+                <p class="text-[11px] text-zuma-muted italic">"Mesa romântica deck climatizado"</p>
+                <div class="flex justify-end pt-1">
+                  <button onclick="alert('Reserva Camila cancelada com sucesso!')" class="text-xs text-red-400 hover:text-red-300 font-semibold">Cancelar Reserva</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= ABA 13: COMPRAS & COTAÇÃO ================= -->
+    <section id="aba-compras-cotacao" class="hidden space-y-6">
+      <div class="bg-zuma-surface p-5 sm:p-6 rounded-2xl border border-zuma-border space-y-6 shadow-xl">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-zuma-border pb-5">
+          <div class="space-y-1">
+            <div class="flex items-center space-x-3">
+              <span class="text-2xl">🛒</span>
+              <h2 class="text-xl font-extrabold text-white">Automação de Compras & Cotação com Fornecedores</h2>
+              <span class="px-2.5 py-1 rounded-md text-xs font-black bg-orange-500/20 text-orange-400 border border-orange-500/30">
+                R$ 7.226,85 Sugerido para Reposição
+              </span>
+            </div>
+            <p class="text-xs text-zuma-muted">
+              Algoritmo de cálculo de ponto de pedido para o fim de semana com fornecedores de Cuiabá, SP e Tangará da Serra.
+            </p>
+          </div>
+          <button onclick="abrirModalNovaCompraPrompt()" class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-extrabold text-xs shadow-lg transition-all flex items-center space-x-2">
+            <span>➕</span><span>Emitir Ordem de Compra</span>
+          </button>
+        </div>
+
+        <!-- Cards de Sugestões de Reposição -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="bg-zuma-card p-4 rounded-xl border border-zuma-border space-y-2 flex flex-col justify-between">
+            <div class="space-y-1.5">
+              <div class="flex justify-between items-center">
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white">ALTA CRITICIDADE</span>
+                <span class="text-xs font-mono text-zuma-muted">INS-001</span>
+              </div>
+              <strong class="text-white text-sm block">Salmão Fresco Chileno (Filé Limpo)</strong>
+              <p class="text-xs text-zinc-300">Saldo Atual: <span class="text-red-400 font-bold">18.5 kg</span> (Mín: 30.0 kg)</p>
+              <p class="text-xs text-emerald-400 font-bold">Sugerido: +45.0 kg (~R$ 3.731,85)</p>
+              <p class="text-[11px] text-zuma-muted">Fornecedor: <em>Pescados Pantanal Cuiabá</em></p>
+            </div>
+            <button onclick="abrirModalNovaCompraPrompt('Pescados Pantanal Cuiabá', 'Salmão Fresco Chileno (Filé Limpo)', 45.0, 82.93)" class="w-full py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-white transition-colors">
+              Pedir Este Insumo
+            </button>
+          </div>
+
+          <div class="bg-zuma-card p-4 rounded-xl border border-zuma-border space-y-2 flex flex-col justify-between">
+            <div class="space-y-1.5">
+              <div class="flex justify-between items-center">
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-600 text-white">MÉDIA CRITICIDADE</span>
+                <span class="text-xs font-mono text-zuma-muted">INS-002</span>
+              </div>
+              <strong class="text-white text-sm block">Atum Fresco Yellowfin (Lombo Nobre)</strong>
+              <p class="text-xs text-zinc-300">Saldo Atual: <span class="text-yellow-400 font-bold">6.2 kg</span> (Mín: 10.0 kg)</p>
+              <p class="text-xs text-emerald-400 font-bold">Sugerido: +15.0 kg (~R$ 1.425,00)</p>
+              <p class="text-[11px] text-zuma-muted">Fornecedor: <em>Mar del Sur Pescados Nobres</em></p>
+            </div>
+            <button onclick="abrirModalNovaCompraPrompt('Mar del Sur Pescados Nobres', 'Atum Fresco Yellowfin', 15.0, 95.00)" class="w-full py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-white transition-colors">
+              Pedir Este Insumo
+            </button>
+          </div>
+
+          <div class="bg-zuma-card p-4 rounded-xl border border-zuma-border space-y-2 flex flex-col justify-between">
+            <div class="space-y-1.5">
+              <div class="flex justify-between items-center">
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-600 text-white">MÉDIA CRITICIDADE</span>
+                <span class="text-xs font-mono text-zuma-muted">INS-005</span>
+              </div>
+              <strong class="text-white text-sm block">Arroz Gohan Curto Japonês (Mirokumai)</strong>
+              <p class="text-xs text-zinc-300">Saldo Atual: <span class="text-yellow-400 font-bold">28.0 kg</span> (Mín: 50.0 kg)</p>
+              <p class="text-xs text-emerald-400 font-bold">Sugerido: +80.0 kg (~R$ 1.120,00)</p>
+              <p class="text-[11px] text-zuma-muted">Fornecedor: <em>Distribuidora Oriente SP</em></p>
+            </div>
+            <button onclick="abrirModalNovaCompraPrompt('Distribuidora Oriente SP', 'Arroz Gohan Curto Japonês', 80.0, 14.00)" class="w-full py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-white transition-colors">
+              Pedir Este Insumo
+            </button>
+          </div>
+
+          <div class="bg-zuma-card p-4 rounded-xl border border-zuma-border space-y-2 flex flex-col justify-between">
+            <div class="space-y-1.5">
+              <div class="flex justify-between items-center">
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-600 text-white">BAIXA CRITICIDADE</span>
+                <span class="text-xs font-mono text-zuma-muted">INS-008</span>
+              </div>
+              <strong class="text-white text-sm block">Cream Cheese Original Tradicional</strong>
+              <p class="text-xs text-zinc-300">Saldo Atual: <span class="text-zinc-200 font-bold">8.5 kg</span> (Mín: 15.0 kg)</p>
+              <p class="text-xs text-emerald-400 font-bold">Sugerido: +25.0 kg (~R$ 950,00)</p>
+              <p class="text-[11px] text-zuma-muted">Fornecedor: <em>Distribuidora Laticínios MT</em></p>
+            </div>
+            <button onclick="abrirModalNovaCompraPrompt('Distribuidora Laticínios MT', 'Cream Cheese Original', 25.0, 38.00)" class="w-full py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-white transition-colors">
+              Pedir Este Insumo
+            </button>
+          </div>
+        </div>
+
+        <!-- Tabela Ordens de Compra -->
+        <div class="bg-zuma-card rounded-xl border border-zuma-border overflow-hidden">
+          <div class="p-4 border-b border-zuma-border flex justify-between items-center">
+            <h3 class="font-extrabold text-white text-sm">📦 Histórico de Ordens de Compra</h3>
+            <span class="text-xs text-zuma-muted font-mono">Integração Direta Contas a Pagar</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-zinc-900/80 text-zuma-muted border-b border-zuma-border">
+                <tr>
+                  <th class="p-3">Ordem ID</th>
+                  <th class="p-3">Fornecedor</th>
+                  <th class="p-3">Data Emissão</th>
+                  <th class="p-3">Valor Total</th>
+                  <th class="p-3">Condição</th>
+                  <th class="p-3">Status</th>
+                  <th class="p-3">Ações</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-zuma-border/40 text-slate-200">
+                <tr class="hover:bg-zinc-800/40">
+                  <td class="p-3 font-mono font-bold text-sky-400">OC-2026-045</td>
+                  <td class="p-3 font-semibold text-white">Pescados Pantanal Cuiabá</td>
+                  <td class="p-3 text-zuma-muted">2026-11-19</td>
+                  <td class="p-3 font-bold text-emerald-400">R$ 4.146,50</td>
+                  <td class="p-3 text-zuma-muted">Boleto 14 dias</td>
+                  <td class="p-3">
+                    <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400">ENVIADO</span>
+                  </td>
+                  <td class="p-3">
+                    <button onclick="alert('Mercadoria da Ordem OC-2026-045 recebida com sucesso! Estoque e contas a pagar atualizados.')" class="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs">
+                      Dar Entrada
+                    </button>
+                  </td>
+                </tr>
+                <tr class="hover:bg-zinc-800/40">
+                  <td class="p-3 font-mono font-bold text-sky-400">OC-2026-044</td>
+                  <td class="p-3 font-semibold text-white">Distribuidora Oriente SP</td>
+                  <td class="p-3 text-zuma-muted">2026-11-17</td>
+                  <td class="p-3 font-bold text-emerald-400">R$ 2.240,00</td>
+                  <td class="p-3 text-zuma-muted">Boleto 21 dias</td>
+                  <td class="p-3">
+                    <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400">RECEBIDO</span>
+                  </td>
+                  <td class="p-3 text-zuma-muted font-mono text-[11px]">NF-88129 OK</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>

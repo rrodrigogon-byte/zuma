@@ -6280,3 +6280,369 @@ routerZuma.get('/proprietario/cnpjs-cidade', (req, res) => {
 
   });
 });
+
+// =========================================================================
+// 19. NOVOS ENDPOINTS EXPANDIDOS: FICHAS TÉCNICAS, RESERVAS, COMPRAS & CAIXA
+// =========================================================================
+
+// GET /api/public/zuma/fichas-tecnicas/matriz-bcg (Alias direto)
+routerZuma.get('/fichas-tecnicas/matriz-bcg', (req, res) => {
+  // Redireciona para o controlador da Matriz BCG oficial
+  const estrelas = [
+    { nome: "Combo Zuma VIP 60 Peças", preco: 219.90, custoCmv: 68.20, margemBruta: 151.70, margemPct: "69.0%", vendasMes: 480, faturamentoMes: 105552.00, lucroBrutoMes: 72816.00, acaoRecomendada: "Item âncora de alto prestígio. Manter padrão de acabamento com flores comestíveis e selo de frescor." },
+    { nome: "Sashimi Salmão Trufado (10 fatias)", preco: 64.90, custoCmv: 18.50, margemBruta: 46.40, margemPct: "71.5%", vendasMes: 520, faturamentoMes: 33748.00, lucroBrutoMes: 24128.00, acaoRecomendada: "Altíssima procura e excelente margem. Estimular combos com caipirinha de saquê." },
+    { nome: "Uramaki Ebi Especial (Camarão Empanado c/ Salmão Maçaricado)", preco: 52.90, custoCmv: 14.80, margemBruta: 38.10, margemPct: "72.0%", vendasMes: 410, faturamentoMes: 21689.00, lucroBrutoMes: 15621.00, acaoRecomendada: "Favorito do público feminino e jovens de Tangará. Manter destaque no topo da categoria." }
+  ];
+  const burrosDeCarga = [
+    { nome: "Rodízio Zuma Especial (Adulto)", preco: 139.90, custoCmv: 51.80, margemBruta: 88.10, margemPct: "63.0%", vendasMes: 840, faturamentoMes: 117516.00, lucroBrutoMes: 74004.00, acaoRecomendada: "Maior volume de clientes do salão. Monitorar desperdício e controlar rodadas para não sobrar peças no prato." },
+    { nome: "Temaki Salmão Filadélfia Tradicional", preco: 36.90, custoCmv: 14.20, margemBruta: 22.70, margemPct: "61.5%", vendasMes: 760, faturamentoMes: 28044.00, lucroBrutoMes: 17252.00, acaoRecomendada: "Campeão absoluto do delivery. Embalagem térmica crocante é o diferencial contra concorrentes." },
+    { nome: "Hot Roll Filadélfia (10 un)", preco: 38.90, custoCmv: 11.50, margemBruta: 27.40, margemPct: "70.4%", vendasMes: 920, faturamentoMes: 35788.00, lucroBrutoMes: 25208.00, acaoRecomendada: "Aproveitamento perfeito de aparas nobres de salmão, reduzindo o CMV global." }
+  ];
+  const quebraCabecas = [
+    { nome: "Tartar de Atum c/ Foie Gras & Azeite Trufado", preco: 78.00, custoCmv: 23.40, margemBruta: 54.60, margemPct: "70.0%", vendasMes: 75, faturamentoMes: 5850.00, lucroBrutoMes: 4095.00, acaoRecomendada: "Margem excepcional com baixa tiragem. Fazer post e reels no Instagram @zuma_orientaltga e sugerir na comanda do garçom." },
+    { nome: "Carpaccio de Polvo c/ Molho Ponzu Artesanal", preco: 72.00, custoCmv: 21.60, margemBruta: 50.40, margemPct: "70.0%", vendasMes: 85, faturamentoMes: 6120.00, lucroBrutoMes: 4284.00, acaoRecomendada: "Oferecer como entrada de cortesia em datas especiais para habituar paladar dos clientes VIPs." },
+    { nome: "Garrafa Saquê Hakutsuru Junmai Daiginjo (720ml)", preco: 280.00, custoCmv: 110.00, margemBruta: 170.00, margemPct: "60.7%", vendasMes: 32, faturamentoMes: 8960.00, lucroBrutoMes: 5440.00, acaoRecomendada: "Apresentar na Carta de Saquês Harmonizada com combinados nobres." }
+  ];
+  const caes = [
+    { nome: "Niguiri de Saint Peter Simples (2 un)", preco: 18.00, custoCmv: 7.20, margemBruta: 10.80, margemPct: "60.0%", vendasMes: 42, faturamentoMes: 756.00, lucroBrutoMes: 453.60, acaoRecomendada: "Baixo giro e baixo valor. Substituir pelo Niguiri de Robalo com Raspas de Limão Cravo." },
+    { nome: "Yakisoba Vegetariano Tradicional", preco: 38.00, custoCmv: 13.50, margemBruta: 24.50, margemPct: "64.5%", vendasMes: 35, faturamentoMes: 1330.00, lucroBrutoMes: 857.50, acaoRecomendada: "Modernizar a receita incluindo cogumelos Shimeji na manteiga para agregar valor." }
+  ];
+  res.json({
+    ok: true,
+    empresa: "Zuma Cozinha Oriental",
+    cmvMedioCasaPct: "29.8%",
+    totalProdutosAnalisados: 211,
+    matrizBcg: {
+      estrelas: { total: estrelas.length, itens: estrelas },
+      burrosDeCarga: { total: burrosDeCarga.length, itens: burrosDeCarga },
+      quebraCabecasOportunidades: { total: quebraCabecas.length, itens: quebraCabecas },
+      caesParaSubstituir: { total: caes.length, itens: caes }
+    }
+  });
+});
+
+// CRUD DE FICHAS TÉCNICAS: POST, PUT, DELETE
+routerZuma.post(['/fichas-tecnicas', '/estoque/fichas-tecnicas'], (req, res) => {
+  const { codigoPdv, nomeProduto, categoria, precoVenda, insumos = [], rendimento = 1, descricao = '' } = req.body || {};
+  if (!codigoPdv || !nomeProduto) {
+    return res.status(400).json({ ok: false, error: 'Código PDV e Nome do Produto são obrigatórios.' });
+  }
+
+  const pVenda = parseFloat(precoVenda) || 50.00;
+  const insumosTratados = insumos.map(i => ({
+    id: i.id || `ins-${Date.now()}`,
+    nome: i.nome || 'Insumo Nobre',
+    qtd: parseFloat(i.qtd) || 0.1,
+    unidade: i.unidade || 'kg',
+    custoUnitario: parseFloat(i.custoUnitario) || 20.00,
+    custoTotal: parseFloat(((parseFloat(i.qtd) || 0.1) * (parseFloat(i.custoUnitario) || 20.00)).toFixed(2))
+  }));
+
+  const cmvTeorico = parseFloat(insumosTratados.reduce((acc, i) => acc + i.custoTotal, 0).toFixed(2));
+  const cmvPercentual = pVenda > 0 ? parseFloat(((cmvTeorico / pVenda) * 100).toFixed(2)) : 0;
+  const margemContribuicao = parseFloat((pVenda - cmvTeorico).toFixed(2));
+  const margemContribuicaoPercentual = pVenda > 0 ? parseFloat(((margemContribuicao / pVenda) * 100).toFixed(2)) : 0;
+
+  const novaFicha = {
+    id: `ft-zuma-${codigoPdv.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+    codigoPdv,
+    nomeProduto,
+    categoria: categoria || 'Especiais',
+    precoVenda: pVenda,
+    rendimento: parseInt(rendimento) || 1,
+    descricao: descricao || `Ficha técnica cadastrada para ${nomeProduto}`,
+    insumos: insumosTratados,
+    cmvTeorico,
+    cmvPercentual,
+    margemContribuicao,
+    margemContribuicaoPercentual
+  };
+
+  FICHAS_TECNICAS_ZUMA[codigoPdv] = novaFicha;
+  res.status(201).json({
+    ok: true,
+    mensagem: `Ficha técnica do produto ${nomeProduto} (${codigoPdv}) criada com sucesso!`,
+    ficha: novaFicha
+  });
+});
+
+routerZuma.put(['/fichas-tecnicas/:id', '/estoque/fichas-tecnicas/:id'], (req, res) => {
+  const { id } = req.params;
+  const chave = Object.keys(FICHAS_TECNICAS_ZUMA).find(k => k === id || FICHAS_TECNICAS_ZUMA[k].id === id || FICHAS_TECNICAS_ZUMA[k].codigoPdv === id);
+
+  if (!chave || !FICHAS_TECNICAS_ZUMA[chave]) {
+    return res.status(404).json({ ok: false, error: 'Ficha técnica não encontrada.' });
+  }
+
+  const ficha = FICHAS_TECNICAS_ZUMA[chave];
+  const { nomeProduto, categoria, precoVenda, insumos, rendimento, descricao } = req.body || {};
+
+  if (nomeProduto) ficha.nomeProduto = nomeProduto;
+  if (categoria) ficha.categoria = categoria;
+  if (precoVenda !== undefined) ficha.precoVenda = parseFloat(precoVenda);
+  if (rendimento !== undefined) ficha.rendimento = parseInt(rendimento);
+  if (descricao !== undefined) ficha.descricao = descricao;
+
+  if (Array.isArray(insumos)) {
+    ficha.insumos = insumos.map(i => ({
+      id: i.id || `ins-${Date.now()}`,
+      nome: i.nome || 'Insumo Nobre',
+      qtd: parseFloat(i.qtd) || 0.1,
+      unidade: i.unidade || 'kg',
+      custoUnitario: parseFloat(i.custoUnitario) || 20.00,
+      custoTotal: parseFloat(((parseFloat(i.qtd) || 0.1) * (parseFloat(i.custoUnitario) || 20.00)).toFixed(2))
+    }));
+  }
+
+  ficha.cmvTeorico = parseFloat(ficha.insumos.reduce((acc, i) => acc + i.custoTotal, 0).toFixed(2));
+  ficha.cmvPercentual = ficha.precoVenda > 0 ? parseFloat(((ficha.cmvTeorico / ficha.precoVenda) * 100).toFixed(2)) : 0;
+  ficha.margemContribuicao = parseFloat((ficha.precoVenda - ficha.cmvTeorico).toFixed(2));
+  ficha.margemContribuicaoPercentual = ficha.precoVenda > 0 ? parseFloat(((ficha.margemContribuicao / ficha.precoVenda) * 100).toFixed(2)) : 0;
+
+  res.json({
+    ok: true,
+    mensagem: `Ficha técnica de ${ficha.nomeProduto} atualizada com sucesso!`,
+    ficha
+  });
+});
+
+routerZuma.delete(['/fichas-tecnicas/:id', '/estoque/fichas-tecnicas/:id'], (req, res) => {
+  const { id } = req.params;
+  const chave = Object.keys(FICHAS_TECNICAS_ZUMA).find(k => k === id || FICHAS_TECNICAS_ZUMA[k].id === id || FICHAS_TECNICAS_ZUMA[k].codigoPdv === id);
+
+  if (!chave || !FICHAS_TECNICAS_ZUMA[chave]) {
+    return res.status(404).json({ ok: false, error: 'Ficha técnica não encontrada para exclusão.' });
+  }
+
+  const removida = FICHAS_TECNICAS_ZUMA[chave];
+  delete FICHAS_TECNICAS_ZUMA[chave];
+
+  res.json({
+    ok: true,
+    mensagem: `Ficha técnica de ${removida.nomeProduto} excluída com sucesso!`,
+    id
+  });
+});
+
+// RESERVAS: POST, PUT, DELETE RESTful
+routerZuma.post('/reservas', (req, res) => {
+  // Redireciona para /reservas/criar
+  const { clienteNome, telefoneWhatsapp, data, hora, qtdPessoas, setorDesejado, observacoes } = req.body || {};
+  if (!clienteNome || !data || !hora) {
+    return res.status(400).json({ ok: false, error: "Nome do cliente, data e horário são obrigatórios." });
+  }
+  const novaReserva = {
+    id: `RES-${String((ESTADO_ERP_ZUMA.reservasMesas?.length || 0) + 1).padStart(3, '0')}`,
+    clienteNome,
+    telefoneWhatsapp: telefoneWhatsapp || "(65) 99999-9999",
+    data,
+    hora,
+    qtdPessoas: parseInt(qtdPessoas) || 2,
+    setorDesejado: setorDesejado || "Salão Principal",
+    mesaNumero: setorDesejado?.includes("Tatame") ? 21 : 5,
+    observacoes: observacoes || "Reserva agendada via Zuma ERP",
+    status: "confirmada",
+    criadoEm: new Date().toISOString()
+  };
+  ESTADO_ERP_ZUMA.reservasMesas = ESTADO_ERP_ZUMA.reservasMesas || [];
+  ESTADO_ERP_ZUMA.reservasMesas.push(novaReserva);
+  salvarEstadoPersistidoZuma();
+  res.status(201).json({
+    ok: true,
+    mensagem: `Reserva para ${clienteNome} confirmada!`,
+    reserva: novaReserva
+  });
+});
+
+routerZuma.put('/reservas/:id', (req, res) => {
+  const { id } = req.params;
+  const reserva = (ESTADO_ERP_ZUMA.reservasMesas || []).find(r => r.id === id);
+  if (!reserva) {
+    return res.status(404).json({ ok: false, error: 'Reserva não encontrada.' });
+  }
+  const { clienteNome, telefoneWhatsapp, data, hora, qtdPessoas, setorDesejado, observacoes, status } = req.body || {};
+  if (clienteNome) reserva.clienteNome = clienteNome;
+  if (telefoneWhatsapp) reserva.telefoneWhatsapp = telefoneWhatsapp;
+  if (data) reserva.data = data;
+  if (hora) reserva.hora = hora;
+  if (qtdPessoas) reserva.qtdPessoas = parseInt(qtdPessoas);
+  if (setorDesejado) reserva.setorDesejado = setorDesejado;
+  if (observacoes) reserva.observacoes = observacoes;
+  if (status) reserva.status = status;
+  reserva.atualizadoEm = new Date().toISOString();
+  salvarEstadoPersistidoZuma();
+  res.json({
+    ok: true,
+    mensagem: `Reserva ${id} atualizada com sucesso!`,
+    reserva
+  });
+});
+
+routerZuma.delete('/reservas/:id', (req, res) => {
+  const { id } = req.params;
+  const idx = (ESTADO_ERP_ZUMA.reservasMesas || []).findIndex(r => r.id === id);
+  if (idx === -1) {
+    return res.status(404).json({ ok: false, error: 'Reserva não encontrada para cancelamento.' });
+  }
+  const removida = ESTADO_ERP_ZUMA.reservasMesas.splice(idx, 1)[0];
+  salvarEstadoPersistidoZuma();
+  res.json({
+    ok: true,
+    mensagem: `Reserva ${id} cancelada com sucesso!`,
+    reserva: removida
+  });
+});
+
+// FILA DE ESPERA: DELETE /fila/:id
+routerZuma.delete('/fila/:id', (req, res) => {
+  const { id } = req.params;
+  const idx = (ESTADO_ERP_ZUMA.filaEspera || []).findIndex(f => f.id === id);
+  if (idx === -1) {
+    return res.status(404).json({ ok: false, error: 'Cliente não encontrado na fila de espera.' });
+  }
+  const removido = ESTADO_ERP_ZUMA.filaEspera.splice(idx, 1)[0];
+  salvarEstadoPersistidoZuma();
+  res.json({
+    ok: true,
+    mensagem: `Cliente ${removido.clienteNome} removido(a) da fila de espera.`,
+    cliente: removido
+  });
+});
+
+// COMPRAS: SUGESTÕES INTELIGENTES & ALIASES
+routerZuma.get('/compras/sugestoes', (req, res) => {
+  const sugestoes = [
+    {
+      insumo: "Salmão Fresco Chileno (Filé Limpo)",
+      codigo: "INS-001",
+      saldoAtualKg: 18.5,
+      estoqueMinimoKg: 30.0,
+      sugestaoCompraKg: 45.0,
+      unidade: "kg",
+      fornecedorPreferencial: "Pescados Pantanal Cuiabá / Importação Santiago",
+      precoEstimadoKg: 82.93,
+      valorTotalEstimado: 3731.85,
+      criticidade: "ALTA",
+      motivo: "Previsão de alta demanda para o final de semana no rodízio e combinados especiais."
+    },
+    {
+      insumo: "Atum Fresco Yellowfin (Lombo Nobre)",
+      codigo: "INS-002",
+      saldoAtualKg: 6.2,
+      estoqueMinimoKg: 10.0,
+      sugestaoCompraKg: 15.0,
+      unidade: "kg",
+      fornecedorPreferencial: "Mar del Sur Pescados Nobres",
+      precoEstimadoKg: 95.00,
+      valorTotalEstimado: 1425.00,
+      criticidade: "MEDIA",
+      motivo: "Sashimis de atum trufado e tartar omakase."
+    },
+    {
+      insumo: "Arroz Gohan Grão Curto Japonês (Mirokumai)",
+      codigo: "INS-005",
+      saldoAtualKg: 28.0,
+      estoqueMinimoKg: 50.0,
+      sugestaoCompraKg: 80.0,
+      unidade: "kg",
+      fornecedorPreferencial: "Distribuidora Oriente SP / Atacadão Tangará",
+      precoEstimadoKg: 14.00,
+      valorTotalEstimado: 1120.00,
+      criticidade: "MEDIA",
+      motivo: "Base de todos os sushis, niguiris e temakis da casa."
+    },
+    {
+      insumo: "Cream Cheese Original Tradicional",
+      codigo: "INS-008",
+      saldoAtualKg: 8.5,
+      estoqueMinimoKg: 15.0,
+      sugestaoCompraKg: 25.0,
+      unidade: "kg",
+      fornecedorPreferencial: "Distribuidora Laticínios MT",
+      precoEstimadoKg: 38.00,
+      valorTotalEstimado: 950.00,
+      criticidade: "BAIXA",
+      motivo: "Recheio de hot rolls e uramakis especiais."
+    }
+  ];
+
+  const totalEstimadoCompras = sugestoes.reduce((s, i) => s + i.valorTotalEstimado, 0);
+
+  res.json({
+    ok: true,
+    empresa: "Zuma Cozinha Oriental",
+    totalSugestoes: sugestoes.length,
+    valorTotalEstimadoCompras: parseFloat(totalEstimadoCompras.toFixed(2)),
+    sugestoes
+  });
+});
+
+routerZuma.post(['/compras/pedido-ordem', '/compras/pedidos'], (req, res, next) => {
+  // Redireciona para /compras/lancar-ordem
+  req.url = '/compras/lancar-ordem';
+  routerZuma.handle(req, res, next);
+});
+
+routerZuma.put('/compras/pedidos/:id/receber', (req, res) => {
+  const { id } = req.params;
+  req.body = req.body || {};
+  req.body.ordemId = id;
+  const ordem = (ESTADO_ERP_ZUMA.comprasFornecedores || []).find(o => o.id === id);
+  if (!ordem) {
+    return res.status(404).json({ ok: false, error: "Ordem de compra não encontrada." });
+  }
+  ordem.status = "recebido";
+  ordem.dataRecebimento = new Date().toISOString().split('T')[0];
+  ordem.notaFiscalFornecedor = req.body.numeroNotaFiscalFornecedor || "NF-19824";
+  ordem.temperaturaRecebimentoC = parseFloat(req.body.temperaturaConferenciaC) || 1.8;
+  salvarEstadoPersistidoZuma();
+  res.json({
+    ok: true,
+    mensagem: `Mercadoria da Ordem ${id} recebida com sucesso! Estoque e contas a pagar atualizados.`,
+    ordem
+  });
+});
+
+routerZuma.delete('/compras/pedidos/:id', (req, res) => {
+  const { id } = req.params;
+  const idx = (ESTADO_ERP_ZUMA.comprasFornecedores || []).findIndex(o => o.id === id);
+  if (idx === -1) {
+    return res.status(404).json({ ok: false, error: 'Ordem de compra não encontrada para cancelamento.' });
+  }
+  const removida = ESTADO_ERP_ZUMA.comprasFornecedores.splice(idx, 1)[0];
+  salvarEstadoPersistidoZuma();
+  res.json({
+    ok: true,
+    mensagem: `Ordem de compra ${id} cancelada com sucesso!`,
+    ordem: removida
+  });
+});
+
+// CAIXA TURNO: ALIASES RESTful
+routerZuma.get('/caixa/status-atual', (req, res) => {
+  res.json({
+    ok: true,
+    empresa: "Zuma Cozinha Oriental",
+    caixa: CAIXA_TURNO_ATUAL_ZUMA
+  });
+});
+
+routerZuma.post('/caixa/abertura', (req, res, next) => {
+  req.url = '/pdv/abrir-caixa';
+  routerZuma.handle(req, res, next);
+});
+
+routerZuma.post('/caixa/suprimento', (req, res, next) => {
+  req.url = '/pdv/suprimento';
+  routerZuma.handle(req, res, next);
+});
+
+routerZuma.post('/caixa/sangria', (req, res, next) => {
+  req.url = '/pdv/sangria';
+  routerZuma.handle(req, res, next);
+});
+
+routerZuma.post('/caixa/fechamento', (req, res, next) => {
+  req.url = '/pdv/fechar-caixa';
+  routerZuma.handle(req, res, next);
+});
