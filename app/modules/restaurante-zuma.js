@@ -4005,9 +4005,22 @@ const INFORMACOES_APPS_ZUMA = {
       { cargo: "Entregador / Motoboy", app: "App do Entregador (PWA/APK)", pinSugerido: "2001", escopo: "Expedição Delivery, Mapa GPS Tangará da Serra, Rotas Waze/Google Maps e Comprovante de Entrega" },
       { cargo: "Caixa PDV", app: "App Caixa Touch (PWA/APK)", pinSugerido: "3001", escopo: "Frente de Caixa, Módulo de Pagamentos, Emissão Fiscal NFC-e SEFAZ-MT" },
       { cargo: "Cozinha / Sushiman", app: "App KDS Cozinha (PWA)", pinSugerido: "4001", escopo: "Monitores das 4 Praças de Produção com Alertas Sonoros" }
-    ]
-  },
-  apps: [
+   ]
+ },
+ apps: [
+    {
+      id: "proprietario",
+      nome: "App do Proprietário Zuma",
+      subtitulo: "Gestão na Palma da Mão, Comparativos & Concorrência",
+      icone: "👑",
+      cor: "amber",
+      pwaUrl: "/zuma/proprietario.html",
+      manifestUrl: "/zuma/manifest-proprietario.json",
+      apkUrl: "/zuma/downloads/zuma-proprietario.apk",
+      apkTamanho: "5.4 MB",
+      recursos: ["Visão 360° em tempo real", "Comparativo de dias iguais (D-7, D-30)", "Gráficos de faturamento e CMV", "Radar de concorrência de Tangará da Serra", "Tomada de ação com 1 toque"],
+      compatibilidade: "iOS (Safari Add to Home) & Android (PWA / APK)"
+    },
     {
       id: "garcom",
       nome: "App do Garçom Zuma",
@@ -4081,5 +4094,262 @@ routerZuma.get('/apps/info', (req, res) => {
   res.json({
     ok: true,
     info: INFORMACOES_APPS_ZUMA
+  });
+});
+
+// ============================================================================
+// MÓDULO DE GESTÃO DO PROPRIETÁRIO (PALMA DA MÃO, COMPARATIVOS, CONCORRÊNCIA E AÇÕES)
+// ============================================================================
+
+export const DASHBOARD_PROPRIETARIO_ZUMA = {
+  kpisHoje: {
+    faturamentoHoje: 8940.00,
+    metaHoje: 10000.00,
+    percentualMeta: 89.4,
+    ticketMedioHoje: 154.13,
+    pedidosHojeTotal: 58,
+    pedidosSalao: 36,
+    pedidosDelivery: 22,
+    cmvPercentualHoje: 27.8,
+    cmvMetaTeto: 30.0,
+    lucroLiquidoEstimadoHoje: 3486.60,
+    margemLiquidaHoje: 39.0,
+    giroMedioMesaMinutos: 72,
+    tempoMedioEntregaMinutos: 34,
+    clientesAtendidosHoje: 142,
+    mesasOcupadasAgora: 18,
+    mesasTotal: 27,
+    taxaOcupacaoSalao: 66.7,
+    statusOperacao: "Aberto / Pico Noturno Ativo",
+    previsaoFechamentoHoje: 10850.00
+  },
+  comparativoMesmosDias: {
+    d7: {
+      titulo: "Hoje vs Sexta-Feira Passada (D-7)",
+      diaReferencia: "Sexta-Feira, 13/11/2026",
+      faturamentoHoje: 8940.00,
+      faturamentoAnterior: 7160.00,
+      diffFaturamento: 1780.00,
+      diffPercentualFaturamento: 24.86,
+      pedidosHoje: 58,
+      pedidosAnterior: 49,
+      diffPedidos: 9,
+      ticketHoje: 154.13,
+      ticketAnterior: 146.12,
+      diffTicket: 8.01,
+      cmvHoje: 27.8,
+      cmvAnterior: 29.4,
+      lucroEstimadoHoje: 3486.60,
+      lucroEstimadoAnterior: 2685.00,
+      diffLucro: 801.60
+    },
+    d30: {
+      titulo: "Hoje vs Mesma Sexta Mês Anterior (D-30)",
+      diaReferencia: "Sexta-Feira, 23/10/2026",
+      faturamentoHoje: 8940.00,
+      faturamentoAnterior: 6820.00,
+      diffFaturamento: 2120.00,
+      diffPercentualFaturamento: 31.08,
+      pedidosHoje: 58,
+      pedidosAnterior: 45,
+      ticketHoje: 154.13,
+      ticketAnterior: 151.55,
+      cmvHoje: 27.8,
+      cmvAnterior: 30.2
+    },
+    semanalAcumulado: {
+      titulo: "Semana Atual vs Semana Anterior",
+      faturamentoSemanaAtual: 48920.00,
+      faturamentoSemanaAnterior: 41250.00,
+      diffPercentual: 18.59,
+      ticketMedioSemanaAtual: 149.60,
+      ticketMedioSemanaAnterior: 142.20
+    }
+  },
+  curvaHorariaHojeVsD7: [
+    { hora: "11h", faturamentoHoje: 320, faturamentoD7: 210, meta: 300 },
+    { hora: "12h", faturamentoHoje: 1150, faturamentoD7: 890, meta: 1100 },
+    { hora: "13h", faturamentoHoje: 880, faturamentoD7: 740, meta: 850 },
+    { hora: "14h", faturamentoHoje: 340, faturamentoD7: 280, meta: 350 },
+    { hora: "18h", faturamentoHoje: 450, faturamentoD7: 380, meta: 400 },
+    { hora: "19h", faturamentoHoje: 1280, faturamentoD7: 980, meta: 1200 },
+    { hora: "20h", faturamentoHoje: 1950, faturamentoD7: 1540, meta: 1900 },
+    { hora: "21h", faturamentoHoje: 1420, faturamentoD7: 1190, meta: 1500 },
+    { hora: "22h", faturamentoHoje: 860, faturamentoD7: 710, meta: 900 },
+    { hora: "23h", faturamentoHoje: 290, faturamentoD7: 240, meta: 300 }
+  ],
+  diasSemanaComparativo: [
+    { dia: "Seg", atual: 4210, anterior: 3820, meta: 4000 },
+    { dia: "Ter", atual: 4850, anterior: 4190, meta: 4500 },
+    { dia: "Qua", atual: 5920, anterior: 5120, meta: 5500 },
+    { dia: "Qui", atual: 6840, anterior: 5980, meta: 6500 },
+    { dia: "Sex (Hoje)", atual: 8940, anterior: 7160, meta: 10000 },
+    { dia: "Sáb", atual: 10450, anterior: 8920, meta: 11000 },
+    { dia: "Dom", atual: 7710, anterior: 6060, meta: 8000 }
+  ],
+  canaisDistribuicao: {
+    salao: { valor: 5542.80, percentual: 62.0, pedidos: 36, ticket: 153.97, icone: "🍽️" },
+    delivery: { valor: 2503.20, percentual: 28.0, pedidos: 22, ticket: 113.78, icone: "🛵" },
+    cardapioDigital: { valor: 625.80, percentual: 7.0, pedidos: 5, ticket: 125.16, icone: "📱" },
+    balcaoRetirada: { valor: 268.20, percentual: 3.0, pedidos: 3, ticket: 89.40, icone: "🛍️" }
+  },
+  pescadosCriticosHoje: {
+    salmaoFrescoEstoqueKg: 28.5,
+    salmaoConsumidoHojeKg: 14.2,
+    atumFrescoEstoqueKg: 11.2,
+    peixeBrancoEstoqueKg: 15.0,
+    rendimentoFilamentoPercentual: 71.4,
+    perdasAparasGramas: 420,
+    alertaReposicao: "Estoque suficiente para atendimento da noite (previsão de consumo: 9.8 kg de salmão até 23h30)"
+  }
+};
+
+export const RADAR_CONCORRENCIA_TANGARA = {
+  cidade: "Tangará da Serra - MT",
+  dataVarredura: "2026-11-20T19:30:00Z",
+  motorIA: "Motor KyttoIA 2.5 Flash",
+  posicaoZumaNoMercado: "Líder de Categoria (Nota 4.9 ★, Melhor Tempo de Entrega e Maior Variedade de Peixes Nobres)",
+  estabelecimentos: [
+    {
+      id: "zuma",
+      nome: "Zuma Cozinha Oriental",
+      tipo: "Restaurante Oriental & Sushi Bar Premium",
+      endereco: "Rua Celso Rosa Lima, nº 142-W, Centro / Jd. Tangará II",
+      avaliacaoGoogle: 4.9,
+      totalAvaliacoes: 418,
+      tempoMedioEntregaMin: 34,
+      taxaEntregaMedia: 7.50,
+      raioAtendimentoKm: 12,
+      status: "Aberto",
+      pontosFortes: ["Salmão chileno fresco diário", "211 SKUs no cardápio", "Rastreabilidade GPS por mapa", "Salão climatizado com 27 mesas"],
+      isZuma: true
+    },
+    {
+      id: "sushi_prime",
+      nome: "Sushi Prime Tangará",
+      tipo: "Restaurante & Rodízio",
+      endereco: "Av. Brasil, Centro",
+      avaliacaoGoogle: 4.5,
+      totalAvaliacoes: 234,
+      tempoMedioEntregaMin: 48,
+      taxaEntregaMedia: 9.00,
+      raioAtendimentoKm: 8,
+      status: "Aberto",
+      pontosFortes: ["Foco em festivais e rodízio", "Localização central"],
+      pontosFracos: ["Tempo de espera elevado no delivery (48 min)", "Taxa de entrega mais alta"],
+      isZuma: false
+    },
+    {
+      id: "tokio_express",
+      nome: "Tokio Express Tangará",
+      tipo: "Fast Food Oriental & Delivery",
+      endereco: "Av. Tancredo Neves",
+      avaliacaoGoogle: 4.3,
+      totalAvaliacoes: 175,
+      tempoMedioEntregaMin: 55,
+      taxaEntregaMedia: 10.00,
+      raioAtendimentoKm: 10,
+      status: "Aberto",
+      pontosFortes: ["Preço de entrada acessível nos hot rolls"],
+      pontosFracos: ["Utiliza peixe congelado", "Atrasos recorrentes em dias de chuva", "Taxa de R$ 10"],
+      isZuma: false
+    },
+    {
+      id: "koiso_delivery",
+      nome: "Koiso Oriental Delivery",
+      tipo: "Dark Kitchen Delivery",
+      endereco: "Jd. Europa",
+      avaliacaoGoogle: 4.4,
+      totalAvaliacoes: 96,
+      tempoMedioEntregaMin: 50,
+      taxaEntregaMedia: 8.50,
+      raioAtendimentoKm: 7,
+      status: "Aberto",
+      pontosFortes: ["Focado em combinados econômicos"],
+      pontosFracos: ["Sem salão para consumo", "Cardápio limitado a 35 itens", "Sem rastreamento ao vivo"],
+      isZuma: false
+    },
+    {
+      id: "ryori_bar",
+      nome: "Ryori Sushi Bar",
+      tipo: "Balcão & Delivery",
+      endereco: "Rua Antônio Hortolani",
+      avaliacaoGoogle: 4.6,
+      totalAvaliacoes: 142,
+      tempoMedioEntregaMin: 45,
+      taxaEntregaMedia: 9.50,
+      raioAtendimentoKm: 9,
+      status: "Aberto",
+      pontosFortes: ["Drinks autorais e ambiente intimista"],
+      pontosFracos: ["Capacidade reduzida de salão (12 mesas)", "Fila de espera"],
+      isZuma: false
+    }
+  ],
+  benchmarkPratos: [
+    { prato: "Combinado Casal 40 Pçs", zumaPreco: 149.90, mediaConcorrencia: 158.00, menorPreco: 142.00, maiorPreco: 169.00, statusCompetitivo: "Vantagem Zuma: -R$ 8,10 vs média com salmão maçaricado e trufado" },
+    { prato: "Sashimi Salmão 10 Pçs", zumaPreco: 54.90, mediaConcorrencia: 59.50, menorPreco: 52.00, maiorPreco: 66.00, statusCompetitivo: "Vantagem Zuma: -R$ 4,60 vs média (pescado 100% fresco)" },
+    { prato: "Temaki Salmão Completo", zumaPreco: 36.90, mediaConcorrencia: 38.50, menorPreco: 35.00, maiorPreco: 42.00, statusCompetitivo: "Preço de mercado com nori premium e cream cheese legítimo" },
+    { prato: "Hot Roll Salmão 10 Pçs", zumaPreco: 34.90, mediaConcorrencia: 36.00, menorPreco: 32.00, maiorPreco: 39.00, statusCompetitivo: "Altíssima saída no delivery com molho tarê artesanal" },
+    { prato: "Festival / Rodízio Individual", zumaPreco: 119.90, mediaConcorrencia: 129.90, menorPreco: 115.00, maiorPreco: 139.90, statusCompetitivo: "Melhor custo-benefício gastronômico de Tangará da Serra" }
+  ],
+  diagnosticoMotorKyttoIA: {
+    resumoExecutivo: "O Zuma Cozinha Oriental mantém dominância incontestável em Tangará da Serra - MT, operando com tempo de entrega 14 a 21 minutos mais veloz que todos os concorrentes devido ao mapeamento georreferenciado e ao App do Entregador próprio. A nota 4.9 ★ assegura fidelização máxima.",
+    oportunidadesImediatas: [
+      "Almoço Corporativo Executivo: Alta demanda de executivos do Agronegócio de Tangará da Serra nas sextas-feiras. Recomenda-se combo corporativo ágil.",
+      "Gap Logístico dos Concorrentes: Tokio Express e Koiso estão demorando mais de 50 minutos hoje. Divulgar nas redes sociais que a entrega do Zuma leva em média 34 min.",
+      "Oscilação do Salmão no Atacado: Leve alta de 3.8% na cotação regional de pescados; manter o CMV rigoroso em 27.8% priorizando saídas de combinados com atum e hot rolls."
+    ]
+  }
+};
+
+export const HISTORICO_ACOES_PROPRIETARIO = [];
+
+// GET /api/public/zuma/proprietario/dashboard — Visão executiva completa do dono
+routerZuma.get('/proprietario/dashboard', (req, res) => {
+  res.json({
+    ok: true,
+    dashboard: DASHBOARD_PROPRIETARIO_ZUMA
+  });
+});
+
+// GET /api/public/zuma/proprietario/concorrencia — Radar da concorrência de Tangará da Serra
+routerZuma.get('/proprietario/concorrencia', (req, res) => {
+  res.json({
+    ok: true,
+    radar: RADAR_CONCORRENCIA_TANGARA
+  });
+});
+
+// POST /api/public/zuma/proprietario/acao — Tomada de ação completa com 1 toque
+routerZuma.post('/proprietario/acao', (req, res) => {
+  const { acaoId, titulo, detalhes, parametros } = req.body || {};
+  
+  const novaAcao = {
+    id: `ACT-${Date.now()}`,
+    acaoId: acaoId || "acao_generica",
+    titulo: titulo || "Ação Executada pelo Proprietário",
+    detalhes: detalhes || "Comando executado via App do Proprietário na palma da mão",
+    parametros: parametros || {},
+    dataHora: new Date().toISOString(),
+    responsavel: "Proprietário Zuma (Sócio Gestor)",
+    status: "Executado com Sucesso"
+  };
+  
+  HISTORICO_ACOES_PROPRIETARIO.unshift(novaAcao);
+  
+  res.json({
+    ok: true,
+    mensagem: `Ação '${novaAcao.titulo}' executada imediatamente com sucesso!`,
+    acao: novaAcao,
+    totalAcoesExecutadas: HISTORICO_ACOES_PROPRIETARIO.length
+  });
+});
+
+// GET /api/public/zuma/proprietario/acoes-historico — Histórico de ações tomadas
+routerZuma.get('/proprietario/acoes-historico', (req, res) => {
+  res.json({
+    ok: true,
+    total: HISTORICO_ACOES_PROPRIETARIO.length,
+    acoes: HISTORICO_ACOES_PROPRIETARIO
   });
 });

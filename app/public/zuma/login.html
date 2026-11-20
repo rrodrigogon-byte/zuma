@@ -107,15 +107,15 @@
         <label class="block text-[11px] font-bold uppercase tracking-wider text-zuma-muted">Perfis Pré-Configurados (Acesso Imediato)</label>
         <div class="grid grid-cols-2 gap-2 text-left">
           
-          <!-- Perfil 1: Gerente / Proprietário -->
-          <button onclick="selecionarPerfil('gerente')" type="button" class="p-2.5 rounded-xl border border-zuma-border bg-zuma-card hover:border-zuma-salmon hover:bg-zuma-salmon/10 transition-all text-left group touch-btn">
+          <!-- Perfil 1: Proprietário / Sócio (Palma da Mão) -->
+          <button onclick="selecionarPerfil('proprietario')" type="button" class="p-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:border-amber-400 hover:bg-amber-500/20 transition-all text-left group touch-btn">
             <div class="w-full">
               <div class="flex items-center justify-between">
                 <span class="text-base">👑</span>
-                <span class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-zuma-salmon/20 text-zuma-salmon">Cockpit</span>
+                <span class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/30 text-amber-300">Dono</span>
               </div>
-              <div class="text-xs font-bold text-white mt-1 group-hover:text-zuma-salmon">Leandro / Jessica</div>
-              <div class="text-[10px] text-zuma-muted">Gerente Geral</div>
+              <div class="text-xs font-bold text-white mt-1 group-hover:text-amber-400">Proprietário Zuma</div>
+              <div class="text-[10px] text-zinc-400">Palma da Mão &amp; Radar</div>
             </div>
           </button>
 
@@ -254,6 +254,12 @@
   <!-- ================= LÓGICA JAVASCRIPT ================= -->
   <script>
     const PERFIS = {
+      proprietario: {
+        email: 'proprietario@zumacozinhaoriental.com.br',
+        senha: '123456',
+        destino: 'proprietario.html',
+        nome: 'Proprietário Zuma (Palma da Mão)'
+      },
       gerente: {
         email: 'leandro@zumacozinhaoriental.com.br',
         senha: '123456',

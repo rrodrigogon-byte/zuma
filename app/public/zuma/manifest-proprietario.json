@@ -1,0 +1,19 @@
+{
+  "name": "Zuma Proprietário · Gestão Executiva na Palma da Mão",
+  "short_name": "Zuma Dono",
+  "description": "Cockpit executivo do proprietário Zuma: faturamento ao vivo, comparativo de mesmos dias, gráficos, radar de concorrência Tangará da Serra e tomada de ação com 1 toque.",
+  "start_url": "/zuma/proprietario.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B0C10",
+  "theme_color": "#F59E0B",
+  "scope": "/zuma/",
+  "icons": [
+    {
+      "src": "zumi-mascote.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
