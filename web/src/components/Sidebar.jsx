@@ -7,7 +7,7 @@ import { catalogoPorArea, contagemPorEstado, ESTADOS } from '../lib/catalogo-mod
 import { itemVisivelNoPerfil } from '../lib/perfis-menu'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
-import { applyThemeMode, DINO_BARBERSHOP_LOGO, isClubeBrandContext, isDinoBrandContext, isStalloneBrandContext, isRestauranteBrandContext, isConcretoBrandContext, PALATARE_LOGO, CONCRETO_LOGO, STALLONE_LOGO, storedThemeMode } from '../lib/brand'
+import { applyThemeMode, DINO_BARBERSHOP_LOGO, isClubeBrandContext, isDinoBrandContext, isStalloneBrandContext, isZumaBrandContext, isRestauranteBrandContext, isConcretoBrandContext, PALATARE_LOGO, CONCRETO_LOGO, STALLONE_LOGO, storedThemeMode } from '../lib/brand'
 import {
   HOLDING_PALATARE_EMPRESA_ID,
   PALATARE_PIZZARIA_EMPRESA_ID,
@@ -496,6 +496,69 @@ const NAV_STALLONE_PUBLIC = [
 ]
 
 
+export const NAV_ZUMA_GROUPS = [
+  {
+    label: 'Hoje no Zuma', aberto: true,
+    items: [
+      { to: '/admin/zuma', icon: '🍣', label: 'Painel Zuma 360°', end: true },
+      { to: '/zuma/pilot.html', icon: '🚀', label: 'Zuma Pilot 360°', novaGuia: true },
+      { to: '/zuma/operacao.html', icon: '🍱', label: 'Central Operacional (4 Estações)', novaGuia: true },
+      { to: '/zuma', icon: '📱', label: 'Cardápio Digital PWA', novaGuia: true },
+      { to: '/admin/mesas', icon: '🪑', label: 'Mesas & Salão (27 Mesas)' },
+      { to: '/pdv', icon: '🛒', label: 'PDV & Caixa Balcão', badge: true },
+      { to: '/garcom', icon: '🧑‍🍳', label: 'App Garçom' },
+      { to: '/kds', icon: '👨‍🍳', label: 'KDS Sushi Bar & Cozinha', badge: true },
+      { to: '/admin/inteligencia-vendas', icon: '🚀', label: 'Como Vender Mais com IA' },
+    ],
+  },
+  {
+    label: 'Cardápio & Produção Oriental', aberto: true,
+    items: [
+      { to: '/zuma/pilot.html#engenharia', icon: '🏷️', label: 'Engenharia BCG (211 SKUs)', novaGuia: true },
+      { to: '/zuma/pilot.html#estoque', icon: '🐟', label: 'Ficha Pescados & Salmão', novaGuia: true },
+      { to: '/admin/cardapio', icon: '🍽️', label: 'Cardápio ERP' },
+      { to: '/admin/fichas-tecnicas', icon: '🧪', label: 'Fichas Técnicas & Porções' },
+      { to: '/admin/estoque', icon: '📦', label: 'Estoque de Insumos' },
+      { to: '/admin/perdas-inventario', icon: '🧾', label: 'Perdas & Inventário' },
+    ],
+  },
+  {
+    label: 'Crescimento & Inteligência (KyttoIA)', aberto: true,
+    items: [
+      { to: '/zuma/pilot.html#mercado', icon: '🎯', label: 'Inteligência Competitiva', novaGuia: true },
+      { to: '/zuma/pilot.html#zumi', icon: '🤖', label: 'Mascote Zumi & Akira', novaGuia: true },
+      { to: '/zuma/pilot.html#campanhas', icon: '📸', label: 'Instagram @zuma_orientaltga', novaGuia: true },
+      { to: '/zuma/pilot.html#b2b', icon: '🤝', label: 'Convênios B2B Agro Tangará', novaGuia: true },
+      { to: '/zuma/pilot.html#recuperador', icon: '🛒', label: 'Recuperador de Carrinhos', novaGuia: true },
+      { to: '/zuma/pilot.html#rfm', icon: '👥', label: 'Matriz RFM & Clientes VIP', novaGuia: true },
+      { to: '/zuma/pilot.html#clube', icon: '👑', label: 'Clube Zumi de Fidelidade', novaGuia: true },
+      { to: '/zuma/pilot.html#clima', icon: '⛅', label: 'Estação Climática Tangará', novaGuia: true },
+    ],
+  },
+  {
+    label: 'Financeiro & Fiscal',
+    items: [
+      { to: '/zuma/pilot.html#financeiro', icon: '📈', label: 'DRE Gastronômica & Margens', novaGuia: true },
+      { to: '/admin/financeiro', icon: '💰', label: 'Financeiro Geral' },
+      { to: '/admin/contas-pagar', icon: '🧾', label: 'Contas a Pagar', razao: true },
+      { to: '/admin/contas-receber', icon: '🧾', label: 'Contas a Receber', razao: true },
+      { to: '/admin/fechamento-diario', icon: '🔐', label: 'Fechamento de Caixa', razao: true },
+      { to: '/admin/notas', icon: '🧾', label: 'Emissão Fiscal NFC-e / NF-e' },
+      { to: '/admin/fiscal/config', icon: '⚙️', label: 'Configurações Fiscais' },
+    ],
+  },
+  {
+    label: 'Configurações & Cadastros',
+    items: [
+      { to: '/admin/cadastros-mestres', icon: '🗂️', label: 'Fornecedores e Equipe' },
+      { to: '/admin/lojas', icon: '🏬', label: 'Unidade Tangará da Serra' },
+      { to: '/admin/usuarios', icon: '👥', label: 'Usuários & Permissões' },
+      { to: '/admin/configuracoes', icon: '🛠️', label: 'Configurações' },
+      { to: '/admin/auditoria', icon: '🔍', label: 'Auditoria de Acessos' },
+    ],
+  },
+];
+
 export const NAV_RESTAURANTE_GROUPS = [
   {
     label: 'Hoje na Pizzaria', aberto: true,
@@ -927,8 +990,9 @@ export default function Sidebar() {
   const naRotaPizzaria = location.pathname.startsWith('/admin/pizzaria')
 
   // Contexto de Marca com Prioridade Correta:
-  const isHolding = (empresaAtiva?.id === HOLDING_PALATARE_EMPRESA_ID || empresaAtiva?.tipoNegocio === 'holding' || naRotaHolding)
-  const isRestaurante = !isHolding && (empresaAtiva?.id === PALATARE_PIZZARIA_EMPRESA_ID || isRestauranteBrandContext(empresaAtiva) || naRotaPizzaria)
+  const isZuma = isZumaBrandContext(empresaAtiva) || location.pathname.startsWith('/admin/zuma') || location.pathname.startsWith('/zuma')
+  const isHolding = !isZuma && (empresaAtiva?.id === HOLDING_PALATARE_EMPRESA_ID || empresaAtiva?.tipoNegocio === 'holding' || naRotaHolding)
+  const isRestaurante = !isZuma && !isHolding && (empresaAtiva?.id === PALATARE_PIZZARIA_EMPRESA_ID || isRestauranteBrandContext(empresaAtiva) || naRotaPizzaria)
   const isConcreto = !isHolding && !isRestaurante && (empresaAtiva?.id === SERRANO_CONCRETO_EMPRESA_ID || isConcretoBrandContext(empresaAtiva) || naRotaConcreto)
   const isGrupoPalatareAtivo = isHolding || isRestaurante || isConcreto || isGrupoPalatareEmpresa(empresaAtiva?.id)
   const isDino = !isGrupoPalatareAtivo && (isDinoDedicatedHost() || isDinoBrandContext(empresaAtiva))
@@ -1467,7 +1531,15 @@ export default function Sidebar() {
           <Section
             label={isRestaurante ? "Operação de Salão & Cozinha" : isConcreto ? "Operação da Usina" : isClube ? "Balcão, bar e portaria" : "Operações"}
             items={opVisiveis(
-              isRestaurante
+              isZuma
+                ? [
+                    { to: "/zuma/operacao.html", icon: "🍱", label: "Central Operacional", badge: true, novaGuia: true },
+                    { to: "/zuma/pilot.html", icon: "🚀", label: "Zuma Pilot 360°", badge: false, novaGuia: true },
+                    { to: "/pdv", icon: "🛒", label: "PDV & Caixa", badge: true },
+                    { to: "/garcom", icon: "🧑‍🍳", label: "Modo Garçom", badge: false },
+                    { to: "/kds", icon: "👨‍🍳", label: "KDS Sushi & Cozinha", badge: true },
+                  ]
+                : isRestaurante
                 ? [
                     { to: "/pdv", icon: "🛒", label: "PDV Balcão", badge: true },
                     { to: "/garcom", icon: "🧑‍🍳", label: "Modo Garçom", badge: false },
@@ -1506,7 +1578,9 @@ export default function Sidebar() {
         {isOrg && (
           <AdminGroups
             groups={
-              isHolding
+              isZuma
+                ? NAV_ZUMA_GROUPS
+                : isHolding
                 ? NAV_HOLDING_GROUPS
                 : isDino
                 ? NAV_DINO_GROUPS
@@ -1525,7 +1599,7 @@ export default function Sidebar() {
             empresa={empresaDoMenu}
             usuarioDeEmpresa={usuarioDeEmpresa}
             sidebarCollapsed={recolhido}
-            compacto={isHolding || isClube || isRestaurante || isConcreto}
+            compacto={isZuma || isHolding || isClube || isRestaurante || isConcreto}
           />
         )}
         {isPlatformAdmin && <Section label="Administração da Plataforma" items={NAV_PLATFORM} onNavClick={handleNavClick} sidebarCollapsed={recolhido} />}

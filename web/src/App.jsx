@@ -53,6 +53,7 @@ function EntradaPrincipal() {
   if (host.startsWith('setpoint.')) return <Navigate to="/admin" replace />
   const destinoStallone = stalloneEntryFromHost(host)
   if (destinoStallone) return <Navigate to={destinoStallone} replace />
+  if (host.includes('zuma')) return <Navigate to="/admin/zuma" replace />
   const destinoDino = destinoInicialDino(host)
   if (destinoDino) return <Navigate to={destinoDino} replace />
   // Domínio próprio da Stallone (stallone.kytto.com.br): abre direto a loja.
@@ -206,6 +207,7 @@ const ExpedicaoLogistica = lazy(() => import('./pages/admin/ExpedicaoLogistica')
 const PatrimonioAtivos = lazy(() => import('./pages/admin/PatrimonioAtivos'))
 const LojaModa        = lazy(() => import('./pages/admin/LojaModa'))
 const PalatarePizzariaSuite = lazyWithRetry(() => import("./pages/admin/PalatarePizzariaSuite"))
+const ZumaSuite = lazyWithRetry(() => import("./pages/admin/ZumaSuite"))
 const ConcretoUsinaERP = lazyWithRetry(() => import("./pages/admin/ConcretoUsinaERP"))
 const ConcretoPwaAssinatura = lazyWithRetry(() => import("./pages/public/ConcretoPwaAssinatura"))
 const ConcretoPortalCliente = lazyWithRetry(() => import("./pages/public/ConcretoPortalCliente"))

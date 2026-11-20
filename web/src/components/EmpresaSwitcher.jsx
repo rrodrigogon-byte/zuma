@@ -10,6 +10,28 @@ import {
   deduplicarEmpresas
 } from "../lib/palatare-constants";
 
+export const EMPRESA_ZUMA_CANONICA = {
+  id: 'c3c3ac01-8e50-4b61-8c79-de4aaa916da3',
+  nome: 'Zuma Cozinha Oriental',
+  razaoSocial: 'Zuma Cozinha Oriental LTDA',
+  nomeFantasia: 'Zuma Cozinha Oriental',
+  cnpj: '36.296.848/0001-57',
+  inscricaoEstadual: '13.882.109-8',
+  inscricaoMunicipal: '94820',
+  tipoNegocio: 'restaurante_oriental',
+  segmento: 'culinaria_japonesa',
+  icone: '🍣',
+  lojas: [
+    {
+      id: 'c3c3ac01-8e50-4b61-8c79-de4aaa916da0',
+      empresaId: 'c3c3ac01-8e50-4b61-8c79-de4aaa916da3',
+      nome: 'Zuma - Tangará da Serra (Matriz)',
+      slug: 'zuma',
+      alias: 'zuma'
+    }
+  ]
+};
+
 function iconeEmpresa(emp) {
   if (!emp) return "🏢";
   const nome = String(emp.nome || emp.nomeFantasia || emp.razaoSocial || '').toLowerCase();
@@ -17,6 +39,7 @@ function iconeEmpresa(emp) {
   if (emp.logoUrl) {
     return <img src={emp.logoUrl} alt={emp.nome || ''} style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover' }} />;
   }
+  if (tipo === 'restaurante_oriental' || nome.includes('zuma') || nome.includes('oriental') || (emp && emp.id === 'c3c3ac01-8e50-4b61-8c79-de4aaa916da3')) return '🍣';
   if (tipo === "restaurante" || nome.includes("palatare") || nome.includes("pizza")) return "🍕";
   if (tipo === "concreto" || nome.includes("concreto") || nome.includes("serrano") || nome.includes("usina")) return "🚚";
   if (tipo === 'barbearia' || nome.includes('dino')) return '💈';
@@ -64,6 +87,8 @@ export default function EmpresaSwitcher() {
         return true;
       });
 
+      // Garante SEMPRE a empresa canônica Zuma Cozinha Oriental no topo
+      lista.unshift(EMPRESA_ZUMA_CANONICA);
       // Garante SEMPRE as 3 empresas canônicas do Grupo Palatare (Holding, Pizzaria, Concreto)
       for (const empGp of GRUPO_PALATARE_EMPRESAS) {
         lista.push(empGp);
@@ -123,6 +148,10 @@ export default function EmpresaSwitcher() {
       window.dispatchEvent(new CustomEvent("empresa_alterada", { detail: emp }));
     } catch {}
     setAberto(false);
+    if (emp.id === 'c3c3ac01-8e50-4b61-8c79-de4aaa916da3' || String(emp.nome || '').toLowerCase().includes('zuma')) {
+      navigate('/admin/zuma');
+      return;
+    }
     if (emp.id === HOLDING_PALATARE_EMPRESA_ID || emp.tipoNegocio === 'holding') {
       navigate('/admin/concreto?secao=empresa-holding');
     } else if (emp.id === PALATARE_PIZZARIA_EMPRESA_ID || emp.tipoNegocio === 'restaurante') {
