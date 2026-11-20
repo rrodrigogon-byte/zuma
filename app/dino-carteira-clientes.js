@@ -15,7 +15,8 @@ const EQUIVALENCIAS_DINO = new Set([
 ]);
 
 function empresasEquivalentes(empresaId) {
-  const chave = String(empresaId || '');
+  const idReal = typeof empresaId === 'function' ? empresaId() : empresaId;
+  const chave = String(idReal || '');
   if (EQUIVALENCIAS_DINO.has(chave)) {
     return Array.from(EQUIVALENCIAS_DINO);
   }
@@ -41,13 +42,53 @@ function classificarStatusRetorno(dias) {
   return 'sumido';
 }
 
+// Cache em memória de alta performance para evitar travamento de CPU e timeouts 502
+const CACHE_CARTEIRAS = new Map();
+const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutos
+
+export function invalidarCacheCarteira(empresaId) {
+  if (!empresaId) {
+    CACHE_CARTEIRAS.clear();
+    return;
+  }
+  const empresas = empresasEquivalentes(empresaId);
+  for (const emp of empresas) {
+    for (const key of Array.from(CACHE_CARTEIRAS.keys())) {
+      if (key.startsWith(emp)) {
+        CACHE_CARTEIRAS.delete(key);
+      }
+    }
+  }
+}
+
 /**
  * Mapeia todos os clientes e infere/atribui o barbeiro titular de cada um
  * com base na escolha explícita ou no histórico de atendimentos mais frequente.
  */
-export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
+export function mapearCarteiras(empresaId, { lojaId = null, force = false } = {}) {
+  const idReal = typeof empresaId === 'function' ? empresaId() : empresaId;
+  const chave = String(idReal || '');
+  const cacheKey = `${chave}::${lojaId || 'todas'}`;
+  const agora = Date.now();
+  const cached = CACHE_CARTEIRAS.get(cacheKey);
+  if (!force && cached && (agora - cached.timestamp < CACHE_TTL_MS)) {
+    return cached.dados;
+  }
+
   const empresas = empresasEquivalentes(empresaId);
   const root = db();
+
+  // Cache de normalização telefônica local para evitar regex repetitivo em loops grandes
+  const telNormCache = new Map();
+  const getNormTel = (tel) => {
+    if (!tel) return '';
+    const key = String(tel);
+    let val = telNormCache.get(key);
+    if (val !== undefined) return val;
+    val = normalizarTelefoneBR(key);
+    telNormCache.set(key, val);
+    return val;
+  };
 
   // 1. Carrega lista unificada de profissionais ativos
   const profissionaisMap = new Map();
@@ -69,38 +110,38 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
   }
 
   // 2. Coleta atendimentos e comandas para calcular histórico por cliente e profissional
-  // Mapa de cliente -> { [profId]: { atendimentos, ultimaData, ultimoServico, totalGasto, servicosCount: {} } }
+  // Mapa de cliente -> { [profId]: { atendimentos, ultimaData, ultimoServico, totalGasto, servicos, datasSet } }
   const relacaoClienteProf = new Map();
 
   for (const emp of empresas) {
-    // Agendamentos
+    // Agendamentos - Leitura direta sem clonagem pesada
     try {
-      const agendamentos = barbeariaErpKytto.listarAgendamentos(emp, { lojaId });
-      for (const ag of agendamentos) {
-        if (ag.status === 'cancelado') continue;
+      const agendamentosObj = root.barbearias?.[emp]?.agendamentos || {};
+      for (const ag of Object.values(agendamentosObj)) {
+        if (!ag || ag.status === 'cancelado') continue;
+        if (lojaId && ag.lojaId && ag.lojaId !== lojaId) continue;
         const cliId = ag.clienteId || ag.clienteTelefone || ag.clienteNome;
-        const cliTelNorm = normalizarTelefoneBR(ag.clienteTelefone);
+        const cliTelNorm = getNormTel(ag.clienteTelefone);
         const profId = ag.profissionalId;
         if (!cliId || !profId) continue;
 
         if (!relacaoClienteProf.has(cliId)) relacaoClienteProf.set(cliId, {});
         const cliProf = relacaoClienteProf.get(cliId);
-        cliProf[profId] ||= { atendimentos: 0, ultimaData: '', ultimoServico: '', totalGasto: 0, servicos: {}, datas: [] };
+        cliProf[profId] ||= { atendimentos: 0, ultimaData: '', ultimoServico: '', totalGasto: 0, servicos: {}, datasSet: new Set() };
+        const pAg = cliProf[profId];
 
         const dataAg = String(ag.dataAgenda || ag.dataHora || '').slice(0, 10);
-        cliProf[profId].atendimentos += 1;
-        cliProf[profId].totalGasto += Number(ag.valor || 0);
-        if (dataAg && !cliProf[profId].datas.includes(dataAg)) {
-          cliProf[profId].datas.push(dataAg);
-        }
+        pAg.atendimentos += 1;
+        pAg.totalGasto += Number(ag.valor || 0);
+        if (dataAg) pAg.datasSet.add(dataAg);
 
         if (ag.servicoNome) {
-          cliProf[profId].servicos[ag.servicoNome] = (cliProf[profId].servicos[ag.servicoNome] || 0) + 1;
+          pAg.servicos[ag.servicoNome] = (pAg.servicos[ag.servicoNome] || 0) + 1;
         }
 
-        if (!cliProf[profId].ultimaData || dataAg >= cliProf[profId].ultimaData) {
-          cliProf[profId].ultimaData = dataAg;
-          cliProf[profId].ultimoServico = ag.servicoNome || cliProf[profId].ultimoServico;
+        if (!pAg.ultimaData || dataAg >= pAg.ultimaData) {
+          pAg.ultimaData = dataAg;
+          pAg.ultimoServico = ag.servicoNome || pAg.ultimoServico;
         }
         if (cliTelNorm && cliTelNorm !== cliId) {
           relacaoClienteProf.set(cliTelNorm, cliProf);
@@ -108,37 +149,36 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
       }
     } catch {}
 
-    // Comandas
+    // Comandas - Leitura direta sem overhead de cópia profunda
     try {
-      const comandas = barbeariaErpKytto.listarComandasBarbearia(emp, { lojaId });
-      for (const cmd of comandas) {
-        if (cmd.status === 'cancelada') continue;
+      const comandasObj = root.barbearias?.[emp]?.comandas || {};
+      for (const cmd of Object.values(comandasObj)) {
+        if (!cmd || cmd.status === 'cancelada') continue;
+        if (lojaId && cmd.lojaId && cmd.lojaId !== lojaId) continue;
         const cliId = cmd.clienteId || cmd.clienteTelefone || cmd.clienteNome;
-        const cliTelNorm = normalizarTelefoneBR(cmd.clienteTelefone);
+        const cliTelNorm = getNormTel(cmd.clienteTelefone);
         const profId = cmd.profissionalId;
         if (!cliId || !profId) continue;
 
         if (!relacaoClienteProf.has(cliId)) relacaoClienteProf.set(cliId, {});
         const cliProf = relacaoClienteProf.get(cliId);
-        cliProf[profId] ||= { atendimentos: 0, ultimaData: '', ultimoServico: '', totalGasto: 0, servicos: {}, datas: [] };
+        cliProf[profId] ||= { atendimentos: 0, ultimaData: '', ultimoServico: '', totalGasto: 0, servicos: {}, datasSet: new Set() };
+        const pCmd = cliProf[profId];
 
         const dataCmd = String(cmd.fechadaEm || cmd.atualizadoEm || cmd.criadoEm || '').slice(0, 10);
-        cliProf[profId].totalGasto += Number(cmd.total || 0);
-        if (dataCmd && !cliProf[profId].datas.includes(dataCmd)) {
-          cliProf[profId].datas.push(dataCmd);
-        }
+        pCmd.totalGasto += Number(cmd.total || 0);
+        if (dataCmd) pCmd.datasSet.add(dataCmd);
 
         for (const it of cmd.itens || []) {
           const itemProfId = it.profissionalId || profId;
           if (it.tipo === 'servico' && it.nome) {
-            cliProf[itemProfId] ||= { atendimentos: 0, ultimaData: '', ultimoServico: '', totalGasto: 0, servicos: {}, datas: [] };
-            cliProf[itemProfId].servicos[it.nome] = (cliProf[itemProfId].servicos[it.nome] || 0) + 1;
-            if (dataCmd && !cliProf[itemProfId].datas.includes(dataCmd)) {
-              cliProf[itemProfId].datas.push(dataCmd);
-            }
-            if (!cliProf[itemProfId].ultimaData || dataCmd >= cliProf[itemProfId].ultimaData) {
-              cliProf[itemProfId].ultimaData = dataCmd;
-              cliProf[itemProfId].ultimoServico = it.nome;
+            cliProf[itemProfId] ||= { atendimentos: 0, ultimaData: '', ultimoServico: '', totalGasto: 0, servicos: {}, datasSet: new Set() };
+            const pItem = cliProf[itemProfId];
+            pItem.servicos[it.nome] = (pItem.servicos[it.nome] || 0) + 1;
+            if (dataCmd) pItem.datasSet.add(dataCmd);
+            if (!pItem.ultimaData || dataCmd >= pItem.ultimaData) {
+              pItem.ultimaData = dataCmd;
+              pItem.ultimoServico = it.nome;
             }
           }
         }
@@ -152,29 +192,29 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
     try {
       const hist = Object.values(root.barbearias?.[emp]?.historicoAtendimentos || {});
       for (const h of hist) {
+        if (!h) continue;
         const cliId = h.clienteId || h.clienteTelefone || h.clienteNome;
-        const cliTelNorm = normalizarTelefoneBR(h.clienteTelefone);
+        const cliTelNorm = getNormTel(h.clienteTelefone);
         const profId = h.profissionalId;
         if (!cliId || !profId) continue;
 
         if (!relacaoClienteProf.has(cliId)) relacaoClienteProf.set(cliId, {});
         const cliProf = relacaoClienteProf.get(cliId);
-        cliProf[profId] ||= { atendimentos: 0, ultimaData: '', ultimoServico: '', totalGasto: 0, servicos: {}, datas: [] };
+        cliProf[profId] ||= { atendimentos: 0, ultimaData: '', ultimoServico: '', totalGasto: 0, servicos: {}, datasSet: new Set() };
+        const pHist = cliProf[profId];
 
         const dataH = String(h.dataAgenda || '').slice(0, 10);
-        cliProf[profId].atendimentos += 1;
-        cliProf[profId].totalGasto += Number(h.total || h.valor || 0);
-        if (dataH && !cliProf[profId].datas.includes(dataH)) {
-          cliProf[profId].datas.push(dataH);
-        }
+        pHist.atendimentos += 1;
+        pHist.totalGasto += Number(h.total || h.valor || 0);
+        if (dataH) pHist.datasSet.add(dataH);
 
         if (h.servicoNome) {
-          cliProf[profId].servicos[h.servicoNome] = (cliProf[profId].servicos[h.servicoNome] || 0) + 1;
+          pHist.servicos[h.servicoNome] = (pHist.servicos[h.servicoNome] || 0) + 1;
         }
 
-        if (!cliProf[profId].ultimaData || dataH >= cliProf[profId].ultimaData) {
-          cliProf[profId].ultimaData = dataH;
-          cliProf[profId].ultimoServico = h.servicoNome || cliProf[profId].ultimoServico;
+        if (!pHist.ultimaData || dataH >= pHist.ultimaData) {
+          pHist.ultimaData = dataH;
+          pHist.ultimoServico = h.servicoNome || pHist.ultimoServico;
         }
         if (cliTelNorm && cliTelNorm !== cliId) {
           relacaoClienteProf.set(cliTelNorm, cliProf);
@@ -188,8 +228,8 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
   for (const emp of empresas) {
     const cliStore = root.clientesKytto?.empresas?.[emp]?.clientes || {};
     for (const cli of Object.values(cliStore)) {
-      if (cli.status === 'deletado' || cli.status === 'mesclado') continue;
-      const telNorm = normalizarTelefoneBR(cli.telefone);
+      if (!cli || cli.status === 'deletado' || cli.status === 'mesclado') continue;
+      const telNorm = getNormTel(cli.telefone);
       const chaveAgrupamento = telNorm || cli.id;
       if (!clientesMap.has(chaveAgrupamento)) {
         clientesMap.set(chaveAgrupamento, { ...cli, telefone: telNorm || cli.telefone, idsAgrupados: [cli.id] });
@@ -213,11 +253,12 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
 
   for (const [cliId, cli] of clientesMap.entries()) {
     // Identifica o histórico deste cliente
-    const telNorm = normalizarTelefoneBR(cli.telefone);
+    const telNorm = getNormTel(cli.telefone);
     let historicoProfissionais = relacaoClienteProf.get(cliId) ||
       (telNorm && relacaoClienteProf.get(telNorm)) ||
       relacaoClienteProf.get(cli.telefone) ||
       relacaoClienteProf.get(cli.nome) || {};
+
     if (cli.idsAgrupados && cli.idsAgrupados.length > 1) {
       const histMesclado = { ...historicoProfissionais };
       for (const outroId of cli.idsAgrupados) {
@@ -225,14 +266,18 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
         if (hOutro) {
           for (const [pId, dados] of Object.entries(hOutro)) {
             if (!histMesclado[pId]) {
-              histMesclado[pId] = { ...dados, servicos: { ...(dados.servicos || {}) }, datas: [...(dados.datas || [])] };
+              histMesclado[pId] = {
+                ...dados,
+                servicos: { ...(dados.servicos || {}) },
+                datasSet: new Set(dados.datasSet || []),
+              };
             } else {
               histMesclado[pId].atendimentos += dados.atendimentos;
               histMesclado[pId].totalGasto += dados.totalGasto;
-              if (dados.datas && dados.datas.length) {
-                histMesclado[pId].datas ||= [];
-                for (const d of dados.datas) {
-                  if (!histMesclado[pId].datas.includes(d)) histMesclado[pId].datas.push(d);
+              if (dados.datasSet) {
+                histMesclado[pId].datasSet ||= new Set();
+                for (const d of dados.datasSet) {
+                  histMesclado[pId].datasSet.add(d);
                 }
               }
               if (!histMesclado[pId].ultimaData || (dados.ultimaData && dados.ultimaData > histMesclado[pId].ultimaData)) {
@@ -274,6 +319,7 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
       ultimoServico: '',
       totalGasto: 0,
       servicos: {},
+      datasSet: new Set(),
     };
 
     // Serviço favorito com o barbeiro
@@ -304,12 +350,12 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
 
     // Ciclo médio individual de retorno em dias com este barbeiro
     let cicloMedioDias = 0;
-    const datasOrdenadas = (metricasTitular.datas || []).filter(Boolean).sort();
-    if (datasOrdenadas.length >= 2) {
+    const datasArr = metricasTitular.datasSet ? Array.from(metricasTitular.datasSet).filter(Boolean).sort() : [];
+    if (datasArr.length >= 2) {
       let somaIntervalos = 0;
       let countIntervalos = 0;
-      for (let i = 1; i < datasOrdenadas.length; i++) {
-        const diff = calcularDiasDiferenca(datasOrdenadas[i - 1], datasOrdenadas[i]);
+      for (let i = 1; i < datasArr.length; i++) {
+        const diff = calcularDiasDiferenca(datasArr[i - 1], datasArr[i]);
         if (diff >= 3 && diff <= 180) {
           somaIntervalos += diff;
           countIntervalos += 1;
@@ -344,10 +390,17 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
     });
   }
 
-  return {
+  const resultado = {
     carteiraCompleta,
     profissionais: Array.from(profissionaisMap.values()),
   };
+
+  CACHE_CARTEIRAS.set(cacheKey, {
+    timestamp: Date.now(),
+    dados: resultado,
+  });
+
+  return resultado;
 }
 
 /**
@@ -359,8 +412,9 @@ export function listarCarteiraClientes(empresaId, {
   busca = '',
   filtroRetorno = 'todos',
   limite = 200,
+  force = false,
 } = {}) {
-  const { carteiraCompleta, profissionais } = mapearCarteiras(empresaId, { lojaId });
+  const { carteiraCompleta, profissionais } = mapearCarteiras(empresaId, { lojaId, force });
 
   let lista = carteiraCompleta;
 
@@ -414,8 +468,8 @@ export function listarCarteiraClientes(empresaId, {
 /**
  * Retorna resumo numérico de todas as carteiras para visualização executiva e comparativa.
  */
-export function resumoCarteirasProfissionais(empresaId, { lojaId = null } = {}) {
-  const { carteiraCompleta, profissionais } = mapearCarteiras(empresaId, { lojaId });
+export function resumoCarteirasProfissionais(empresaId, { lojaId = null, force = false } = {}) {
+  const { carteiraCompleta, profissionais } = mapearCarteiras(empresaId, { lojaId, force });
 
   const mapaResumo = new Map();
   for (const prof of profissionais) {
@@ -546,6 +600,7 @@ export function vincularClienteBarbeiro(empresaId, clienteId, { profissionalId, 
   clienteEncontrado.atualizadoPor = String(usuario || '').slice(0, 120);
 
   save();
+  invalidarCacheCarteira(empresaId);
   return { ...clienteEncontrado };
 }
 
@@ -564,7 +619,6 @@ export function gerarMensagemWhatsappRetorno({
 
   return `Fala ${primeiroNome}, tudo bem? Aqui é o ${barbeiroApelido} da Barbearia Dino! 💈\n\nVi aqui que ${tempoTexto}. Vamos dar aquele talento no visual essa semana?\n\nJá separei sua cadeira! Pode me avisar por aqui ou escolher o melhor horário direto no link: ${linkAgendamento}`;
 }
-
 
 /**
  * Gera exportação CSV formatada para planilhas da carteira de clientes.
@@ -594,16 +648,17 @@ export function exportarCarteiraCsv(empresaId, options = {}) {
       atrasado: 'Em Atraso (31-60d)',
       sumido: 'Sumido (> 60d)',
     }[c.statusRetorno] || c.statusRetorno;
+
     linhas.push([
-      `"${(c.nome || '').replace(/"/g, '""')}"`,
-      `"${(c.telefone || '').replace(/"/g, '""')}"`,
-      `"${(c.barbeiroApelido || c.barbeiroNome || 'Sem barbeiro').replace(/"/g, '""')}"`,
-      c.barbeiroFonte === 'manual' ? 'Fixado Manualmente' : 'Habitual Inferido',
-      c.isVip ? 'SIM' : 'NAO',
-      c.ultimaVisita || 'Nunca visitou',
-      c.diasSemRetorno,
-      `"${statusLabel}"`,
-      `"${(c.servicoFavorito || '').replace(/"/g, '""')}"`,
+      `"${String(c.nome || '').replace(/"/g, '""')}"`,
+      c.telefone || '',
+      `"${String(c.barbeiroNome || 'Sem barbeiro').replace(/"/g, '""')}"`,
+      c.barbeiroFonte === 'manual' ? 'Fixado' : 'Habitual',
+      c.isVip ? 'Sim' : 'Não',
+      c.ultimaVisita || '',
+      c.diasSemRetorno || 0,
+      statusLabel,
+      `"${String(c.servicoFavorito || '').replace(/"/g, '""')}"`,
       c.totalAtendimentosComBarbeiro || 0,
       (c.totalGastoComBarbeiro || 0).toFixed(2).replace('.', ','),
       (c.ticketMedioCliente || 0).toFixed(2).replace('.', ','),

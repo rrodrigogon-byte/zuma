@@ -184,11 +184,56 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
   const abrirReativacaoLote = useCallback(async () => {
     setCarregandoLote(true)
     try {
-      const res = await api.post('/api/admin/barbearia/carteira-clientes/disparar-reativacao', {
-        clientesSelecionados: clientes.filter(c => c.statusRetorno === 'ideal_retorno' || c.statusRetorno === 'atrasado'),
-        profissionalId: barbeiroSelecionadoId,
-      })
-      setModalLote(res)
+      const candidatos = (clientes || [])
+        .filter(c => c.statusRetorno === 'ideal_retorno' || c.statusRetorno === 'atrasado')
+        .slice(0, 150)
+        .map(c => ({
+          clienteId: c.clienteId || c.id,
+          nome: c.nome,
+          telefone: c.telefone,
+          barbeiroApelido: c.barbeiroApelido || c.barbeiroNome?.split(' ')[0] || 'Dino',
+          servicoFavorito: c.servicoFavorito || 'corte',
+          diasSemRetorno: c.diasSemRetorno || 0,
+        }))
+
+      let res = null
+      try {
+        res = await api.post('/api/admin/barbearia/carteira-clientes/disparar-reativacao', {
+          clientesSelecionados: candidatos,
+          profissionalId: barbeiroSelecionadoId,
+        })
+      } catch (postErr) {
+        console.warn('Fallback resiliente na fila de reativação:', postErr)
+      }
+
+      if (res && res.disparos && res.disparos.length > 0) {
+        setModalLote(res)
+      } else {
+        const listaAlvo = candidatos.length > 0 ? candidatos : (clientes || []).slice(0, 100)
+        const disparosLocais = listaAlvo.map(c => {
+          const link = gerarLinkWhatsapp(c)
+          let msg = ''
+          try {
+            msg = decodeURIComponent(link.split('text=')[1] || '')
+          } catch {
+            msg = `Fala ${c.nome?.split(' ')[0] || 'amigo'}! Tudo bem? Passando para te convidar a renovar o visual na Barbearia Dino!`
+          }
+          return {
+            clienteId: c.clienteId || c.id || String(Math.random()),
+            nome: c.nome,
+            telefone: c.telefone,
+            whatsappUrl: link !== '#' ? link : null,
+            mensagem: msg,
+            status: link !== '#' ? 'pronto' : 'sem_telefone',
+          }
+        })
+        setModalLote({
+          ok: true,
+          totalProntos: disparosLocais.filter(d => d.status === 'pronto').length,
+          totalSemTelefone: disparosLocais.filter(d => d.status === 'sem_telefone').length,
+          disparos: disparosLocais,
+        })
+      }
     } catch (err) {
       alert('Erro ao preparar reativação: ' + (err.message || 'tente novamente.'))
     } finally {

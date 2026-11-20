@@ -142,4 +142,19 @@ test('Carteira de clientes por profissional - mapeamento e resumo', async (t) =>
     assert.equal(res.cicloMedioRetornoGeral > 0, true);
     assert.equal(typeof res.carteiras[0].cicloMedioRetornoDias, 'number');
   });
+
+  await t.test('cache em memoria funciona e invalidarCacheCarteira renova dados', () => {
+    // Primeira chamada preenche o cache
+    const r1 = carteira.mapearCarteiras(empId);
+    assert.ok(r1.carteiraCompleta);
+
+    // Segunda chamada reaproveita o cache instantaneamente
+    const r2 = carteira.mapearCarteiras(empId);
+    assert.equal(r1, r2);
+
+    // Invalidação força recálculo
+    carteira.invalidarCacheCarteira(empId);
+    const r3 = carteira.mapearCarteiras(empId);
+    assert.notEqual(r1, r3);
+  });
 });

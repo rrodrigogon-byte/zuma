@@ -9829,12 +9829,14 @@ app.get('/api/admin/barbearia/clientes/busca', (req, res) => {
 app.get(['/api/admin/barbearia/carteira-clientes', '/api/admin/dino/carteira-clientes'], (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
+    const force = req.query?.force === 'true' || req.query?.refresh === 'true';
     const resultado = dinoCarteiraClientes.listarCarteiraClientes(empresaId, {
       profissionalId: req.query?.profissionalId || '',
       lojaId: legacyLojaId(req),
       busca: req.query?.busca || '',
       filtroRetorno: req.query?.filtroRetorno || 'todos',
       limite: Number(req.query?.limite) || 300,
+      force,
     });
     res.json({ ok: true, ...resultado });
   } catch (error) {
@@ -9845,8 +9847,10 @@ app.get(['/api/admin/barbearia/carteira-clientes', '/api/admin/dino/carteira-cli
 app.get(['/api/admin/barbearia/carteira-clientes/resumo', '/api/admin/dino/carteira-clientes/resumo'], (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
+    const force = req.query?.force === 'true' || req.query?.refresh === 'true';
     const resumo = dinoCarteiraClientes.resumoCarteirasProfissionais(empresaId, {
       lojaId: legacyLojaId(req),
+      force,
     });
     res.json({ ok: true, ...resumo });
   } catch (error) {
@@ -9880,11 +9884,11 @@ app.post(['/api/admin/barbearia/carteira-clientes/disparar-reativacao', '/api/ad
       const listagem = dinoCarteiraClientes.listarCarteiraClientes(empresaId, {
         profissionalId,
         filtroRetorno,
-        limite: 100,
+        limite: 150,
       });
       clientesAlvo = listagem.clientes;
     }
-    const disparos = (clientesAlvo || []).map((c) => {
+    const disparos = (clientesAlvo || []).slice(0, 300).map((c) => {
       const msg = dinoCarteiraClientes.gerarMensagemWhatsappRetorno({
         clienteNome: c.nome,
         barbeiroApelido: c.barbeiroApelido || 'Dino',
@@ -9894,7 +9898,7 @@ app.post(['/api/admin/barbearia/carteira-clientes/disparar-reativacao', '/api/ad
       const tel = String(c.telefone || '').replace(/\D/g, '');
       const telCompleto = tel.startsWith('55') ? tel : `55${tel}`;
       return {
-        clienteId: c.clienteId,
+        clienteId: c.clienteId || c.id,
         nome: c.nome,
         telefone: c.telefone,
         whatsappUrl: tel.length >= 10 ? `https://wa.me/${telCompleto}?text=${encodeURIComponent(msg)}` : null,
