@@ -751,3 +751,145 @@ test("Zuma Cozinha Oriental - Acesso Unificado login.html e Responsividade iPhon
   assert.ok(indexHtml.includes("cart-badge-bottom"), "index.html deve sincronizar badge na barra inferior iOS");
 });
 
+
+test('Zuma Cozinha Oriental - Gestão de Câmaras Frias IoT e Perdas Técnicas de Pescados', async () => {
+  const { routerZuma, CAMARAS_FRIAS_ZUMA } = await import('./modules/restaurante-zuma.js');
+  const callRoute = (method, p, body = {}) => {
+    return new Promise((resolve) => {
+      const req = { method, path: p, query: {}, body, params: {} };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      const layer = routerZuma.stack.find(l => l.route && l.route.path === p && l.route.methods[method.toLowerCase()]);
+      if (layer) {
+        layer.route.stack[0].handle(req, res);
+      } else {
+        resolve({ status: 404, data: { error: 'Route not found: ' + p } });
+      }
+    });
+  };
+
+  // 1. Telemetria das Câmaras Frias
+  const camarasRes = await callRoute('GET', '/estoque/camaras-frias');
+  assert.equal(camarasRes.status, 200);
+  assert.equal(camarasRes.data.ok, true);
+  assert.equal(camarasRes.data.totalCamarasMonitoradas, 3);
+  assert.equal(camarasRes.data.statusGeral, '100%_CONFORME');
+
+  const camaraPescados = camarasRes.data.camaras.find(c => c.id === 'camara-01-pescados-frescos');
+  assert.ok(camaraPescados, 'Câmara de salmão e atum fresco deve existir');
+  assert.ok(camaraPescados.temperaturaAtual >= camaraPescados.faixaMinima && camaraPescados.temperaturaAtual <= camaraPescados.faixaMaxima, 'Temperatura deve estar na faixa de -2°C a +2°C');
+
+  // 2. Registro de Perda Técnica de Salmão Fresco
+  const perdaRes = await callRoute('POST', '/estoque/perda-descarte', {
+    insumoId: 'ins-salmao-fresco',
+    quantidadeKg: 0.500,
+    tipo: 'apara_tecnica_sushiman',
+    motivo: 'Apara de gordura escura e sangria para sushi premium',
+    sushiman: 'Kenji Mestre'
+  });
+  assert.equal(perdaRes.status, 200);
+  assert.equal(perdaRes.data.ok, true);
+  assert.equal(perdaRes.data.perda.quantidadeKg, 0.500);
+  assert.ok(perdaRes.data.perda.id.startsWith('PERD-'));
+});
+
+test('Zuma Cozinha Oriental - Mapa de Temperatura & Heatmap do Salão e Mesas (25 Mesas)', async () => {
+  const { routerZuma, MESAS_SALAO_ZUMA } = await import('./modules/restaurante-zuma.js');
+  const callRoute = (method, p, body = {}) => {
+    return new Promise((resolve) => {
+      const req = { method, path: p, query: {}, body, params: {} };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      const layer = routerZuma.stack.find(l => l.route && l.route.path === p && l.route.methods[method.toLowerCase()]);
+      if (layer) {
+        layer.route.stack[0].handle(req, res);
+      } else {
+        resolve({ status: 404, data: { error: 'Route not found: ' + p } });
+      }
+    });
+  };
+
+  // 1. Obter Mapa de Calor de Mesas
+  const mapaRes = await callRoute('GET', '/mesas/mapa-temperatura');
+  assert.equal(mapaRes.status, 200);
+  assert.equal(mapaRes.data.ok, true);
+  assert.equal(mapaRes.data.totalMesas, 25);
+  assert.ok(mapaRes.data.taxaOcupacaoMesasPct > 0);
+  assert.ok(mapaRes.data.totalFaturamentoSalaoAtual > 0);
+  assert.ok(mapaRes.data.ticketMedioSalao > 50.0);
+
+  // Validar indicadores de giro das mesas
+  const mesaConta = mapaRes.data.mesas.find(m => m.solicitouConta);
+  assert.ok(mesaConta, 'Deve haver mesa solicitando conta');
+  assert.equal(mesaConta.heatmapGiro.nivel, 'alerta_giro_roxo');
+
+  // 2. Alterar status de mesa
+  const altRes = await callRoute('POST', '/mesas/alterar-status', {
+    mesaId: 3,
+    novoStatus: 'consumindo',
+    garcom: 'Roberto Kenji',
+    valorAdicionar: 150.00
+  });
+  assert.equal(altRes.status, 200);
+  assert.equal(altRes.data.ok, true);
+  assert.equal(altRes.data.mesa.status, 'consumindo');
+  assert.equal(altRes.data.mesa.valorAcumulado, 150.00);
+});
+
+test('Zuma Cozinha Oriental - Módulo Fiscal Completo com Emissão SEFAZ-MT (NFC-e & NF-e)', async () => {
+  const { routerZuma, HISTORICO_NOTAS_FISCAIS_ZUMA } = await import('./modules/restaurante-zuma.js');
+  const callRoute = (method, p, body = {}) => {
+    return new Promise((resolve) => {
+      const req = { method, path: p, query: {}, body, params: {} };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      const layer = routerZuma.stack.find(l => l.route && l.route.path === p && l.route.methods[method.toLowerCase()]);
+      if (layer) {
+        layer.route.stack[0].handle(req, res);
+      } else {
+        resolve({ status: 404, data: { error: 'Route not found: ' + p } });
+      }
+    });
+  };
+
+  // 1. Painel Fiscal e Certificado Digital A1
+  const painelRes = await callRoute('GET', '/fiscal/painel');
+  assert.equal(painelRes.status, 200);
+  assert.equal(painelRes.data.ok, true);
+  assert.equal(painelRes.data.cnpj, '36.296.848/0001-57');
+  assert.equal(painelRes.data.certificadoDigital.status, 'VALIDO_E_ATIVO');
+  assert.equal(painelRes.data.contingenciaOffline.status, 'PRONTA_STANDBY');
+  assert.ok(painelRes.data.notas.length >= 3);
+
+  // 2. Emitir NFC-e Modelo 65
+  const emissaoRes = await callRoute('POST', '/fiscal/emitir', {
+    modelo: 'NFC-e (65)',
+    origemVenda: 'Mesa 12 · Salão Principal',
+    cliente: 'Consumidor VIP Tangará',
+    formaPagamento: 'PIX',
+    itens: [
+      { descricao: 'Combinado Zuma Casal 40 Peças', qtd: 1, precoUnit: 139.00, ncm: '2106.90.90' },
+      { descricao: 'Hot Roll Filadélfia Especial (10 un)', qtd: 1, precoUnit: 42.00, ncm: '2106.90.90' }
+    ]
+  });
+
+  assert.equal(emissaoRes.status, 200);
+  assert.equal(emissaoRes.data.ok, true);
+  assert.equal(emissaoRes.data.notaFiscal.modelo, 'NFC-e (65)');
+  assert.equal(emissaoRes.data.notaFiscal.valorTotal, 181.00);
+  assert.ok(emissaoRes.data.notaFiscal.chaveAcesso.startsWith('51261136296848000157'), 'Chave com UF 51 MT e CNPJ Zuma');
+  assert.ok(emissaoRes.data.notaFiscal.protocoloSEFAZ.startsWith('1512600'), 'Protocolo SEFAZ-MT');
+  assert.ok(emissaoRes.data.notaFiscal.qrcodeUrl.includes('sefaz.mt.gov.br'), 'URL de QR Code oficial SEFAZ-MT');
+});

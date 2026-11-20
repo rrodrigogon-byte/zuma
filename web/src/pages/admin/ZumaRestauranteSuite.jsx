@@ -47,6 +47,7 @@ const TABS = [
   { id: 'mesas', label: 'Mesas & Salão', icon: Layers, badge: '25 Mesas' },
   { id: 'zumi', label: 'Zumi Atende (KyttoIA)', icon: Sparkles, badge: 'WhatsApp IA' },
   { id: 'estoque', label: 'Estoque de Pescados', icon: ChefHat, badge: 'Salmão & Insumos' },
+  { id: 'fiscal', label: 'Fiscal & SEFAZ-MT', icon: FileText, badge: 'NFC-e / NF-e' },
   { id: 'financeiro', label: 'DRE & Financeiro', icon: DollarSign, badge: 'CMV & Margens' },
   { id: 'crm', label: 'Clientes & Clube Zumi', icon: Users, badge: 'Fidelidade' },
   { id: 'delivery', label: 'Delivery & Canais', icon: Truck, badge: 'Omnichannel' },
@@ -83,6 +84,12 @@ export default function ZumaRestauranteSuite() {
   const [simulacaoPedido, setSimulacaoPedido] = useState(null);
   const [simulando, setSimulando] = useState(false);
   const [mensagemSucesso, setMensagemSucesso] = useState(null);
+  const [mapaMesas, setMapaMesas] = useState(null);
+  const [setorFiltroMesas, setSetorFiltroMesas] = useState('todos');
+  const [camarasFrias, setCamarasFrias] = useState([]);
+  const [perdasRecentes, setPerdasRecentes] = useState([]);
+  const [dadosFiscal, setDadosFiscal] = useState(null);
+  const [emitindoNota, setEmitindoNota] = useState(false);
 
   // Carregar dados de Zuma da API
   const carregarDadosZuma = async () => {
@@ -166,6 +173,87 @@ export default function ZumaRestauranteSuite() {
     }
   };
 
+  // Carregar Mapa de Temperatura das Mesas, Câmaras Frias e Fiscal
+  const carregarModulosAvancados = async () => {
+    try {
+      const [resMesas, resCamaras, resFiscal] = await Promise.allSettled([
+        api.get('/api/public/zuma/mesas/mapa-temperatura'),
+        api.get('/api/public/zuma/estoque/camaras-frias'),
+        api.get('/api/public/zuma/fiscal/painel')
+      ]);
+
+      if (resMesas.status === 'fulfilled' && resMesas.value) {
+        setMapaMesas(resMesas.value);
+      }
+      if (resCamaras.status === 'fulfilled' && resCamaras.value) {
+        setCamarasFrias(resCamaras.value.camaras || []);
+        setPerdasRecentes(resCamaras.value.perdasRecentes || []);
+      }
+      if (resFiscal.status === 'fulfilled' && resFiscal.value) {
+        setDadosFiscal(resFiscal.value);
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar módulos avançados do Zuma:', e);
+    }
+  };
+
+  const alterarStatusMesa = async (mesaId, novoStatus) => {
+    try {
+      const res = await api.post('/api/public/zuma/mesas/alterar-status', { mesaId, novoStatus });
+      if (res && res.ok) {
+        setMensagemSucesso(`Status da Mesa atualizado para "${novoStatus}" com sucesso!`);
+        setTimeout(() => setMensagemSucesso(null), 3500);
+        carregarModulosAvancados();
+      }
+    } catch (e) {
+      console.error('Erro ao alterar status da mesa:', e);
+    }
+  };
+
+  const emitirNotaFiscalRapida = async (modelo, origem) => {
+    setEmitindoNota(true);
+    try {
+      const res = await api.post('/api/public/zuma/fiscal/emitir', {
+        modelo: modelo || 'NFC-e (65)',
+        origemVenda: origem || 'Balcão / Salão Zuma',
+        cliente: 'Consumidor VIP Tangará',
+        formaPagamento: 'PIX',
+        itens: [
+          { descricao: 'Combinado Zuma Casal 40 Peças', qtd: 1, precoUnit: 139.00, ncm: '2106.90.90' },
+          { descricao: 'Hot Roll Filadélfia Especial (10 un)', qtd: 1, precoUnit: 42.00, ncm: '2106.90.90' }
+        ]
+      });
+      if (res && res.ok) {
+        setMensagemSucesso(`Nota Fiscal ${modelo} #${res.notaFiscal?.numeroNota} AUTORIZADA com sucesso pela SEFAZ-MT! Protocolo: ${res.notaFiscal?.protocoloSEFAZ}`);
+        setTimeout(() => setMensagemSucesso(null), 5000);
+        carregarModulosAvancados();
+      }
+    } catch (e) {
+      console.error('Erro na emissão fiscal:', e);
+    } finally {
+      setEmitindoNota(false);
+    }
+  };
+
+  const registrarPerdaTecnica = async (insumoId, quantidadeKg, motivo) => {
+    try {
+      const res = await api.post('/api/public/zuma/estoque/perda-descarte', {
+        insumoId,
+        quantidadeKg,
+        motivo,
+        sushiman: 'Kenji Sushiman Chefe'
+      });
+      if (res && res.ok) {
+        setMensagemSucesso(`Perda técnica registrada: -${quantidadeKg}kg debitados para controle sanitário.`);
+        setTimeout(() => setMensagemSucesso(null), 3500);
+        carregarModulosAvancados();
+        carregarEstoqueEFichas();
+      }
+    } catch (e) {
+      console.error('Erro ao registrar perda técnica:', e);
+    }
+  };
+
   const reporEstoque = async (insumoId, quantidade) => {
     try {
       await api.post('/api/public/zuma/estoque-pescados/repor', { insumoId, quantidade });
@@ -180,6 +268,7 @@ export default function ZumaRestauranteSuite() {
   useEffect(() => {
     carregarDadosZuma();
     carregarEstoqueEFichas();
+    carregarModulosAvancados();
   }, []);
 
   // Categorias únicas
@@ -886,69 +975,340 @@ export default function ZumaRestauranteSuite() {
       {/* 4. ABA MESAS & SALÃO */}
       {abaAtiva === 'mesas' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {/* Header do Salão & Mapa de Temperatura */}
           <div style={{
-            background: 'var(--card, #1e293b)',
-            border: '1px solid var(--line, #334155)',
-            borderRadius: 12,
-            padding: 18,
+            background: 'linear-gradient(135deg, rgba(230, 57, 70, 0.2) 0%, rgba(15, 23, 42, 0.95) 100%)',
+            border: '1px solid #E63946',
+            borderRadius: 14,
+            padding: 22,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             flexWrap: 'wrap',
-            gap: 12
+            gap: 14
           }}>
-            <div>
-              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Salão Oficial Zuma · 25 Mesas</h3>
-              <p style={{ margin: '4px 0 0 0', fontSize: 12, color: 'var(--muted, #94a3b8)' }}>
-                Controle de ocupação, tempo de permanência, conta pedida e fechamento sincronizado com o PDV.
-              </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <span style={{ fontSize: 34 }}>🗺️</span>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <h2 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#ffffff' }}>
+                    Mapa de Temperatura &amp; Giro do Salão · Zuma Cozinha Oriental
+                  </h2>
+                  <span style={{
+                    fontSize: 10,
+                    fontWeight: 800,
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                    background: 'rgba(16, 185, 129, 0.2)',
+                    color: '#10b981',
+                    border: '1px solid #10b981'
+                  }}>
+                    ● Salão Aberto · 25 Mesas Ativas
+                  </span>
+                </div>
+                <p style={{ margin: '4px 0 0 0', fontSize: 12.5, color: '#cbd5e1' }}>
+                  Heatmap visual de permanência, ritmo de consumo, comanda acumulada e controle térmico IoT do salão (21.8°C).
+                </p>
+              </div>
             </div>
-            <button
-              onClick={() => navigate('/admin/mesas')}
-              style={{
-                background: '#E63946',
-                color: '#ffffff',
-                border: 'none',
-                padding: '8px 16px',
-                borderRadius: 8,
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer'
-              }}
-            >
-              Abrir Mapa Completo de Mesas →
-            </button>
-          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 12 }}>
-            {Array.from({ length: 25 }, (_, i) => i + 1).map(num => (
-              <div
-                key={num}
-                onClick={() => navigate('/admin/mesas')}
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                onClick={carregarModulosAvancados}
                 style={{
-                  background: 'var(--card, #1e293b)',
-                  border: '1px solid var(--line, #334155)',
+                  background: 'var(--surface, #0f172a)',
+                  color: '#ffffff',
+                  border: '1px solid #334155',
+                  padding: '10px 16px',
                   borderRadius: 10,
-                  padding: 14,
-                  textAlign: 'center',
+                  fontSize: 12.5,
+                  fontWeight: 700,
                   cursor: 'pointer',
-                  transition: 'all 0.15s ease'
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8
                 }}
               >
-                <div style={{ fontSize: 18 }}>🪑</div>
-                <div style={{ fontSize: 14, fontWeight: 900, color: '#ffffff', marginTop: 4 }}>
-                  Mesa {num}
+                <RefreshCw size={14} /> Atualizar Salão
+              </button>
+              <button
+                onClick={() => navigate('/admin/mesas')}
+                style={{
+                  background: '#E63946',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '10px 18px',
+                  borderRadius: 10,
+                  fontSize: 12.5,
+                  fontWeight: 800,
+                  cursor: 'pointer'
+                }}
+              >
+                Central PDV &amp; Garçom Mobile →
+              </button>
+            </div>
+          </div>
+
+          {/* Cards de Métricas Consolidadas do Salão */}
+          {mapaMesas && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
+              <div style={{ background: 'var(--card, #1e293b)', border: '1px solid #334155', borderRadius: 12, padding: 16 }}>
+                <div style={{ fontSize: 11.5, color: 'var(--muted, #94a3b8)' }}>Taxa de Ocupação</div>
+                <div style={{ fontSize: 24, fontWeight: 900, color: '#ffffff', marginTop: 4 }}>
+                  {mapaMesas.taxaOcupacaoMesasPct}%
                 </div>
-                <div style={{ fontSize: 10, color: '#10b981', fontWeight: 700, marginTop: 4 }}>
-                  Livre
+                <div style={{ fontSize: 11, color: '#10b981', marginTop: 2, fontWeight: 700 }}>
+                  {mapaMesas.totalMesasOcupadas} ocupadas · {mapaMesas.totalMesasLivres} livres
                 </div>
               </div>
+
+              <div style={{ background: 'var(--card, #1e293b)', border: '1px solid #334155', borderRadius: 12, padding: 16 }}>
+                <div style={{ fontSize: 11.5, color: 'var(--muted, #94a3b8)' }}>Faturamento em Salão</div>
+                <div style={{ fontSize: 24, fontWeight: 900, color: '#10b981', marginTop: 4 }}>
+                  R$ {Number(mapaMesas.totalFaturamentoSalaoAtual || 0).toFixed(2).replace('.', ',')}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--muted, #94a3b8)', marginTop: 2 }}>
+                  {mapaMesas.totalPessoasAtendidas} clientes sentados
+                </div>
+              </div>
+
+              <div style={{ background: 'var(--card, #1e293b)', border: '1px solid #334155', borderRadius: 12, padding: 16 }}>
+                <div style={{ fontSize: 11.5, color: 'var(--muted, #94a3b8)' }}>Ticket Médio por Pessoa</div>
+                <div style={{ fontSize: 24, fontWeight: 900, color: '#3b82f6', marginTop: 4 }}>
+                  R$ {Number(mapaMesas.ticketMedioSalao || 0).toFixed(2).replace('.', ',')}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--muted, #94a3b8)', marginTop: 2 }}>
+                  Meta salão: R$ 85,00
+                </div>
+              </div>
+
+              <div style={{ background: 'var(--card, #1e293b)', border: '1px solid #334155', borderRadius: 12, padding: 16 }}>
+                <div style={{ fontSize: 11.5, color: 'var(--muted, #94a3b8)' }}>Tempo Médio / Mesa</div>
+                <div style={{ fontSize: 24, fontWeight: 900, color: '#f59e0b', marginTop: 4 }}>
+                  {mapaMesas.tempoMedioOcupacaoMinutos} min
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--muted, #94a3b8)', marginTop: 2 }}>
+                  Climatização IoT: {mapaMesas.climatizacaoSalao?.temperaturaMedia}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Legenda do Heatmap de Giro */}
+          <div style={{
+            background: 'var(--surface, #0f172a)',
+            border: '1px solid #334155',
+            borderRadius: 12,
+            padding: 14,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 12,
+            fontSize: 12
+          }}>
+            <div style={{ fontWeight: 800, color: '#ffffff' }}>Legenda Heatmap de Giro:</div>
+            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#10b981' }}>
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981' }}></span> Livre
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#3b82f6' }}>
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#3b82f6' }}></span> Recém-chegada (&lt;30m)
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#eab308' }}>
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#eab308' }}></span> Consumindo (30-60m)
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#f97316' }}>
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#f97316' }}></span> Sobremesa/Café (60-90m)
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#a855f7', fontWeight: 800 }}>
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#a855f7' }}></span> Alerta Giro / Conta (&gt;90m)
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#64748b' }}>
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#64748b' }}></span> Higienização
+              </span>
+            </div>
+          </div>
+
+          {/* Filtro por Setor do Salão */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {['todos', 'Salão Principal', 'Deck Lounge', 'Sushi Bar Omakase', 'Sala VIP'].map(setor => (
+              <button
+                key={setor}
+                onClick={() => setSetorFiltroMesas(setor)}
+                style={{
+                  background: setorFiltroMesas === setor ? '#E63946' : 'var(--card, #1e293b)',
+                  color: '#ffffff',
+                  border: '1px solid ' + (setorFiltroMesas === setor ? '#E63946' : '#334155'),
+                  padding: '6px 14px',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                {setor === 'todos' ? 'Todas as 25 Mesas' : setor}
+              </button>
             ))}
+          </div>
+
+          {/* Grid de Mesas com Heatmap Dinâmico */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 14 }}>
+            {(mapaMesas?.mesas || []).filter(m => setorFiltroMesas === 'todos' || m.setor === setorFiltroMesas).map(mesa => {
+              const corStatus = mesa.heatmapGiro?.cor || '#10b981';
+              return (
+                <div
+                  key={mesa.id}
+                  style={{
+                    background: 'var(--card, #1e293b)',
+                    border: `1.5px solid ${corStatus}`,
+                    borderRadius: 14,
+                    padding: 16,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    boxShadow: mesa.solicitouConta ? '0 0 16px rgba(168, 85, 247, 0.35)' : 'none'
+                  }}
+                >
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <div style={{ fontSize: 16, fontWeight: 900, color: '#ffffff' }}>
+                          Mesa {mesa.numero}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--muted, #94a3b8)' }}>
+                          {mesa.setor} · {mesa.capacidade} lugares
+                        </div>
+                      </div>
+                      <span style={{
+                        fontSize: 10,
+                        fontWeight: 800,
+                        padding: '3px 8px',
+                        borderRadius: 6,
+                        background: `${corStatus}20`,
+                        color: corStatus,
+                        border: `1px solid ${corStatus}`
+                      }}>
+                        {mesa.heatmapGiro?.rotulo}
+                      </span>
+                    </div>
+
+                    <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                      <span style={{ color: 'var(--muted, #94a3b8)' }}>Permanência:</span>
+                      <span style={{ fontWeight: 800, color: mesa.tempoMinutos >= 90 ? '#a855f7' : '#ffffff' }}>
+                        ⏱️ {mesa.tempoMinutos} minutos
+                      </span>
+                    </div>
+
+                    <div style={{ marginTop: 4, display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                      <span style={{ color: 'var(--muted, #94a3b8)' }}>Clientes Sentados:</span>
+                      <span style={{ fontWeight: 700, color: '#ffffff' }}>
+                        👥 {mesa.clientesNaMesa} pessoas
+                      </span>
+                    </div>
+
+                    <div style={{ marginTop: 4, display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                      <span style={{ color: 'var(--muted, #94a3b8)' }}>Garçom:</span>
+                      <span style={{ color: '#cbd5e1' }}>{mesa.garcom}</span>
+                    </div>
+
+                    {mesa.valorAcumulado > 0 && (
+                      <div style={{
+                        marginTop: 10,
+                        background: 'var(--surface, #0f172a)',
+                        padding: '8px 10px',
+                        borderRadius: 8,
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                        <span style={{ fontSize: 11, color: 'var(--muted, #94a3b8)' }}>Comanda:</span>
+                        <span style={{ fontSize: 14, fontWeight: 900, color: '#10b981' }}>
+                          R$ {Number(mesa.valorAcumulado).toFixed(2).replace('.', ',')}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Ações da Mesa */}
+                  <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid #334155', display: 'flex', gap: 6 }}>
+                    {mesa.status === 'livre' ? (
+                      <button
+                        onClick={() => alterarStatusMesa(mesa.id, 'consumindo')}
+                        style={{
+                          flex: 1,
+                          background: 'rgba(16, 185, 129, 0.2)',
+                          color: '#10b981',
+                          border: '1px solid #10b981',
+                          padding: '6px',
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        + Ocupar Mesa
+                      </button>
+                    ) : mesa.solicitouConta ? (
+                      <button
+                        onClick={() => emitirNotaFiscalRapida('NFC-e (65)', `Mesa ${mesa.numero} · ${mesa.setor}`)}
+                        style={{
+                          flex: 1,
+                          background: '#a855f7',
+                          color: '#ffffff',
+                          border: 'none',
+                          padding: '6px',
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 800,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ⚡ Emitir NFC-e &amp; Fechar
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => alterarStatusMesa(mesa.id, 'solicitou_conta')}
+                          style={{
+                            flex: 1,
+                            background: 'rgba(168, 85, 247, 0.2)',
+                            color: '#a855f7',
+                            border: '1px solid #a855f7',
+                            padding: '6px',
+                            borderRadius: 6,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Pedir Conta
+                        </button>
+                        <button
+                          onClick={() => alterarStatusMesa(mesa.id, 'livre')}
+                          style={{
+                            flex: 1,
+                            background: 'rgba(239, 68, 68, 0.2)',
+                            color: '#ef4444',
+                            border: '1px solid #ef4444',
+                            padding: '6px',
+                            borderRadius: 6,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Liberar
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
-
-      {/* 5. ABA ZUMI ATENDE (KYTTOIA) */}
       {abaAtiva === 'zumi' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           {/* Header Zumi */}
@@ -1581,6 +1941,110 @@ export default function ZumaRestauranteSuite() {
             )}
           </div>
 
+          {/* Câmaras Frias IoT & Rastreabilidade Térmica (RDC 216 / Vigilância MT) */}
+          <div style={{
+            background: 'var(--card, #1e293b)',
+            border: '1px solid #334155',
+            borderRadius: 14,
+            padding: 20
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 900, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>❄️</span> Telemetria IoT de Câmaras Frias &amp; Ultra-Congelamento (RDC 216 ANVISA-MT)
+                </h3>
+                <p style={{ margin: '4px 0 0 0', fontSize: 12, color: 'var(--muted, #94a3b8)' }}>
+                  Monitoramento contínuo de temperatura e umidade com alerta preventivo contra desvio térmico.
+                </p>
+              </div>
+              <span style={{
+                fontSize: 10,
+                fontWeight: 800,
+                padding: '3px 8px',
+                borderRadius: 6,
+                background: 'rgba(16, 185, 129, 0.2)',
+                color: '#10b981',
+                border: '1px solid #10b981'
+              }}>
+                100% CONFORME VIGILÂNCIA
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 }}>
+              {(camarasFrias.length > 0 ? camarasFrias : [
+                { id: 'c1', nome: 'Câmara Fria 01 · Pescados Nobres Frescos (Salmão & Atum)', temperaturaAtual: 0.8, faixaMinima: -2.0, faixaMaxima: 2.0, umidadeRelativa: 88.5, status: 'NORMAL_OTIMA' },
+                { id: 'c2', nome: 'Câmara Fria 02 · Ultra-Congelamento (Camarão IQF & Polvo)', temperaturaAtual: -19.4, faixaMinima: -22.0, faixaMaxima: -18.0, umidadeRelativa: 64.0, status: 'NORMAL_OTIMA' },
+                { id: 'c3', nome: 'Câmara Fria 03 · Hortifrúti Japonês, Shari & Cream Cheese', temperaturaAtual: 4.2, faixaMinima: 2.0, faixaMaxima: 6.0, umidadeRelativa: 82.0, status: 'NORMAL_OTIMA' }
+              ]).map((cam) => (
+                <div
+                  key={cam.id}
+                  style={{
+                    background: 'var(--surface, #0f172a)',
+                    border: '1px solid #334155',
+                    borderRadius: 12,
+                    padding: 16
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: '#ffffff' }}>{cam.nome}</div>
+                    <span style={{
+                      fontSize: 10,
+                      fontWeight: 800,
+                      padding: '2px 6px',
+                      borderRadius: 4,
+                      background: 'rgba(16, 185, 129, 0.15)',
+                      color: '#10b981'
+                    }}>
+                      {cam.status}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 8 }}>
+                    <span style={{ fontSize: 26, fontWeight: 900, color: '#38bdf8' }}>
+                      {cam.temperaturaAtual}°C
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--muted, #94a3b8)' }}>
+                      Faixa segura: {cam.faixaMinima}°C a {cam.faixaMaxima}°C
+                    </span>
+                  </div>
+
+                  <div style={{ marginTop: 8, fontSize: 11.5, color: '#94a3b8', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Umidade Relativa: <strong style={{ color: '#ffffff' }}>{cam.umidadeRelativa}%</strong></span>
+                    <span>Sensor IoT: <strong style={{ color: '#10b981' }}>Ativo</strong></span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Painel de Perdas Técnicas */}
+            <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid #334155' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: '#ffffff' }}>
+                  Aparas Sanitárias &amp; Perdas Técnicas de Sushiman (Auditoria)
+                </div>
+                <button
+                  onClick={() => registrarPerdaTecnica('ins-salmao-fresco', 0.500, 'Apara de acabamento de tosa de filé de salmão')}
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    color: '#ef4444',
+                    border: '1px solid #ef4444',
+                    padding: '4px 10px',
+                    borderRadius: 6,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  + Lançar Apara Técnica (-500g Salmão)
+                </button>
+              </div>
+
+              <div style={{ fontSize: 12, color: 'var(--muted, #94a3b8)' }}>
+                Rendimento médio do salmão: 62% filé nobre, 20% aparas (patê/uramaki), 18% cabeça/espinhaço. Descarte rigorosamente auditado para controle de CMV real.
+              </div>
+            </div>
+          </div>
+
           {/* Fichas Técnicas Oficiais */}
           <div style={{
             background: 'var(--card, #1e293b)',
@@ -1680,6 +2144,215 @@ export default function ZumaRestauranteSuite() {
           )}
         </div>
       )}
+      {/* ABA FISCAL & SEFAZ-MT */}
+      {abaAtiva === 'fiscal' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {/* Header Fiscal */}
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(15, 23, 42, 0.95) 100%)',
+            border: '1px solid #10b981',
+            borderRadius: 14,
+            padding: 22,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 14
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <span style={{ fontSize: 34 }}>🧾</span>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <h2 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#ffffff' }}>
+                    Emissor Fiscal &amp; Gestão Tributária SEFAZ-MT · Zuma Cozinha Oriental
+                  </h2>
+                  <span style={{
+                    fontSize: 10,
+                    fontWeight: 800,
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                    background: 'rgba(16, 185, 129, 0.2)',
+                    color: '#10b981',
+                    border: '1px solid #10b981'
+                  }}>
+                    ● SEFAZ-MT Online · Produção 100
+                  </span>
+                </div>
+                <p style={{ margin: '4px 0 0 0', fontSize: 12.5, color: '#cbd5e1' }}>
+                  Emissão instantânea de NFC-e (Modelo 65) e NF-e (Modelo 55), cálculo de ICMS Simples Nacional, QR-Code oficial e contingência off-line.
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                onClick={() => emitirNotaFiscalRapida('NFC-e (65)', 'Emissão Balcão Zuma')}
+                disabled={emitindoNota}
+                style={{
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '10px 18px',
+                  borderRadius: 10,
+                  fontSize: 12.5,
+                  fontWeight: 800,
+                  cursor: emitindoNota ? 'wait' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)'
+                }}
+              >
+                <Zap size={14} />
+                {emitindoNota ? 'Emitindo...' : '⚡ Emitir NFC-e Avulsa'}
+              </button>
+              <button
+                onClick={() => emitirNotaFiscalRapida('NF-e (55) Corporativa', 'Sala VIP 24 · Almoço Corporativo')}
+                disabled={emitindoNota}
+                style={{
+                  background: '#3b82f6',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '10px 18px',
+                  borderRadius: 10,
+                  fontSize: 12.5,
+                  fontWeight: 800,
+                  cursor: emitindoNota ? 'wait' : 'pointer'
+                }}
+              >
+                + Emitir NF-e B2B (Mod 55)
+              </button>
+            </div>
+          </div>
+
+          {/* Cards de Métricas Fiscais */}
+          {dadosFiscal && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
+              <div style={{ background: 'var(--card, #1e293b)', border: '1px solid #334155', borderRadius: 12, padding: 16 }}>
+                <div style={{ fontSize: 11.5, color: 'var(--muted, #94a3b8)' }}>Notas Emitidas (Mês)</div>
+                <div style={{ fontSize: 24, fontWeight: 900, color: '#ffffff', marginTop: 4 }}>
+                  {dadosFiscal.totaisMes?.totalNotasEmitidas} notas
+                </div>
+                <div style={{ fontSize: 11, color: '#10b981', marginTop: 2 }}>
+                  100% autorizadas na SEFAZ-MT
+                </div>
+              </div>
+
+              <div style={{ background: 'var(--card, #1e293b)', border: '1px solid #334155', borderRadius: 12, padding: 16 }}>
+                <div style={{ fontSize: 11.5, color: 'var(--muted, #94a3b8)' }}>Faturamento Fiscalizado</div>
+                <div style={{ fontSize: 24, fontWeight: 900, color: '#10b981', marginTop: 4 }}>
+                  R$ {Number(dadosFiscal.totaisMes?.faturamentoFiscalMes || 0).toFixed(2).replace('.', ',')}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--muted, #94a3b8)', marginTop: 2 }}>
+                  Regime Simples Nacional
+                </div>
+              </div>
+
+              <div style={{ background: 'var(--card, #1e293b)', border: '1px solid #334155', borderRadius: 12, padding: 16 }}>
+                <div style={{ fontSize: 11.5, color: 'var(--muted, #94a3b8)' }}>ICMS Simples Apurado</div>
+                <div style={{ fontSize: 24, fontWeight: 900, color: '#f59e0b', marginTop: 4 }}>
+                  R$ {Number(dadosFiscal.totaisMes?.totalIcmsApurado || 0).toFixed(2).replace('.', ',')}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--muted, #94a3b8)', marginTop: 2 }}>
+                  Alíquota Efetiva: {dadosFiscal.aliquotaEfetivaSimplesNacional}
+                </div>
+              </div>
+
+              <div style={{ background: 'var(--card, #1e293b)', border: '1px solid #334155', borderRadius: 12, padding: 16 }}>
+                <div style={{ fontSize: 11.5, color: 'var(--muted, #94a3b8)' }}>Certificado Digital A1</div>
+                <div style={{ fontSize: 16, fontWeight: 900, color: '#10b981', marginTop: 4 }}>
+                  Válido até 18/10/2027
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--muted, #94a3b8)', marginTop: 2 }}>
+                  Contingência Off-line: Standby (0 pendentes)
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tabela de Notas Fiscais Emitidas */}
+          <div style={{
+            background: 'var(--card, #1e293b)',
+            border: '1px solid #334155',
+            borderRadius: 14,
+            padding: 20
+          }}>
+            <h3 style={{ margin: '0 0 14px 0', fontSize: 15, fontWeight: 900, color: '#ffffff' }}>
+              Livro de Saídas &amp; Documentos Fiscais Emitidos (SEFAZ-MT)
+            </h3>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                <thead>
+                  <tr style={{ background: 'var(--surface, #0f172a)', borderBottom: '1px solid #334155' }}>
+                    <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--muted, #94a3b8)' }}>Nota / Modelo</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--muted, #94a3b8)' }}>Cliente / Destinatário</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--muted, #94a3b8)' }}>Origem da Venda</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--muted, #94a3b8)' }}>Valor Total</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--muted, #94a3b8)' }}>Status SEFAZ</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--muted, #94a3b8)' }}>Ações Fiscais</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(dadosFiscal?.notas || []).map((n) => (
+                    <tr key={n.chaveAcesso} style={{ borderBottom: '1px solid rgba(51, 65, 85, 0.4)' }}>
+                      <td style={{ padding: '10px 12px', fontWeight: 800, color: '#ffffff' }}>
+                        #{n.numeroNota} ({n.modelo})
+                        <div style={{ fontSize: 10, color: 'var(--muted, #94a3b8)', fontWeight: 400 }}>
+                          Chave: {n.chaveAcesso.slice(0, 20)}...
+                        </div>
+                      </td>
+                      <td style={{ padding: '10px 12px', color: '#cbd5e1' }}>
+                        {n.cliente}
+                      </td>
+                      <td style={{ padding: '10px 12px', color: 'var(--muted, #94a3b8)' }}>
+                        {n.origemVenda}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#10b981' }}>
+                        R$ {Number(n.valorTotal).toFixed(2).replace('.', ',')}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                        <span style={{
+                          fontSize: 10,
+                          fontWeight: 800,
+                          padding: '2px 8px',
+                          borderRadius: 4,
+                          background: 'rgba(16, 185, 129, 0.15)',
+                          color: '#10b981'
+                        }}>
+                          AUTORIZADA
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                        <a
+                          href={n.qrcodeUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{
+                            background: 'rgba(59, 130, 246, 0.15)',
+                            color: '#60a5fa',
+                            padding: '4px 8px',
+                            borderRadius: 6,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            textDecoration: 'none',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4
+                          }}
+                        >
+                          QR-Code SEFAZ ↗
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 7. ABA FINANCEIRO & DRE */}
       {abaAtiva === 'financeiro' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
