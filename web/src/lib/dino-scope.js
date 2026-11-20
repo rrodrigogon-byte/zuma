@@ -11,7 +11,15 @@ export const DINO_SCOPE = Object.freeze({
 export const DINO_COMPANY = Object.freeze({
   id: DINO_SCOPE.empresaId,
   nome: 'Barbearia Dino',
+  nomeFantasia: 'Barbearia Dino',
   nome_fantasia: 'Barbearia Dino',
+  razaoSocial: 'Barbearia Dino LTDA',
+  cnpj: '50.073.355/0001-89',
+  cnpjNormalizado: '50073355000189',
+  inscricaoEstadual: '14.229.191-9',
+  inscricaoMunicipal: '30297',
+  tipoNegocio: 'barbearia',
+  brandKey: 'dino',
   ativa: true,
 })
 

@@ -15,6 +15,8 @@ import {
   ZUMA_COMPANY,
   isZumaEmpresa
 } from "../lib/zuma-constants";
+import { DINO_COMPANY } from "../lib/dino-scope";
+import { isDinoBrandContext } from "../lib/brand";
 
 export const EMPRESA_ZUMA_CANONICA = {
   id: 'c3c3ac01-8e50-4b61-8c79-de4aaa916da3',
@@ -104,6 +106,10 @@ export default function EmpresaSwitcher() {
       if (!lista.some(e => e.id === ZUMA_EMPRESA_ID || isZumaEmpresa(e.id))) {
         lista.push(ZUMA_COMPANY);
       }
+      // Garante SEMPRE a presença canônica da Barbearia Dino
+      if (!lista.some(e => e.id === DINO_COMPANY.id || isDinoBrandContext(e))) {
+        lista.push(DINO_COMPANY);
+      }
       lista = deduplicarEmpresas(lista);
 
       if (lista.length > 0) {
@@ -164,6 +170,10 @@ export default function EmpresaSwitcher() {
     setAberto(false);
     if (emp.id === ZUMA_EMPRESA_ID || emp.id === 'c3c3ac01-8e50-4b61-8c79-de4aaa916da3' || isZumaEmpresa(emp.id) || isZumaEmpresa(emp.nome) || String(emp.nome || '').toLowerCase().includes('zuma')) {
       navigate('/admin/zuma');
+      return;
+    }
+    if (emp.id === DINO_COMPANY.id || emp.brandKey === 'dino' || emp.tipoNegocio === 'barbearia' || isDinoBrandContext(emp) || String(emp.nome || '').toLowerCase().includes('dino')) {
+      navigate('/admin/barbearia-erp');
       return;
     }
     if (emp.id === HOLDING_PALATARE_EMPRESA_ID || emp.tipoNegocio === 'holding') {
@@ -276,7 +286,12 @@ export default function EmpresaSwitcher() {
             {(() => {
               const empresasPalatare = empresas.filter(e => isGrupoPalatareEmpresa(e.id) || isGrupoPalatareEmpresa(e.nome));
               const empresasZuma = empresas.filter(e => isZumaEmpresa(e.id) || isZumaEmpresa(e.nome));
-              const outrasEmpresas = empresas.filter(e => !isGrupoPalatareEmpresa(e.id) && !isGrupoPalatareEmpresa(e.nome) && !isZumaEmpresa(e.id) && !isZumaEmpresa(e.nome));
+              const empresasDino = empresas.filter(e => e.id === DINO_COMPANY.id || isDinoBrandContext(e) || String(e.nome || '').toLowerCase().includes('dino') || e.tipoNegocio === 'barbearia');
+              const outrasEmpresas = empresas.filter(e => 
+                !isGrupoPalatareEmpresa(e.id) && !isGrupoPalatareEmpresa(e.nome) && 
+                !isZumaEmpresa(e.id) && !isZumaEmpresa(e.nome) &&
+                e.id !== DINO_COMPANY.id && !isDinoBrandContext(e) && !String(e.nome || '').toLowerCase().includes('dino') && e.tipoNegocio !== 'barbearia'
+              );
               return (
                 <>
                   {empresasPalatare.length > 0 && (
@@ -468,6 +483,96 @@ export default function EmpresaSwitcher() {
                   )}
 
                   {/* 3. DEMAIS EMPRESAS DA PLATAFORMA */}
+                  {/* 3. SEÇÃO BARBEARIA DINO (BELEZA & ESTÉTICA MASCULINA) */}
+                  {empresasDino.length > 0 && (
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{
+                        padding: "6px 10px 4px",
+                        fontSize: "10px",
+                        fontWeight: 800,
+                        color: "#38bdf8",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.6px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6
+                      }}>
+                        <span>💈</span> BARBEARIA DINO · BELEZA &amp; BEM-ESTAR
+                      </div>
+                      {empresasDino.map((emp) => {
+                        const selecionada = (empresaAtiva?.id === emp.id) || (empresaAtiva?.cnpj === emp.cnpj) || isDinoBrandContext(empresaAtiva);
+                        return (
+                          <div
+                            key={emp.id}
+                            onClick={() => selecionarEmpresa(emp)}
+                            style={{
+                              padding: "8px 12px",
+                              borderRadius: "8px",
+                              cursor: "pointer",
+                              background: selecionada ? "rgba(56, 189, 248, 0.18)" : "transparent",
+                              border: selecionada ? "1px solid rgba(56, 189, 248, 0.4)" : "1px solid transparent",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "10px",
+                              marginBottom: "4px",
+                              transition: "all 0.1s ease"
+                            }}
+                          >
+                            <div style={{
+                              width: "30px",
+                              height: "30px",
+                              borderRadius: "6px",
+                              background: "#0284c7",
+                              color: "#ffffff",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: "14px",
+                              fontWeight: 700,
+                              flexShrink: 0
+                            }}>
+                              💈
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{
+                                fontSize: "13px",
+                                fontWeight: 700,
+                                color: selecionada ? "#ffffff" : "var(--text, #f8fafc)",
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis"
+                              }}>
+                                {emp.nome || emp.nomeFantasia || emp.razaoSocial || "Barbearia Dino"}
+                                <span style={{ marginLeft: 6, fontSize: 10, background: "#0284c7", color: "#fff", padding: "1px 5px", borderRadius: 4, fontWeight: 800 }}>Matriz</span>
+                              </div>
+                              <div style={{ fontSize: "11px", color: "var(--muted, #94a3b8)", marginTop: 2, display: "flex", flexDirection: "column", gap: 2 }}>
+                                <div><strong>CNPJ:</strong> {emp.cnpj || '50.073.355/0001-89'}</div>
+                                <div style={{ color: "#10b981", fontWeight: 600 }}>
+                                  <strong>IE:</strong> {emp.inscricaoEstadual || "14.229.191-9"} (SEFAZ-MT · CCE Ativo)
+                                </div>
+                                <div style={{ color: "#38bdf8", fontWeight: 600 }}>
+                                  <strong>IM:</strong> {emp.inscricaoMunicipal || "30297"} (Tangará da Serra/MT)
+                                </div>
+                                <div style={{ display: "flex", gap: 4, marginTop: 3 }}>
+                                  <span style={{ fontSize: "9px", background: "rgba(16, 185, 129, 0.15)", color: "#10b981", padding: "1px 5px", borderRadius: "4px", fontWeight: 800 }}>
+                                    ✓ dinobarbearia.com.br
+                                  </span>
+                                  <span style={{ fontSize: "9px", background: "rgba(56, 189, 248, 0.15)", color: "#38bdf8", padding: "1px 5px", borderRadius: "4px", fontWeight: 800 }}>
+                                    Barbearia &amp; Salão
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            {selecionada && (
+                              <span style={{ color: "#10b981", fontSize: "12px", fontWeight: 800 }}>✓</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* 4. DEMAIS EMPRESAS DA PLATAFORMA */}
                   {outrasEmpresas.length > 0 && (
                     <div>
                       <div style={{

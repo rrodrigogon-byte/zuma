@@ -239,6 +239,19 @@ export function deduplicarEmpresas(empresas) {
   if (!mapa.has(HOLDING_PALATARE_EMPRESA_ID)) mapa.set(HOLDING_PALATARE_EMPRESA_ID, HOLDING_PALATARE_EMPRESA);
   if (!mapa.has(PALATARE_PIZZARIA_EMPRESA_ID)) mapa.set(PALATARE_PIZZARIA_EMPRESA_ID, PALATARE_PIZZARIA_EMPRESA);
   if (!mapa.has(SERRANO_CONCRETO_EMPRESA_ID)) mapa.set(SERRANO_CONCRETO_EMPRESA_ID, SERRANO_CONCRETO_EMPRESA);
+  if (!mapa.has('d0d0ac01-8e50-4b61-8c79-de4aaa916da6')) mapa.set('d0d0ac01-8e50-4b61-8c79-de4aaa916da6', {
+    id: 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
+    nome: 'Barbearia Dino',
+    nomeFantasia: 'Barbearia Dino',
+    razaoSocial: 'Barbearia Dino LTDA',
+    cnpj: '50.073.355/0001-89',
+    cnpjNormalizado: '50073355000189',
+    tipoNegocio: 'barbearia',
+    brandKey: 'dino',
+    icone: '💈',
+    rotaPadrao: '/admin/barbearia-erp',
+    ativa: true
+  });
 
   return Array.from(mapa.values());
 }
@@ -289,6 +302,16 @@ export function deduplicarLojas(lojas) {
 
   for (const lojaGp of GRUPO_PALATARE_LOJAS) {
     if (!mapa.has(lojaGp.id)) mapa.set(lojaGp.id, lojaGp);
+  }
+  if (!mapa.has('ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8')) {
+    mapa.set('ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8', {
+      id: 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8',
+      empresaId: 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
+      codigo: 'DINO-MATRIZ',
+      nome: 'Barbearia Dino - Matriz',
+      nome_fantasia: 'Barbearia Dino',
+      ativa: true
+    });
   }
 
   return Array.from(mapa.values());

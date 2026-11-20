@@ -637,26 +637,14 @@ export default function BarbeariaERP({ tabInicial } = {}) {
   );
   useEffect(() => {
     if (!empresaAtiva || isDinoBrandContext(empresaAtiva)) return;
-    const tipo = String(empresaAtiva.tipoNegocio || empresaAtiva.tipo_negocio || "").toLowerCase();
-    const nomeAtual = String(empresaAtiva.nome || "").toLowerCase();
-    // Se a empresa ativa no seletor não for barbearia:
-    // 1. Se o usuário tiver acesso à Barbearia Dino, troca automaticamente para a Dino para operar o módulo
-    const empDino = (empresasAcessiveis || []).find((e) => isDinoBrandContext(e));
+    // O usuário está na tela do Barbearia ERP.
+    // Se a empresa ativa no contexto não for a Barbearia Dino, ativa automaticamente a Dino
+    // para garantir a operação plena do módulo sem bloquear nem redirecionar para outros sistemas.
+    const empDino = (empresasAcessiveis || []).find((e) => isDinoBrandContext(e)) || { id: 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6' };
     if (empDino && typeof trocarEmpresa === "function") {
-      trocarEmpresa(empDino);
-      return;
+      trocarEmpresa(empDino.id || empDino);
     }
-    // 2. Se for Pizzaria/Restaurante (Palatare), redireciona imediatamente para o Cardápio & Mesas
-    if (tipo === "restaurante" || nomeAtual.includes("palatare") || nomeAtual.includes("pizzaria")) {
-      navigate("/admin/cardapio", { replace: true });
-      return;
-    }
-    // 3. Se for Concreto Usinado, redireciona para o ERP de Concreto
-    if (tipo === "concreto" || nomeAtual.includes("concreto")) {
-      navigate("/admin/concreto", { replace: true });
-      return;
-    }
-  }, [empresaAtiva, empresasAcessiveis, trocarEmpresa, navigate]);
+  }, [empresaAtiva, empresasAcessiveis, trocarEmpresa]);
   // operador: só as abas da operação do dia (comissões, metas e indicadores ficam com a administração)
   const operador = perfil === "operador";
   const areasVisiveis = operador

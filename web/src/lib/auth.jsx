@@ -50,6 +50,9 @@ function readEmpresaAtivaInicial() {
     if (path.startsWith('/admin/zuma') || path.startsWith('/admin/restaurante-zuma')) {
       return ZUMA_COMPANY
     }
+    if (path.startsWith('/admin/barbearia') || path.startsWith('/barbeiro/dino')) {
+      return DINO_COMPANY
+    }
   }
   if (ehHostZuma()) {
     try { localStorage.setItem('sp_empresa_ativa', JSON.stringify(ZUMA_COMPANY)) } catch {}
@@ -136,7 +139,7 @@ function garantirEmpresasCanonicas(empresas) {
     return [ZUMA_COMPANY];
   }
   let lista = Array.isArray(empresas) ? [...empresas] : []
-  if (isDinoDedicatedHost() && !lista.some((empresa) => isDinoBrandContext(empresa))) {
+  if (!lista.some((empresa) => isDinoBrandContext(empresa) || String(empresa?.id || '').toLowerCase() === DINO_COMPANY.id.toLowerCase())) {
     lista.push(DINO_COMPANY)
   }
   // Garante SEMPRE as 3 empresas canônicas do Grupo Palatare
@@ -154,7 +157,7 @@ function garantirLojasCanonicas(lojas) {
   }
   // Entradas antigas da loja Dino gravadas sem vínculo de empresa são reparadas aqui.
   let lista = repararLojasSemEmpresa(Array.isArray(lojas) ? lojas : [], [DINO_STORE])
-  if (isDinoDedicatedHost() && !lista.some((loja) => String(loja?.id || '') === DINO_STORE.id)) {
+  if (!lista.some((loja) => String(loja?.id || '').toLowerCase() === DINO_STORE.id.toLowerCase())) {
     lista.push(DINO_STORE)
   }
   for (const lojaGp of GRUPO_PALATARE_LOJAS) {
@@ -314,16 +317,18 @@ export function AuthProvider({ children }) {
 
   const trocarEmpresa = (empresaId) => {
     if (!empresaId) return false
-    const proxima = empresasAcessiveis.find((empresa) => String(empresa.id).toLowerCase() === String(empresaId).toLowerCase())
-      || GRUPO_PALATARE_EMPRESAS.find((e) => String(e.id).toLowerCase() === String(empresaId).toLowerCase())
-      || (String(empresaId).toLowerCase() === DINO_COMPANY.id.toLowerCase() ? DINO_COMPANY : null)
-      || (String(empresaId).toLowerCase() === ZUMA_COMPANY.id.toLowerCase() ? ZUMA_COMPANY : null)
+    const idAlvo = String(typeof empresaId === 'object' && empresaId?.id ? empresaId.id : (empresaId || '')).toLowerCase()
+    const proxima = empresasAcessiveis.find((empresa) => String(empresa.id).toLowerCase() === idAlvo)
+      || (idAlvo === DINO_COMPANY.id.toLowerCase() ? DINO_COMPANY : null)
+      || GRUPO_PALATARE_EMPRESAS.find((e) => String(e.id).toLowerCase() === idAlvo)
+      || (idAlvo === ZUMA_COMPANY.id.toLowerCase() ? ZUMA_COMPANY : null)
     if (!proxima) return false
     if (empresaAtiva?.id !== proxima.id || lojaAtiva?.id) desligarPushContextoAtual()
     // a unidade escolhida da última vez nesta empresa volta; no host da Dino vale a unidade Dino
     const lembrada = lojaLembrada(proxima.id)
     const proximaLoja = selecionarLojaDoContexto(lojasAcessiveis, proxima, lembrada ? { id: lembrada } : null)
       || lojasAcessiveis.find((l) => l.empresaId === proxima.id)
+      || (proxima.id === DINO_COMPANY.id ? DINO_STORE : null)
       || (proxima.lojaPadraoId ? lojasAcessiveis.find((l) => l.id === proxima.lojaPadraoId) : null)
     localStorage.setItem('sp_empresa_ativa', JSON.stringify(proxima))
     if (proximaLoja) localStorage.setItem('sp_loja_ativa', JSON.stringify(proximaLoja))
