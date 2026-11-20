@@ -457,3 +457,103 @@
   transform: translateY(-1px);
   box-shadow: 0 4px 14px rgba(245, 158, 11, 0.4);
 }
+
+/* BARRA VISUAL DE RETENÇÃO E SAÚDE DA BASE */
+.carteira-retencao-card {
+  background: rgba(30, 41, 59, 0.4);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.carteira-retencao-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.carteira-ciclo-tag {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.carteira-progress-bar-container {
+  display: flex;
+  height: 12px;
+  width: 100%;
+  background: #0f172a;
+  border-radius: 999px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
+  gap: 1px;
+}
+
+.carteira-progress-segment {
+  height: 100%;
+  transition: width 0.4s ease;
+}
+
+.carteira-progress-segment.em-dia {
+  background: #10b981;
+}
+
+.carteira-progress-segment.ideal-retorno {
+  background: #f59e0b;
+}
+
+.carteira-progress-segment.atrasados {
+  background: #f87171;
+}
+
+.carteira-progress-segment.sumidos {
+  background: #64748b;
+}
+
+.carteira-progress-legend {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: #94a3b8;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.legend-dot.dot-em-dia {
+  background: #10b981;
+}
+
+.legend-dot.dot-ideal {
+  background: #f59e0b;
+}
+
+.legend-dot.dot-atrasado {
+  background: #f87171;
+}
+
+.legend-dot.dot-sumido {
+  background: #64748b;
+}

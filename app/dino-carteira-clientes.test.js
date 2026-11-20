@@ -120,5 +120,26 @@ test('Carteira de clientes por profissional - mapeamento e resumo', async (t) =>
     const csv = carteira.exportarCarteiraCsv(empId);
     assert(csv.startsWith('\uFEFF'));
     assert(csv.includes('Nome do Cliente;Telefone;Barbeiro Titular'));
+    assert(csv.includes('Ciclo Medio Retorno (dias)'));
+  });
+
+  await t.test('calcula ciclo medio de retorno em dias por profissional e geral', () => {
+    root.barbearias[empId].agendamentos['ag-2'] = {
+      id: 'ag-2',
+      clienteId: 'cli-3',
+      clienteNome: 'Marcos Lima',
+      clienteTelefone: '65999993333',
+      profissionalId: 'prof-dino',
+      servicoId: 'srv-corte',
+      servicoNome: 'Corte Tradicional',
+      dataAgenda: '2026-10-30',
+      dataHora: '2026-10-30T14:00:00Z',
+      status: 'concluido',
+      valor: 60,
+    };
+    const res = carteira.resumoCarteirasProfissionais(empId);
+    assert.equal(typeof res.cicloMedioRetornoGeral, 'number');
+    assert.equal(res.cicloMedioRetornoGeral > 0, true);
+    assert.equal(typeof res.carteiras[0].cicloMedioRetornoDias, 'number');
   });
 });

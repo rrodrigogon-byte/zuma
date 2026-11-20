@@ -85,11 +85,14 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
 
         if (!relacaoClienteProf.has(cliId)) relacaoClienteProf.set(cliId, {});
         const cliProf = relacaoClienteProf.get(cliId);
-        cliProf[profId] ||= { atendimentos: 0, ultimaData: '', ultimoServico: '', totalGasto: 0, servicos: {} };
+        cliProf[profId] ||= { atendimentos: 0, ultimaData: '', ultimoServico: '', totalGasto: 0, servicos: {}, datas: [] };
 
         const dataAg = String(ag.dataAgenda || ag.dataHora || '').slice(0, 10);
         cliProf[profId].atendimentos += 1;
         cliProf[profId].totalGasto += Number(ag.valor || 0);
+        if (dataAg && !cliProf[profId].datas.includes(dataAg)) {
+          cliProf[profId].datas.push(dataAg);
+        }
 
         if (ag.servicoNome) {
           cliProf[profId].servicos[ag.servicoNome] = (cliProf[profId].servicos[ag.servicoNome] || 0) + 1;
@@ -117,16 +120,22 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
 
         if (!relacaoClienteProf.has(cliId)) relacaoClienteProf.set(cliId, {});
         const cliProf = relacaoClienteProf.get(cliId);
-        cliProf[profId] ||= { atendimentos: 0, ultimaData: '', ultimoServico: '', totalGasto: 0, servicos: {} };
+        cliProf[profId] ||= { atendimentos: 0, ultimaData: '', ultimoServico: '', totalGasto: 0, servicos: {}, datas: [] };
 
         const dataCmd = String(cmd.fechadaEm || cmd.atualizadoEm || cmd.criadoEm || '').slice(0, 10);
         cliProf[profId].totalGasto += Number(cmd.total || 0);
+        if (dataCmd && !cliProf[profId].datas.includes(dataCmd)) {
+          cliProf[profId].datas.push(dataCmd);
+        }
 
         for (const it of cmd.itens || []) {
           const itemProfId = it.profissionalId || profId;
           if (it.tipo === 'servico' && it.nome) {
-            cliProf[itemProfId] ||= { atendimentos: 0, ultimaData: '', ultimoServico: '', totalGasto: 0, servicos: {} };
+            cliProf[itemProfId] ||= { atendimentos: 0, ultimaData: '', ultimoServico: '', totalGasto: 0, servicos: {}, datas: [] };
             cliProf[itemProfId].servicos[it.nome] = (cliProf[itemProfId].servicos[it.nome] || 0) + 1;
+            if (dataCmd && !cliProf[itemProfId].datas.includes(dataCmd)) {
+              cliProf[itemProfId].datas.push(dataCmd);
+            }
             if (!cliProf[itemProfId].ultimaData || dataCmd >= cliProf[itemProfId].ultimaData) {
               cliProf[itemProfId].ultimaData = dataCmd;
               cliProf[itemProfId].ultimoServico = it.nome;
@@ -150,11 +159,14 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
 
         if (!relacaoClienteProf.has(cliId)) relacaoClienteProf.set(cliId, {});
         const cliProf = relacaoClienteProf.get(cliId);
-        cliProf[profId] ||= { atendimentos: 0, ultimaData: '', ultimoServico: '', totalGasto: 0, servicos: {} };
+        cliProf[profId] ||= { atendimentos: 0, ultimaData: '', ultimoServico: '', totalGasto: 0, servicos: {}, datas: [] };
 
         const dataH = String(h.dataAgenda || '').slice(0, 10);
         cliProf[profId].atendimentos += 1;
         cliProf[profId].totalGasto += Number(h.total || h.valor || 0);
+        if (dataH && !cliProf[profId].datas.includes(dataH)) {
+          cliProf[profId].datas.push(dataH);
+        }
 
         if (h.servicoNome) {
           cliProf[profId].servicos[h.servicoNome] = (cliProf[profId].servicos[h.servicoNome] || 0) + 1;
@@ -213,10 +225,16 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
         if (hOutro) {
           for (const [pId, dados] of Object.entries(hOutro)) {
             if (!histMesclado[pId]) {
-              histMesclado[pId] = { ...dados, servicos: { ...(dados.servicos || {}) } };
+              histMesclado[pId] = { ...dados, servicos: { ...(dados.servicos || {}) }, datas: [...(dados.datas || [])] };
             } else {
               histMesclado[pId].atendimentos += dados.atendimentos;
               histMesclado[pId].totalGasto += dados.totalGasto;
+              if (dados.datas && dados.datas.length) {
+                histMesclado[pId].datas ||= [];
+                for (const d of dados.datas) {
+                  if (!histMesclado[pId].datas.includes(d)) histMesclado[pId].datas.push(d);
+                }
+              }
               if (!histMesclado[pId].ultimaData || (dados.ultimaData && dados.ultimaData > histMesclado[pId].ultimaData)) {
                 histMesclado[pId].ultimaData = dados.ultimaData;
                 histMesclado[pId].ultimoServico = dados.ultimoServico || histMesclado[pId].ultimoServico;
@@ -284,6 +302,24 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
       ? Math.round((metricasTitular.totalGasto / metricasTitular.atendimentos) * 100) / 100
       : 0;
 
+    // Ciclo médio individual de retorno em dias com este barbeiro
+    let cicloMedioDias = 0;
+    const datasOrdenadas = (metricasTitular.datas || []).filter(Boolean).sort();
+    if (datasOrdenadas.length >= 2) {
+      let somaIntervalos = 0;
+      let countIntervalos = 0;
+      for (let i = 1; i < datasOrdenadas.length; i++) {
+        const diff = calcularDiasDiferenca(datasOrdenadas[i - 1], datasOrdenadas[i]);
+        if (diff >= 3 && diff <= 180) {
+          somaIntervalos += diff;
+          countIntervalos += 1;
+        }
+      }
+      if (countIntervalos > 0) {
+        cicloMedioDias = Math.round(somaIntervalos / countIntervalos);
+      }
+    }
+
     carteiraCompleta.push({
       clienteId: cli.id,
       nome: cli.nome,
@@ -303,6 +339,7 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
       diasSemRetorno,
       statusRetorno,
       servicoFavorito,
+      cicloMedioDias,
       criadoEm: cli.criadoEm,
     });
   }
@@ -397,6 +434,8 @@ export function resumoCarteirasProfissionais(empresaId, { lojaId = null } = {}) 
       taxaRetencao: 100,
       ticketMedio: 0,
       potencialRecuperacao: 0,
+      cicloMedioRetornoDias: 25,
+      _ciclos: [],
     });
   }
 
@@ -411,6 +450,7 @@ export function resumoCarteirasProfissionais(empresaId, { lojaId = null } = {}) 
       else if (item.statusRetorno === 'atrasado') r.atrasados += 1;
       else if (item.statusRetorno === 'sumido') r.sumidos += 1;
       if (item.isVip) r.totalVip += 1;
+      if (item.cicloMedioDias > 0) r._ciclos.push(item.cicloMedioDias);
       r.faturamentoTotal += item.totalGastoComBarbeiro;
     } else {
       semBarbeiroDefinido += 1;
@@ -428,6 +468,10 @@ export function resumoCarteirasProfissionais(empresaId, { lojaId = null } = {}) 
     r.potencialRecuperacao = Math.round(
       (r.atrasados + r.sumidos) * (r.ticketMedio > 0 ? r.ticketMedio : 60)
     );
+    r.cicloMedioRetornoDias = r._ciclos.length > 0
+      ? Math.round(r._ciclos.reduce((a, b) => a + b, 0) / r._ciclos.length)
+      : 25;
+    delete r._ciclos;
   }
 
   const carteiras = Array.from(mapaResumo.values()).sort((a, b) => b.totalClientes - a.totalClientes);
@@ -447,6 +491,10 @@ export function resumoCarteirasProfissionais(empresaId, { lojaId = null } = {}) 
   const potencialRecuperacaoGeral = Math.round(
     (atrasadosGeral + sumidosGeral) * (ticketMedioGeral > 0 ? ticketMedioGeral : 60)
   );
+  const todosCiclos = carteiraCompleta.map((c) => c.cicloMedioDias).filter((d) => d > 0);
+  const cicloMedioRetornoGeral = todosCiclos.length > 0
+    ? Math.round(todosCiclos.reduce((a, b) => a + b, 0) / todosCiclos.length)
+    : 25;
 
   return {
     carteiras,
@@ -460,6 +508,7 @@ export function resumoCarteirasProfissionais(empresaId, { lojaId = null } = {}) 
     taxaRetencaoGeral,
     ticketMedioGeral,
     potencialRecuperacaoGeral,
+    cicloMedioRetornoGeral,
     semBarbeiroDefinido,
     atualizadoEm: new Date().toISOString(),
   };
@@ -535,6 +584,7 @@ export function exportarCarteiraCsv(empresaId, options = {}) {
     'Visitas com Barbeiro',
     'Total Gasto com Barbeiro (R$)',
     'Ticket Medio (R$)',
+    'Ciclo Medio Retorno (dias)',
   ];
   const linhas = [colunas.join(';')];
   for (const c of clientes) {
@@ -557,6 +607,7 @@ export function exportarCarteiraCsv(empresaId, options = {}) {
       c.totalAtendimentosComBarbeiro || 0,
       (c.totalGastoComBarbeiro || 0).toFixed(2).replace('.', ','),
       (c.ticketMedioCliente || 0).toFixed(2).replace('.', ','),
+      c.cicloMedioDias > 0 ? c.cicloMedioDias : 'N/D',
     ].join(';'));
   }
   return '\uFEFF' + linhas.join('\r\n');

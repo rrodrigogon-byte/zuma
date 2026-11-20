@@ -1280,6 +1280,16 @@ export default function BarbeariaAgendaPeriodo({
           {item.origem === "whatsapp_ia" && (
             <span className="dino-cal-event-wpp-badge">🤖 IA</span>
           )}
+          {(item.lembreteVesperaEnviadoEm || item.confirmacaoDiaEnviadaEm || item.lembrete24hEnviado) && (
+            <span className="dino-badge-trex-24h" title={`Lembrete 24h enviado pelo T-Rex via WhatsApp (${item.lembreteVesperaEnviadoEm ? new Date(item.lembreteVesperaEnviadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : 'Véspera'})`}>
+              🦖 24h
+            </span>
+          )}
+          {(item.lembrete30mEnviadoEm || item.lembrete30mEnviado) && (
+            <span className="dino-badge-trex-30m" title={`Lembrete 30m enviado pelo T-Rex via WhatsApp (${item.lembrete30mEnviadoEm ? new Date(item.lembrete30mEnviadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '30 min'})`}>
+              ⏱️ 30m
+            </span>
+          )}
           <span className={`dino-cal-event-status-badge status-${statusSlot}`}>
             {rotuloStatusAgendamento(item)}
           </span>
@@ -1647,9 +1657,21 @@ export default function BarbeariaAgendaPeriodo({
           </div>
           <div>
             <strong>
-              {visiveis.filter((i) => i.status === "confirmado").length}
+              {visiveis.filter((i) => i.status === "confirmado" || i.confirmadoPeloCliente).length}
             </strong>{" "}
             <span>confirmado(s)</span>
+          </div>
+          <div title="Total de agendamentos no período com confirmação ativa (24h/véspera) enviada pelo T-Rex">
+            <strong style={{ color: "#60a5fa" }}>
+              {visiveis.filter((i) => i.lembreteVesperaEnviadoEm || i.confirmacaoDiaEnviadaEm || i.lembrete24hEnviado).length}
+            </strong>{" "}
+            <span>🦖 lembrete 24h</span>
+          </div>
+          <div title="Total de agendamentos no período com lembrete de 30m enviado pelo T-Rex">
+            <strong style={{ color: "#c084fc" }}>
+              {visiveis.filter((i) => i.lembrete30mEnviadoEm || i.lembrete30mEnviado).length}
+            </strong>{" "}
+            <span>⏱️ lembrete 30m</span>
           </div>
           <div>
             <strong>
@@ -1967,6 +1989,22 @@ export default function BarbeariaAgendaPeriodo({
                                     title="Agendado pela IA no WhatsApp"
                                   >
                                     🤖 IA
+                                  </span>
+                                )}
+                                {(item.lembreteVesperaEnviadoEm || item.confirmacaoDiaEnviadaEm || item.lembrete24hEnviado) && (
+                                  <span
+                                    className="dino-badge-trex-24h"
+                                    title={`Lembrete 24h enviado pelo T-Rex via WhatsApp (${item.lembreteVesperaEnviadoEm ? new Date(item.lembreteVesperaEnviadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : 'Véspera'})`}
+                                  >
+                                    🦖 24h
+                                  </span>
+                                )}
+                                {(item.lembrete30mEnviadoEm || item.lembrete30mEnviado) && (
+                                  <span
+                                    className="dino-badge-trex-30m"
+                                    title={`Lembrete de 30m enviado pelo T-Rex via WhatsApp (${item.lembrete30mEnviadoEm ? new Date(item.lembrete30mEnviadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '30 min'})`}
+                                  >
+                                    ⏱️ 30m
                                   </span>
                                 )}
                                 <span
@@ -2712,6 +2750,16 @@ export default function BarbeariaAgendaPeriodo({
                               <span className="dino-cal-event-prof-pill">
                                 💈 {item.profissionalNome || "Barbeiro"}
                               </span>
+                              {(item.lembreteVesperaEnviadoEm || item.confirmacaoDiaEnviadaEm || item.lembrete24hEnviado) && (
+                                <span className="dino-badge-trex-24h" title="Lembrete 24h enviado pelo T-Rex">
+                                  🦖 24h
+                                </span>
+                              )}
+                              {(item.lembrete30mEnviadoEm || item.lembrete30mEnviado) && (
+                                <span className="dino-badge-trex-30m" title="Lembrete 30m enviado pelo T-Rex">
+                                  ⏱️ 30m
+                                </span>
+                              )}
                               <span className="dino-cal-event-status-badge">
                                 {STATUS[item.status] || item.status}
                               </span>

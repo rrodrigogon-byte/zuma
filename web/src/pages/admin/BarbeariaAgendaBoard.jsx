@@ -430,6 +430,7 @@ export default function BarbeariaAgendaBoard({ data, configuracao = {}, agendame
 
       <div style={styles.hint}>
         <strong>Leitura rápida:</strong> Agendamentos confirmados em <strong style={{ color: '#10b981' }}>verde</strong>. A linha vermelha horizontal indica o horário atual cortando a tela de fora a fora.
+        Badges do T-Rex: <span style={{ color: '#60a5fa', fontWeight: 700 }}>🦖 24h</span> (lembrete de véspera) e <span style={{ color: '#c084fc', fontWeight: 700 }}>⏱️ 30m</span> (lembrete pré-atendimento com blindagem Meta).
       </div>
 
       <div style={styles.scroll}>
@@ -545,7 +546,21 @@ export default function BarbeariaAgendaBoard({ data, configuracao = {}, agendame
                         <strong>{item.clienteNome || 'Cliente sem nome'}</strong>
                         <span>{item.servicoNome || 'Serviço não informado'}</span>
                         <small>{horaLabel(minutosDoDia(item.dataHora))} · {item.duracaoMinutos || grade.intervalo} min · {moeda(item.valor)}</small>
-                        <small style={{ fontWeight: 800, color: status.color }}>{status.label}</small>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, marginTop: 2, flexWrap: 'wrap' }}>
+                          <small style={{ fontWeight: 800, color: status.color }}>{status.label}</small>
+                          <div style={{ display: 'flex', gap: 3 }}>
+                            {(item.lembreteVesperaEnviadoEm || item.confirmacaoDiaEnviadaEm || item.lembrete24hEnviado) && (
+                              <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 4px', borderRadius: 3, background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa' }} title="Lembrete 24h enviado pelo T-Rex">
+                                🦖 24h
+                              </span>
+                            )}
+                            {(item.lembrete30mEnviadoEm || item.lembrete30mEnviado) && (
+                              <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 4px', borderRadius: 3, background: 'rgba(168, 85, 247, 0.2)', color: '#c084fc' }} title="Lembrete 30m enviado pelo T-Rex">
+                                ⏱️ 30m
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </button>
                     )
                   })}

@@ -770,6 +770,22 @@ export async function processAppointmentNotificationTask(task = {}) {
   } else if (evento === EVENTO_CONFIRMACAO_DIA) {
     barbearia.registrarConfirmacaoAutomaticaEnviada(legacyEmpresaId, appointmentId, 'segunda', { lojaId: task.loja_id, enviadoEm: new Date() });
   }
+  try {
+    const agReal = barbearia.estadoEmpresa ? barbearia.estadoEmpresa(legacyEmpresaId, false)?.agendamentos?.[String(appointmentId)] : null;
+    if (agReal) {
+      const agoraIso = new Date().toISOString();
+      if (evento === 'lembrete') {
+        agReal.lembreteVesperaEnviadoEm = agoraIso;
+        agReal.lembreteVesperaData = agoraIso.slice(0, 10);
+      } else if (evento === EVENTO_CONFIRMACAO_DIA) {
+        agReal.confirmacaoDiaEnviadaEm = agoraIso;
+        agReal.confirmacaoDiaData = agoraIso.slice(0, 10);
+      } else if (evento === 'lembrete_30m') {
+        agReal.lembrete30mEnviadoEm = agoraIso;
+      }
+      if (typeof barbearia.save === 'function') barbearia.save();
+    }
+  } catch (_) {}
   return { sent: true, appointmentId, eventType: evento, providerMessageId };
 }
 

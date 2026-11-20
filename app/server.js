@@ -6924,6 +6924,9 @@ function enriquecerAgendamentoBarbearia(empresaId, agendamento, indices = null) 
   const profissional = idx.profissionais.get(agendamento.profissionalId);
   const servico = idx.servicos.get(agendamento.servicoId);
   const cliente = idx.clientes.get(agendamento.clienteId);
+  const lembrete24h = Boolean(agendamento.lembreteVesperaEnviadoEm || agendamento.confirmacaoDiaEnviadaEm);
+  const lembrete30m = Boolean(agendamento.lembrete30mEnviadoEm);
+  const confirmado = agendamento.status === 'confirmado' || agendamento.confirmado === true || agendamento.confirmacaoAutomatica?.status === 'confirmado';
   return {
     ...agendamento,
     clienteNome: agendamento.clienteNome || cliente?.nome || '',
@@ -6936,6 +6939,12 @@ function enriquecerAgendamentoBarbearia(empresaId, agendamento, indices = null) 
     duracao_minutos: agendamento.duracaoMinutos,
     meio_pagamento: agendamento.meioPagamento,
     lojaId: agendamento.lojaId || '',
+    lembrete24hEnviado: lembrete24h,
+    lembrete30mEnviado: lembrete30m,
+    confirmadoPeloCliente: confirmado,
+    lembreteVesperaEnviadoEm: agendamento.lembreteVesperaEnviadoEm || null,
+    confirmacaoDiaEnviadaEm: agendamento.confirmacaoDiaEnviadaEm || null,
+    lembrete30mEnviadoEm: agendamento.lembrete30mEnviadoEm || null,
   };
 }
 

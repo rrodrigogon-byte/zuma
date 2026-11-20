@@ -123,6 +123,7 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
           ticketMedio: bResumo.ticketMedio ?? (bResumo.totalClientes > 0 ? Math.round(bResumo.faturamentoTotal / bResumo.totalClientes) : 0),
           potencialRecuperacao: bResumo.potencialRecuperacao ?? Math.round((bResumo.atrasados + bResumo.sumidos) * 60),
           totalVip: bResumo.totalVip || 0,
+          cicloMedioRetornoDias: bResumo.cicloMedioRetornoDias || 25,
         }
       }
     }
@@ -140,6 +141,7 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
     const taxaRetencao = total > 0 ? Math.round(((emDia + idealRetorno) / total) * 100) : 0
     const ticketMedio = total > 0 ? Math.round((faturamento / total) * 100) / 100 : 0
     const potencialRecuperacao = Math.round((atrasados + sumidos) * (ticketMedio > 0 ? ticketMedio : 60))
+    const cicloMedioRetornoDias = resumo.cicloMedioRetornoGeral || 25
     return {
       total,
       emDia,
@@ -151,6 +153,7 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
       ticketMedio,
       potencialRecuperacao,
       totalVip,
+      cicloMedioRetornoDias,
     }
   }, [resumo, barbeiroSelecionadoId])
 
@@ -331,7 +334,7 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
             <span className="carteira-kpi-val" style={{ color: '#10b981' }}>
               {kpisCarteira.taxaRetencao}%
             </span>
-            <span className="carteira-kpi-sub">Fidelidade da base ativa</span>
+            <span className="carteira-kpi-sub">Ciclo médio: ~{kpisCarteira.cicloMedioRetornoDias} dias</span>
           </div>
 
           <div className="carteira-kpi-card">
@@ -344,6 +347,55 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
             </span>
           </div>
         </div>
+
+        {/* BARRA VISUAL DE RETENÇÃO E SAÚDE DA BASE */}
+        {kpisCarteira.total > 0 && (
+          <div className="carteira-retencao-card">
+            <div className="carteira-retencao-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 700, fontSize: 13, color: '#f3f4f6' }}>
+                  Composição da Carteira & Ciclo de Retorno
+                </span>
+                <span className="carteira-ciclo-tag">
+                  Ciclo habitual: <strong>~{kpisCarteira.cicloMedioRetornoDias} dias</strong>
+                </span>
+              </div>
+              <span style={{ fontSize: 12, color: '#94a3b8' }}>
+                Fidelidade da Base: <strong style={{ color: '#10b981' }}>{kpisCarteira.taxaRetencao}%</strong>
+              </span>
+            </div>
+
+            <div className="carteira-progress-bar-container" title={`Em dia: ${kpisCarteira.emDia} | Hora de voltar: ${kpisCarteira.idealRetorno} | Atrasados: ${kpisCarteira.atrasados} | Sumidos: ${kpisCarteira.sumidos}`}>
+              <div
+                className="carteira-progress-segment em-dia"
+                style={{ width: `${Math.round((kpisCarteira.emDia / kpisCarteira.total) * 100)}%` }}
+                title={`Em dia: ${kpisCarteira.emDia} clientes (${Math.round((kpisCarteira.emDia / kpisCarteira.total) * 100)}%)`}
+              />
+              <div
+                className="carteira-progress-segment ideal-retorno"
+                style={{ width: `${Math.round((kpisCarteira.idealRetorno / kpisCarteira.total) * 100)}%` }}
+                title={`Hora de voltar: ${kpisCarteira.idealRetorno} clientes (${Math.round((kpisCarteira.idealRetorno / kpisCarteira.total) * 100)}%)`}
+              />
+              <div
+                className="carteira-progress-segment atrasados"
+                style={{ width: `${Math.round((kpisCarteira.atrasados / kpisCarteira.total) * 100)}%` }}
+                title={`Atrasados: ${kpisCarteira.atrasados} clientes (${Math.round((kpisCarteira.atrasados / kpisCarteira.total) * 100)}%)`}
+              />
+              <div
+                className="carteira-progress-segment sumidos"
+                style={{ width: `${Math.round((kpisCarteira.sumidos / kpisCarteira.total) * 100)}%` }}
+                title={`Sumidos: ${kpisCarteira.sumidos} clientes (${Math.round((kpisCarteira.sumidos / kpisCarteira.total) * 100)}%)`}
+              />
+            </div>
+
+            <div className="carteira-progress-legend">
+              <span className="legend-item"><span className="legend-dot dot-em-dia" /> Em dia ({kpisCarteira.emDia})</span>
+              <span className="legend-item"><span className="legend-dot dot-ideal" /> Hora de voltar ({kpisCarteira.idealRetorno})</span>
+              <span className="legend-item"><span className="legend-dot dot-atrasado" /> Atrasados ({kpisCarteira.atrasados})</span>
+              <span className="legend-item"><span className="legend-dot dot-sumido" /> Sumidos ({kpisCarteira.sumidos})</span>
+            </div>
+          </div>
+        )}
 
         {/* BANNER INTELIGENTE DE OPORTUNIDADE & REATIVAÇÃO */}
         {(kpisCarteira.idealRetorno > 0 || kpisCarteira.atrasados > 0) && (
@@ -478,6 +530,11 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
                     <td className="carteira-td">
                       <div style={{ fontWeight: 600 }}>{dataBR(c.ultimaVisita)}</div>
                       <div style={{ fontSize: 11.5, color: '#64748b' }}>{c.servicoFavorito || 'Serviço'}</div>
+                      {c.cicloMedioDias > 0 && (
+                        <div style={{ fontSize: 10.5, color: '#38bdf8', marginTop: 2, fontWeight: 600 }} title="Média de dias entre visitas consecutivas deste cliente">
+                          ⏱️ Ciclo: ~{c.cicloMedioDias}d
+                        </div>
+                      )}
                     </td>
 
                     <td className="carteira-td">
