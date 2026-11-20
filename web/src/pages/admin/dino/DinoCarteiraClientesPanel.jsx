@@ -1,7 +1,24 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { api } from '../../../lib/api'
-import { Scissors, Users, Clock, MessageSquare, AlertCircle, RefreshCw, UserCheck, PhoneCall, ChevronRight, ExternalLink } from 'lucide-react'
-import { refHistoricoCliente, urlHistoricoCliente, abrirHistoricoEmNovaGuia } from './historico-cliente'
+import {
+  Scissors,
+  Users,
+  Clock,
+  MessageSquare,
+  AlertCircle,
+  RefreshCw,
+  UserCheck,
+  PhoneCall,
+  ChevronRight,
+  ExternalLink,
+  Download,
+  Crown,
+  Zap,
+  CheckCircle2,
+  TrendingUp,
+  Sparkles,
+} from 'lucide-react'
+import { refHistoricoCliente, urlHistoricoCliente } from './historico-cliente'
 import './DinoCarteiraClientesPanel.css'
 
 const moeda = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -19,6 +36,8 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
   const [modalReatribuir, setModalReatribuir] = useState(null) // { cliente, novoBarbeiroId }
   const [salvandoVinculo, setSalvandoVinculo] = useState(false)
   const [unificando, setUnificando] = useState(false)
+  const [modalLote, setModalLote] = useState(null) // { disparos: [], totalProntos: 0 }
+  const [carregandoLote, setCarregandoLote] = useState(false)
 
   useEffect(() => {
     const timer = setTimeout(() => { setBuscaDebounced(busca) }, 350)
@@ -44,8 +63,6 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
     }
   }, [barbeiroSelecionadoId, filtroRetorno, buscaDebounced])
 
-
-
   const autoUnificarDuplicados = useCallback(async () => {
     const confirmou = window.confirm(
       "Deseja iniciar a varredura e unificação inteligente de cadastros duplicados da barbearia?\n\n" +
@@ -66,7 +83,6 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
     }
   }, [carregarDados])
 
-
   useEffect(() => {
     carregarDados()
   }, [carregarDados])
@@ -80,7 +96,18 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
   // KPIs da carteira selecionada
   const kpisCarteira = useMemo(() => {
     if (!resumo) {
-      return { total: 0, emDia: 0, idealRetorno: 0, atrasados: 0, sumidos: 0, faturamento: 0 }
+      return {
+        total: 0,
+        emDia: 0,
+        idealRetorno: 0,
+        atrasados: 0,
+        sumidos: 0,
+        faturamento: 0,
+        taxaRetencao: 100,
+        ticketMedio: 0,
+        potencialRecuperacao: 0,
+        totalVip: 0,
+      }
     }
     if (barbeiroSelecionadoId) {
       const bResumo = (resumo.carteiras || []).find((c) => c.profissionalId === barbeiroSelecionadoId)
@@ -92,20 +119,39 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
           atrasados: bResumo.atrasados,
           sumidos: bResumo.sumidos,
           faturamento: bResumo.faturamentoTotal,
+          taxaRetencao: bResumo.taxaRetencao ?? (bResumo.totalClientes > 0 ? Math.round(((bResumo.emDia + bResumo.idealRetorno) / bResumo.totalClientes) * 100) : 0),
+          ticketMedio: bResumo.ticketMedio ?? (bResumo.totalClientes > 0 ? Math.round(bResumo.faturamentoTotal / bResumo.totalClientes) : 0),
+          potencialRecuperacao: bResumo.potencialRecuperacao ?? Math.round((bResumo.atrasados + bResumo.sumidos) * 60),
+          totalVip: bResumo.totalVip || 0,
         }
       }
     }
     // Visão Geral (Soma de todos)
     const total = resumo.totalGeralClientes || 0
-    let emDia = 0, idealRetorno = 0, atrasados = 0, sumidos = 0, faturamento = 0
+    let emDia = 0, idealRetorno = 0, atrasados = 0, sumidos = 0, faturamento = 0, totalVip = 0
     for (const c of resumo.carteiras || []) {
       emDia += c.emDia || 0
       idealRetorno += c.idealRetorno || 0
       atrasados += c.atrasados || 0
       sumidos += c.sumidos || 0
+      totalVip += c.totalVip || 0
       faturamento += c.faturamentoTotal || 0
     }
-    return { total, emDia, idealRetorno, atrasados, sumidos, faturamento }
+    const taxaRetencao = total > 0 ? Math.round(((emDia + idealRetorno) / total) * 100) : 0
+    const ticketMedio = total > 0 ? Math.round((faturamento / total) * 100) / 100 : 0
+    const potencialRecuperacao = Math.round((atrasados + sumidos) * (ticketMedio > 0 ? ticketMedio : 60))
+    return {
+      total,
+      emDia,
+      idealRetorno,
+      atrasados,
+      sumidos,
+      faturamento,
+      taxaRetencao,
+      ticketMedio,
+      potencialRecuperacao,
+      totalVip,
+    }
   }, [resumo, barbeiroSelecionadoId])
 
   async function handleVincularBarbeiro(e) {
@@ -126,6 +172,26 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
       setSalvandoVinculo(false)
     }
   }
+
+  const exportarCsv = useCallback(() => {
+    const url = `/api/admin/barbearia/carteira-clientes/exportar-csv?profissionalId=${encodeURIComponent(barbeiroSelecionadoId)}&filtroRetorno=${encodeURIComponent(filtroRetorno)}&busca=${encodeURIComponent(buscaDebounced)}`
+    window.open(url, '_blank')
+  }, [barbeiroSelecionadoId, filtroRetorno, buscaDebounced])
+
+  const abrirReativacaoLote = useCallback(async () => {
+    setCarregandoLote(true)
+    try {
+      const res = await api.post('/api/admin/barbearia/carteira-clientes/disparar-reativacao', {
+        clientesSelecionados: clientes.filter(c => c.statusRetorno === 'ideal_retorno' || c.statusRetorno === 'atrasado'),
+        profissionalId: barbeiroSelecionadoId,
+      })
+      setModalLote(res)
+    } catch (err) {
+      alert('Erro ao preparar reativação: ' + (err.message || 'tente novamente.'))
+    } finally {
+      setCarregandoLote(false)
+    }
+  }, [clientes, barbeiroSelecionadoId])
 
   function gerarLinkWhatsapp(cliente) {
     const tel = String(cliente.telefone || '').replace(/\D/g, '')
@@ -156,10 +222,19 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
             </h2>
             <p className="carteira-sub">
               Acompanhe a base exclusiva de clientes de cada barbeiro (Dino, Nat, Bruno, David e equipe).
-              Identifique clientes que estão na hora de voltar e reative o contato com mensagens diretas pelo WhatsApp.
+              Identifique clientes que estão na hora de voltar e reative o contato com inteligência via WhatsApp (Motor KyttoIA).
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="carteira-prof-pill"
+              onClick={exportarCsv}
+              title="Exportar base completa filtrada para planilha CSV"
+            >
+              <Download size={14} />
+              Exportar CSV
+            </button>
             <button
               type="button"
               className="carteira-prof-pill"
@@ -216,6 +291,9 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
               </div>
               <span>{b.profissionalApelido || b.profissionalNome}</span>
               <span className="carteira-count-badge">{b.totalClientes}</span>
+              {b.taxaRetencao !== undefined && (
+                <span style={{ fontSize: 10, opacity: 0.8, marginLeft: 2 }}>({b.taxaRetencao}%)</span>
+              )}
             </button>
           ))}
         </div>
@@ -248,14 +326,46 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
             <span className="carteira-kpi-sub">Risco de perda / Reativação</span>
           </div>
 
+          <div className="carteira-kpi-card" style={{ borderColor: 'rgba(16, 185, 129, 0.4)' }}>
+            <span className="carteira-kpi-label">Taxa de Retenção</span>
+            <span className="carteira-kpi-val" style={{ color: '#10b981' }}>
+              {kpisCarteira.taxaRetencao}%
+            </span>
+            <span className="carteira-kpi-sub">Fidelidade da base ativa</span>
+          </div>
+
           <div className="carteira-kpi-card">
             <span className="carteira-kpi-label">Faturamento Acumulado</span>
             <span className="carteira-kpi-val" style={{ color: '#f59e0b', fontSize: 22 }}>
               {moeda(kpisCarteira.faturamento)}
             </span>
-            <span className="carteira-kpi-sub">Total gerado pelos clientes</span>
+            <span className="carteira-kpi-sub">
+              Ticket Médio: {moeda(kpisCarteira.ticketMedio)}
+            </span>
           </div>
         </div>
+
+        {/* BANNER INTELIGENTE DE OPORTUNIDADE & REATIVAÇÃO */}
+        {(kpisCarteira.idealRetorno > 0 || kpisCarteira.atrasados > 0) && (
+          <div className="carteira-opportunity-banner">
+            <div className="carteira-opportunity-text">
+              <Sparkles size={20} color="#f59e0b" />
+              <span>
+                <strong>Oportunidade na Carteira:</strong> {kpisCarteira.idealRetorno + kpisCarteira.atrasados} clientes em momento de retorno.
+                Potencial de faturamento adormecido de <strong>{moeda(kpisCarteira.potencialRecuperacao)}</strong>.
+              </span>
+            </div>
+            <button
+              type="button"
+              className="btn-lote-reativacao"
+              onClick={abrirReativacaoLote}
+              disabled={carregandoLote}
+            >
+              <Zap size={14} />
+              {carregandoLote ? 'Carregando fila…' : '⚡ Reativação em Lote (Motor KyttoIA)'}
+            </button>
+          </div>
+        )}
 
         {/* FILTROS E BUSCA */}
         <div className="carteira-actions-row">
@@ -280,6 +390,7 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
               <option value="atrasado">🔴 Em Atraso (31 a 60 dias)</option>
               <option value="sumido">⚠️ Sumidos (&gt; 60 dias)</option>
               <option value="em_dia">🟢 Em Dia (&le; 15 dias)</option>
+              <option value="vip">👑 Clientes VIP (Alto Valor)</option>
             </select>
           </div>
         </div>
@@ -318,7 +429,7 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
                 return (
                   <tr key={c.clienteId} className="carteira-row">
                     <td className="carteira-td">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         <a
                           href={urlHistorico}
                           target="_blank"
@@ -329,6 +440,11 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
                           <span className="carteira-cliente-nome">{c.nome}</span>
                           <ExternalLink size={13} className="carteira-link-icon" />
                         </a>
+                        {c.isVip && (
+                          <span className="carteira-vip-badge" title="Cliente VIP: Alto faturamento e visitas recorrentes">
+                            👑 VIP
+                          </span>
+                        )}
                       </div>
                       <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{c.telefone || 'Sem telefone'}</div>
                     </td>
@@ -375,7 +491,10 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
 
                     <td className="carteira-td">
                       <div style={{ fontWeight: 700 }}>{c.totalAtendimentosComBarbeiro} visita(s)</div>
-                      <div style={{ fontSize: 11.5, color: '#64748b' }}>{moeda(c.totalGastoComBarbeiro)}</div>
+                      <div style={{ fontSize: 11.5, color: '#64748b' }}>
+                        {moeda(c.totalGastoComBarbeiro)}
+                        {c.ticketMedioCliente > 0 && ` (Méd: ${moeda(c.ticketMedioCliente)})`}
+                      </div>
                     </td>
 
                     <td className="carteira-td">
@@ -413,6 +532,88 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
           </tbody>
         </table>
       </div>
+
+      {/* MODAL DE REATIVAÇÃO RÁPIDA EM LOTE (MOTOR KYTTOIA) */}
+      {modalLote && (
+        <div className="modal-overlay-carteira" onClick={() => setModalLote(null)}>
+          <div className="modal-content-carteira" style={{ maxWidth: 700 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header-carteira">
+              <h3 className="modal-title-carteira">
+                <Zap size={22} color="#f59e0b" style={{ verticalAlign: 'middle', marginRight: 8 }} />
+                Fila de Reativação em Lote (Motor KyttoIA)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setModalLote(null)}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 20, cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <p style={{ fontSize: 13, color: '#94a3b8', margin: '0 0 16px 0' }}>
+              Foram preparados <strong>{modalLote.totalProntos} contatos</strong> para reativação com mensagens humanizadas e links de agendamento personalizados.
+            </p>
+
+            <div style={{ maxHeight: 380, overflowY: 'auto', display: 'grid', gap: 10, paddingRight: 4 }}>
+              {(modalLote.disparos || []).map((d) => (
+                <div
+                  key={d.clienteId}
+                  style={{
+                    background: '#0f131a',
+                    border: '1px solid #2d3748',
+                    borderRadius: 10,
+                    padding: '12px 14px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 12,
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, color: '#ffffff', fontSize: 14 }}>
+                      {d.nome}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                      {d.telefone}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#f59e0b', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {d.mensagem}
+                    </div>
+                  </div>
+
+                  <div>
+                    {d.whatsappUrl ? (
+                      <a
+                        href={d.whatsappUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn-whatsapp-carteira"
+                        style={{ padding: '6px 12px', fontSize: 12 }}
+                      >
+                        <MessageSquare size={12} />
+                        Enviar
+                      </a>
+                    ) : (
+                      <span style={{ fontSize: 11, color: '#ef4444' }}>Sem Celular</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
+              <button
+                type="button"
+                className="carteira-prof-pill active"
+                onClick={() => setModalLote(null)}
+              >
+                Concluir Reativações
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL PARA REATRIBUIR BARBEIRO DA CARTEIRA */}
       {modalReatribuir && (

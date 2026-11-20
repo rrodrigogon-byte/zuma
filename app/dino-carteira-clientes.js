@@ -279,6 +279,10 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
     const ultimaVisita = metricasTitular.ultimaData || ultimaDataGeral || cli.atualizadoEm?.slice(0, 10) || cli.criadoEm?.slice(0, 10) || '';
     const diasSemRetorno = calcularDiasDiferenca(ultimaVisita, hoje);
     const statusRetorno = classificarStatusRetorno(diasSemRetorno);
+    const isVip = (metricasTitular.totalGasto >= 250 || metricasTitular.atendimentos >= 4);
+    const ticketMedioCliente = metricasTitular.atendimentos > 0
+      ? Math.round((metricasTitular.totalGasto / metricasTitular.atendimentos) * 100) / 100
+      : 0;
 
     carteiraCompleta.push({
       clienteId: cli.id,
@@ -293,6 +297,8 @@ export function mapearCarteiras(empresaId, { lojaId = null } = {}) {
       barbeiroFonte: titularFonte,
       totalAtendimentosComBarbeiro: metricasTitular.atendimentos,
       totalGastoComBarbeiro: Math.round(metricasTitular.totalGasto * 100) / 100,
+      isVip,
+      ticketMedioCliente,
       ultimaVisita,
       diasSemRetorno,
       statusRetorno,
@@ -345,7 +351,11 @@ export function listarCarteiraClientes(empresaId, {
 
   // Filtro por status de retorno
   if (filtroRetorno && filtroRetorno !== 'todos') {
-    lista = lista.filter((c) => c.statusRetorno === filtroRetorno);
+    if (filtroRetorno === 'vip') {
+      lista = lista.filter((c) => c.isVip);
+    } else {
+      lista = lista.filter((c) => c.statusRetorno === filtroRetorno);
+    }
   }
 
   // Ordena por maior relevância: hora de voltar e atrasados no topo
@@ -383,6 +393,10 @@ export function resumoCarteirasProfissionais(empresaId, { lojaId = null } = {}) 
       atrasados: 0,
       sumidos: 0,
       faturamentoTotal: 0,
+      totalVip: 0,
+      taxaRetencao: 100,
+      ticketMedio: 0,
+      potencialRecuperacao: 0,
     });
   }
 
@@ -396,17 +410,56 @@ export function resumoCarteirasProfissionais(empresaId, { lojaId = null } = {}) 
       else if (item.statusRetorno === 'ideal_retorno') r.idealRetorno += 1;
       else if (item.statusRetorno === 'atrasado') r.atrasados += 1;
       else if (item.statusRetorno === 'sumido') r.sumidos += 1;
+      if (item.isVip) r.totalVip += 1;
       r.faturamentoTotal += item.totalGastoComBarbeiro;
     } else {
       semBarbeiroDefinido += 1;
     }
   }
 
+  for (const r of mapaResumo.values()) {
+    r.faturamentoTotal = Math.round(r.faturamentoTotal * 100) / 100;
+    r.taxaRetencao = r.totalClientes > 0
+      ? Math.round(((r.emDia + r.idealRetorno) / r.totalClientes) * 100)
+      : 0;
+    r.ticketMedio = r.totalClientes > 0
+      ? Math.round((r.faturamentoTotal / r.totalClientes) * 100) / 100
+      : 0;
+    r.potencialRecuperacao = Math.round(
+      (r.atrasados + r.sumidos) * (r.ticketMedio > 0 ? r.ticketMedio : 60)
+    );
+  }
+
   const carteiras = Array.from(mapaResumo.values()).sort((a, b) => b.totalClientes - a.totalClientes);
+  const totalGeralClientes = carteiraCompleta.length;
+  const faturamentoTotalGeral = Math.round(carteiras.reduce((acc, c) => acc + (c.faturamentoTotal || 0), 0) * 100) / 100;
+  const emDiaGeral = carteiras.reduce((acc, c) => acc + (c.emDia || 0), 0);
+  const idealRetornoGeral = carteiras.reduce((acc, c) => acc + (c.idealRetorno || 0), 0);
+  const atrasadosGeral = carteiras.reduce((acc, c) => acc + (c.atrasados || 0), 0);
+  const sumidosGeral = carteiras.reduce((acc, c) => acc + (c.sumidos || 0), 0);
+  const vipsGeral = carteiras.reduce((acc, c) => acc + (c.totalVip || 0), 0);
+  const taxaRetencaoGeral = totalGeralClientes > 0
+    ? Math.round(((emDiaGeral + idealRetornoGeral) / totalGeralClientes) * 100)
+    : 0;
+  const ticketMedioGeral = totalGeralClientes > 0
+    ? Math.round((faturamentoTotalGeral / totalGeralClientes) * 100) / 100
+    : 0;
+  const potencialRecuperacaoGeral = Math.round(
+    (atrasadosGeral + sumidosGeral) * (ticketMedioGeral > 0 ? ticketMedioGeral : 60)
+  );
 
   return {
     carteiras,
-    totalGeralClientes: carteiraCompleta.length,
+    totalGeralClientes,
+    faturamentoTotalGeral,
+    emDiaGeral,
+    idealRetornoGeral,
+    atrasadosGeral,
+    sumidosGeral,
+    vipsGeral,
+    taxaRetencaoGeral,
+    ticketMedioGeral,
+    potencialRecuperacaoGeral,
     semBarbeiroDefinido,
     atualizadoEm: new Date().toISOString(),
   };
@@ -461,4 +514,50 @@ export function gerarMensagemWhatsappRetorno({
   const tempoTexto = diasSemRetorno > 0 ? `já faz ${diasSemRetorno} dias do seu último ${servicoFavorito}` : 'já está na hora de renovar seu visual';
 
   return `Fala ${primeiroNome}, tudo bem? Aqui é o ${barbeiroApelido} da Barbearia Dino! 💈\n\nVi aqui que ${tempoTexto}. Vamos dar aquele talento no visual essa semana?\n\nJá separei sua cadeira! Pode me avisar por aqui ou escolher o melhor horário direto no link: ${linkAgendamento}`;
+}
+
+
+/**
+ * Gera exportação CSV formatada para planilhas da carteira de clientes.
+ */
+export function exportarCarteiraCsv(empresaId, options = {}) {
+  const { clientes } = listarCarteiraClientes(empresaId, { ...options, limite: 5000 });
+  const colunas = [
+    'Nome do Cliente',
+    'Telefone',
+    'Barbeiro Titular',
+    'Tipo de Vinculo',
+    'Cliente VIP',
+    'Ultima Visita',
+    'Dias Sem Retorno',
+    'Status de Retorno',
+    'Servico Favorito',
+    'Visitas com Barbeiro',
+    'Total Gasto com Barbeiro (R$)',
+    'Ticket Medio (R$)',
+  ];
+  const linhas = [colunas.join(';')];
+  for (const c of clientes) {
+    const statusLabel = {
+      em_dia: 'Em Dia (<= 15d)',
+      ideal_retorno: 'Hora de Voltar (16-30d)',
+      atrasado: 'Em Atraso (31-60d)',
+      sumido: 'Sumido (> 60d)',
+    }[c.statusRetorno] || c.statusRetorno;
+    linhas.push([
+      `"${(c.nome || '').replace(/"/g, '""')}"`,
+      `"${(c.telefone || '').replace(/"/g, '""')}"`,
+      `"${(c.barbeiroApelido || c.barbeiroNome || 'Sem barbeiro').replace(/"/g, '""')}"`,
+      c.barbeiroFonte === 'manual' ? 'Fixado Manualmente' : 'Habitual Inferido',
+      c.isVip ? 'SIM' : 'NAO',
+      c.ultimaVisita || 'Nunca visitou',
+      c.diasSemRetorno,
+      `"${statusLabel}"`,
+      `"${(c.servicoFavorito || '').replace(/"/g, '""')}"`,
+      c.totalAtendimentosComBarbeiro || 0,
+      (c.totalGastoComBarbeiro || 0).toFixed(2).replace('.', ','),
+      (c.ticketMedioCliente || 0).toFixed(2).replace('.', ','),
+    ].join(';'));
+  }
+  return '\uFEFF' + linhas.join('\r\n');
 }

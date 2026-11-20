@@ -9845,6 +9845,65 @@ app.get(['/api/admin/barbearia/carteira-clientes/resumo', '/api/admin/dino/carte
   }
 });
 
+app.get(['/api/admin/barbearia/carteira-clientes/exportar-csv', '/api/admin/dino/carteira-clientes/exportar-csv'], (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const csv = dinoCarteiraClientes.exportarCarteiraCsv(empresaId, {
+      profissionalId: req.query?.profissionalId || '',
+      lojaId: legacyLojaId(req),
+      busca: req.query?.busca || '',
+      filtroRetorno: req.query?.filtroRetorno || 'todos',
+    });
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="carteira-barbearia-dino.csv"');
+    res.send(csv);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post(['/api/admin/barbearia/carteira-clientes/disparar-reativacao', '/api/admin/dino/carteira-clientes/disparar-reativacao'], (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const { clientesSelecionados = [], filtroRetorno = 'ideal_retorno', profissionalId = '' } = req.body || {};
+    let clientesAlvo = clientesSelecionados;
+    if (!clientesAlvo || clientesAlvo.length === 0) {
+      const listagem = dinoCarteiraClientes.listarCarteiraClientes(empresaId, {
+        profissionalId,
+        filtroRetorno,
+        limite: 100,
+      });
+      clientesAlvo = listagem.clientes;
+    }
+    const disparos = (clientesAlvo || []).map((c) => {
+      const msg = dinoCarteiraClientes.gerarMensagemWhatsappRetorno({
+        clienteNome: c.nome,
+        barbeiroApelido: c.barbeiroApelido || 'Dino',
+        servicoFavorito: c.servicoFavorito || 'corte',
+        diasSemRetorno: c.diasSemRetorno || 0,
+      });
+      const tel = String(c.telefone || '').replace(/\D/g, '');
+      const telCompleto = tel.startsWith('55') ? tel : `55${tel}`;
+      return {
+        clienteId: c.clienteId,
+        nome: c.nome,
+        telefone: c.telefone,
+        whatsappUrl: tel.length >= 10 ? `https://wa.me/${telCompleto}?text=${encodeURIComponent(msg)}` : null,
+        mensagem: msg,
+        status: tel.length >= 10 ? 'pronto' : 'sem_telefone',
+      };
+    });
+    res.json({
+      ok: true,
+      totalProntos: disparos.filter((d) => d.status === 'pronto').length,
+      totalSemTelefone: disparos.filter((d) => d.status === 'sem_telefone').length,
+      disparos,
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 app.patch(['/api/admin/barbearia/clientes/:id/vincular-barbeiro', '/api/admin/dino/clientes/:id/vincular-barbeiro'], (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);

@@ -313,7 +313,7 @@ export async function carregarBaseConsolidada({
 
     const client = obterOuCriarCliente(telNorm, nomeBruto, { cpf: cmd.clienteCpf });
 
-    const dataIso = String(cmd.dataComandaIso || cmd.dataComandaOriginal || cmd.criadoEm || '').slice(0, 10);
+    const dataIso = String(cmd.dataComandaIso || cmd.dataComandaOriginal || cmd.dataFechamento || cmd.dataHora || cmd.data || cmd.criadoEm || '').slice(0, 10);
     if (dataIso) {
       if (dataIso < client.primeiraVisita) client.primeiraVisita = dataIso;
       if (dataIso >= client.ultimaVisita) client.ultimaVisita = dataIso;
@@ -354,7 +354,7 @@ export async function carregarBaseConsolidada({
 
     const client = obterOuCriarCliente(telNorm, nomeBruto, { cpf: ag.clienteCpf || ag.cpf });
 
-    const dataIso = String(ag.dataAgenda || ag.dataHora || ag.criadoEm || '').slice(0, 10);
+    const dataIso = String(ag.dataAgenda || ag.data_agenda || ag.data || ag.dataHora || ag.data_hora || ag.criadoEm || '').slice(0, 10);
     const hora = String(ag.horario || ag.hora || '').slice(0, 5);
     const valor = Number(ag.valor || ag.preco || 0);
     const prof = (ag.barbeiroNome || ag.profissionalNome || ag.barbeiro || 'Equipe Dino').trim();
