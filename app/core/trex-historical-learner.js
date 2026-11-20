@@ -294,7 +294,7 @@ export async function runFullHistoricalAnalysis({
             `INSERT INTO ai_conversation_summaries 
              (empresa_id, loja_id, sessao_id, telefone, dia, mensagens, resultado, sentimento, resumo, modelo)
              VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9, $10)
-             ON CONFLICT (empresa_id, sessao_id, dia) DO UPDATE SET
+             ON CONFLICT (empresa_id, telefone, dia) DO UPDATE SET
                mensagens = EXCLUDED.mensagens,
                resultado = EXCLUDED.resultado,
                sentimento = EXCLUDED.sentimento,
