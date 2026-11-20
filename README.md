@@ -1,109 +1,178 @@
-# SetPoint Ultra — ERP & SaaS Platform
+# 🍣 Zuma Cozinha Oriental — ERP & Cockpit Gastronômico 360°
 
-![Version](https://img.shields.io/badge/version-3.1.0-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Node](https://img.shields.io/badge/node-v22.0.0-brightgreen.svg)
-![React](https://img.shields.io/badge/react-v18.2.0-blue.svg)
+![Version](https://img.shields.io/badge/version-2.5.0-red.svg)
+![Segmento](https://img.shields.io/badge/segmento-Culinária%20Japonesa%20%26%20Rodízio-gold.svg)
+![Local](https://img.shields.io/badge/local-Tangará%20da%20Serra--MT-green.svg)
+![Barramento](https://img.shields.io/badge/barramento-A2%20Síncrono%20Ativo-emerald.svg)
+![Testes](https://img.shields.io/badge/testes-19%2F19%20Aprovados%20(100%25)-brightgreen.svg)
 
-O **SetPoint Ultra** (antigo Agro-Open / Kytto ERP) é uma plataforma SaaS modular enterprise-grade construída para revolucionar a gestão de negócios no Brasil. Originalmente focado em clubes esportivos e arenas, o sistema evoluiu para um ERP completo, capaz de atender diversos segmentos de varejo e serviços.
+O repositório **Zuma** é a suíte tecnológica completa e standalone do restaurante **Zuma Cozinha Oriental LTDA** (Tangará da Serra - MT), construída utilizando como base o robusto ecossistema de ERP corporativo do **agro-open / Kytto**.
 
-## 🚀 Segmentos Atendidos
+A plataforma une a mais moderna engenharia gastronômica de culinária oriental a um ERP de classe empresarial com motor fiscal próprio, inteligência artificial preditiva, central multiestação e CRM conversacional.
 
-O sistema possui uma arquitetura multi-tenant onde cada empresa ativa apenas os módulos que precisa:
+---
 
-- **🏪 Supermercado:** Balança, lotes, validade, promoções (Leve X Pague Y), ficha técnica de desossa.
-- **👗 Loja de Moda:** Matriz de grade (Cor×Tamanho), crediário próprio (fórmula Price), condicional (malinha).
-- **✂️ Barbearia / Salão:** Agendamento online, rateio automático de comissões, assinaturas recorrentes.
-- **🔧 Oficina Mecânica:** OS digital, checklist com foto, aprovação via WhatsApp, controle de garantia.
-- **🐾 Agropecuária / Petshop:** Receituário agronômico/veterinário, prontuário, fracionamento.
-- **🎾 Arenas Esportivas:** Reservas de quadras, gestão de torneios, catracas IoT, iluminação automática.
+## 🏢 Identificação e Dados Canônicos da Empresa
 
-## 🏗️ Arquitetura Técnica
+* **Razão Social:** Zuma Cozinha Oriental LTDA
+* **Nome Fantasia:** Zuma Cozinha Oriental
+* **CNPJ:** `36.296.848/0001-57`
+* **Inscrição Estadual:** `13.882.109-8` | **Inscrição Municipal:** `94820`
+* **Localização:** Tangará da Serra - Mato Grosso (MT)
+* **ID Canônico no Ecossistema:** `c3c3ac01-8e50-4b61-8c79-de4aaa916da3`
+* **Instagram Oficial:** [@zuma_orientaltga](https://www.instagram.com/zuma_orientaltga/)
 
-O projeto é dividido em 3 camadas principais (Monorepo):
+---
 
-1. **`/app` (Backend Node.js)**
-   - API RESTful modular (25+ módulos independentes).
-   - Motor Fiscal Próprio: Geração e assinatura de XML (A1), envio direto SEFAZ-MT, DANFE em PDF.
-   - Core WhatsApp: Integração com Evolution API para disparos automáticos.
-   - Push Notifications: Integração com Expo Push para alertas mobile.
-   - Banco de Dados: PostgreSQL 16 com schema isolado por tenant (Row-Level Security).
+## 🌟 As 3 Aplicações Principais do Zuma
 
-2. **`/web` (Frontend React + Vite)**
-   - Dashboard Administrativo (SPA) e PDV Unificado.
-   - Telas de BI, Relatórios Fiscais (SPED/Sintegra), Crediário e Billing.
-   - Páginas públicas (Agendamento Online, Checkout).
+O sistema oferece três experiências web integradas com sincronização em tempo real:
 
-3. **`/mobile` (App Expo / React Native)**
-   - App do Atleta / Cliente Final (reservas, pagamentos, histórico).
-   - App do Gestor (PDV Mobile, aprovação de OS, dashboard).
-   - Suporte offline-first com sincronização assíncrona.
+### 1. 📱 Cardápio Digital PWA & Autoatendimento (`/zuma`)
+* **URL:** `https://kytto.com.br/zuma/` (ou `/zuma/index.html`)
+* **Experiência do Cliente:** PWA instalável offline-first com tempo de resposta de 0,1s.
+* **211 Itens Reais em 23 Categorias:** Sincronizado 100% com `https://zumacozinhaoriental.com.br/loja/pedidos`, incluindo 116 fotos reais oficiais de alta resolução hospedadas no CDN da Liga dos Pedidos (`cdnimages.ligafiles.com.br` e `alloydeliveryimages.ligafiles.com.br`), capas webp panorâmicas para todas as 23 categorias e grupos de complementos reais.
+* **Construtor Dinâmico de Barcas 360°:** O cliente monta barcas personalizadas peça por peça visualizando valor e foto.
+* **Sommelier de Saquês & Harmonização:** Sugestão de bebidas guiada por ocasião e preferência de paladar.
+* **Rodízio Tangará:** Rodízio tradicional a R$ 99,90/pessoa (segunda a sábado).
+* **Integração Instagram & Cupons:** Cupom oficial `INSTAZUMA` (R$ 15,00 OFF no primeiro pedido).
 
-## ⚙️ Como Executar Localmente
+### 2. 🚀 Cockpit Executivo Zuma Pilot 360° (`/zuma/pilot.html`)
+* **URL:** `https://kytto.com.br/zuma/pilot.html`
+* **18 Módulos de Gestão, Inteligência e Vendas:**
+  1. **#operacao:** Acesso direto às 4 estações operacionais.
+  2. **#cockpit:** Métricas financeiras, ticket médio e volume de rodízios.
+  3. **#zumi:** Mascote Zumi (assistente virtual de IA KyttoIA 2.5 Flash).
+  4. **#campanhas:** Gestão de anúncios para Instagram e tráfego pago geolocalizado.
+  5. **#leads:** Funil de aquisição de clientes e captação de contatos.
+  6. **#clientes:** CRM gastronômico com histórico de pedidos e preferências.
+  7. **#horarios:** Controle de escala e turnos do Sushi Bar e Salão.
+  8. **#clube:** Clube Zumi de Fidelidade e Recompra com níveis de pontuação.
+  9. **#trafego:** Análise de ROI de tráfego pago no Meta Ads e Google Ads.
+  10. **#indicacao:** Motor viral de indicação "Indique um Amigo e Ganhe R$ 15".
+  11. **#b2b:** Convênios corporativos com empresas do agronegócio de Tangará da Serra (Amaggi, SLC, John Deere, etc.).
+  12. **#recuperador:** Recuperador de carrinhos abandonados com disparo automático de WhatsApp.
+  13. **#mercado:** Inteligência Competitiva KyttoIA com benchmarking dos concorrentes locais (Sansei, Sushi Ya, Matsuri) e estratégia de desintermediação do iFood.
+  14. **#engenharia:** Matriz BCG completa dos 211 SKUs (Estrelas, Vacas Leiteiras, Cavalos de Corrida e Abacaxis).
+  15. **#rfm:** Segmentação da base de clientes em Campeões, Fiéis, Em Risco e Inativos.
+  16. **#clima:** Estação meteorológica com gatilhos automáticos para dias de chuva e frio.
+  17. **#omnichannel:** Central de canais integrados (Salão, Delivery, Takeaway, WhatsApp).
+  18. **#financeiro & #estoque:** DRE Gerencial, Break-Even e Ficha Técnica de Rendimento do Salmão.
 
-### 1. Pré-requisitos
-- Node.js 22+
-- PostgreSQL 16+
-- Conta no GCP (opcional, para deploy)
+### 3. 🍱 Central Operacional Unificada (`/zuma/operacao.html`)
+* **URL:** `https://kytto.com.br/zuma/operacao.html`
+* **4 Estações Operacionais Sincronizadas:**
+  1. **Caixa / PDV:** Fechamento de comandas, emissão fiscal de cupom NFC-e, TEF integrado e PIX instantâneo.
+  2. **KDS Sushi Bar & Cozinha:** Painel de produção com setorização de praças (`sushi_bar`, `cozinha`, `bar`) e contador de tempo limite.
+  3. **App Garçom / Salão:** Gestão das 27 mesas físicas (Salão Principal, Deck Externo, Área Bistrô e Balcão Sushi Bar).
+  4. **App Motoboy / Delivery:** Roteirização de entregas por bairros de Tangará da Serra com status em tempo real.
 
-### 2. Configuração do Banco de Dados
-```bash
-# Iniciar PostgreSQL e criar banco/usuário
-sudo -u postgres psql -c "CREATE USER setpoint WITH PASSWORD 'setpoint2026' CREATEDB;"
-sudo -u postgres psql -c "CREATE DATABASE setpoint_ultra OWNER setpoint;"
+---
 
-# Executar migrations
-cd app/migrations
-./run_migrations.sh localhost 5432 setpoint setpoint2026 setpoint_ultra
+## 🏛️ Núcleo ERP Base (Herança do agro-open / Kytto)
+
+O repositório Zuma incorpora todo o poder do ERP multinegócio Kytto:
+
+* **Motor Fiscal SEFAZ-MT:** Emissão de NFC-e (Mod 65) e NF-e de entrada/saída (Mod 55), com assinatura digital A1, contingência offline e Barramento A2 Síncrono.
+* **Módulo Financeiro e Contábil:** Plano de contas, razão analítico, conciliação bancária, contas a pagar/receber e DRE contábil/gerencial.
+* **Controle de Estoque e Suprimentos:** Fichas técnicas, inventário por pesagem, perda operacional e cotações RFQ.
+* **Atendimento Humanizado via WhatsApp:** Motor conversacional Akira (alimentado por KyttoIA 2.5 Flash / Gemini) com atendimento 24h, agendamento de reservas e envio de cardápio.
+
+---
+
+## 📁 Estrutura de Arquivos Principais
+
+```
+zuma/
+├── app/
+│   ├── modules/
+│   │   └── restaurante-zuma.js          # Router Express e regras de negócio do Zuma
+│   ├── public/
+│   │   ├── zuma/
+│   │   │   ├── index.html               # Cardápio Digital PWA do cliente
+│   │   │   ├── pilot.html               # Cockpit Zuma Pilot 360° (18 módulos)
+│   │   │   ├── operacao.html            # Central Operacional (PDV, KDS, Garçom, Motoboy)
+│   │   │   ├── cardapio-real-zuma.json  # Catálogo integral de 211 produtos e 23 categorias
+│   │   │   ├── sw.js                    # Service Worker PWA offline-first
+│   │   │   └── manifest.json            # Manifesto do Web App
+│   ├── migrations/
+│   │   └── 128_zuma_cozinha_oriental_completo.sql # Migration SQL idempotente
+│   ├── zuma-cozinha-oriental-seed.js    # Seed de produtos, mesas, clientes VIP e combos
+│   ├── zuma-cozinha-oriental.test.js    # Suíte com 18 testes automatizados
+│   ├── server.js                        # Servidor Express principal
+│   └── tenant-provisioning.js           # Provisionamento de usuários e tenants
+├── web/
+│   ├── src/
+│   │   ├── pages/admin/
+│   │   │   └── ZumaSuite.jsx            # Painel nativo React da Suíte Zuma
+│   │   ├── components/
+│   │   │   ├── Sidebar.jsx              # Menu lateral com navegação oficial Zuma
+│   │   │   └── EmpresaSwitcher.jsx      # Seletor canônico com Zuma prioritário
+│   │   └── lib/
+│   │       └── brand.js                 # Detecção de contexto de marca Zuma
+│   └── package.json                     # Frontend Vite + React 18
+├── package.json                         # Dependências do backend Node.js
+└── README.md                            # Documentação oficial do projeto
 ```
 
-### 3. Rodando o Backend (API)
+---
+
+## 🚀 Como Executar Localmente
+
+### Pré-requisitos
+* Node.js v20+ ou v22+
+* PostgreSQL 15+ (opcional para persistência completa, ou modo mock em memória)
+
+### Instalação de Dependências
 ```bash
-cd app
+# 1. Dependências do Backend
 npm install
-cp .env.example .env.development
-# Preencha o .env.development com suas credenciais locais
-npm run dev
+
+# 2. Dependências do Frontend
+npm --prefix web install
 ```
 
-### 4. Rodando o Frontend (Web)
+### Compilação do Frontend
 ```bash
-cd web
-npm install
-npm run dev
+npm --prefix web run build
 ```
 
-### 5. Rodando o App Mobile (Expo)
+### Executar Testes Automatizados
 ```bash
-cd mobile
-npm install
-npx expo start
+npm run test:zuma
 ```
+*Saída esperada: 19 testes aprovados (100% pass).*
 
-## 🧪 Testes Automatizados
-
-O projeto utiliza **Vitest** para garantir a integridade dos cálculos críticos:
-
+### Sincronização Automatizada do Catálogo Real
+O repositório inclui a ferramenta de extração e sincronização direta com a loja oficial:
 ```bash
-cd app
-npm run test
-# ou npx vitest run --reporter=verbose
+python3 scripts/sync_zuma_catalog.py
 ```
-*Cobertura atual:* Motor Fiscal (Chave NFC-e, ICMS, PIS/COFINS), PDV (Troco, Promoções), Barbearia (Rateio) e Crediário (Fórmula Price).
+Ela atualiza simultaneamente:
+1. `app/public/zuma/cardapio-real-zuma.json`
+2. `app/zuma-cozinha-oriental-seed.js`
+3. `app/public/zuma/index.html` (catálogo offline e PWA)
 
-## ☁️ Deploy no Google Cloud Platform (GCP)
-
-O repositório já contém a infraestrutura como código (IaC) pronta para o GCP.
-
-1. **Cloud SQL:** Instância PostgreSQL 16 (`southamerica-east1`).
-2. **Cloud Run:** Container Docker multi-stage (definido em `Dockerfile`).
-3. **Cloud Build:** Pipeline CI/CD automatizado (definido em `cloudbuild.yaml`).
-
-Para fazer o deploy manual:
+### Inicialização do Servidor
 ```bash
-gcloud builds submit --config cloudbuild.yaml .
+npm start
 ```
+O servidor estará rodando em `http://localhost:3000`.
 
-## 📜 Licença
+---
 
-Desenvolvido pela equipe SetPoint Ultra. Uso restrito e confidencial.
+## 🔌 Principais Endpoints da API
+
+* `GET /api/zuma/cardapio` — Retorna as 23 categorias e os 211 produtos do cardápio oficial.
+* `GET /api/zuma/operacional/completo` — Retorna dados operacionais síncronos (mesas, pedidos, comandas).
+* `POST /api/zuma/caixa/fechar-venda` — Fechamento de venda no PDV com emissão fiscal.
+* `POST /api/zuma/kds/atualizar-item` — Atualização de status de preparo pelo Sushiman no KDS.
+* `POST /api/zuma/garcom/lancar-pedido` — Lançamento de novos itens em comandas de mesas físicas.
+* `POST /api/zuma/delivery/despachar` — Despacho e associação de motoboys para entregas.
+
+---
+
+## 📜 Licença e Propriedade
+
+Desenvolvido para **Zuma Cozinha Oriental LTDA** integrado à infraestrutura do ecossistema **Kytto**.
+Todos os direitos reservados.

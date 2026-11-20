@@ -53,6 +53,7 @@ function EntradaPrincipal() {
   if (host.startsWith('setpoint.')) return <Navigate to="/admin" replace />
   const destinoStallone = stalloneEntryFromHost(host)
   if (destinoStallone) return <Navigate to={destinoStallone} replace />
+  if (host.includes('zuma')) return <Navigate to="/admin/zuma" replace />
   const destinoDino = destinoInicialDino(host)
   if (destinoDino) return <Navigate to={destinoDino} replace />
   // Domínio próprio da Stallone (stallone.kytto.com.br): abre direto a loja.
@@ -207,6 +208,7 @@ const PatrimonioAtivos = lazy(() => import('./pages/admin/PatrimonioAtivos'))
 const LojaModa        = lazy(() => import('./pages/admin/LojaModa'))
 const PalatarePizzariaSuite = lazyWithRetry(() => import("./pages/admin/PalatarePizzariaSuite"))
 const ZumaRestauranteSuite = lazyWithRetry(() => import("./pages/admin/ZumaRestauranteSuite"))
+const ZumaSuite = lazyWithRetry(() => import("./pages/admin/ZumaSuite"))
 const ConcretoUsinaERP = lazyWithRetry(() => import("./pages/admin/ConcretoUsinaERP"))
 const ConcretoPwaAssinatura = lazyWithRetry(() => import("./pages/public/ConcretoPwaAssinatura"))
 const ConcretoPortalCliente = lazyWithRetry(() => import("./pages/public/ConcretoPortalCliente"))
@@ -446,6 +448,7 @@ export default function App() {
           <Route path="/admin/zuma" element={<Layout><ZumaRestauranteSuite /></Layout>} />
           <Route path="/admin/zuma-erp" element={<Layout><ZumaRestauranteSuite /></Layout>} />
           <Route path="/admin/restaurante-zuma" element={<Layout><ZumaRestauranteSuite /></Layout>} />
+          <Route path="/admin/zuma-suite" element={<Layout><ZumaSuite /></Layout>} />
           <Route path="/admin/concreto" element={<Layout><ConcretoUsinaERP /></Layout>} />
           <Route path="/admin/usina-concreto" element={<Layout><ConcretoUsinaERP /></Layout>} />
           <Route path="/admin/balanca" element={<Layout><BalancaRodoviariaCockpit /></Layout>} />

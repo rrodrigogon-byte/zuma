@@ -78,3 +78,7 @@ k8s/secrets/
 .env.*.secret
 .env.production.local
 data/
+
+# GCP and private keys
+gcp_key.json
+*.key

@@ -1,7 +1,7 @@
 {
-  "name": "erp-modular-brasil",
+  "name": "zuma-erp",
   "version": "2.0.0",
-  "description": "ERP Modular para Bares, Restaurantes, Clubes, Lojas e Comércio em Geral",
+  "description": "Zuma Cozinha Oriental - ERP & Cockpit Gastronômico 360° Completo (Tangará da Serra - MT)",
   "type": "module",
   "main": "app/server-v2.js",
   "scripts": {
@@ -39,7 +39,8 @@
     "test:human-queue-pg": "node scripts/test-dino-human-queue-pg.mjs",
     "test:human-queue": "node --test app/core/whatsapp-human-queue.test.js web/src/pages/admin/dino/whatsapp-human-queue.test.js && (cd web && ../node_modules/.bin/vitest --config vite.config.js run src/pages/admin/dino/WhatsappHumanQueue.test.jsx)",
     "test:caixa-preview": "node --test --test-concurrency=1 app/comandas-caixa-previa.test.js app/server-caixa-previa.test.js && (cd web && ../node_modules/.bin/vitest --config vite.config.js run src/pages/admin/BarbeariaCaixaPrevia.test.jsx)",
-    "test:comanda-plano": "node --test --test-concurrency=1 app/barbearia-comanda-plano.test.js app/cliente-historico-kytto.test.js app/customer360-store.test.js app/core/commerce-comanda-bridge.pg.test.js web/src/pages/admin/dino/comanda-nova.test.js web/src/pages/admin/dino/historico-cliente.test.js && (cd web && ../node_modules/.bin/vitest --config vite.config.js run src/pages/admin/dino/ComandaNova.test.jsx)"
+    "test:comanda-plano": "node --test --test-concurrency=1 app/barbearia-comanda-plano.test.js app/cliente-historico-kytto.test.js app/customer360-store.test.js app/core/commerce-comanda-bridge.pg.test.js web/src/pages/admin/dino/comanda-nova.test.js web/src/pages/admin/dino/historico-cliente.test.js && (cd web && ../node_modules/.bin/vitest --config vite.config.js run src/pages/admin/dino/ComandaNova.test.jsx)",
+    "test:zuma": "node --test app/zuma-cozinha-oriental.test.js"
   },
   "keywords": [
     "erp",
@@ -74,10 +75,12 @@
     "uuid": "^11.1.1",
     "web-push": "^3.6.7",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "xml-crypto": "^6.4.0",
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.23.3",
+    "@xmldom/xmldom": "^0.9.12",
     "eslint": "^8.52.0",
     "jest": "^29.7.0",
     "nodemon": "^3.0.1",

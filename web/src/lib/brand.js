@@ -6,9 +6,8 @@ export const STALLONE_MARK = '/brand/stallone-mark.svg'
 
 // Marcas com identidade própria. Cada empresa (tenant) aponta para uma marca pelo
 // brandKey do storefront; empresas sem marca registrada usam a identidade Kytto.
-export const BRAND_KEYS = ['dino', 'stallone', 'zuma']
+export const BRAND_KEYS = ['dino', 'stallone']
 export const STALLONE_HOSTS = new Set(['stallone.kytto.com.br', 'www.stallone.kytto.com.br'])
-export const ZUMA_HOSTS = new Set(['zuma.kytto.com.br', 'www.zuma.kytto.com.br', 'zuma-oriental.kytto.com.br'])
 
 function normalizeHost(host) {
   return String(host || '').trim().toLowerCase().replace(/\.$/, '')
@@ -16,10 +15,7 @@ function normalizeHost(host) {
 
 /** Marca pelo domínio próprio da loja (null quando o host não tem marca dedicada). */
 export function brandFromHost(host) {
-  const h = normalizeHost(host);
-  if (STALLONE_HOSTS.has(h)) return 'stallone';
-  if (ZUMA_HOSTS.has(h)) return 'zuma';
-  return null;
+  return STALLONE_HOSTS.has(normalizeHost(host)) ? 'stallone' : null
 }
 
 export function isStalloneBrandContext(...contexts) {
@@ -133,6 +129,21 @@ export function isClubeBrandContext(...contexts) {
   })
 }
 
+export const ZUMA_EMPRESA_ID = 'c3c3ac01-8e50-4b61-8c79-de4aaa916da3'
+export const ZUMA_LOGO = '/zuma/logo.png'
+
+export function isZumaBrandContext(...contexts) {
+  return contexts.some((context) => {
+    const values = typeof context === 'object'
+      ? [context.id, context.empresaId, context.tipoNegocio, context.tipo_negocio, context.segmento, context.vertical, context.brandKey, context.brand_key, context.slug, context.codigo, context.alias, context.nome, context.nome_fantasia, context.razaoSocial]
+      : [context]
+    return values.some((value) => {
+      const v = String(value || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      return v.includes('zuma') || v.includes('oriental') || v === 'c3c3ac01-8e50-4b61-8c79-de4aaa916da3'
+    })
+  })
+}
+
 export const PALATARE_LOGO = "/palatare-logo.png"
 export const PALATARE_BANNER = "/palatare-banner.png"
 export const CONCRETO_LOGO = "/brand/concreto-usina-logo.png"
@@ -157,7 +168,7 @@ export function isRestauranteBrandContext(...contexts) {
       : [context]
     return values.some((value) => {
       const v = String(value || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-      return /\brestaurante\b|\bpizzaria\b|\bpalatare\b|\bgastronomia\b|\bzuma\b|\boriental\b|\bsushi\b/.test(v)
+      return /\brestaurante\b|\bpizzaria\b|\bpalatare\b|\bgastronomia\b/.test(v)
     })
   })
 }
