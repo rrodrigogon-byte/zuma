@@ -211,3 +211,59 @@ O módulo fiscal dispõe de recursos completos para compliance tributário em Ma
   - Separação entre receitas tributadas normalmente (refeições preparadas a 3,85% de ICMS efetivo) e receitas com segregação de ICMS-ST / PIS-COFINS Monofásico (refrigerantes, águas e cervejas).
   - Demonstrativo de economia tributária gerada pela segregação legal de monofásicos.
 - **Exportação Digital de XMLs:** Download de pacote consolidado (ZIP) com todas as notas fiscais emitidas, canceladas e cartas de correção do mês para envio direto ao escritório de contabilidade.
+
+
+---
+
+## 11. Operações CRUD Completas: Incluir, Modificar/Editar, Salvar e Excluir
+
+Para conferir autonomia operacional máxima aos gestores do restaurante, foram implementados botões com modais interativos e endpoints REST dedicados para todas as entidades centrais:
+
+### 11.1. Cardápio & Sushi Bar
+- **Incluir Novo Prato:** Modal com campos de Nome, Categoria (Combinados, Sashimis, Uramakis, etc.), Preço de Venda (R$), Código PDV, Praça de Preparo (Sushi Bar, Cozinha Quente, Bar), Descrição dos Ingredientes e URL da Foto.
+- **Modificar / Salvar:** Edição completa de dados de pratos existentes com atualização dinâmica e recálculo instantâneo de margens.
+- **Excluir:** Remoção segura de itens do cardápio com caixa de diálogo de confirmação.
+- **Endpoints:** `POST /api/public/zuma/cardapio/item`, `PUT /api/public/zuma/cardapio/item/:id`, `DELETE /api/public/zuma/cardapio/item/:id`.
+
+### 11.2. Mesas & Salão
+- **Incluir Nova Mesa:** Cadastro de novas mesas informando Número, Setor (Salão Principal, Deck Lounge, Sushi Bar Omakase, Sala VIP), Capacidade de Lugares, Garçom Responsável e Temperatura Alvo IoT.
+- **Modificar / Salvar:** Alteração de setor, garçom alocado, capacidade de pessoas e status da comanda.
+- **Excluir:** Remoção de mesas do salão com ajuste em tempo real das métricas de ocupação.
+- **Endpoints:** `POST /api/public/zuma/mesas`, `PUT /api/public/zuma/mesas/:id`, `DELETE /api/public/zuma/mesas/:id`.
+
+### 11.3. Estoque de Pescados & Insumos Nobres
+- **Incluir Novo Insumo:** Cadastro de novos pescados e insumos informando Nome, Código de Estoque, Unidade (kg, g, un, l, cx), Saldo Inicial, Estoque Mínimo de Segurança, Custo Médio Unitário (R$) e Fornecedor Padrão.
+- **Modificar / Salvar:** Atualização de estoques mínimos, fornecedores e custos de reposição.
+- **Excluir:** Exclusão de insumos descontinuados com conferência de saldo remanescente.
+- **Endpoints:** `POST /api/public/zuma/estoque/insumo`, `PUT /api/public/zuma/estoque/insumo/:id`, `DELETE /api/public/zuma/estoque/insumo/:id`.
+
+### 11.4. Cozinha KDS (Kitchen Display System)
+- **Incluir Pedido Manual:** Lançamento de comandas manuais de balcão ou telefone especificando Comanda, Origem, Praça Responsável, Prioridade (NORMAL, ALTA, URGENTE), Garçom e Itens com Observações específicas (ex.: "sem wasabi", "tarê à parte").
+- **Modificar / Salvar:** Ajuste de itens, observações de alergias e alteração de praça ou nível de prioridade.
+- **Excluir / Cancelar:** Cancelamento de pedidos da fila da cozinha com registro de auditoria.
+- **Endpoints:** `POST /api/public/zuma/cozinha/pedido`, `PUT /api/public/zuma/cozinha/pedido/:id`, `DELETE /api/public/zuma/cozinha/pedido/:id`.
+
+### 11.5. Frente de Caixa (PDV)
+- **Modificação de Quantidades:** Botões `+` e `-` para incremento e decremento dinâmico de itens no carrinho.
+- **Exclusão de Itens:** Botão de lixeira `🗑️` para remover itens individuais do pedido antes da finalização.
+- **Salvar Comanda em Aberto:** Botão `💾 Salvar Comanda em Aberto` para armazenar pedidos em andamento de clientes no salão ou balcão para posterior recebimento e emissão de NFC-e.
+
+---
+
+## 12. Homologação Oficial & Suíte de 33 Testes Automatizados
+
+A suíte completa de testes de regressão e homologação operacional (`app/zuma-cozinha-oriental.test.js`) foi expandida para **33 testes automatizados**, atingindo 100% de cobertura nos cenários gastronômicos:
+
+1. Dados Cadastrais e Identidade Visual Zuma Cozinha Oriental
+2. Catálogo Oficial dos 211 Produtos e 23 Categorias
+3. Grade de Mesas Físicas e Canais Virtuais
+4. Perfis de Clientes VIP e Fatos do Motor KyttoIA 2.5 Flash
+5. Abertura, Sangria, Suprimento e Fechamento de Turno do Caixa PDV
+6. Venda Rápida de Balcão e Delivery com Emissão Simultânea de NFC-e SEFAZ-MT
+7. KDS Cozinha Multi-Praças e Transições de Status
+8. Livro Razão Kardex de Movimentações Contínuas de Estoque
+9. Gestão Fiscal Avançada SEFAZ-MT: Cancelamento Homologado, CC-e e Livro de Apuração
+10. CRUD Completo de Cardápio (Incluir, Modificar e Excluir Item)
+11. CRUD Completo de Mesas (Incluir, Modificar e Excluir Mesa)
+12. CRUD Completo de Estoque e Insumos (Incluir, Modificar e Excluir Insumo)
+13. CRUD Completo de Cozinha KDS (Incluir, Modificar e Excluir Pedido Manual)

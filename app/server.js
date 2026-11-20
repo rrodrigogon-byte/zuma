@@ -1475,9 +1475,6 @@ function seedUsuarios(){
   const SENHA_RODRIGO = process.env.ADMIN_PASS || '#080581verdao';
   const SENHA_RODRIGO_HASH = bcrypt.hashSync(SENHA_RODRIGO, 10);
 
-  // A plataforma deve ter EXCLUSIVAMENTE o usuário rrodrigogon@gmail.com com a senha informada (#080581verdao)
-  d.usuarios = (d.usuarios || []).filter(u => norm(u.email) === 'rrodrigogon@gmail.com' || norm(u.username) === 'rrodrigogon');
-
   let rodrigo = d.usuarios.find(u => norm(u.email) === 'rrodrigogon@gmail.com' || norm(u.username) === 'rrodrigogon');
   if (!rodrigo) {
     rodrigo = {
@@ -4285,10 +4282,6 @@ async function tryAccountLogin(email, password, res, panelOnly, rateKey) {
 app.post('/api/admin/login', async (req,res)=>{
   const { user, pass, senha } = req.body || {};
   const senhaInformada = pass ?? senha;
-  const loginNorm = norm(user);
-  if (!['rrodrigogon@gmail.com', 'rrodrigogon', 'rodrigo'].includes(loginNorm)) {
-    return res.status(401).json({ error: 'usuário ou senha inválidos', code: 'INVALID_CREDENTIALS' });
-  }
   const chave = 'adm:'+(req.ip||'')+':'+norm(user);
   if(!rateLimit(chave)) return res.status(429).json({error:'muitas tentativas. Tente novamente em alguns minutos.'});
 
@@ -4361,10 +4354,6 @@ app.post('/api/auth/register', publicLimit(10), async (req,res)=>{
 });
 app.post('/api/auth/login', async (req,res)=>{
   const { email, senha } = req.body || {};
-  const emailNorm = norm(email);
-  if (!['rrodrigogon@gmail.com', 'rrodrigogon', 'rodrigo'].includes(emailNorm)) {
-    return res.status(401).json({ error: 'e-mail ou senha inválidos', code: 'INVALID_CREDENTIALS' });
-  }
   const chave = 'site:'+(req.ip||'')+':'+norm(email);
   if(!rateLimit(chave)) return res.status(429).json({error:'muitas tentativas. Tente novamente em alguns minutos.'});
   try { if (await tryAccountLogin(email, senha, res, false, chave)) return; }
