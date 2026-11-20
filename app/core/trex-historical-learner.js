@@ -183,7 +183,7 @@ export function summarizeSessionConversation(messages = []) {
   if (/obrigad|valeu|top|show|maravilha|perfeito|excelente|bom demais/i.test(userNorm)) {
     sentimento = 'positivo';
   } else if (/reclam|chato|demor|atraso|pessimo|horrivel|insatisfeito/i.test(userNorm)) {
-    sentimento = 'atrito';
+    sentimento = 'negativo';
   } else {
     sentimento = 'neutro';
   }
@@ -218,6 +218,24 @@ export async function runFullHistoricalAnalysis({
   force = true,
   log = console.log,
 } = {}) {
+  if (!force) {
+    try {
+      const checkSummaries = await query(
+        `SELECT COUNT(*)::int AS total FROM ai_conversation_summaries WHERE empresa_id = $1 AND dia >= CURRENT_DATE - 1`,
+        [empresaId]
+      );
+      if ((checkSummaries.rows[0]?.total || 0) > 0) {
+        log(`[KyttoIA Historical Learner] Base histórica consolidada recentemente (${checkSummaries.rows[0].total} resumos). Inicialização otimizada.`);
+        return {
+          ok: true,
+          motivo: 'ja_consolidado_recentemente',
+          resumosRecentes: checkSummaries.rows[0].total,
+        };
+      }
+    } catch (errCheck) {
+      // Continua se a verificação falhar
+    }
+  }
   const inicioMs = Date.now();
   log(`[KyttoIA Historical Learner] Iniciando análise exaustiva de todas as conversas para empresa ${empresaId}...`);
 

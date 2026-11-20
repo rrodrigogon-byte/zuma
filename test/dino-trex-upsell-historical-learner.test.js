@@ -71,4 +71,12 @@ test('T-Rex Historical Learner: extração semântica de fatos a partir de mensa
   const resumo = summarizeSessionConversation(mensagens, { customerName: 'Rodrigo' });
   assert.ok(resumo, 'Deve gerar resumo semântico da sessão');
   assert.ok(resumo.resumo, 'Resumo deve conter texto estruturado');
+  assert.ok(['positivo', 'neutro', 'negativo'].includes(resumo.sentimento), 'Sentimento deve aderir à constraint chk_ai_summary_sentimento');
+
+  // Mensagem com reclamação deve classificar sentimento como negativo
+  const msgsReclamacao = [
+    { papel: 'user', texto: 'Atrasou demais hoje, péssimo atendimento, insatisfeito' }
+  ];
+  const resumoReclamacao = summarizeSessionConversation(msgsReclamacao);
+  assert.equal(resumoReclamacao.sentimento, 'negativo', 'Deve mapear insatisfação para negativo');
 });
