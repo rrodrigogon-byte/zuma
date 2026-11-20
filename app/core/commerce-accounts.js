@@ -235,7 +235,7 @@ export async function linkedAccountForLocalUser(userId, database = db) {
 export function accountCredential(account, legacyUsers = []) {
   if (account.origem !== 'legacy') return account.senha_hash;
   const source = legacyUsers.find(item => String(item.id) === account.origem_id && item.ativo !== false && normalizeLoose(item.email) === account.email);
-  return source?.senhaHash || null;
+  return source?.senhaHash || (account.origem_id ? null : account.senha_hash);
 }
 export async function resolveAccountUser(accountId, { legacyUsers = [], database = db } = {}) {
   const id = assertUuid(accountId, 'accountId');
