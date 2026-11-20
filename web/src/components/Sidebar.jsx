@@ -7,11 +7,7 @@ import { catalogoPorArea, contagemPorEstado, ESTADOS } from '../lib/catalogo-mod
 import { itemVisivelNoPerfil } from '../lib/perfis-menu'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
-<<<<<<< HEAD
 import { applyThemeMode, DINO_BARBERSHOP_LOGO, isClubeBrandContext, isDinoBrandContext, isStalloneBrandContext, isRestauranteBrandContext, isConcretoBrandContext, isZumaBrandContext, PALATARE_LOGO, CONCRETO_LOGO, STALLONE_LOGO, storedThemeMode } from '../lib/brand'
-=======
-import { applyThemeMode, DINO_BARBERSHOP_LOGO, isClubeBrandContext, isDinoBrandContext, isStalloneBrandContext, isZumaBrandContext, isRestauranteBrandContext, isConcretoBrandContext, PALATARE_LOGO, CONCRETO_LOGO, STALLONE_LOGO, storedThemeMode } from '../lib/brand'
->>>>>>> zuma/main
 import {
   HOLDING_PALATARE_EMPRESA_ID,
   PALATARE_PIZZARIA_EMPRESA_ID,
@@ -503,63 +499,6 @@ const NAV_STALLONE_PUBLIC = [
   { to: '/ecommerce/stallone', icon: '↗', label: 'Abrir loja Stallone' },
 ]
 
-export const NAV_ZUMA_GROUPS = [
-  {
-    label: 'Zuma Cozinha Oriental', aberto: true,
-    items: [
-      { to: '/admin/zuma', icon: '🍣', label: 'Zuma Suite & Cockpit', end: true },
-      { to: '/admin/zuma?tab=mercado', icon: '🌐', label: 'Mercado & IA 360°', badge: 'Radar Tangará' },
-      { to: '/admin/zuma?tab=zumi', icon: '🤖', label: 'Zumi Atende (KyttoIA)', badge: 'WhatsApp' },
-      { to: '/admin/mesas', icon: '🪑', label: 'Mesas & Salão (25 mesas)' },
-      { to: '/pdv', icon: '🛒', label: 'PDV Balcão & Caixa', badge: true },
-      { to: '/kds', icon: '👨‍🍳', label: 'Sushi Bar & Cozinha KDS', badge: true },
-      { to: '/admin/zuma?tab=delivery', icon: '🛵', label: 'Delivery & Omnichannel' },
-    ],
-  },
-  {
-    label: 'Cardápio & Estoque Oriental', aberto: true,
-    items: [
-      { to: '/admin/cardapio', icon: '🥢', label: 'Cardápio Sushi Bar (211 itens)' },
-      { to: '/admin/zuma?tab=engenharia', icon: '📊', label: 'Engenharia de Cardápio' },
-      { to: '/admin/estoque', icon: '📦', label: 'Estoque de Pescados & Insumos' },
-      { to: '/admin/fichas-tecnicas', icon: '🧪', label: 'Fichas Técnicas & Sushis' },
-      { to: '/admin/modificadores-combos', icon: '➕', label: 'Combos & Adicionais' },
-      { to: '/admin/perdas-inventario', icon: '🧾', label: 'Perdas & Inventário de Pescados' },
-    ],
-  },
-  {
-    label: 'Clientes, Clube & Vendas',
-    items: [
-      { to: '/admin/zuma?tab=clube', icon: '👑', label: 'Clube Zumi (Assinaturas)' },
-      { to: '/admin/zuma?tab=crm', icon: '⭐', label: 'Clientes CRM & Preferências' },
-      { to: '/admin/clientes', icon: '👥', label: 'Base de Clientes' },
-      { to: '/admin/zuma?tab=campanhas', icon: '📢', label: 'Campanhas & Horários Vazios' },
-      { to: '/admin/cupons', icon: '🎟️', label: 'Cupons & Promoções' },
-    ],
-  },
-  {
-    label: 'Financeiro, CMV & Gestão',
-    items: [
-      { to: '/admin/zuma?tab=financeiro', icon: '💰', label: 'DRE, CMV & Margem Pescados' },
-      { to: '/admin/fechamento-diario', icon: '🔐', label: 'Fechamento de Caixa', razao: true },
-      { to: '/admin/financeiro', icon: '💰', label: 'Gestão Financeira' },
-      { to: '/admin/contas-pagar', icon: '🧾', label: 'Contas a Pagar', razao: true },
-      { to: '/admin/contas-receber', icon: '💳', label: 'Contas a Receber', razao: true },
-      { to: '/admin/dre', icon: '📈', label: 'DRE Demonstrativo' },
-      { to: '/admin/fiscal', icon: '📑', label: 'Fiscal (NFC-e / NF-e)' },
-    ],
-  },
-  {
-    label: 'Inteligência & Expansão',
-    items: [
-      { to: '/admin/zuma?tab=mercado', icon: '🎯', label: 'Benchmarking Concorrência' },
-      { to: '/admin/zuma?tab=pilot', icon: '⚡', label: 'Cockpit Pilot Completo' },
-      { to: '/admin/inteligencia-vendas', icon: '🚀', label: 'KyttoIA Vendas & Upsell' },
-      { to: '/admin/configuracoes', icon: '⚙️', label: 'Configurações da Loja' },
-    ],
-  },
-]
-
 export const NAV_ZUMA_PUBLIC = [
   { to: 'https://zuma.kytto.com.br', icon: '↗', label: 'Cardápio Digital Zuma (zuma.kytto.com.br)' },
   { to: '/zuma/pilot.html?locale=pt-BR#mercado', icon: '⚡', label: 'Pilot Inteligência Mercado' },
@@ -570,6 +509,7 @@ export const NAV_ZUMA_GROUPS = [
     label: 'Hoje no Zuma', aberto: true,
     items: [
       { to: '/admin/zuma', icon: '🍣', label: 'Painel Zuma 360°', end: true },
+      { to: '/zuma/erp.html', icon: '💼', label: 'Zuma ERP 360°', novaGuia: true },
       { to: '/zuma/pilot.html', icon: '🚀', label: 'Zuma Pilot 360°', novaGuia: true },
       { to: '/zuma/operacao.html', icon: '🍱', label: 'Central Operacional (4 Estações)', novaGuia: true },
       { to: '/zuma', icon: '📱', label: 'Cardápio Digital PWA', novaGuia: true },

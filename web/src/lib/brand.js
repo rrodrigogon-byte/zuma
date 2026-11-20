@@ -132,18 +132,6 @@ export function isClubeBrandContext(...contexts) {
 export const ZUMA_EMPRESA_ID = 'c3c3ac01-8e50-4b61-8c79-de4aaa916da3'
 export const ZUMA_LOGO = '/zuma/logo.png'
 
-export function isZumaBrandContext(...contexts) {
-  return contexts.some((context) => {
-    const values = typeof context === 'object'
-      ? [context.id, context.empresaId, context.tipoNegocio, context.tipo_negocio, context.segmento, context.vertical, context.brandKey, context.brand_key, context.slug, context.codigo, context.alias, context.nome, context.nome_fantasia, context.razaoSocial]
-      : [context]
-    return values.some((value) => {
-      const v = String(value || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-      return v.includes('zuma') || v.includes('oriental') || v === 'c3c3ac01-8e50-4b61-8c79-de4aaa916da3'
-    })
-  })
-}
-
 export const PALATARE_LOGO = "/palatare-logo.png"
 export const PALATARE_BANNER = "/palatare-banner.png"
 export const CONCRETO_LOGO = "/brand/concreto-usina-logo.png"
@@ -151,7 +139,7 @@ export const CONCRETO_LOGO = "/brand/concreto-usina-logo.png"
 export function isZumaBrandContext(...contexts) {
   return contexts.some((context) => {
     const values = context && typeof context === "object"
-      ? [context.id, context.tipoNegocio, context.tipo_negocio, context.segmento, context.vertical, context.brandKey, context.brand_key, context.slug, context.codigo, context.alias, context.nome, context.nome_fantasia, context.razaoSocial, context.cnpj]
+      ? [context.id, context.empresaId, context.tipoNegocio, context.tipo_negocio, context.segmento, context.vertical, context.brandKey, context.brand_key, context.slug, context.codigo, context.alias, context.nome, context.nome_fantasia, context.razaoSocial, context.cnpj]
       : [context]
     return values.some((value) => {
       const v = String(value || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
