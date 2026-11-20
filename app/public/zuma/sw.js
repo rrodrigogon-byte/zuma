@@ -1,11 +1,21 @@
 // Service Worker - Zuma Cozinha Oriental / Kytto Station
-const CACHE_NAME = 'zuma-kytto-v2';
+const CACHE_NAME = 'zuma-kytto-v3';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './operacao.html',
   './pilot.html',
+  './login.html',
+  './apps.html',
+  './entregador.html',
+  './garcom.html',
+  './pagamentos.html',
+  './caixa.html',
+  './erp.html',
   './manifest.json',
+  './manifest-garcom.json',
+  './manifest-entregador.json',
+  './manifest-caixa.json',
   './zumi-mascote.svg',
   './cardapio-real-zuma.json'
 ];
@@ -39,7 +49,7 @@ self.addEventListener('fetch', (event) => {
     caches.match(event.request).then((response) => {
       return response || fetch(event.request).catch(() => {
         if (event.request.mode === 'navigate') {
-          return caches.match('./operacao.html') || caches.match('./index.html');
+          return caches.match('./operacao.html') || caches.match('./apps.html') || caches.match('./index.html');
         }
       });
     })

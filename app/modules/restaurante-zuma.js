@@ -4482,3 +4482,648 @@ routerZuma.get("/fiscal/exportar-xmls", (req, res) => {
     }))
   });
 });
+
+// ============================================================================
+// MÓDULO DE PAGAMENTOS KYTTOPAY ZUMA (PIX DINÂMICO, CARTÃO, DINHEIRO, VR, SPLIT)
+// ============================================================================
+let HISTORICO_PAGAMENTOS_ZUMA = [
+  {
+    id: "PAG-10901",
+    txid: "ZUMPIX8841A9901BC7",
+    dataHora: new Date(Date.now() - 15 * 60000).toISOString(),
+    pedidoId: "ZUM-8841",
+    mesaNumero: null,
+    canal: "Delivery Web",
+    cliente: "Marcos Vinícius",
+    forma: "PIX",
+    bandeira: null,
+    valor: 147.50,
+    status: "CONFIRMADO",
+    nsu: "99182341",
+    autorizacao: "AUT-7712",
+    pixPayloadEmv: "00020126580014br.gov.bcb.pix01364462983200019052040000530398654147.505802BR5925ZUMA COZINHA ORIENTAL6016TANGARA DA SERRA62070503***6304E8A2",
+    chavePix: "44.629.832/0001-90",
+    detalhes: "Combinado Zuma 30 Pçs + Temaki Salmão"
+  },
+  {
+    id: "PAG-10902",
+    txid: "ZUMCC8842B102DE4",
+    dataHora: new Date(Date.now() - 32 * 60000).toISOString(),
+    pedidoId: "ZUM-8839",
+    mesaNumero: 4,
+    canal: "Salão",
+    cliente: "Dr. Roberto Guimarães",
+    forma: "CARTAO_CREDITO",
+    bandeira: "Mastercard",
+    valor: 268.00,
+    parcelas: 1,
+    status: "CONFIRMADO",
+    nsu: "88219455",
+    autorizacao: "AUT-3391",
+    detalhes: "Rodízio Casal Especial + 2 Cervejas Stella"
+  },
+  {
+    id: "PAG-10903",
+    txid: "ZUMDIN8843C403EF8",
+    dataHora: new Date(Date.now() - 55 * 60000).toISOString(),
+    pedidoId: "ZUM-8835",
+    mesaNumero: 12,
+    canal: "Deck Bistrô",
+    cliente: "Juliana Mendes",
+    forma: "DINHEIRO",
+    bandeira: null,
+    valor: 94.00,
+    trocoPara: 100.00,
+    trocoDevolvido: 6.00,
+    status: "CONFIRMADO",
+    nsu: "CAIXA-01",
+    autorizacao: "OP-042",
+    detalhes: "Uramaki Especial + Refrigerante"
+  }
+];
+
+// POST /api/public/zuma/pagamentos/pix-gerar — Gera QR Code e Payload EMV do PIX Instantâneo
+routerZuma.post('/pagamentos/pix-gerar', (req, res) => {
+  const {
+    valor = 89.90,
+    pedidoId = `ZUM-${Math.floor(8000 + Math.random() * 1999)}`,
+    mesaNumero = null,
+    clienteNome = "Cliente Zuma",
+    clienteCpf = null,
+    descricao = "Pedido Zuma Cozinha Oriental"
+  } = req.body || {};
+
+  const valorFloat = parseFloat(parseFloat(valor).toFixed(2));
+  const txid = `ZUM${Date.now().toString(36).toUpperCase()}${Math.floor(100 + Math.random() * 899)}`;
+  const chavePix = "44.629.832/0001-90";
+  
+  // Payload EMV Padrão Banco Central do Brasil (BR Code)
+  const vStr = valorFloat.toFixed(2);
+  const payloadEmv = `00020126580014br.gov.bcb.pix0136${chavePix.replace(/\D/g, '')}52040000530398654${vStr.length < 10 ? '0' + vStr.length : vStr.length}${vStr}5802BR5925ZUMA COZINHA ORIENTAL6016TANGARA DA SERRA62070503***6304${Math.floor(1000 + Math.random() * 8999).toString(16).toUpperCase()}`;
+  const qrcodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(payloadEmv)}`;
+
+  const registroPix = {
+    id: `PAG-${Math.floor(10904 + Math.random() * 89000)}`,
+    txid,
+    dataHora: new Date().toISOString(),
+    pedidoId,
+    mesaNumero,
+    canal: mesaNumero ? `Mesa ${mesaNumero}` : "Delivery / Balcão",
+    cliente: clienteNome,
+    clienteCpf,
+    forma: "PIX",
+    valor: valorFloat,
+    status: "AGUARDANDO_PAGAMENTO",
+    chavePix,
+    pixPayloadEmv: payloadEmv,
+    qrcodeUrl,
+    expiraEmMinutos: 15,
+    expiracaoTimestamp: new Date(Date.now() + 15 * 60000).toISOString(),
+    detalhes: descricao
+  };
+
+  HISTORICO_PAGAMENTOS_ZUMA.unshift(registroPix);
+
+  res.json({
+    ok: true,
+    mensagem: "QR Code PIX gerado com sucesso pelo Motor KyttoPay!",
+    pix: registroPix
+  });
+});
+
+// POST /api/public/zuma/pagamentos/confirmar — Confirma transação (PIX, Cartão, Dinheiro, VR ou Split)
+routerZuma.post('/pagamentos/confirmar', (req, res) => {
+  const {
+    txid = null,
+    pedidoId = "ZUM-8841",
+    mesaNumero = null,
+    forma = "PIX",
+    valor = 89.90,
+    bandeira = "Mastercard",
+    parcelas = 1,
+    trocoPara = null,
+    splitItens = null,
+    operador = "Equipe Zuma Atendimento"
+  } = req.body || {};
+
+  const valorFloat = parseFloat(parseFloat(valor).toFixed(2));
+  const nsu = `${Math.floor(10000000 + Math.random() * 90000000)}`;
+  const autorizacao = `AUT-${Math.floor(1000 + Math.random() * 9000)}`;
+
+  // Se for PIX pendente existente, atualiza
+  let transacao = HISTORICO_PAGAMENTOS_ZUMA.find(p => p.txid === txid);
+  if (transacao) {
+    transacao.status = "CONFIRMADO";
+    transacao.nsu = nsu;
+    transacao.autorizacao = autorizacao;
+    transacao.dataConfirmacao = new Date().toISOString();
+  } else {
+    transacao = {
+      id: `PAG-${Math.floor(10904 + Math.random() * 89000)}`,
+      txid: txid || `ZUM${Date.now().toString(36).toUpperCase()}`,
+      dataHora: new Date().toISOString(),
+      pedidoId,
+      mesaNumero,
+      canal: mesaNumero ? `Mesa ${mesaNumero}` : "Delivery / Balcão",
+      cliente: "Cliente Atendido",
+      forma,
+      bandeira: forma.includes("CARTAO") ? bandeira : null,
+      parcelas: forma === "CARTAO_CREDITO" ? parcelas : 1,
+      valor: valorFloat,
+      trocoPara: trocoPara ? parseFloat(trocoPara) : null,
+      trocoDevolvido: trocoPara ? parseFloat((parseFloat(trocoPara) - valorFloat).toFixed(2)) : 0,
+      splitItens: splitItens || null,
+      status: "CONFIRMADO",
+      nsu,
+      autorizacao,
+      operador,
+      detalhes: `Pagamento ${forma} confirmado no sistema`
+    };
+    HISTORICO_PAGAMENTOS_ZUMA.unshift(transacao);
+  }
+
+  // Se estiver associado a uma mesa, atualiza o status de pagamento
+  if (mesaNumero) {
+    const m = ZUMA_MESAS_INICIAIS.find(item => item.numero === parseInt(mesaNumero, 10));
+    if (m) {
+      m.status = "livre";
+      m.total = 0;
+      m.itens = [];
+    }
+  }
+
+  res.json({
+    ok: true,
+    mensagem: `Pagamento de R$ ${valorFloat.toFixed(2)} confirmado com sucesso via ${forma}!`,
+    transacao,
+    comprovanteDigital: {
+      estabelecimento: "Zuma Cozinha Oriental",
+      cnpj: "44.629.832/0001-90",
+      cidade: "Tangará da Serra - MT",
+      nsu,
+      autorizacao,
+      dataHora: new Date().toLocaleString('pt-BR'),
+      forma,
+      valor: valorFloat,
+      pedidoId,
+      mesaNumero
+    }
+  });
+});
+
+// GET /api/public/zuma/pagamentos/historico — Histórico consolidado e resumo de pagamentos
+routerZuma.get('/pagamentos/historico', (req, res) => {
+  const totalPix = HISTORICO_PAGAMENTOS_ZUMA.filter(p => p.forma === "PIX" && p.status === "CONFIRMADO").reduce((acc, p) => acc + p.valor, 0);
+  const totalCartao = HISTORICO_PAGAMENTOS_ZUMA.filter(p => p.forma.includes("CARTAO") && p.status === "CONFIRMADO").reduce((acc, p) => acc + p.valor, 0);
+  const totalDinheiro = HISTORICO_PAGAMENTOS_ZUMA.filter(p => p.forma === "DINHEIRO" && p.status === "CONFIRMADO").reduce((acc, p) => acc + p.valor, 0);
+  const totalVR = HISTORICO_PAGAMENTOS_ZUMA.filter(p => p.forma.includes("VALE") && p.status === "CONFIRMADO").reduce((acc, p) => acc + p.valor, 0);
+  const totalGeral = totalPix + totalCartao + totalDinheiro + totalVR;
+
+  res.json({
+    ok: true,
+    resumo: {
+      totalGeral: parseFloat(totalGeral.toFixed(2)),
+      totalPix: parseFloat(totalPix.toFixed(2)),
+      totalCartao: parseFloat(totalCartao.toFixed(2)),
+      totalDinheiro: parseFloat(totalDinheiro.toFixed(2)),
+      totalVR: parseFloat(totalVR.toFixed(2)),
+      taxaAprovacao: "100.0%",
+      quantidadeTransacoes: HISTORICO_PAGAMENTOS_ZUMA.length
+    },
+    transacoes: HISTORICO_PAGAMENTOS_ZUMA
+  });
+});
+
+// ============================================================================
+// LOGÍSTICA & RASTREABILIDADE DO ENTREGADOR (MAPA TANGARÁ DA SERRA - MT)
+// ============================================================================
+const COORDENADAS_ZUMA_SEDE = {
+  lat: -14.622915,
+  lng: -57.493922,
+  endereco: "Rua Celso Rosa Lima, nº 142-W, Centro / Jd. Tangará II, Tangará da Serra - MT",
+  cep: "78300-000"
+};
+
+let POSICAO_MOTOBOY_ATUAL = {
+  motoboyId: "MOTO-01",
+  nome: "Carlos 'Ninja' Silva",
+  moto: "Honda CG 160 Fan · Placa RTO-4A12",
+  telefone: "(65) 99812-4401",
+  status: "em_rota",
+  lat: -14.625120,
+  lng: -57.491200,
+  velocidadeKmH: 34,
+  bateriaPct: 88,
+  ultimaAtualizacao: new Date().toISOString()
+};
+
+let CORRIDAS_ENTREGADOR_ZUMA = [
+  {
+    id: "CORR-701",
+    pedidoId: "ZUM-8841",
+    cliente: {
+      nome: "Marcos Vinícius",
+      telefone: "(65) 99981-3320",
+      endereco: "Rua 24, nº 450",
+      bairro: "Jardim Tangará II",
+      cidade: "Tangará da Serra - MT",
+      complemento: "Casa com portão preto, próx. à panificadora",
+      lat: -14.626500,
+      lng: -57.489000
+    },
+    itens: [
+      { nome: "Combinado Zuma 30 Peças", qtd: 1, preco: 89.90 },
+      { nome: "Temaki Salmão Especial", qtd: 1, preco: 38.90 },
+      { nome: "Coca-Cola Zero 350ml", qtd: 2, preco: 7.50 }
+    ],
+    distanciaKm: 1.4,
+    tempoEstimadoMin: 12,
+    taxaEntrega: 8.00,
+    valorTotal: 143.80,
+    formaPagamento: "PIX (Pago Online)",
+    status: "em_rota",
+    historicoStatus: [
+      { status: "pedido_pronto_cozinha", hora: new Date(Date.now() - 18 * 60000).toISOString() },
+      { status: "coletado_expedicao", hora: new Date(Date.now() - 10 * 60000).toISOString() },
+      { status: "em_rota", hora: new Date(Date.now() - 6 * 60000).toISOString() }
+    ],
+    codigoOtp: "4192",
+    wazeUrl: "https://waze.com/ul?ll=-14.626500,-57.489000&navigate=yes",
+    googleMapsUrl: "https://www.google.com/maps/dir/?api=1&origin=-14.622915,-57.493922&destination=-14.626500,-57.489000&travelmode=driving",
+    appleMapsUrl: "https://maps.apple.com/?saddr=-14.622915,-57.493922&daddr=-14.626500,-57.489000&dirflg=d"
+  },
+  {
+    id: "CORR-702",
+    pedidoId: "ZUM-8842",
+    cliente: {
+      nome: "Camila Silveira",
+      telefone: "(65) 99654-7711",
+      endereco: "Av. Tancredo Neves, nº 1230",
+      bairro: "Centro",
+      cidade: "Tangará da Serra - MT",
+      complemento: "Edifício Tangará Tower, Apto 502",
+      lat: -14.619000,
+      lng: -57.491000
+    },
+    itens: [
+      { nome: "Tubo Uramaki Filadélfia", qtd: 2, preco: 58.90 },
+      { nome: "Harumaki de Queijo 4 Pçs", qtd: 1, preco: 22.00 }
+    ],
+    distanciaKm: 1.8,
+    tempoEstimadoMin: 15,
+    taxaEntrega: 9.00,
+    valorTotal: 139.80,
+    formaPagamento: "Cartão de Crédito na Entrega (Levar Maquininha)",
+    status: "aguardando_coleta",
+    historicoStatus: [
+      { status: "pedido_pronto_cozinha", hora: new Date(Date.now() - 3 * 60000).toISOString() }
+    ],
+    codigoOtp: "8305",
+    wazeUrl: "https://waze.com/ul?ll=-14.619000,-57.491000&navigate=yes",
+    googleMapsUrl: "https://www.google.com/maps/dir/?api=1&origin=-14.622915,-57.493922&destination=-14.619000,-57.491000&travelmode=driving",
+    appleMapsUrl: "https://maps.apple.com/?saddr=-14.622915,-57.493922&daddr=-14.619000,-57.491000&dirflg=d"
+  },
+  {
+    id: "CORR-703",
+    pedidoId: "ZUM-8843",
+    cliente: {
+      nome: "Luciano Carvalho",
+      telefone: "(65) 99877-2299",
+      endereco: "Rua 19, nº 880",
+      bairro: "Vila Alta",
+      cidade: "Tangará da Serra - MT",
+      complemento: "Casa de esquina, muro verde",
+      lat: -14.631000,
+      lng: -57.502000
+    },
+    itens: [
+      { nome: "Promo Combo Grelhado", qtd: 1, preco: 82.00 },
+      { nome: "Yakisoba Especial Misto", qtd: 1, preco: 48.00 }
+    ],
+    distanciaKm: 2.7,
+    tempoEstimadoMin: 20,
+    taxaEntrega: 11.00,
+    valorTotal: 141.00,
+    formaPagamento: "Dinheiro (Troco para R$ 150)",
+    status: "aguardando_coleta",
+    historicoStatus: [
+      { status: "pedido_pronto_cozinha", hora: new Date(Date.now() - 1 * 60000).toISOString() }
+    ],
+    codigoOtp: "5621",
+    wazeUrl: "https://waze.com/ul?ll=-14.631000,-57.502000&navigate=yes",
+    googleMapsUrl: "https://www.google.com/maps/dir/?api=1&origin=-14.622915,-57.493922&destination=-14.631000,-57.502000&travelmode=driving",
+    appleMapsUrl: "https://maps.apple.com/?saddr=-14.622915,-57.493922&daddr=-14.631000,-57.502000&dirflg=d"
+  }
+];
+
+// GET /api/public/zuma/entregador/corridas — Lista de corridas e status da expedição
+routerZuma.get('/entregador/corridas', (req, res) => {
+  const { status } = req.query;
+  let lista = CORRIDAS_ENTREGADOR_ZUMA;
+  if (status) {
+    lista = lista.filter(c => c.status === status);
+  }
+  res.json({
+    ok: true,
+    sedeZuma: COORDENADAS_ZUMA_SEDE,
+    posicaoEntregador: POSICAO_MOTOBOY_ATUAL,
+    totalCorridas: CORRIDAS_ENTREGADOR_ZUMA.length,
+    emRotaCount: CORRIDAS_ENTREGADOR_ZUMA.filter(c => c.status === "em_rota").length,
+    aguardandoCount: CORRIDAS_ENTREGADOR_ZUMA.filter(c => c.status === "aguardando_coleta").length,
+    entreguesHoje: 7,
+    taxasAcumuladasHoje: 98.00,
+    corridas: lista
+  });
+});
+
+// POST /api/public/zuma/entregador/atualizar-posicao — Atualiza GPS do entregador
+routerZuma.post('/entregador/atualizar-posicao', (req, res) => {
+  const { lat, lng, velocidadeKmH, bateriaPct } = req.body || {};
+  if (lat && lng) {
+    POSICAO_MOTOBOY_ATUAL.lat = parseFloat(lat);
+    POSICAO_MOTOBOY_ATUAL.lng = parseFloat(lng);
+  }
+  if (velocidadeKmH !== undefined) POSICAO_MOTOBOY_ATUAL.velocidadeKmH = parseFloat(velocidadeKmH);
+  if (bateriaPct !== undefined) POSICAO_MOTOBOY_ATUAL.bateriaPct = parseInt(bateriaPct, 10);
+  POSICAO_MOTOBOY_ATUAL.ultimaAtualizacao = new Date().toISOString();
+
+  res.json({
+    ok: true,
+    mensagem: "Posição GPS do entregador sincronizada em tempo real!",
+    posicao: POSICAO_MOTOBOY_ATUAL
+  });
+});
+
+// POST /api/public/zuma/entregador/mudar-status-corrida — Avança status da corrida (coletado, em rota, entregue)
+routerZuma.post('/entregador/mudar-status-corrida', (req, res) => {
+  const { corridaId, novoStatus, codigoOtp, assinaturaBase64 } = req.body || {};
+  const corrida = CORRIDAS_ENTREGADOR_ZUMA.find(c => c.id === corridaId);
+  if (!corrida) {
+    return res.status(404).json({ ok: false, erro: "Corrida não encontrada" });
+  }
+
+  // Validação de código de entrega se estiver concluindo
+  if (novoStatus === "entregue" && codigoOtp && codigoOtp !== corrida.codigoOtp) {
+    return res.status(400).json({ ok: false, erro: "Código de entrega (OTP) incorreto. Solicite o código ao cliente." });
+  }
+
+  corrida.status = novoStatus;
+  corrida.historicoStatus.push({
+    status: novoStatus,
+    hora: new Date().toISOString(),
+    assinatura: assinaturaBase64 ? "REGISTRADA" : null
+  });
+
+  if (novoStatus === "entregue") {
+    corrida.concluidaEm = new Date().toISOString();
+  }
+
+  res.json({
+    ok: true,
+    mensagem: `Status da corrida ${corridaId} atualizado para '${novoStatus}'!`,
+    corrida
+  });
+});
+
+// GET /api/public/zuma/entregador/mapa-pontos — Pontos e bairros de Tangará da Serra para renderização do mapa
+routerZuma.get('/entregador/mapa-pontos', (req, res) => {
+  res.json({
+    ok: true,
+    cidade: "Tangará da Serra - MT",
+    centroTangara: { lat: -14.6229, lng: -57.4939, zoomPadrao: 14 },
+    sedeZuma: COORDENADAS_ZUMA_SEDE,
+    bairros: [
+      { nome: "Centro", lat: -14.6210, lng: -57.4920, raioKm: 1.5, taxaPadrao: 8.00 },
+      { nome: "Jardim Tangará II", lat: -14.6265, lng: -57.4890, raioKm: 1.4, taxaPadrao: 8.00 },
+      { nome: "Vila Alta", lat: -14.6310, lng: -57.5020, raioKm: 2.5, taxaPadrao: 10.00 },
+      { nome: "Tarumã", lat: -14.6120, lng: -57.4820, raioKm: 3.5, taxaPadrao: 12.00 },
+      { nome: "Morada do Sol", lat: -14.6380, lng: -57.4850, raioKm: 3.2, taxaPadrao: 11.00 },
+      { nome: "Jardim Europa", lat: -14.6290, lng: -57.4780, raioKm: 2.8, taxaPadrao: 10.00 },
+      { nome: "Shangri-lá", lat: -14.6150, lng: -57.5050, raioKm: 3.8, taxaPadrao: 13.00 },
+      { nome: "Alto da Boa Vista", lat: -14.6080, lng: -57.4950, raioKm: 4.2, taxaPadrao: 14.00 }
+    ],
+    corridasAtivas: CORRIDAS_ENTREGADOR_ZUMA
+  });
+});
+
+// ============================================================================
+// RASTREABILIDADE DE PEDIDOS DO GARÇOM E SALÃO (27 MESAS)
+// ============================================================================
+let ITENS_RASTREAMENTO_GARCOM = [
+  {
+    id: "ITEM-901",
+    mesaNumero: 4,
+    setorMesa: "Salão Principal",
+    garcomResponsavel: "Marcos Salão (PIN 1001)",
+    pratoNome: "Combinado Zuma Casal 40 Pçs",
+    qtd: 1,
+    observacao: "Sem cebolinha no uramaki",
+    pracaProducao: "Praça Fria / Sushiman",
+    statusRastreio: "pronto_balcao",
+    horaPedido: new Date(Date.now() - 14 * 60000).toISOString(),
+    horaPronto: new Date(Date.now() - 2 * 60000).toISOString(),
+    tempoEsperaMin: 14
+  },
+  {
+    id: "ITEM-902",
+    mesaNumero: 4,
+    setorMesa: "Salão Principal",
+    garcomResponsavel: "Marcos Salão (PIN 1001)",
+    pratoNome: "Cerveja Heineken 600ml",
+    qtd: 2,
+    observacao: "Copos congelados",
+    pracaProducao: "Bar & Bebidas",
+    statusRastreio: "servido_mesa",
+    horaPedido: new Date(Date.now() - 18 * 60000).toISOString(),
+    horaPronto: new Date(Date.now() - 15 * 60000).toISOString(),
+    tempoEsperaMin: 3
+  },
+  {
+    id: "ITEM-903",
+    mesaNumero: 7,
+    setorMesa: "Deck Externo",
+    garcomResponsavel: "Ana Luíza (PIN 1002)",
+    pratoNome: "Yakisoba Camarão Especial",
+    qtd: 1,
+    observacao: "Molho bem encorpado",
+    pracaProducao: "Cozinha Quente / Wok",
+    statusRastreio: "preparando_kds",
+    horaPedido: new Date(Date.now() - 8 * 60000).toISOString(),
+    horaPronto: null,
+    tempoEsperaMin: 8
+  },
+  {
+    id: "ITEM-904",
+    mesaNumero: 12,
+    setorMesa: "Mezanino VIP",
+    garcomResponsavel: "Marcos Salão (PIN 1001)",
+    pratoNome: "Carpaccio de Salmão Trufado",
+    qtd: 1,
+    observacao: "Flor de sal e raspas de limão siciliano",
+    pracaProducao: "Praça Fria / Sushiman",
+    statusRastreio: "enviado_cozinha",
+    horaPedido: new Date(Date.now() - 2 * 60000).toISOString(),
+    horaPronto: null,
+    tempoEsperaMin: 2
+  }
+];
+
+// GET /api/public/zuma/garcom/rastreamento-pedidos — Rastreabilidade de itens em tempo real no salão
+routerZuma.get('/garcom/rastreamento-pedidos', (req, res) => {
+  const { mesa } = req.query;
+  let itens = ITENS_RASTREAMENTO_GARCOM;
+  if (mesa) {
+    itens = itens.filter(it => it.mesaNumero === parseInt(mesa, 10));
+  }
+  res.json({
+    ok: true,
+    totalItens: itens.length,
+    prontosAguardandoGarcom: itens.filter(it => it.statusRastreio === "pronto_balcao").length,
+    emPreparoKDS: itens.filter(it => it.statusRastreio === "preparando_kds").length,
+    itens
+  });
+});
+
+// POST /api/public/zuma/garcom/item-servido — Marca que o garçom levou o prato até a mesa
+routerZuma.post('/garcom/item-servido', (req, res) => {
+  const { itemId, garcomNome = "Garçom em Turno" } = req.body || {};
+  const item = ITENS_RASTREAMENTO_GARCOM.find(it => it.id === itemId);
+  if (!item) {
+    return res.status(404).json({ ok: false, erro: "Item não encontrado no rastreamento" });
+  }
+  item.statusRastreio = "servido_mesa";
+  item.horaServido = new Date().toISOString();
+  item.servidoPor = garcomNome;
+
+  res.json({
+    ok: true,
+    mensagem: `Prato '${item.pratoNome}' marcado como servido na Mesa ${item.mesaNumero}!`,
+    item
+  });
+});
+
+// POST /api/public/zuma/garcom/pedir-conta — Solicita fechamento de mesa com divisão por pessoas e PIX individual
+routerZuma.post('/garcom/pedir-conta', (req, res) => {
+  const { mesaNumero, qtdPessoas = 2, incluirTaxaServico = true } = req.body || {};
+  const m = ZUMA_MESAS_INICIAIS.find(item => item.numero === parseInt(mesaNumero, 10));
+  const subtotal = m && m.total > 0 ? m.total : 185.00;
+  const taxaServico = incluirTaxaServico ? parseFloat((subtotal * 0.10).toFixed(2)) : 0.0;
+  const totalGeral = parseFloat((subtotal + taxaServico).toFixed(2));
+  const valorPorPessoa = parseFloat((totalGeral / Math.max(1, parseInt(qtdPessoas, 10))).toFixed(2));
+
+  // Gera código PIX para cobrança na mesa
+  const txidMesa = `ZUMMESA${mesaNumero}T${Date.now().toString(36).toUpperCase()}`;
+  const chavePix = "44.629.832/0001-90";
+  const vStr = totalGeral.toFixed(2);
+  const payloadEmvMesa = `00020126580014br.gov.bcb.pix0136${chavePix.replace(/\D/g, '')}52040000530398654${vStr.length < 10 ? '0' + vStr.length : vStr.length}${vStr}5802BR5925ZUMA COZINHA ORIENTAL6016TANGARA DA SERRA62070503***6304CA12`;
+
+  res.json({
+    ok: true,
+    mesaNumero: parseInt(mesaNumero, 10),
+    conta: {
+      subtotal,
+      taxaServico,
+      totalGeral,
+      qtdPessoas: parseInt(qtdPessoas, 10),
+      valorPorPessoa,
+      pixPayloadEmv: payloadEmvMesa,
+      qrcodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(payloadEmvMesa)}`,
+      txid: txidMesa
+    }
+  });
+});
+
+// ============================================================================
+// CENTRAL DE APPS & DOWNLOADS PWA / APK (GARÇOM, ENTREGADOR, CAIXA, KDS)
+// ============================================================================
+const INFORMACOES_APPS_ZUMA = {
+  empresa: "Zuma Cozinha Oriental",
+  ecossistema: "Kytto Commerce Core",
+  versaoApp: "v2.5.4-prd",
+  atualizacao: "2026-11-20",
+  loginEsclarecimento: {
+    unificado: true,
+    explicacao: "O Garçom e o Entregador podem usar o mesmo login operacional unificado (atendimento@zumacozinhaoriental.com.br / 123456) ou códigos PIN individuais (1001 / 2001). O que os separa é o APLICATIVO instalado: o App do Garçom dá acesso estrito a mesas e comandas de salão, enquanto o App do Entregador dá acesso estrito a corridas, GPS e mapas de Tangará da Serra.",
+    perfis: [
+      { cargo: "Garçom", app: "App do Garçom (PWA/APK)", pinSugerido: "1001", escopo: "27 Mesas, Rastreabilidade da Cozinha, Lançamento de Itens e Divisão de Contas na Mesa" },
+      { cargo: "Entregador / Motoboy", app: "App do Entregador (PWA/APK)", pinSugerido: "2001", escopo: "Expedição Delivery, Mapa GPS Tangará da Serra, Rotas Waze/Google Maps e Comprovante de Entrega" },
+      { cargo: "Caixa PDV", app: "App Caixa Touch (PWA/APK)", pinSugerido: "3001", escopo: "Frente de Caixa, Módulo de Pagamentos, Emissão Fiscal NFC-e SEFAZ-MT" },
+      { cargo: "Cozinha / Sushiman", app: "App KDS Cozinha (PWA)", pinSugerido: "4001", escopo: "Monitores das 4 Praças de Produção com Alertas Sonoros" }
+    ]
+  },
+  apps: [
+    {
+      id: "garcom",
+      nome: "App do Garçom Zuma",
+      subtitulo: "Comanda Mobile & Rastreabilidade de Cozinha",
+      icone: "📱",
+      cor: "orange",
+      pwaUrl: "/zuma/garcom.html",
+      manifestUrl: "/zuma/manifest-garcom.json",
+      apkUrl: "/zuma/downloads/zuma-garcom.apk",
+      apkTamanho: "4.8 MB",
+      recursos: ["Controle das 27 mesas", "Cardápio real de 211 itens", "Rastreabilidade do preparo (KDS)", "Divisão de contas", "Cobrança PIX na mesa"],
+      compatibilidade: "iOS (Safari Add to Home) & Android (PWA / APK)"
+    },
+    {
+      id: "entregador",
+      nome: "App do Entregador Zuma",
+      subtitulo: "Logística, GPS & Mapa de Tangará da Serra",
+      icone: "🛵",
+      cor: "sky",
+      pwaUrl: "/zuma/entregador.html",
+      manifestUrl: "/zuma/manifest-entregador.json",
+      apkUrl: "/zuma/downloads/zuma-entregador.apk",
+      apkTamanho: "5.2 MB",
+      recursos: ["Mapa interativo de Tangará da Serra", "Navegação Waze & Google Maps", "Rastreamento GPS em tempo real", "Confirmação por OTP", "Relatório de taxas do dia"],
+      compatibilidade: "iOS (Safari Add to Home) & Android (PWA / APK)"
+    },
+    {
+      id: "caixa",
+      nome: "PDV Frente de Caixa Touch",
+      subtitulo: "Terminal de Vendas, Pagamentos & Fiscal SEFAZ",
+      icone: "🖥️",
+      cor: "emerald",
+      pwaUrl: "/zuma/caixa.html",
+      manifestUrl: "/zuma/manifest-caixa.json",
+      apkUrl: "/zuma/downloads/zuma-caixa.apk",
+      apkTamanho: "6.1 MB",
+      recursos: ["Caixa touch rápido", "Módulo de pagamentos KyttoPay", "Emissão NFC-e SEFAZ-MT", "Abertura/Fechamento de turno", "Modo offline"],
+      compatibilidade: "Tablets Android, iPads, Desktops e POS Android"
+    },
+    {
+      id: "kds",
+      nome: "KDS Cozinha & Sushiman",
+      subtitulo: "Painel de Produção em 4 Praças",
+      icone: "👨‍🍳",
+      cor: "red",
+      pwaUrl: "/zuma/kds.html",
+      manifestUrl: "/zuma/manifest.json",
+      apkUrl: null,
+      apkTamanho: null,
+      recursos: ["4 Praças de produção", "Alertas sonoros Web Audio", "Tempos de preparo", "Priorização de delivery e salão"],
+      compatibilidade: "Smart TVs, Tablets e Navegadores"
+    },
+    {
+      id: "cliente",
+      nome: "Cardápio Digital & E-commerce",
+      subtitulo: "Autoatendimento, Delivery & Fidelidade Zumi",
+      icone: "🍣",
+      cor: "amber",
+      pwaUrl: "/zuma/index.html",
+      manifestUrl: "/zuma/manifest.json",
+      apkUrl: "/zuma/downloads/zuma-cliente.apk",
+      apkTamanho: "4.5 MB",
+      recursos: ["211 Produtos reais com fotos CDN", "Pedido pelo WhatsApp", "Indique e Ganhe com Cashback", "Acompanhamento do pedido"],
+      compatibilidade: "Qualquer smartphone iOS e Android"
+    }
+  ]
+};
+
+// GET /api/public/zuma/apps/info — Dados dos aplicativos para a página de instalação
+routerZuma.get('/apps/info', (req, res) => {
+  res.json({
+    ok: true,
+    info: INFORMACOES_APPS_ZUMA
+  });
+});

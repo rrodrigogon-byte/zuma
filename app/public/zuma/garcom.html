@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Zuma Garçom · Comanda Mobile & Rastreabilidade de Cozinha</title>
+  <link rel="manifest" href="manifest-garcom.json">
+  <link rel="icon" type="image/svg+xml" href="zumi-mascote.svg">
+  <meta name="theme-color" content="#EA580C">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Zuma Garçom">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            zuma: {
+              bg: '#0B0C10',
+              surface: '#15171E',
+              card: '#1F222E',
+              border: '#2E3446',
+              salmon: '#F97316',
+              orange: '#EA580C',
+              emerald: '#10B981',
+              muted: '#94A3B8'
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    body {
+      background-color: #0B0C10;
+      color: #F8FAFC;
+      -webkit-tap-highlight-color: transparent;
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 70px);
+    }
+    .touch-btn {
+      min-height: 46px;
+      min-width: 46px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: manipulation;
+    }
+  </style>
+</head>
+<body class="selection:bg-orange-600 selection:text-white font-sans">
+
+  <!-- ================= HEADER TOP FIXO ================= -->
+  <header class="sticky top-0 z-40 bg-zuma-surface/95 backdrop-blur-md border-b border-zuma-border px-4 py-3">
+    <div class="max-w-5xl mx-auto flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center text-xl shadow-lg">
+          📱
+        </div>
+        <div>
+          <h1 class="font-extrabold text-white text-base leading-tight flex items-center space-x-1.5">
+            <span>App do Garçom</span>
+            <span class="text-[10px] bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded-full font-bold border border-orange-500/30">27 Mesas</span>
+          </h1>
+          <p class="text-xs text-zuma-muted" id="garcom-header-sub">Marcos Salão · Turno Ativo</p>
+        </div>
+      </div>
+
+      <!-- Alertas & Atalhos -->
+      <div class="flex items-center space-x-2">
+        <span class="text-xs bg-amber-500/20 text-amber-400 px-2.5 py-1 rounded-full font-bold flex items-center space-x-1 border border-amber-500/30">
+          <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+          <span id="badge-prontos-balcao">2 Pratos no Balcão</span>
+        </span>
+        <a href="apps.html" class="text-xs text-zuma-muted hover:text-white bg-zuma-card px-2.5 py-1.5 rounded-lg border border-zuma-border touch-btn">
+          <span>📲 Apps</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= CONTEÚDO PRINCIPAL ================= -->
+  <main class="max-w-5xl mx-auto p-4 sm:p-6 space-y-6">
+
+    <!-- ================= RASTREABILIDADE DE PRATOS NA COZINHA (KDS) ================= -->
+    <div class="bg-gradient-to-r from-orange-950/40 via-zuma-surface to-slate-900 border-2 border-orange-500/40 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xl">
+      <div class="flex items-center justify-between border-b border-zuma-border pb-3">
+        <div>
+          <h2 class="font-black text-white text-base sm:text-lg flex items-center space-x-2">
+            <span>⏱️</span><span>Rastreabilidade em Tempo Real (Cozinha &amp; Sushiman)</span>
+          </h2>
+          <p class="text-xs text-zuma-muted">Acompanhe cada prato lançado até ficar pronto no pass/balcão para você levar à mesa.</p>
+        </div>
+        <button onclick="carregarRastreamento()" class="text-xs font-bold text-orange-400 bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 px-3 py-1.5 rounded-lg touch-btn">
+          🔄 Atualizar
+        </button>
+      </div>
+
+      <!-- Lista de Itens com Status de Preparo -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3" id="lista-rastreabilidade-itens">
+        <!-- Renderizado dinamicamente via JS -->
+      </div>
+    </div>
+
+    <!-- ================= MAPA DAS 27 MESAS DO RESTAURANTE ================= -->
+    <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-4 sm:p-5 space-y-4 shadow-xl">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zuma-border pb-3">
+        <div>
+          <h3 class="font-black text-white text-base sm:text-lg flex items-center space-x-2">
+            <span>🪑</span><span>Salão &amp; Mesas (27 Unidades)</span>
+          </h3>
+          <p class="text-xs text-zuma-muted">Selecione uma mesa para lançar pedidos, ver a conta ou gerar QR Code PIX de cobrança.</p>
+        </div>
+
+        <!-- Filtro de Setor -->
+        <div class="flex items-center space-x-1.5 overflow-x-auto">
+          <button onclick="filtrarSetor('todos')" class="btn-filtro-setor active text-xs font-bold px-2.5 py-1 rounded-lg bg-orange-600 text-white">Todos (27)</button>
+          <button onclick="filtrarSetor('Salão Principal')" class="btn-filtro-setor text-xs font-bold px-2.5 py-1 rounded-lg bg-zuma-card text-slate-300">Salão (10)</button>
+          <button onclick="filtrarSetor('Deck Externo')" class="btn-filtro-setor text-xs font-bold px-2.5 py-1 rounded-lg bg-zuma-card text-slate-300">Deck (6)</button>
+          <button onclick="filtrarSetor('Mezanino VIP')" class="btn-filtro-setor text-xs font-bold px-2.5 py-1 rounded-lg bg-zuma-card text-slate-300">VIP (5)</button>
+          <button onclick="filtrarSetor('Sushi Bar')" class="btn-filtro-setor text-xs font-bold px-2.5 py-1 rounded-lg bg-zuma-card text-slate-300">Balcão (6)</button>
+        </div>
+      </div>
+
+      <!-- Grid de Mesas -->
+      <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-9 gap-2.5" id="grid-mesas-garcom">
+        <!-- Renderizado via JS -->
+      </div>
+    </div>
+
+    <!-- ================= PAINEL DA MESA SELECIONADA ================= -->
+    <div id="painel-mesa-ativa" class="bg-zuma-surface border-2 border-orange-500 rounded-2xl p-4 sm:p-6 space-y-5 shadow-2xl">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zuma-border pb-4">
+        <div class="flex items-center space-x-3">
+          <div class="w-12 h-12 rounded-xl bg-orange-600 text-white font-black text-xl flex items-center justify-center shadow-lg" id="detalhe-mesa-num">
+            04
+          </div>
+          <div>
+            <h3 class="font-extrabold text-white text-lg flex items-center space-x-2">
+              <span id="detalhe-mesa-titulo">Mesa 04 · Salão Principal</span>
+              <span class="text-xs bg-amber-500/20 text-amber-400 font-bold px-2 py-0.5 rounded-full" id="detalhe-mesa-status">Ocupada</span>
+            </h3>
+            <p class="text-xs text-zuma-muted" id="detalhe-mesa-sub">4 Pessoas · Atendente: Marcos Salão</p>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <button onclick="abrirModalLancamento()" class="touch-btn bg-orange-600 hover:bg-orange-500 text-white font-black text-xs px-3.5 py-2 rounded-xl shadow-md transition-colors flex items-center space-x-1.5">
+            <span>+ Lançar Pedido</span>
+          </button>
+          <button onclick="abrirModalDivisaoConta()" class="touch-btn bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs px-3.5 py-2 rounded-xl shadow-md transition-colors flex items-center space-x-1.5">
+            <span>💳 Cobrar / Dividir Conta</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Itens Consumidos na Mesa -->
+      <div class="space-y-3">
+        <div class="flex items-center justify-between text-xs text-zuma-muted">
+          <span>Itens Lançados nesta Comanda:</span>
+          <span class="font-bold text-white text-sm" id="detalhe-mesa-total">Total: R$ 268,00</span>
+        </div>
+
+        <div class="bg-zuma-card border border-zuma-border rounded-xl divide-y divide-zuma-border text-xs" id="lista-itens-comanda">
+          <div class="p-3 flex items-center justify-between">
+            <div>
+              <div class="font-bold text-white">1x Rodízio Casal Especial Zuma</div>
+              <div class="text-[11px] text-slate-400">Praça Sushiman · Entregue à Mesa</div>
+            </div>
+            <div class="font-bold text-white">R$ 238,00</div>
+          </div>
+          <div class="p-3 flex items-center justify-between">
+            <div>
+              <div class="font-bold text-white">2x Cerveja Heineken 600ml</div>
+              <div class="text-[11px] text-slate-400">Bar · Entregue à Mesa</div>
+            </div>
+            <div class="font-bold text-white">R$ 30,00</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ================= MODAL DE LANÇAMENTO RÁPIDO (211 SKUS) ================= -->
+  <div id="modal-lancamento" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-3 sm:p-4">
+    <div class="bg-zuma-surface border-2 border-orange-500 rounded-2xl max-w-lg w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+      <div class="p-4 border-b border-zuma-border flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <span class="text-xl">🍣</span>
+          <h4 class="font-black text-white text-base">Lançar Item na Mesa</h4>
+        </div>
+        <button onclick="fecharModalLancamento()" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+
+      <!-- Campo de Busca Rápida -->
+      <div class="p-3 bg-zuma-card border-b border-zuma-border">
+        <input type="text" id="busca-cardapio-garcom" oninput="filtrarCardapioLancamento(this.value)" placeholder="Buscar por nome ou código PDV (ex: 666, temaki, rodízio)..." class="w-full bg-zuma-bg border border-zuma-border rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-orange-500">
+      </div>
+
+      <!-- Lista de Produtos para Adicionar -->
+      <div class="flex-1 overflow-y-auto p-3 space-y-2 divide-y divide-zuma-border/50" id="lista-busca-produtos">
+        <!-- Renderizado dinamicamente -->
+      </div>
+
+      <div class="p-3 border-t border-zuma-border bg-zuma-card flex justify-end">
+        <button onclick="fecharModalLancamento()" class="touch-btn px-4 bg-zinc-800 text-slate-300 font-bold text-xs rounded-xl border border-zuma-border">
+          Fechar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL DE DIVISÃO DE CONTA & PIX NA MESA ================= -->
+  <div id="modal-divisao" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-3 sm:p-4">
+    <div class="bg-zuma-surface border-2 border-emerald-500 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-zuma-border pb-3">
+        <div class="flex items-center space-x-2">
+          <span class="text-xl">💳</span>
+          <h4 class="font-black text-white text-base">Fechar Conta da Mesa</h4>
+        </div>
+        <button onclick="fecharModalDivisao()" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+
+      <!-- Seleção de Divisão -->
+      <div class="space-y-3 text-xs">
+        <div class="flex items-center justify-between">
+          <span class="text-slate-300">Dividir a conta em quantas pessoas?</span>
+          <div class="flex items-center space-x-2">
+            <button onclick="ajustarPessoasDivisao(-1)" class="w-8 h-8 rounded-lg bg-zuma-card border border-zuma-border text-white font-bold text-base">-</button>
+            <span class="font-black text-white text-base px-2" id="val-qtd-pessoas">2</span>
+            <button onclick="ajustarPessoasDivisao(1)" class="w-8 h-8 rounded-lg bg-zuma-card border border-zuma-border text-white font-bold text-base">+</button>
+          </div>
+        </div>
+
+        <div class="bg-zuma-card p-3 rounded-xl border border-zuma-border space-y-2">
+          <div class="flex justify-between text-slate-400">
+            <span>Subtotal Consumo:</span>
+            <span class="text-white font-bold">R$ 268,00</span>
+          </div>
+          <div class="flex justify-between text-slate-400">
+            <span>10% Taxa de Serviço (Opcional):</span>
+            <span class="text-emerald-400 font-bold">+ R$ 26,80</span>
+          </div>
+          <div class="flex justify-between text-white font-extrabold text-sm border-t border-zuma-border pt-1.5">
+            <span>Total da Mesa:</span>
+            <span class="text-emerald-400">R$ 294,80</span>
+          </div>
+          <div class="flex justify-between text-sky-400 font-extrabold text-sm border-t border-zuma-border/60 pt-1.5">
+            <span>Valor por Pessoa (<span id="txt-pessoas-sub">2 pessoas</span>):</span>
+            <span id="txt-valor-por-pessoa">R$ 147,40</span>
+          </div>
+        </div>
+
+        <!-- QR Code PIX para Cobrança na Mesa -->
+        <div class="text-center p-3 bg-white rounded-xl space-y-2 text-slate-900">
+          <div class="text-[11px] font-bold uppercase tracking-wider text-slate-600">Aproxime a Câmera do Celular para Pagar</div>
+          <img id="img-qrcode-pix-mesa" src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=00020126580014br.gov.bcb.pix01364462983200019052040000530398654147.405802BR5925ZUMA%20COZINHA%20ORIENTAL6016TANGARA%20DA%20SERRA62070503***6304CA12" alt="QR Code PIX Mesa" class="w-36 h-36 mx-auto">
+          <div class="text-[10px] text-slate-600 font-mono">Chave: 44.629.832/0001-90 (Zuma Cozinha Oriental)</div>
+        </div>
+      </div>
+
+      <div class="flex space-x-2 pt-2">
+        <button onclick="fecharModalDivisao()" class="flex-1 touch-btn bg-zinc-800 text-slate-300 font-bold text-xs rounded-xl border border-zuma-border">
+          Voltar
+        </button>
+        <button onclick="confirmarPagamentoMesa()" class="flex-1 touch-btn bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl shadow-lg">
+          ✓ Confirmar Pagamento
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= BARRA INFERIOR IOS (BOTTOM TABBAR) ================= -->
+  <nav class="fixed bottom-0 left-0 right-0 z-50 bg-zuma-surface/95 backdrop-blur-lg border-t border-zuma-border/80 flex items-center justify-around px-2 py-1.5" style="padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);">
+    <a href="index.html" class="flex flex-col items-center justify-center w-14 py-1 text-zuma-muted hover:text-white transition-colors">
+      <span class="text-lg">🏪</span>
+      <span class="text-[10px] font-semibold mt-0.5">Loja</span>
+    </a>
+    <a href="garcom.html" class="flex flex-col items-center justify-center w-14 py-1 text-orange-500 font-bold transition-colors">
+      <span class="text-lg">📱</span>
+      <span class="text-[10px] font-bold mt-0.5">Garçom</span>
+    </a>
+    <a href="entregador.html" class="flex flex-col items-center justify-center w-14 py-1 text-zuma-muted hover:text-sky-400 transition-colors">
+      <span class="text-lg">🛵</span>
+      <span class="text-[10px] font-semibold mt-0.5">Entregador</span>
+    </a>
+    <a href="operacao.html" class="flex flex-col items-center justify-center w-14 py-1 text-zuma-muted hover:text-white transition-colors">
+      <span class="text-lg">⚡</span>
+      <span class="text-[10px] font-semibold mt-0.5">Central</span>
+    </a>
+    <a href="apps.html" class="flex flex-col items-center justify-center w-14 py-1 text-zuma-muted hover:text-white transition-colors">
+      <span class="text-lg">📲</span>
+      <span class="text-[10px] font-semibold mt-0.5">Apps</span>
+    </a>
+    <a href="login.html" class="flex flex-col items-center justify-center w-14 py-1 text-zuma-muted hover:text-white transition-colors">
+      <span class="text-lg">🔐</span>
+      <span class="text-[10px] font-semibold mt-0.5">Login</span>
+    </a>
+  </nav>
+
+  <!-- ================= JAVASCRIPT DO APP DO GARÇOM ================= -->
+  <script>
+    let mesasData = [];
+    let mesaSelecionada = 4;
+    let cardapioData = [];
+    let qtdPessoasDivisao = 2;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      carregarRastreamento();
+      carregarMesas();
+      carregarCardapio();
+    });
+
+    async function carregarRastreamento() {
+      try {
+        const res = await fetch('/api/public/zuma/garcom/rastreamento-pedidos');
+        const data = await res.json();
+        if (data.ok) {
+          document.getElementById('badge-prontos-balcao').innerText = `${data.prontosAguardandoGarcom} Pratos no Balcão`;
+          renderizarRastreamento(data.itens || []);
+        }
+      } catch (err) {
+        console.error('Erro ao buscar rastreamento:', err);
+      }
+    }
+
+    function renderizarRastreamento(itens) {
+      const container = document.getElementById('lista-rastreabilidade-itens');
+      container.innerHTML = itens.map(it => {
+        let badgeStatus = '';
+        let btnAcao = '';
+
+        if (it.statusRastreio === 'pronto_balcao') {
+          badgeStatus = '<span class="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded font-bold text-[10px] border border-emerald-500/30">🔔 Pronto no Balcão! Leve à Mesa</span>';
+          btnAcao = `<button onclick="marcarItemServido('${it.id}')" class="touch-btn bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-2.5 py-1 rounded-lg shadow-sm">✓ Servido</button>`;
+        } else if (it.statusRastreio === 'preparando_kds') {
+          badgeStatus = `<span class="bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded font-bold text-[10px]">👨‍🍳 Preparando (${it.tempoEsperaMin}m)</span>`;
+          btnAcao = `<span class="text-[11px] text-slate-400">Na Cozinha</span>`;
+        } else if (it.statusRastreio === 'servido_mesa') {
+          badgeStatus = '<span class="bg-slate-700 text-slate-300 px-2 py-0.5 rounded font-bold text-[10px]">✓ Servido na Mesa</span>';
+          btnAcao = `<span class="text-[11px] text-emerald-400 font-semibold">Concluído</span>`;
+        } else {
+          badgeStatus = '<span class="bg-sky-500/20 text-sky-400 px-2 py-0.5 rounded font-bold text-[10px]">Na Fila KDS</span>';
+          btnAcao = `<span class="text-[11px] text-slate-400">Aguardando</span>`;
+        }
+
+        return `
+          <div class="bg-zuma-card border border-zuma-border rounded-xl p-3 flex items-center justify-between gap-3 text-xs">
+            <div class="space-y-1">
+              <div class="flex items-center space-x-2">
+                <span class="font-black text-orange-400 text-sm">Mesa ${it.mesaNumero}</span>
+                <span class="text-[10px] text-slate-400">${it.setorMesa}</span>
+              </div>
+              <div class="font-bold text-white">${it.qtd}x ${it.pratoNome}</div>
+              <div class="text-[11px] text-slate-400">${it.observacao || it.pracaProducao}</div>
+              <div>${badgeStatus}</div>
+            </div>
+            <div>${btnAcao}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function marcarItemServido(itemId) {
+      try {
+        const res = await fetch('/api/public/zuma/garcom/item-servido', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ itemId, garcomNome: 'Marcos Salão' })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          alert('Prato marcado como servido na mesa!');
+          carregarRastreamento();
+        }
+      } catch (err) {
+        alert('Erro ao marcar item');
+      }
+    }
+
+    async function carregarMesas() {
+      try {
+        const res = await fetch('/api/public/zuma/mesas');
+        const data = await res.json();
+        if (data.ok) {
+          mesasData = data.mesas || [];
+          renderizarGridMesas(mesasData);
+        }
+      } catch (err) {
+        console.error('Erro ao carregar mesas:', err);
+      }
+    }
+
+    function renderizarGridMesas(lista) {
+      const grid = document.getElementById('grid-mesas-garcom');
+      grid.innerHTML = lista.map(m => {
+        let corBg = 'bg-zinc-800 text-slate-300 border-zinc-700';
+        let statusTag = 'Livre';
+        if (m.status === 'ocupada') {
+          corBg = 'bg-orange-600/30 text-orange-300 border-orange-500/50';
+          statusTag = 'Ocupada';
+        } else if (m.status === 'aguardando_prato') {
+          corBg = 'bg-amber-600/30 text-amber-300 border-amber-500/50';
+          statusTag = 'Cozinha';
+        }
+
+        const isSel = m.numero === mesaSelecionada ? 'ring-2 ring-orange-500 ring-offset-2 ring-offset-zuma-bg' : '';
+
+        return `
+          <button onclick="selecionarMesa(${m.numero})" class="p-2.5 rounded-xl border flex flex-col items-center justify-center space-y-1 transition-all ${corBg} ${isSel} touch-btn">
+            <span class="text-xs font-mono font-black">M${m.numero}</span>
+            <span class="text-[9px] uppercase font-bold">${statusTag}</span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function filtrarSetor(setor) {
+      document.querySelectorAll('.btn-filtro-setor').forEach(b => {
+        b.classList.remove('bg-orange-600', 'text-white');
+        b.classList.add('bg-zuma-card', 'text-slate-300');
+      });
+      event.target.classList.add('bg-orange-600', 'text-white');
+      event.target.classList.remove('bg-zuma-card', 'text-slate-300');
+
+      if (setor === 'todos') {
+        renderizarGridMesas(mesasData);
+      } else {
+        renderizarGridMesas(mesasData.filter(m => m.setor === setor));
+      }
+    }
+
+    function selecionarMesa(num) {
+      mesaSelecionada = num;
+      renderizarGridMesas(mesasData);
+      const m = mesasData.find(item => item.numero === num);
+      if (m) {
+        document.getElementById('detalhe-mesa-num').innerText = String(num).padStart(2, '0');
+        document.getElementById('detalhe-mesa-titulo').innerText = `Mesa ${num} · ${m.setor}`;
+        document.getElementById('detalhe-mesa-status').innerText = m.status === 'ocupada' ? 'Ocupada' : 'Livre';
+        document.getElementById('detalhe-mesa-total').innerText = `Total: R$ ${(m.total || 0).toFixed(2)}`;
+      }
+    }
+
+    async function carregarCardapio() {
+      try {
+        const res = await fetch('/api/public/zuma/cardapio');
+        const data = await res.json();
+        if (data.ok) {
+          cardapioData = data.itens || [];
+          renderizarListaBuscaProdutos(cardapioData.slice(0, 15));
+        }
+      } catch (err) {
+        console.error('Erro ao carregar cardapio:', err);
+      }
+    }
+
+    function filtrarCardapioLancamento(termo) {
+      const t = termo.toLowerCase().trim();
+      const filtrados = cardapioData.filter(p => 
+        p.nome.toLowerCase().includes(t) || 
+        (p.codigo_pdv && p.codigo_pdv.toLowerCase().includes(t)) ||
+        (p.categoria_nome && p.categoria_nome.toLowerCase().includes(t))
+      );
+      renderizarListaBuscaProdutos(filtrados.slice(0, 15));
+    }
+
+    function renderizarListaBuscaProdutos(lista) {
+      const container = document.getElementById('lista-busca-produtos');
+      if (lista.length === 0) {
+        container.innerHTML = '<div class="text-xs text-slate-400 p-4 text-center">Nenhum produto encontrado.</div>';
+        return;
+      }
+      container.innerHTML = lista.map(p => `
+        <div class="py-2.5 flex items-center justify-between text-xs">
+          <div>
+            <div class="font-bold text-white">${p.nome}</div>
+            <div class="text-[11px] text-slate-400">Cód: ${p.codigo_pdv || 'ZUM'} · R$ ${parseFloat(p.preco).toFixed(2)}</div>
+          </div>
+          <button onclick="adicionarItemNaMesa('${p.nome}', ${p.preco})" class="touch-btn bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs px-3 py-1 rounded-lg">
+            + Adicionar
+          </button>
+        </div>
+      `).join('');
+    }
+
+    function abrirModalLancamento() {
+      document.getElementById('modal-lancamento').classList.remove('hidden');
+      document.getElementById('modal-lancamento').classList.add('flex');
+    }
+
+    function fecharModalLancamento() {
+      document.getElementById('modal-lancamento').classList.add('hidden');
+      document.getElementById('modal-lancamento').classList.remove('flex');
+    }
+
+    function adicionarItemNaMesa(nome, preco) {
+      alert(`Item '${nome}' lançado na Mesa ${mesaSelecionada}! Enviado para a praça KDS da cozinha.`);
+      fecharModalLancamento();
+      carregarRastreamento();
+    }
+
+    function abrirModalDivisaoConta() {
+      document.getElementById('modal-divisao').classList.remove('hidden');
+      document.getElementById('modal-divisao').classList.add('flex');
+      calcularDivisao();
+    }
+
+    function fecharModalDivisao() {
+      document.getElementById('modal-divisao').classList.add('hidden');
+      document.getElementById('modal-divisao').classList.remove('flex');
+    }
+
+    function ajustarPessoasDivisao(delta) {
+      qtdPessoasDivisao = Math.max(1, qtdPessoasDivisao + delta);
+      document.getElementById('val-qtd-pessoas').innerText = qtdPessoasDivisao;
+      document.getElementById('txt-pessoas-sub').innerText = `${qtdPessoasDivisao} pessoa${qtdPessoasDivisao > 1 ? 's' : ''}`;
+      calcularDivisao();
+    }
+
+    function calcularDivisao() {
+      const total = 294.80;
+      const porPessoa = (total / qtdPessoasDivisao).toFixed(2);
+      document.getElementById('txt-valor-por-pessoa').innerText = `R$ ${porPessoa}`;
+    }
+
+    async function confirmarPagamentoMesa() {
+      try {
+        const res = await fetch('/api/public/zuma/pagamentos/confirmar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mesaNumero: mesaSelecionada,
+            forma: 'PIX',
+            valor: 294.80,
+            operador: 'Marcos Salão'
+          })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          fecharModalDivisao();
+          alert('🎉 Pagamento confirmado com sucesso! A Mesa foi liberada no sistema.');
+          carregarMesas();
+        }
+      } catch (err) {
+        alert('Erro ao confirmar pagamento');
+      }
+    }
+  </script>
+
+</body>
+</html>
