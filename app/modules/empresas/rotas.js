@@ -60,6 +60,11 @@ export function createEmpresasAdminRouter({ db, isPlatformAdmin = () => false, o
           "concreto",
           "holding"
         ];
+      } else if (em.includes("zuma") || em.includes("oriental") || em.includes("sushiman") || em.includes("leandro")) {
+        autorizadas = [
+          "c3c3ac01-8e50-4b61-8c79-de4aaa916da3",
+          "zuma"
+        ];
       } else if (em.includes('agroopen') || em.includes('caua') || em.includes('rafa') || em.includes('agro open')) {
         autorizadas = ['2e041110-db20-4fd1-8278-12bd3dead008', 'emp-agro-open', 'agroopen'];
       } else {
@@ -105,6 +110,8 @@ export function createEmpresasAdminRouter({ db, isPlatformAdmin = () => false, o
           autorizadas = ["c1c1ac01-8e50-4b61-8c79-de4aaa916da9", "palatare"];
         } else if (em.includes("concreto") || em.includes("serrano") || em.includes("usina")) {
           autorizadas = ["c2c2ac01-8e50-4b61-8c79-de4aaa916da2", "concreto"];
+        } else if (em.includes("zuma") || em.includes("oriental") || em.includes("sushiman") || em.includes("leandro")) {
+          autorizadas = ["c3c3ac01-8e50-4b61-8c79-de4aaa916da3", "zuma"];
         } else {
           const empId = obterEmpresaIdDoUsuario(req) || req.user?.empresaId || null;
           autorizadas = empId ? [empId] : [];

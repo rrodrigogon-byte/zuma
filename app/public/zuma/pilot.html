@@ -185,6 +185,26 @@ tr:last-child td{border-bottom:0}
 }
 </style>
 
+<!-- ================= TOP SWITCHER UNIFICADO KYTTO ================= -->
+<div style="background:#090b0e;border-bottom:1px solid #ffffff15;padding:8px 16px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;font-size:12px;position:sticky;top:0;z-index:999">
+  <div style="display:flex;align-items:center;gap:8px">
+    <span style="width:10px;height:10px;border-radius:50%;background:#10b981;display:inline-block"></span>
+    <strong style="color:#fff;letter-spacing:.05em">ZUMA KYTTO</strong>
+    <span style="font-size:10px;padding:2px 8px;border-radius:999px;background:#f9731625;color:#f97316;font-weight:700;border:1px solid #f9731640">EMPRESA INDEPENDENTE</span>
+    <span style="color:#64748b;font-size:11px">zuma.kytto.com.br</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <a href="index.html" style="padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;background:#1e293b;color:#94a3b8;text-decoration:none;border:1px solid #334155;display:flex;align-items:center;gap:4px">
+      <span>🍣</span><span>Cardápio &amp; Delivery</span>
+    </a>
+    <a href="operacao.html" style="padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;background:#1e293b;color:#94a3b8;text-decoration:none;border:1px solid #334155;display:flex;align-items:center;gap:4px">
+      <span>⚡</span><span>Central 360° (PDV/KDS)</span>
+    </a>
+    <a href="pilot.html" style="padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;background:#f97316;color:#fff;text-decoration:none;display:flex;align-items:center;gap:4px">
+      <span>📊</span><span>Pilot 360 (Gestão)</span>
+    </a>
+  </div>
+</div>
 <div class="shell">
   <aside class="side">
     <div class="brand">
@@ -2741,4 +2761,25 @@ window.addEventListener("hashchange", route);
 route();
 </script>
 
+  <script>
+    function ajustarLinksNavegacao() {
+      const isZumaHost = window.location.hostname.includes("zuma.kytto");
+      const basePath = isZumaHost ? "" : "/zuma";
+      document.querySelectorAll("a[href]").forEach(el => {
+        let href = el.getAttribute("href") || "";
+        if (href.startsWith("operacao.html") || href === "operacao.html" || href === "operacao") {
+          el.setAttribute("href", `${basePath}/operacao.html${window.location.search}`);
+          el.removeAttribute("target");
+        } else if (href.startsWith("pilot.html") || href === "pilot.html" || href === "pilot") {
+          el.setAttribute("href", `${basePath}/pilot.html${window.location.search}`);
+          el.removeAttribute("target");
+        } else if (href.startsWith("index.html") || href === "index.html" || href === "index") {
+          el.setAttribute("href", `${basePath}/index.html${window.location.search}`);
+          el.removeAttribute("target");
+        }
+      });
+    }
+    window.addEventListener("DOMContentLoaded", ajustarLinksNavegacao);
+    setTimeout(ajustarLinksNavegacao, 100);
+  </script>
 </body></html>

@@ -6,8 +6,9 @@ export const STALLONE_MARK = '/brand/stallone-mark.svg'
 
 // Marcas com identidade própria. Cada empresa (tenant) aponta para uma marca pelo
 // brandKey do storefront; empresas sem marca registrada usam a identidade Kytto.
-export const BRAND_KEYS = ['dino', 'stallone']
+export const BRAND_KEYS = ['dino', 'stallone', 'zuma']
 export const STALLONE_HOSTS = new Set(['stallone.kytto.com.br', 'www.stallone.kytto.com.br'])
+export const ZUMA_HOSTS = new Set(['zuma.kytto.com.br', 'www.zuma.kytto.com.br', 'zuma-oriental.kytto.com.br'])
 
 function normalizeHost(host) {
   return String(host || '').trim().toLowerCase().replace(/\.$/, '')
@@ -15,7 +16,10 @@ function normalizeHost(host) {
 
 /** Marca pelo domínio próprio da loja (null quando o host não tem marca dedicada). */
 export function brandFromHost(host) {
-  return STALLONE_HOSTS.has(normalizeHost(host)) ? 'stallone' : null
+  const h = normalizeHost(host);
+  if (STALLONE_HOSTS.has(h)) return 'stallone';
+  if (ZUMA_HOSTS.has(h)) return 'zuma';
+  return null;
 }
 
 export function isStalloneBrandContext(...contexts) {
@@ -139,7 +143,7 @@ export function isRestauranteBrandContext(...contexts) {
       : [context]
     return values.some((value) => {
       const v = String(value || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-      return /\brestaurante\b|\bpizzaria\b|\bpalatare\b|\bgastronomia\b/.test(v)
+      return /\brestaurante\b|\bpizzaria\b|\bpalatare\b|\bgastronomia\b|\bzuma\b|\boriental\b|\bsushi\b/.test(v)
     })
   })
 }
@@ -191,4 +195,16 @@ export function brandThemeMode(brand, pathname, preference = 'system') {
   const admin = pathname === '/admin' || pathname.startsWith('/admin/')
   if (!admin) return 'light'
   return mode === 'system' ? 'light' : mode
+}
+
+export function isZumaBrandContext(...contexts) {
+  return contexts.some((context) => {
+    const values = context && typeof context === "object"
+      ? [context.tipoNegocio, context.tipo_negocio, context.segmento, context.vertical, context.brandKey, context.brand_key, context.slug, context.codigo, context.alias, context.nome, context.nome_fantasia, context.razaoSocial]
+      : [context]
+    return values.some((value) => {
+      const v = String(value || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      return /\bzuma\b|cozinha oriental|sushiman/.test(v)
+    })
+  })
 }

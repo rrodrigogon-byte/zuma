@@ -75,6 +75,27 @@
 </head>
 <body class="min-h-screen flex flex-col bg-zuma-bg text-slate-100 antialiased selection:bg-zuma-salmon selection:text-white">
 
+  <!-- ================= TOP SWITCHER UNIFICADO KYTTO ================= -->
+  <div class="bg-black/95 border-b border-white/10 px-3 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2 text-xs sticky top-0 z-50 backdrop-blur-md">
+    <div class="flex items-center space-x-2">
+      <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+      <span class="font-extrabold text-white tracking-wide">ZUMA KYTTO</span>
+      <span class="text-[10px] px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 font-bold border border-orange-500/30">EMPRESA INDEPENDENTE</span>
+      <span class="hidden lg:inline text-zinc-400 text-[11px]">zuma.kytto.com.br</span>
+    </div>
+    <div class="flex items-center space-x-1.5 sm:space-x-2">
+      <a href="index.html" class="px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 border border-white/10">
+        <span>🍣</span><span class="hidden sm:inline">Cardápio &</span><span>Delivery</span>
+      </a>
+      <a href="operacao.html" class="px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 bg-zuma-salmon text-white shadow-md">
+        <span>⚡</span><span>Central 360° (PDV/KDS)</span>
+      </a>
+      <a href="pilot.html" class="px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 border border-white/10">
+        <span>📊</span><span>Pilot 360 (Gestão)</span>
+      </a>
+    </div>
+  </div>
+
   <!-- ================= TOPBAR OPERACIONAL UNIFICADA ================= -->
   <header class="sticky top-0 z-40 bg-zuma-surface/95 backdrop-blur border-b border-zuma-border px-3 sm:px-6 py-2.5">
     <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
@@ -1314,5 +1335,26 @@
     }
   </script>
 
+  <script>
+    function ajustarLinksNavegacao() {
+      const isZumaHost = window.location.hostname.includes("zuma.kytto");
+      const basePath = isZumaHost ? "" : "/zuma";
+      document.querySelectorAll("a[href]").forEach(el => {
+        let href = el.getAttribute("href") || "";
+        if (href.startsWith("operacao.html") || href === "operacao.html" || href === "operacao") {
+          el.setAttribute("href", `${basePath}/operacao.html${window.location.search}`);
+          el.removeAttribute("target");
+        } else if (href.startsWith("pilot.html") || href === "pilot.html" || href === "pilot") {
+          el.setAttribute("href", `${basePath}/pilot.html${window.location.search}`);
+          el.removeAttribute("target");
+        } else if (href.startsWith("index.html") || href === "index.html" || href === "index") {
+          el.setAttribute("href", `${basePath}/index.html${window.location.search}`);
+          el.removeAttribute("target");
+        }
+      });
+    }
+    window.addEventListener("DOMContentLoaded", ajustarLinksNavegacao);
+    setTimeout(ajustarLinksNavegacao, 100);
+  </script>
 </body>
 </html>
