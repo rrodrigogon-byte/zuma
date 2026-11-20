@@ -82,6 +82,7 @@ const ProjecaoFaturamentoPanel = lazyWithRetry(
 );
 const DinoMetasRoletaPanel = lazyWithRetry(() => import("./dino/DinoMetasRoletaPanel"));
 const DinoInteligenciaVendasIa = lazyWithRetry(() => import("./dino/DinoInteligenciaVendasIa"));
+const CerebroIA = lazyWithRetry(() => import("./dino/CerebroIA"));
 const GestaoSalaoAvancada = lazyWithRetry(() => import("./relatorios/dino/GestaoSalaoAvancada"));
 import ComandaNova, {
   AdicionarItensComanda,
@@ -114,6 +115,7 @@ import {
 
 const TABS = [
   ["Dino Influencer & Perfumaria 360°", "Cockpit diário de seguidores ganhos/perdidos, desintoxicação de following, insights diários da KyttoIA, matriz de Reels e perfumaria de luxo"],
+  ["Cérebro KyttoIA & Aprendizado", "Cérebro autônomo, auditoria de conversas WhatsApp, preferências dos clientes e evolução contínua do negócio"],
   ["Recuperação Ativa & Pacotes (T-Rex)", "Cockpit diário de reativação de clientes > 60d e simulador comercial de pacotes"],
   ["Como Vender Mais com IA", "Indicadores de vendas, combate ao churn, upsell e motor preditivo da IA"],
   ["Gestão do Salão (IA)", "Metas, entregas por profissional, blend e IA T-Rex"],
@@ -198,6 +200,7 @@ const AREAS = [
     short: "Clientes, retorno e indicação",
     tabs: [
       "Dino Influencer & Perfumaria 360°",
+      "Cérebro KyttoIA & Aprendizado",
       "Recuperação Ativa & Pacotes (T-Rex)",
       "Como Vender Mais com IA",
       "Gestão do Salão (IA)",
@@ -238,6 +241,7 @@ const AREAS = [
     short: "Comissões, metas e regras",
     tabs: [
       "Dino Influencer & Perfumaria 360°",
+      "Cérebro KyttoIA & Aprendizado",
       "Como Vender Mais com IA",
       "Recuperação de clientes (Avec)",
       "Metas & Roleta",
@@ -596,6 +600,7 @@ function rotuloPreco(servico) {
 
 // Abas que não dependem da visão geral da barbearia (cada uma busca seus próprios dados).
 const TABS_AUTONOMAS = new Set([
+  "Cérebro KyttoIA & Aprendizado",
   "Como Vender Mais com IA",
   "Gestão do Salão (IA)",
   "Painel de gestão",
@@ -669,6 +674,10 @@ export default function BarbeariaERP({ tabInicial } = {}) {
     fiscal: "Notas fiscais",
     vendas: "Como Vender Mais com IA",
     inteligencia: "Como Vender Mais com IA",
+    cerebro: "Cérebro KyttoIA & Aprendizado",
+    "cerebro-ia": "Cérebro KyttoIA & Aprendizado",
+    "cerebro_ia": "Cérebro KyttoIA & Aprendizado",
+    aprendizado: "Cérebro KyttoIA & Aprendizado",
     carteira: "Carteira por barbeiro",
     Carteira: "Carteira por barbeiro",
     "carteira-por-barbeiro": "Carteira por barbeiro",
@@ -14451,6 +14460,13 @@ export default function BarbeariaERP({ tabInicial } = {}) {
       return (
         <Suspense fallback={<Card style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>Carregando Gestão do Salão & Metas IA…</Card>}>
           <GestaoSalaoAvancada />
+        </Suspense>
+      );
+    }
+    if (tab === "Cérebro KyttoIA & Aprendizado") {
+      return (
+        <Suspense fallback={<Card style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>Carregando Cérebro KyttoIA & Aprendizado…</Card>}>
+          <CerebroIA />
         </Suspense>
       );
     }

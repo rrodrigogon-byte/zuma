@@ -678,5 +678,53 @@ export function detectDinoQuickFaq(userText, { storeName = 'Dino Barbearia' } = 
     };
   }
 
+  // 5.1 Pergunta direta "E se for só cabelo??" ou "Só cabelo"
+  if (/^(?:e\s+se\s+for\s+|se\s+for\s+)?(?:s[oó]|apenas|somente)\s+(?:o\s+)?(?:cabelo|corte)[?.\s]*$/i.test(t)) {
+    return {
+      kind: 'faq_preco_corte',
+      text: `O *Corte Masculino* com nossa equipe (Bruno ou Nati) custa *R$ 90,00* (cerca de 45 min). Já com o Mestre Dino sai por *R$ 300,00* diurno.\n\n💈 Você pode agendar direto pelo link:\nhttps://kytto.com.br/agendar/dino\n\nQual dia e horário você prefere?`,
+    };
+  }
+
+  // 6. Pacotes e Assinaturas (Agendamento pelo link e validade)
+  if (/\b(pacote|plano|assinatura|assinante|clube)\b/i.test(t) && /\b(link|agendamento|agendar|como faco|normalmente|validade|vencimento|ate quando|funciona|posso agendar)\b/i.test(t)) {
+    return {
+      kind: 'faq_pacote_agendamento',
+      text: `Sim! Se você já tem pacote ou assinatura ativa na ${storeName}, pode agendar tanto por aqui comigo quanto pelo link oficial:\nhttps://kytto.com.br/agendar/dino\n\nO sistema reconhece seu pacote automaticamente pelo número de telefone cadastrado e debita a sessão direto do seu plano (sem nenhum pagamento adicional no agendamento)! 💈\n\nQuer agendar seu retorno agora ou prefere usar o link?`,
+    };
+  }
+
+  // 7. Mesa de Sinuca, Lazer e Bebidas (Chopp, Café, Cerveja)
+  if (/\b(sinuca|mesa de sinuca|jogo|bilhar|bebida|bebidas|cerveja|chopp|cafe|cafezinho|refrigerante)\b/i.test(t)) {
+    return {
+      kind: 'faq_sinuca_bebidas',
+      text: `Sim! Aqui na ${storeName} temos uma estrutura completa de entretenimento e conforto pra você: ambiente 100% climatizado, mesa de sinuca para relaxar antes ou depois do corte, café expresso cortesia e bebidas geladas para você curtir a experiência completa! 🎱☕💈\n\nBora garantir seu horário? Qual dia fica melhor pra você vir?`,
+    };
+  }
+
+  // 8. Visagismo e Consultoria de Estilo
+  if (/\bvisagismo\b/i.test(t) || (/\b(corte|estilo)\b/i.test(t) && /\b(formato de rosto|combinar com meu rosto|tipo de rosto)\b/i.test(t))) {
+    return {
+      kind: 'faq_visagismo',
+      text: `Com certeza! Aqui na ${storeName} nossa equipe é especialista em *visagismo masculino*: avaliamos as linhas do seu rosto, formato de mandíbula, formato craniano e textura do cabelo/barba para desenhar o corte e a barba que melhor valorizam seu perfil e autoridade! ✂️💈\n\nVocê pode agendar direto no link:\nhttps://kytto.com.br/agendar/dino\n\nOu me fala o dia que prefere vir que já reservo pra você!`,
+    };
+  }
+
+  // 9. Quem pode atender hoje / Atendimento no dia
+  if (/\b(quem pode me atender hoje|tem quem atenda hoje|quem ta atendendo hoje|quem atende hoje|disponibilidade hoje|barbeiro hoje)\b/i.test(t)) {
+    return {
+      kind: 'faq_quem_atende_hoje',
+      text: `Hoje temos nossa equipe de mestres a todo vapor na ${storeName}: *Bruno*, *Nati* e *Mestre Dino*! 💈\n\nPara conferir as vagas em tempo real e agendar na hora, acesse:\nhttps://kytto.com.br/agendar/dino\n\nOu me diga qual horário fica melhor pra você que já vejo as opções agora mesmo!`,
+    };
+  }
+
+  // 10. Contato do Responsável / Parcerias / Gestão
+  if (/\b(numero do responsavel|falar com o responsavel|contato do responsavel|gerente|gerencia|dono|parceria|comercial|proprietario)\b/i.test(t)) {
+    return {
+      kind: 'faq_contato_responsavel',
+      text: `Com certeza! Você está no canal oficial de atendimento da ${storeName}. Caso deseje tratar de parcerias, fornecedores ou falar diretamente com a gestão do Mestre Dino, me envie um resumo do assunto por aqui que encaminho para nossa diretoria retornar para você! 💈`,
+    };
+  }
+
   return null;
 }

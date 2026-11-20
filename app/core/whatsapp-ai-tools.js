@@ -25,6 +25,7 @@ import {
   confirmAttendance,
   noteDelay,
   verificarStatusBarbeiroDino,
+  BARBEIROS_ATIVOS_DINO,
 } from './barbershop-agenda.js';
 import { clubeParaTelefone, entrarListaEspera, planoDoTelefone, perfilDoTelefone, validarAgendamentoComPlano, sugestaoPosServico, codigoIndicacaoCliente, cobreServicoEProfissional } from '../dino-captacao-kytto.js';
 import { saldoCashback } from '../dino-cobranca-kytto.js';

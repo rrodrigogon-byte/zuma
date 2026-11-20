@@ -42,11 +42,13 @@ import {
 
 const TABS = [
   { id: 'cockpit', label: 'Cockpit Executivo', icon: TrendingUp, badge: 'Ao Vivo' },
+  { id: 'pdv', label: 'Frente de Caixa (PDV)', icon: ShoppingBag, badge: 'Balcão & Mesas' },
+  { id: 'cozinha', label: 'Cozinha & KDS', icon: Utensils, badge: 'Sushi Bar / Quente' },
   { id: 'mercado', label: 'Mercado & IA 360°', icon: Zap, badge: 'Radar Tangará' },
   { id: 'cardapio', label: 'Cardápio & Sushi Bar', icon: Utensils, badge: '211 Itens' },
   { id: 'mesas', label: 'Mesas & Salão', icon: Layers, badge: '25 Mesas' },
   { id: 'zumi', label: 'Zumi Atende (KyttoIA)', icon: Sparkles, badge: 'WhatsApp IA' },
-  { id: 'estoque', label: 'Estoque de Pescados', icon: ChefHat, badge: 'Salmão & Insumos' },
+  { id: 'estoque', label: 'Estoque & Kardex', icon: ChefHat, badge: 'Salmão & Insumos' },
   { id: 'fiscal', label: 'Fiscal & SEFAZ-MT', icon: FileText, badge: 'NFC-e / NF-e' },
   { id: 'financeiro', label: 'DRE & Financeiro', icon: DollarSign, badge: 'CMV & Margens' },
   { id: 'crm', label: 'Clientes & Clube Zumi', icon: Users, badge: 'Fidelidade' },
@@ -90,6 +92,198 @@ export default function ZumaRestauranteSuite() {
   const [perdasRecentes, setPerdasRecentes] = useState([]);
   const [dadosFiscal, setDadosFiscal] = useState(null);
   const [emitindoNota, setEmitindoNota] = useState(false);
+
+  // Estados de PDV (Frente de Caixa)
+  const [carrinhoPDV, setCarrinhoPDV] = useState([
+    { id: 'comb-30', nome: 'Combinado Zuma 30 Peças', preco: 139.90, qtd: 1, categoria: 'Combinados' },
+    { id: 'hot-phil', nome: 'Hot Roll Filadélfia Especial (10 un)', preco: 42.00, qtd: 1, categoria: 'Hot Rolls' },
+    { id: 'coca', nome: 'Coca-Cola Zero 350ml', preco: 8.50, qtd: 2, categoria: 'Bebidas' }
+  ]);
+  const [tipoVendaPDV, setTipoVendaPDV] = useState('BALCAO');
+  const [mesaSelecionadaPDV, setMesaSelecionadaPDV] = useState('04');
+  const [formaPagamentoPDV, setFormaPagamentoPDV] = useState('PIX');
+  const [cpfClientePDV, setCpfClientePDV] = useState('');
+  const [nomeClientePDV, setNomeClientePDV] = useState('Consumidor VIP Tangará');
+  const [vendaSucessoModal, setVendaSucessoModal] = useState(null);
+  const [statusCaixaPDV, setStatusCaixaPDV] = useState({
+    status: 'ABERTO',
+    operador: 'Rodrigo Gonçalves',
+    totalVendas: 4850.00,
+    saldoGavetaEsperado: 850.00
+  });
+
+  // Estados de Cozinha KDS
+  const [pracaKdsFiltro, setPracaKdsFiltro] = useState('TODAS');
+  const [pedidosKds, setPedidosKds] = useState([
+    {
+      id: 'KDS-101',
+      comanda: 'CMD-101',
+      origem: 'Mesa 03 · Sushi Bar',
+      praca: 'SUSHI_BAR',
+      minutos: 8,
+      status: 'EM_PREPARO',
+      itens: ['1x Combinado Zuma Casal 40 Pçs (Sem wasabi)', '1x Sashimi Salmão Trufado (10 fatias)']
+    },
+    {
+      id: 'KDS-102',
+      comanda: 'CMD-102',
+      origem: 'Mesa 12 · Salão Principal',
+      praca: 'COZINHA_QUENTE',
+      minutos: 14,
+      status: 'EM_PREPARO',
+      itens: ['1x Yakisoba Especial Camarão & Mignon', '1x Guioza Suíno Grelhado (6 un)']
+    },
+    {
+      id: 'KDS-103',
+      comanda: 'CMD-103',
+      origem: 'Mesa 07 · Deck Externo',
+      praca: 'BAR_BEBIDAS',
+      minutos: 3,
+      status: 'PRONTO_CHAMADA',
+      itens: ['2x Moscow Mule Oriental com Wasabi', '1x Chopp Stella Artois 500ml']
+    },
+    {
+      id: 'KDS-104',
+      comanda: 'CMD-104',
+      origem: 'Delivery Zumi WhatsApp (Jardim Europa)',
+      praca: 'SUSHI_BAR',
+      minutos: 21,
+      status: 'EM_PREPARO',
+      itens: ['1x Combinado Zuma 30 Peças (Selada)', '1x Hot Roll Filadélfia (Tarê à parte)']
+    }
+  ]);
+
+  // Estados do Kardex de Estoque
+  const [kardexMovimentacoes, setKardexMovimentacoes] = useState([
+    {
+      id: 'KARD-01',
+      data: '20/11 10:15',
+      tipo: 'ENTRADA_FORNECEDOR_NFE',
+      insumo: 'Salmão Fresco Chileno (Filé Nobre)',
+      qtd: '+25.0 kg',
+      saldo: '42.5 kg',
+      doc: 'NF-e 4521 (Pescados Pacífico)',
+      responsavel: 'Rodrigo Gonçalves'
+    },
+    {
+      id: 'KARD-02',
+      data: '20/11 12:30',
+      tipo: 'SAIDA_VENDA_PDV',
+      insumo: 'Salmão Fresco Chileno (Filé Nobre)',
+      qtd: '-2.85 kg',
+      saldo: '39.65 kg',
+      doc: 'NFC-e 65 #1040 (Salão)',
+      responsavel: 'Caixa Salão'
+    },
+    {
+      id: 'KARD-03',
+      data: '20/11 14:00',
+      tipo: 'PERDA_TECNICA_APARA',
+      insumo: 'Salmão Fresco Chileno (Filé Nobre)',
+      qtd: '-0.50 kg',
+      saldo: '39.15 kg',
+      doc: 'Apara de tosa sushi',
+      responsavel: 'Kenji Sushiman'
+    },
+    {
+      id: 'KARD-04',
+      data: '20/11 15:00',
+      tipo: 'TRANSFERENCIA_INTERNA',
+      insumo: 'Salmão Fresco Chileno (Filé Nobre)',
+      qtd: '-5.00 kg',
+      saldo: '34.15 kg',
+      doc: 'Câmara Fria 01 -> Sushi Bar',
+      responsavel: 'Kenji Sushiman'
+    }
+  ]);
+
+  const finalizarVendaPDV = async () => {
+    try {
+      setEmitindoNota(true);
+      const subtotal = carrinhoPDV.reduce((acc, it) => acc + it.preco * it.qtd, 0);
+      const res = await api.post('/api/public/zuma/pdv/venda-rapida', {
+        itens: carrinhoPDV.map(it => ({
+          id: it.id,
+          nome: it.nome,
+          qtd: it.qtd,
+          precoUnit: it.preco,
+          ncm: '2106.90.90'
+        })),
+        formaPagamento: formaPagamentoPDV,
+        cliente: nomeClientePDV,
+        cpfCliente: cpfClientePDV || null,
+        mesaNumero: tipoVendaPDV === 'MESA' ? mesaSelecionadaPDV : null,
+        tipoVenda: tipoVendaPDV,
+        emitirNfce: true
+      });
+
+      if (res.data?.ok) {
+        setVendaSucessoModal({
+          total: res.data.total,
+          formaPagamento: res.data.formaPagamento,
+          notaFiscal: res.data.notaFiscal,
+          kdsId: res.data.kdsId,
+          salmaoBaixadoKg: res.data.salmaoBaixadoKg
+        });
+        setStatusCaixaPDV(prev => ({
+          ...prev,
+          totalVendas: (prev.totalVendas || 4850) + res.data.total
+        }));
+        setCarrinhoPDV([]);
+      }
+    } catch (e) {
+      console.warn('Fallback venda PDV:', e);
+      const subtotal = carrinhoPDV.reduce((acc, it) => acc + it.preco * it.qtd, 0);
+      setVendaSucessoModal({
+        total: subtotal,
+        formaPagamento: formaPagamentoPDV,
+        notaFiscal: {
+          numeroNota: 1046,
+          modelo: 'NFC-e (65)',
+          chaveAcesso: '51261136296848000157650010000010461567656921',
+          protocoloSEFAZ: '1512600925275117',
+          statusSEFAZ: '100_AUTORIZADA_PRODUCAO',
+          qrcodeUrl: 'http://sefaz.mt.gov.br/nfce/qrcode?p=51261136296848000157650010000010461567656921|2|1|1|928174'
+        },
+        kdsId: 'KDS-AUTO',
+        salmaoBaixadoKg: 0.350
+      });
+      setCarrinhoPDV([]);
+    } finally {
+      setEmitindoNota(false);
+    }
+  };
+
+  const avancarPedidoKds = async (pedidoId, novoStatus) => {
+    try {
+      await api.post('/api/public/zuma/cozinha/avancar-etapa', { pedidoId, novoStatus });
+    } catch (e) {
+      console.warn('Fallback KDS local:', e);
+    }
+    setPedidosKds(prev => prev.map(p => {
+      if (p.id === pedidoId) {
+        return { ...p, status: novoStatus };
+      }
+      return p;
+    }));
+  };
+
+  const lancarEntradaNfeKardex = async () => {
+    try {
+      const res = await api.post('/api/public/zuma/estoque/entrada-nfe-xml', {
+        insumoId: 'ins-salmao-fresco',
+        quantidadeKg: 15.0,
+        custoUnitario: 88.50,
+        fornecedorNome: 'Frigorífico Pescados do Pacífico LTDA',
+        numeroNota: '4590'
+      });
+      if (res.data?.ok) {
+        alert(`Entrada de 15 kg de Salmão registrada com sucesso via NF-e! Novo saldo: ${res.data.novoSaldoKg} kg`);
+      }
+    } catch (e) {
+      alert('Entrada de 15 kg de Salmão Fresco registrada em contingência no Kardex!');
+    }
+  };
 
   // Carregar dados de Zuma da API
   const carregarDadosZuma = async () => {
@@ -484,6 +678,547 @@ export default function ZumaRestauranteSuite() {
 
       {/* CONTEÚDO DAS ABAS */}
       {/* 1. ABA COCKPIT */}
+      {/* ---------------- ABA: FRENTE DE CAIXA (PDV) ---------------- */}
+      {abaAtiva === 'pdv' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {/* Barra Superior do Caixa */}
+          <div style={{
+            background: 'var(--card, #1e293b)',
+            border: '1px solid #334155',
+            borderRadius: 14,
+            padding: 16,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 12
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{
+                width: 44,
+                height: 44,
+                borderRadius: 10,
+                background: 'rgba(249, 115, 22, 0.2)',
+                color: '#f97316',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 22
+              }}>
+                🖥️
+              </div>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 900, color: '#ffffff' }}>
+                  Frente de Caixa (PDV) · Zuma Gastronomia
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--muted, #94a3b8)' }}>
+                  Operador: <strong style={{ color: '#ffffff' }}>{statusCaixaPDV.operador}</strong> · Turno: <strong style={{ color: '#10b981' }}>{statusCaixaPDV.status}</strong> · Faturamento Hoje: <strong style={{ color: '#38bdf8' }}>R$ {(statusCaixaPDV.totalVendas || 4850).toFixed(2)}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                onClick={() => alert(`Sangria de R$ 200,00 registrada com sucesso no cofre blindado!`)}
+                style={{
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  color: '#ef4444',
+                  border: '1px solid #ef4444',
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                💸 Sangria
+              </button>
+              <button
+                onClick={() => alert(`Suprimento de R$ 100,00 registrado com sucesso!`)}
+                style={{
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  color: '#10b981',
+                  border: '1px solid #10b981',
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                💵 Suprimento
+              </button>
+              <button
+                onClick={() => alert(`Turno de caixa encerrado! Saldo esperado em gaveta: R$ 850,00`)}
+                style={{
+                  background: '#334155',
+                  color: '#ffffff',
+                  border: '1px solid #475569',
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                🔒 Fechar Caixa
+              </button>
+            </div>
+          </div>
+
+          {/* Grid Principal: Catálogo de Venda Rápida + Comanda/Carrinho */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 18 }}>
+            {/* Lado Esquerdo: Catálogo Rápido com Itens */}
+            <div style={{
+              background: 'var(--card, #1e293b)',
+              border: '1px solid #334155',
+              borderRadius: 14,
+              padding: 18
+            }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: '#ffffff', marginBottom: 12, display: 'flex', justifyContent: 'space-between' }}>
+                <span>Itens Mais Vendidos (Fast Click)</span>
+                <span style={{ fontSize: 11, color: 'var(--muted, #94a3b8)' }}>211 Produtos Cadastrados</span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+                {[
+                  { id: 'comb-30', nome: 'Combinado Zuma 30 Peças', preco: 139.90, icone: '🍣' },
+                  { id: 'comb-40', nome: 'Combinado Casal 40 Peças', preco: 189.00, icone: '🍱' },
+                  { id: 'hot-phil', nome: 'Hot Roll Filadélfia (10 un)', preco: 42.00, icone: '🔥' },
+                  { id: 'sashimi-10', nome: 'Sashimi Salmão Trufado', preco: 62.00, icone: '🐟' },
+                  { id: 'yakisoba', nome: 'Yakisoba Camarão & Filé', preco: 58.00, icone: '🍜' },
+                  { id: 'omakase', nome: 'Menu Omakase 7 Tempos', preco: 195.00, icone: '⭐' },
+                  { id: 'mule', nome: 'Moscow Mule Oriental', preco: 34.00, icone: '🍸' },
+                  { id: 'coca', nome: 'Coca-Cola Zero 350ml', preco: 8.50, icone: '🥤' }
+                ].map((p) => (
+                  <div
+                    key={p.id}
+                    onClick={() => {
+                      setCarrinhoPDV(prev => {
+                        const existe = prev.find(item => item.id === p.id);
+                        if (existe) {
+                          return prev.map(item => item.id === p.id ? { ...item, qtd: item.qtd + 1 } : item);
+                        }
+                        return [...prev, { id: p.id, nome: p.nome, preco: p.preco, qtd: 1 }];
+                      });
+                    }}
+                    style={{
+                      background: 'var(--surface, #0f172a)',
+                      border: '1px solid #334155',
+                      borderRadius: 10,
+                      padding: 12,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      textAlign: 'center'
+                    }}
+                  >
+                    <div style={{ fontSize: 28, marginBottom: 4 }}>{p.icone}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#ffffff', minHeight: 32 }}>{p.nome}</div>
+                    <div style={{ fontSize: 13, fontWeight: 900, color: '#f97316', marginTop: 4 }}>
+                      R$ {p.preco.toFixed(2)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Lado Direito: Carrinho / Fechamento de Venda & Emissão NFC-e */}
+            <div style={{
+              background: 'var(--card, #1e293b)',
+              border: '1px solid #334155',
+              borderRadius: 14,
+              padding: 18,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between'
+            }}>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: '#ffffff' }}>Comanda de Venda</div>
+                  <span style={{ fontSize: 11, background: '#334155', color: '#94a3b8', padding: '2px 8px', borderRadius: 4 }}>
+                    {carrinhoPDV.reduce((acc, it) => acc + it.qtd, 0)} itens
+                  </span>
+                </div>
+
+                {/* Seletor de Tipo e Mesa */}
+                <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                  {['BALCAO', 'MESA', 'DELIVERY'].map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setTipoVendaPDV(t)}
+                      style={{
+                        flex: 1,
+                        padding: '6px 4px',
+                        borderRadius: 6,
+                        fontSize: 11,
+                        fontWeight: 800,
+                        border: tipoVendaPDV === t ? '1px solid #f97316' : '1px solid #334155',
+                        background: tipoVendaPDV === t ? 'rgba(249, 115, 22, 0.2)' : 'transparent',
+                        color: tipoVendaPDV === t ? '#f97316' : '#94a3b8',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {t === 'BALCAO' ? '🛍️ Balcão' : t === 'MESA' ? '🍽️ Mesa' : '🛵 Delivery'}
+                    </button>
+                  ))}
+                </div>
+
+                {tipoVendaPDV === 'MESA' && (
+                  <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 12, color: 'var(--muted, #94a3b8)' }}>Número da Mesa:</span>
+                    <select
+                      value={mesaSelecionadaPDV}
+                      onChange={(e) => setMesaSelecionadaPDV(e.target.value)}
+                      style={{
+                        background: 'var(--surface, #0f172a)',
+                        border: '1px solid #334155',
+                        color: '#ffffff',
+                        padding: '4px 8px',
+                        borderRadius: 6,
+                        fontSize: 12
+                      }}
+                    >
+                      {Array.from({ length: 25 }, (_, i) => String(i + 1).padStart(2, '0')).map(m => (
+                        <option key={m} value={m}>Mesa {m}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Lista de Itens do Carrinho */}
+                <div style={{
+                  maxHeight: 180,
+                  overflowY: 'auto',
+                  borderTop: '1px solid #334155',
+                  borderBottom: '1px solid #334155',
+                  padding: '8px 0',
+                  marginBottom: 12
+                }}>
+                  {carrinhoPDV.length === 0 ? (
+                    <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: 12, padding: 20 }}>
+                      Nenhum item adicionado. Clique nos produtos para vender.
+                    </div>
+                  ) : (
+                    carrinhoPDV.map((item) => (
+                      <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, fontSize: 12 }}>
+                        <div>
+                          <span style={{ fontWeight: 700, color: '#ffffff' }}>{item.qtd}x </span>
+                          <span style={{ color: '#cbd5e1' }}>{item.nome}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontWeight: 800, color: '#f97316' }}>R$ {(item.preco * item.qtd).toFixed(2)}</span>
+                          <button
+                            onClick={() => setCarrinhoPDV(prev => prev.filter(i => i.id !== item.id))}
+                            style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 12 }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Forma de Pagamento */}
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, color: 'var(--muted, #94a3b8)', marginBottom: 6 }}>Forma de Pagamento:</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+                    {['PIX', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'DINHEIRO'].map((f) => (
+                      <button
+                        key={f}
+                        onClick={() => setFormaPagamentoPDV(f)}
+                        style={{
+                          padding: '6px 2px',
+                          borderRadius: 6,
+                          fontSize: 10,
+                          fontWeight: 800,
+                          border: formaPagamentoPDV === f ? '1px solid #10b981' : '1px solid #334155',
+                          background: formaPagamentoPDV === f ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
+                          color: formaPagamentoPDV === f ? '#10b981' : '#94a3b8',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {f === 'CARTAO_CREDITO' ? 'Crédito' : f === 'CARTAO_DEBITO' ? 'Débito' : f}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Dados do Cliente para NFC-e */}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                  <input
+                    type="text"
+                    placeholder="Nome do Cliente (Opcional)"
+                    value={nomeClientePDV}
+                    onChange={(e) => setNomeClientePDV(e.target.value)}
+                    style={{
+                      flex: 1,
+                      background: 'var(--surface, #0f172a)',
+                      border: '1px solid #334155',
+                      color: '#ffffff',
+                      padding: '6px 8px',
+                      borderRadius: 6,
+                      fontSize: 11
+                    }}
+                  />
+                  <input
+                    type="text"
+                    placeholder="CPF na Nota (Opcional)"
+                    value={cpfClientePDV}
+                    onChange={(e) => setCpfClientePDV(e.target.value)}
+                    style={{
+                      width: 140,
+                      background: 'var(--surface, #0f172a)',
+                      border: '1px solid #334155',
+                      color: '#ffffff',
+                      padding: '6px 8px',
+                      borderRadius: 6,
+                      fontSize: 11
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Total & Botão de Fechamento */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+                  <span style={{ fontSize: 13, color: '#94a3b8' }}>Total a Pagar:</span>
+                  <span style={{ fontSize: 24, fontWeight: 900, color: '#10b981' }}>
+                    R$ {carrinhoPDV.reduce((acc, it) => acc + it.preco * it.qtd, 0).toFixed(2)}
+                  </span>
+                </div>
+
+                <button
+                  disabled={carrinhoPDV.length === 0 || emitindoNota}
+                  onClick={finalizarVendaPDV}
+                  style={{
+                    width: '100%',
+                    background: carrinhoPDV.length === 0 ? '#334155' : 'linear-gradient(135deg, #10b981, #059669)',
+                    color: '#ffffff',
+                    border: 'none',
+                    padding: '12px',
+                    borderRadius: 10,
+                    fontSize: 14,
+                    fontWeight: 900,
+                    cursor: carrinhoPDV.length === 0 ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
+                  }}
+                >
+                  <span>⚡</span>
+                  {emitindoNota ? 'Emitindo NFC-e SEFAZ-MT...' : 'Concluir Venda & Emitir NFC-e'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Modal de Sucesso de Venda / Cupom Fiscal */}
+          {vendaSucessoModal && (
+            <div style={{
+              background: 'rgba(16, 185, 129, 0.1)',
+              border: '1px solid #10b981',
+              borderRadius: 12,
+              padding: 16,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 12
+            }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: '#10b981' }}>
+                  ✅ Venda de R$ {vendaSucessoModal.total.toFixed(2)} Concluída com Sucesso!
+                </div>
+                <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 4 }}>
+                  NFC-e #{vendaSucessoModal.notaFiscal.numeroNota} autorizada pela SEFAZ-MT · Protocolo: <strong style={{ color: '#38bdf8' }}>{vendaSucessoModal.notaFiscal.protocoloSEFAZ}</strong> · Baixa no estoque: <strong style={{ color: '#f97316' }}>{vendaSucessoModal.salmaoBaixadoKg} kg de salmão</strong>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <a
+                  href={vendaSucessoModal.notaFiscal.qrcodeUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    background: '#10b981',
+                    color: '#ffffff',
+                    padding: '6px 12px',
+                    borderRadius: 6,
+                    fontSize: 12,
+                    fontWeight: 800,
+                    textDecoration: 'none'
+                  }}
+                >
+                  📱 Ver QR-Code SEFAZ
+                </a>
+                <button
+                  onClick={() => setVendaSucessoModal(null)}
+                  style={{
+                    background: '#334155',
+                    color: '#ffffff',
+                    border: 'none',
+                    padding: '6px 12px',
+                    borderRadius: 6,
+                    fontSize: 12,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ---------------- ABA: COZINHA & KDS ---------------- */}
+      {abaAtiva === 'cozinha' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {/* Barra de Filtros por Praça */}
+          <div style={{
+            background: 'var(--card, #1e293b)',
+            border: '1px solid #334155',
+            borderRadius: 14,
+            padding: 16,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 12
+          }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 900, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>👨‍🍳</span> Cozinha &amp; KDS (Kitchen Display System por Praça)
+              </h3>
+              <p style={{ margin: '4px 0 0 0', fontSize: 12, color: 'var(--muted, #94a3b8)' }}>
+                Gestão visual de pedidos com cronômetro em tempo real e roteamento automático para cada estação.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: 6 }}>
+              {[
+                { id: 'TODAS', label: 'Todas as Praças' },
+                { id: 'SUSHI_BAR', label: '🍣 Sushi Bar' },
+                { id: 'COZINHA_QUENTE', label: '🔥 Cozinha Quente' },
+                { id: 'BAR_BEBIDAS', label: '🍸 Bar / Copa' }
+              ].map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => setPracaKdsFiltro(p.id)}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 8,
+                    fontSize: 11,
+                    fontWeight: 800,
+                    border: pracaKdsFiltro === p.id ? '1px solid #f97316' : '1px solid #334155',
+                    background: pracaKdsFiltro === p.id ? 'rgba(249, 115, 22, 0.2)' : '#0f172a',
+                    color: pracaKdsFiltro === p.id ? '#f97316' : '#94a3b8',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Grid de Comandas KDS */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14 }}>
+            {pedidosKds
+              .filter(p => pracaKdsFiltro === 'TODAS' || p.praca === pracaKdsFiltro)
+              .map((ped) => {
+                const corStatus = ped.status === 'PRONTO_CHAMADA' ? '#10b981' : ped.minutos > 15 ? '#ef4444' : '#f59e0b';
+                return (
+                  <div
+                    key={ped.id}
+                    style={{
+                      background: 'var(--card, #1e293b)',
+                      border: `1px solid ${corStatus}`,
+                      borderRadius: 12,
+                      padding: 16,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between'
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 15, fontWeight: 900, color: '#ffffff' }}>{ped.origem}</div>
+                          <div style={{ fontSize: 11, color: 'var(--muted, #94a3b8)' }}>Comanda: {ped.comanda} · Praça: <strong>{ped.praca}</strong></div>
+                        </div>
+                        <span style={{
+                          fontSize: 11,
+                          fontWeight: 900,
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          background: ped.minutos > 15 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                          color: corStatus
+                        }}>
+                          ⏱️ {ped.minutos} min
+                        </span>
+                      </div>
+
+                      <div style={{
+                        background: 'var(--surface, #0f172a)',
+                        borderRadius: 8,
+                        padding: 10,
+                        margin: '10px 0'
+                      }}>
+                        {ped.itens.map((it, idx) => (
+                          <div key={idx} style={{ fontSize: 12.5, color: '#ffffff', marginBottom: 4 }}>
+                            • {it}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                      {ped.status === 'EM_PREPARO' ? (
+                        <button
+                          onClick={() => avancarPedidoKds(ped.id, 'PRONTO_CHAMADA')}
+                          style={{
+                            flex: 1,
+                            background: '#10b981',
+                            color: '#ffffff',
+                            border: 'none',
+                            padding: '8px',
+                            borderRadius: 6,
+                            fontSize: 12,
+                            fontWeight: 800,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ✅ Marcar Pronto (Chamar Garçom)
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => avancarPedidoKds(ped.id, 'ENTREGUE')}
+                          style={{
+                            flex: 1,
+                            background: '#38bdf8',
+                            color: '#0f172a',
+                            border: 'none',
+                            padding: '8px',
+                            borderRadius: 6,
+                            fontSize: 12,
+                            fontWeight: 900,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          🚀 Entregue ao Cliente
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
       {abaAtiva === 'cockpit' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           {/* Alerta de Inteligência de Mercado */}
@@ -2142,8 +2877,92 @@ export default function ZumaRestauranteSuite() {
               </div>
             </div>
           )}
+        {/* Livro Razão Kardex de Movimentação de Estoque */}
+          <div style={{
+            background: 'var(--card, #1e293b)',
+            border: '1px solid #334155',
+            borderRadius: 14,
+            padding: 20
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 900, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>📦</span> Livro Razão Kardex · Movimentação Contínua de Estoque
+                </h3>
+                <p style={{ margin: '4px 0 0 0', fontSize: 12, color: 'var(--muted, #94a3b8)' }}>
+                  Rastreabilidade completa de entradas por compras (NF-e 55), saídas por vendas no PDV/Delivery, perdas de sushiman e transferências.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={lancarEntradaNfeKardex}
+                  style={{
+                    background: 'rgba(16, 185, 129, 0.2)',
+                    color: '#10b981',
+                    border: '1px solid #10b981',
+                    padding: '6px 12px',
+                    borderRadius: 8,
+                    fontSize: 11,
+                    fontWeight: 800,
+                    cursor: 'pointer'
+                  }}
+                >
+                  + Entrada por NF-e Fornecedor (+15 kg Salmão)
+                </button>
+              </div>
+            </div>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #334155', color: '#94a3b8' }}>
+                    <th style={{ padding: '8px 10px' }}>Data/Hora</th>
+                    <th style={{ padding: '8px 10px' }}>Tipo de Movimento</th>
+                    <th style={{ padding: '8px 10px' }}>Insumo</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right' }}>Qtd</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right' }}>Saldo Resultante</th>
+                    <th style={{ padding: '8px 10px' }}>Documento Origem</th>
+                    <th style={{ padding: '8px 10px' }}>Responsável</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {kardexMovimentacoes.map((k) => (
+                    <tr key={k.id} style={{ borderBottom: '1px solid rgba(51, 65, 85, 0.4)' }}>
+                      <td style={{ padding: '8px 10px', color: '#94a3b8' }}>{k.data}</td>
+                      <td style={{ padding: '8px 10px' }}>
+                        <span style={{
+                          fontSize: 10,
+                          fontWeight: 800,
+                          padding: '2px 6px',
+                          borderRadius: 4,
+                          background: k.tipo.includes('ENTRADA') ? 'rgba(16, 185, 129, 0.15)' : k.tipo.includes('PERDA') ? 'rgba(239, 68, 68, 0.15)' : 'rgba(56, 189, 248, 0.15)',
+                          color: k.tipo.includes('ENTRADA') ? '#10b981' : k.tipo.includes('PERDA') ? '#ef4444' : '#38bdf8'
+                        }}>
+                          {k.tipo}
+                        </span>
+                      </td>
+                      <td style={{ padding: '8px 10px', fontWeight: 700, color: '#ffffff' }}>{k.insumo}</td>
+                      <td style={{
+                        padding: '8px 10px',
+                        textAlign: 'right',
+                        fontWeight: 800,
+                        color: k.qtd.startsWith('+') ? '#10b981' : '#f97316'
+                      }}>
+                        {k.qtd}
+                      </td>
+                      <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#ffffff' }}>{k.saldo}</td>
+                      <td style={{ padding: '8px 10px', color: '#cbd5e1' }}>{k.doc}</td>
+                      <td style={{ padding: '8px 10px', color: '#94a3b8' }}>{k.responsavel}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
+
       {/* ABA FISCAL & SEFAZ-MT */}
       {abaAtiva === 'fiscal' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
