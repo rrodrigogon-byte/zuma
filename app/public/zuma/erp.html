@@ -134,6 +134,9 @@
       <button onclick="mudarAba('caixa-fechamento')" class="tab-btn px-3.5 py-2 rounded-xl text-zuma-muted hover:text-white transition-all flex items-center space-x-1.5">
         <span>💰</span><span>Frente de Caixa & Fechamento</span>
       </button>
+      <button onclick="mudarAba('cardapio-crud')" class="tab-btn px-3.5 py-2 rounded-xl text-zuma-muted hover:text-white transition-all flex items-center space-x-1.5">
+        <span>🍣</span><span>Cardápio & Pratos (CRUD)</span>
+      </button>
       <button onclick="mudarAba('mesas-salao')" class="tab-btn px-3.5 py-2 rounded-xl text-zuma-muted hover:text-white transition-all flex items-center space-x-1.5">
         <span>🍽️</span><span>Mesas, Salão & Rodízio</span>
       </button>
@@ -160,6 +163,57 @@
 
   <!-- ================= CONTEÚDO PRINCIPAL DAS ABAS ================= -->
   <main class="max-w-7xl mx-auto px-4 sm:px-8 py-6 flex-1 w-full space-y-6">
+
+    
+    <!-- ================= ABA CARDÁPIO & PRATOS (CRUD) ================= -->
+    <section id="aba-cardapio-crud" class="hidden space-y-6">
+      <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-6 shadow-md space-y-5">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zuma-border pb-4">
+          <div>
+            <h2 class="text-lg font-black text-white flex items-center gap-2">
+              <span>🍣</span> Gestão Completa de Cardápio Zuma (CRUD)
+            </h2>
+            <p class="text-xs text-zuma-muted">Inclusão, modificação de preços, categorias, setores de produção e exclusão de pratos e sushis</p>
+          </div>
+          <div class="flex items-center space-x-2">
+            <button onclick="abrirModalPrato('novo')" class="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5">
+              <span>➕</span> Incluir Novo Prato
+            </button>
+            <button onclick="carregarCardapioDinamicoErp()" class="px-3.5 py-2 rounded-xl bg-zuma-card hover:bg-zinc-700 text-zinc-300 border border-zuma-border text-xs font-bold transition-all">
+              🔄 Atualizar
+            </button>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <input
+            type="text"
+            id="busca-cardapio-erp"
+            placeholder="Buscar pratos por nome, categoria ou código PDV..."
+            oninput="filtrarCardapioErp(this.value)"
+            class="w-full bg-zuma-card border border-zuma-border rounded-xl px-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-zuma-salmon"
+          />
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead>
+              <tr class="bg-zuma-card text-zuma-muted font-bold uppercase tracking-wider border-b border-zuma-border">
+                <th class="py-3 px-4">Código / PDV</th>
+                <th class="py-3 px-4">Nome do Prato</th>
+                <th class="py-3 px-4">Categoria</th>
+                <th class="py-3 px-4">Setor Produção</th>
+                <th class="py-3 px-4 font-mono">Preço Venda</th>
+                <th class="py-3 px-4 text-right">Ações Rápidas</th>
+              </tr>
+            </thead>
+            <tbody id="tabela-cardapio-erp-corpo" class="divide-y divide-zuma-border/50">
+              <!-- Linhas inseridas dinamicamente via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
 
     <!-- ================= 1. ABA VISÃO GERAL ================= -->
     <section id="aba-visao-geral" class="space-y-6">
@@ -374,7 +428,16 @@
             <h2 class="text-lg font-black text-white">Gestão das 27 Mesas & Rodízio Tangará da Serra</h2>
             <p class="text-xs text-zuma-muted">Salão Principal, Deck Climatizado, Bistrô VIP e Balcão Sushi Bar</p>
           </div>
-          <div class="flex items-center space-x-2 text-xs">
+          <div class="flex items-center space-x-2 text-xs flex-wrap gap-2">
+            <button onclick="abrirModalMesa('novo')" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-all shadow flex items-center gap-1">
+              <span>➕</span> Incluir Mesa
+            </button>
+            <button onclick="abrirModalDividirContaPrompt()" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-all shadow flex items-center gap-1">
+              <span>💸</span> Dividir Conta
+            </button>
+            <button onclick="abrirModalTransferirPrompt()" class="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold transition-all shadow flex items-center gap-1">
+              <span>🔄</span> Transferir Mesa
+            </button>
             <span class="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">● 8 Livres</span>
             <span class="px-2.5 py-1 rounded-lg bg-zuma-salmon/20 text-zuma-salmon font-bold border border-zuma-salmon/30">● 19 Ocupadas</span>
           </div>
@@ -616,6 +679,12 @@
             <p class="text-xs text-zuma-muted">Ficha técnica, registro de perdas, temperatura de câmaras e curva de rendimento útil</p>
           </div>
           <div class="flex items-center space-x-2">
+            <button onclick="abrirModalInsumo('novo')" class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold transition-all shadow flex items-center gap-1">
+              <span>➕</span> Incluir Insumo
+            </button>
+            <button onclick="abrirModalAjusteRapidoPrompt()" class="px-3.5 py-2 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/30 text-xs font-bold transition-all flex items-center gap-1">
+              <span>⚖️</span> Ajuste Rápido
+            </button>
             <button onclick="abrirModalCompraPeixe()" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow">
               + Lançar Entrada de Peixe
             </button>
@@ -1732,7 +1801,11 @@ Tempo estimado: 35-45 min
             <h2 class="text-lg font-black text-white">CRM Gastronômico & Clube Zumi de Fidelidade</h2>
             <p class="text-xs text-zuma-muted">Pontos por consumo (R$ 1 = 1 Ponto), clientes VIP Tangará e aniversariantes</p>
           </div>
-          <button onclick="dispararAniversariantes()" class="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all shadow">
+          <div class="flex items-center space-x-2">
+            <button onclick="abrirModalCrm('novo')" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow flex items-center gap-1">
+              <span>➕</span> Incluir Cliente VIP
+            </button>
+            <button onclick="dispararAniversariantes()" class="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all shadow">
             🎉 Disparar Aniversariantes do Mês
           </button>
         </div>
@@ -2194,5 +2267,404 @@ Cães: ${res.resumo?.caes || 46} itens`);
     window.addEventListener("DOMContentLoaded", ajustarLinksNavegacao);
     setTimeout(ajustarLinksNavegacao, 100);
   </script>
+
+  <!-- ================= MODAIS CRUD UNIVERSAIS ZUMA ================= -->
+  <!-- MODAL: PRATO DO CARDÁPIO -->
+  <div id="modal-prato-erp" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-zuma-surface border border-zuma-border rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-zuma-border pb-3">
+        <h3 id="modal-prato-titulo" class="font-black text-white text-base">➕ Incluir Novo Prato</h3>
+        <button onclick="fecharModalPrato()" class="text-zinc-400 hover:text-white font-bold text-lg">&times;</button>
+      </div>
+      <form id="form-prato-erp" onsubmit="salvarPratoErp(event)" class="space-y-3 text-xs">
+        <input type="hidden" id="prato-id" />
+        <div>
+          <label class="block text-zinc-300 font-bold mb-1">Nome do Prato / Sushi *</label>
+          <input type="text" id="prato-nome" required class="w-full bg-zuma-card border border-zuma-border rounded-lg p-2.5 text-white focus:outline-none focus:border-zuma-salmon" placeholder="Ex: Uramaki Salmão Especial" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-zinc-300 font-bold mb-1">Categoria *</label>
+            <select id="prato-categoria" class="w-full bg-zuma-card border border-zuma-border rounded-lg p-2.5 text-white focus:outline-none focus:border-zuma-salmon">
+              <option value="Combinados Especiais">Combinados Especiais</option>
+              <option value="Sashimis & Niguiris">Sashimis & Niguiris</option>
+              <option value="Uramakis & Hossos">Uramakis & Hossos</option>
+              <option value="Temakis Especiais">Temakis Especiais</option>
+              <option value="Cozinha Quente / Robata">Cozinha Quente / Robata</option>
+              <option value="Bebidas & Saquês">Bebidas & Saquês</option>
+              <option value="Sobremesas Japonesas">Sobremesas Japonesas</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-zinc-300 font-bold mb-1">Preço Venda (R$) *</label>
+            <input type="number" step="0.01" id="prato-preco" required class="w-full bg-zuma-card border border-zuma-border rounded-lg p-2.5 text-white font-mono focus:outline-none focus:border-zuma-salmon" placeholder="45.90" />
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-zinc-300 font-bold mb-1">Código PDV</label>
+            <input type="text" id="prato-cod-pdv" class="w-full bg-zuma-card border border-zuma-border rounded-lg p-2.5 text-white font-mono" placeholder="Ex: 501" />
+          </div>
+          <div>
+            <label class="block text-zinc-300 font-bold mb-1">Praça de Preparo</label>
+            <select id="prato-setor" class="w-full bg-zuma-card border border-zuma-border rounded-lg p-2.5 text-white">
+              <option value="sushi_bar">🍣 Sushi Bar</option>
+              <option value="cozinha_quente">🔥 Cozinha Quente</option>
+              <option value="bar_copa">🍸 Bar / Bebidas</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-zinc-300 font-bold mb-1">Descrição Comercial</label>
+          <textarea id="prato-descricao" rows="2" class="w-full bg-zuma-card border border-zuma-border rounded-lg p-2.5 text-white placeholder-zinc-500" placeholder="Ingredientes nobres, finalização trufada e flor de sal..."></textarea>
+        </div>
+        <div class="flex justify-end gap-2 pt-2 border-t border-zuma-border">
+          <button type="button" onclick="fecharModalPrato()" class="px-4 py-2 rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700 font-bold">Cancelar</button>
+          <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold">Salvar Prato</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: INSUMO / ESTOQUE -->
+  <div id="modal-insumo-erp" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-zuma-surface border border-zuma-border rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-zuma-border pb-3">
+        <h3 id="modal-insumo-titulo" class="font-black text-white text-base">➕ Incluir Novo Insumo</h3>
+        <button onclick="fecharModalInsumo()" class="text-zinc-400 hover:text-white font-bold text-lg">&times;</button>
+      </div>
+      <form id="form-insumo-erp" onsubmit="salvarInsumoErp(event)" class="space-y-3 text-xs">
+        <input type="hidden" id="insumo-id" />
+        <div>
+          <label class="block text-zinc-300 font-bold mb-1">Nome do Insumo *</label>
+          <input type="text" id="insumo-nome" required class="w-full bg-zuma-card border border-zuma-border rounded-lg p-2.5 text-white" placeholder="Ex: Polvo Espanhol Congelado" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-zinc-300 font-bold mb-1">Código</label>
+            <input type="text" id="insumo-codigo" class="w-full bg-zuma-card border border-zuma-border rounded-lg p-2.5 text-white font-mono" placeholder="INS-010" />
+          </div>
+          <div>
+            <label class="block text-zinc-300 font-bold mb-1">Unidade</label>
+            <select id="insumo-unidade" class="w-full bg-zuma-card border border-zuma-border rounded-lg p-2.5 text-white">
+              <option value="kg">kg (Quilograma)</option>
+              <option value="un">un (Unidade)</option>
+              <option value="pct">pct (Pacote)</option>
+              <option value="lt">lt (Litro)</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <div>
+            <label class="block text-zinc-300 font-bold mb-1">Saldo Atual *</label>
+            <input type="number" step="0.01" id="insumo-saldo-atual" required class="w-full bg-zuma-card border border-zuma-border rounded-lg p-2.5 text-white font-mono" placeholder="20.0" />
+          </div>
+          <div>
+            <label class="block text-zinc-300 font-bold mb-1">Mínimo *</label>
+            <input type="number" step="0.01" id="insumo-saldo-minimo" required class="w-full bg-zuma-card border border-zuma-border rounded-lg p-2.5 text-white font-mono" placeholder="5.0" />
+          </div>
+          <div>
+            <label class="block text-zinc-300 font-bold mb-1">Custo Médio (R$)</label>
+            <input type="number" step="0.01" id="insumo-custo" class="w-full bg-zuma-card border border-zuma-border rounded-lg p-2.5 text-white font-mono" placeholder="85.00" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-zinc-300 font-bold mb-1">Fornecedor Padrão</label>
+          <input type="text" id="insumo-fornecedor" class="w-full bg-zuma-card border border-zuma-border rounded-lg p-2.5 text-white" placeholder="Ex: Costa Sul Pescados" />
+        </div>
+        <div class="flex justify-end gap-2 pt-2 border-t border-zuma-border">
+          <button type="button" onclick="fecharModalInsumo()" class="px-4 py-2 rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700 font-bold">Cancelar</button>
+          <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold">Salvar Insumo</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // ESTADO LOCAL DE PRATOS DO CARDÁPIO
+    let cardapioLocalErp = [];
+
+    async function carregarCardapioDinamicoErp() {
+      try {
+        const res = await fetch("/api/public/zuma/cardapio/dinamico");
+        const data = await res.json();
+        if (data.ok && Array.isArray(data.cardapio)) {
+          cardapioLocalErp = data.cardapio;
+          renderizarCardapioErp(cardapioLocalErp);
+        }
+      } catch (err) {
+        console.warn("Erro ao buscar cardápio dinamico:", err);
+      }
+    }
+
+    function renderizarCardapioErp(itens) {
+      const corpo = document.getElementById("tabela-cardapio-erp-corpo");
+      if (!corpo) return;
+      if (!itens.length) {
+        corpo.innerHTML = '<tr><td colspan="6" class="py-6 text-center text-zinc-500">Nenhum prato encontrado</td></tr>';
+        return;
+      }
+      corpo.innerHTML = itens.slice(0, 50).map(p => `
+        <tr class="hover:bg-zinc-800/50">
+          <td class="py-3 px-4 font-mono font-bold text-zuma-salmon">${p.cod_pdv ? '#' + p.cod_pdv : (p.id ? String(p.id).slice(-6) : '-')}</td>
+          <td class="py-3 px-4 font-bold text-white">
+            <div>${p.nome}</div>
+            ${p.descricao ? '<div class="text-[10px] text-zinc-400 font-normal truncate max-w-xs">' + p.descricao + '</div>' : ''}
+          </td>
+          <td class="py-3 px-4 text-zinc-300">${p.categoria_nome || p.categoria || 'Oriental'}</td>
+          <td class="py-3 px-4"><span class="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 text-[10px] border border-zinc-700">${p.setor_producao || 'sushi_bar'}</span></td>
+          <td class="py-3 px-4 font-mono font-bold text-emerald-400">R$ ${Number(p.preco || 0).toFixed(2).replace('.', ',')}</td>
+          <td class="py-3 px-4 text-right space-x-1">
+            <button onclick="abrirModalPrato('editar', '${p.id}')" class="px-2 py-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 rounded text-[11px] font-bold">✏️ Modificar</button>
+            <button onclick="excluirPratoErp('${p.id}', '${p.nome.replace(/'/g, "")}')" class="px-2 py-1 bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/30 rounded text-[11px] font-bold">🗑️ Excluir</button>
+          </td>
+        </tr>
+      `).join("");
+    }
+
+    function filtrarCardapioErp(termo) {
+      const t = termo.toLowerCase().trim();
+      const filtrados = cardapioLocalErp.filter(p => 
+        (p.nome && p.nome.toLowerCase().includes(t)) ||
+        (p.categoria && p.categoria.toLowerCase().includes(t)) ||
+        (p.cod_pdv && String(p.cod_pdv).includes(t))
+      );
+      renderizarCardapioErp(filtrados);
+    }
+
+    function abrirModalPrato(modo, id) {
+      const modal = document.getElementById("modal-prato-erp");
+      const titulo = document.getElementById("modal-prato-titulo");
+      modal.classList.remove("hidden");
+      if (modo === "novo") {
+        titulo.innerText = "➕ Incluir Novo Prato";
+        document.getElementById("prato-id").value = "";
+        document.getElementById("prato-nome").value = "";
+        document.getElementById("prato-preco").value = "";
+        document.getElementById("prato-cod-pdv").value = "";
+        document.getElementById("prato-descricao").value = "";
+      } else {
+        titulo.innerText = "✏️ Modificar Prato";
+        const p = cardapioLocalErp.find(it => String(it.id) === String(id));
+        if (p) {
+          document.getElementById("prato-id").value = p.id;
+          document.getElementById("prato-nome").value = p.nome || "";
+          document.getElementById("prato-preco").value = p.preco || "";
+          document.getElementById("prato-cod-pdv").value = p.cod_pdv || "";
+          document.getElementById("prato-categoria").value = p.categoria_nome || p.categoria || "Combinados Especiais";
+          document.getElementById("prato-setor").value = p.setor_producao || "sushi_bar";
+          document.getElementById("prato-descricao").value = p.descricao || "";
+        }
+      }
+    }
+
+    function fecharModalPrato() {
+      document.getElementById("modal-prato-erp").classList.add("hidden");
+    }
+
+    async function salvarPratoErp(e) {
+      e.preventDefault();
+      const id = document.getElementById("prato-id").value;
+      const payload = {
+        nome: document.getElementById("prato-nome").value,
+        categoria: document.getElementById("prato-categoria").value,
+        preco: parseFloat(document.getElementById("prato-preco").value),
+        cod_pdv: document.getElementById("prato-cod-pdv").value,
+        setor_producao: document.getElementById("prato-setor").value,
+        descricao: document.getElementById("prato-descricao").value
+      };
+      try {
+        const url = id ? `/api/public/zuma/cardapio/item/${id}` : "/api/public/zuma/cardapio/item";
+        const method = id ? "PUT" : "POST";
+        const res = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.ok) {
+          alert(data.mensagem || "Prato salvo com sucesso!");
+          fecharModalPrato();
+          carregarCardapioDinamicoErp();
+        } else {
+          alert("Erro: " + (data.error || "Falha ao salvar prato"));
+        }
+      } catch (err) {
+        alert("Erro na requisição: " + err.message);
+      }
+    }
+
+    async function excluirPratoErp(id, nome) {
+      if (!confirm(`Deseja realmente excluir o prato "${nome}" do cardápio?`)) return;
+      try {
+        const res = await fetch(`/api/public/zuma/cardapio/item/${id}`, { method: "DELETE" });
+        const data = await res.json();
+        if (data.ok) {
+          alert(data.mensagem || "Prato excluído!");
+          carregarCardapioDinamicoErp();
+        }
+      } catch (err) {
+        alert("Erro ao excluir: " + err.message);
+      }
+    }
+
+    // MODAL INSUMO ESTOQUE
+    function abrirModalInsumo(modo, id) {
+      const modal = document.getElementById("modal-insumo-erp");
+      const titulo = document.getElementById("modal-insumo-titulo");
+      modal.classList.remove("hidden");
+      if (modo === "novo") {
+        titulo.innerText = "➕ Incluir Novo Insumo";
+        document.getElementById("insumo-id").value = "";
+        document.getElementById("insumo-nome").value = "";
+        document.getElementById("insumo-codigo").value = "";
+        document.getElementById("insumo-saldo-atual").value = "";
+        document.getElementById("insumo-saldo-minimo").value = "";
+        document.getElementById("insumo-custo").value = "";
+        document.getElementById("insumo-fornecedor").value = "";
+      }
+    }
+
+    function fecharModalInsumo() {
+      document.getElementById("modal-insumo-erp").classList.add("hidden");
+    }
+
+    async function salvarInsumoErp(e) {
+      e.preventDefault();
+      const id = document.getElementById("insumo-id").value;
+      const payload = {
+        nome: document.getElementById("insumo-nome").value,
+        codigo: document.getElementById("insumo-codigo").value,
+        unidade: document.getElementById("insumo-unidade").value,
+        saldoAtual: parseFloat(document.getElementById("insumo-saldo-atual").value),
+        saldoMinimo: parseFloat(document.getElementById("insumo-saldo-minimo").value),
+        custoMedioUnitario: parseFloat(document.getElementById("insumo-custo").value) || 0,
+        fornecedor: document.getElementById("insumo-fornecedor").value
+      };
+      try {
+        const url = id ? `/api/public/zuma/estoque/insumo/${id}` : "/api/public/zuma/estoque/insumo";
+        const method = id ? "PUT" : "POST";
+        const res = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.ok) {
+          alert(data.mensagem || "Insumo salvo com sucesso!");
+          fecharModalInsumo();
+        } else {
+          alert("Erro: " + data.error);
+        }
+      } catch (err) {
+        alert("Erro ao salvar: " + err.message);
+      }
+    }
+
+    // OPERAÇÕES RÁPIDAS COM PROMPT
+    async function abrirModalAjusteRapidoPrompt() {
+      const insumo = prompt("ID ou código do insumo para ajuste rápido (ex: ins-salmao-fresco):", "ins-salmao-fresco");
+      if (!insumo) return;
+      const novoSaldo = prompt("Novo saldo real aferido em inventário (kg):", "22.5");
+      if (!novoSaldo) return;
+      const motivo = prompt("Motivo do ajuste:", "Balanço Físico Semanal / Auditoria");
+      try {
+        const res = await fetch("/api/public/zuma/estoque/ajuste-rapido", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ insumoId: insumo, novoSaldo: parseFloat(novoSaldo), motivo })
+        });
+        const data = await res.json();
+        alert(data.ok ? ("⚖️ " + data.mensagem) : ("Erro: " + data.error));
+      } catch (err) {
+        alert("Erro no ajuste rápido: " + err.message);
+      }
+    }
+
+    async function abrirModalMesa(modo) {
+      const num = prompt("Número da nova mesa:", "28");
+      if (!num) return;
+      const setor = prompt("Setor (Salão Principal, Deck Climatizado, Sushi Bar, Tatame VIP):", "Salão Principal");
+      const cap = prompt("Capacidade de pessoas:", "4");
+      try {
+        const res = await fetch("/api/public/zuma/mesas", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ numero: parseInt(num), setor, capacidade: parseInt(cap) || 4 })
+        });
+        const data = await res.json();
+        alert(data.ok ? ("🍽️ " + data.mensagem) : ("Erro: " + data.error));
+      } catch (err) {
+        alert("Erro: " + err.message);
+      }
+    }
+
+    async function abrirModalDividirContaPrompt() {
+      const mesa = prompt("Número da mesa para divisão de conta:", "04");
+      if (!mesa) return;
+      const pessoas = prompt("Dividir entre quantas pessoas?", "3");
+      if (!pessoas) return;
+      try {
+        const res = await fetch("/api/public/zuma/mesas/dividir-conta", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ numeroMesa: mesa, numeroPessoas: parseInt(pessoas) || 2, incluirDezPorcento: true })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          alert(`💸 Divisão de Conta Mesa ${mesa}:
+Total c/ 10%: R$ ${data.valorTotal.toFixed(2)}
+Valor por Pessoa (${data.pessoas}x): R$ ${data.valorPorPessoa.toFixed(2)}
+Chave PIX: 36.296.848/0001-57`);
+        } else {
+          alert("Erro: " + data.error);
+        }
+      } catch (err) {
+        alert("Erro ao dividir conta: " + err.message);
+      }
+    }
+
+    async function abrirModalTransferirPrompt() {
+      const origem = prompt("Mesa de ORIGEM (ex: 04):", "04");
+      if (!origem) return;
+      const destino = prompt("Mesa de DESTINO (ex: 08):", "08");
+      if (!destino) return;
+      try {
+        const res = await fetch("/api/public/zuma/mesas/transferir-comanda", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mesaOrigem: origem, mesaDestino: destino, garcom: "Carlos Silva" })
+        });
+        const data = await res.json();
+        alert(data.ok ? ("🔄 " + data.mensagem) : ("Erro: " + data.error));
+      } catch (err) {
+        alert("Erro na transferência: " + err.message);
+      }
+    }
+
+    async function abrirModalCrm(modo) {
+      const nome = prompt("Nome completo do cliente VIP:", "Dr. Fernando Magalhães");
+      if (!nome) return;
+      const tel = prompt("Telefone / WhatsApp:", "(65) 99988-1122");
+      const prato = prompt("Prato predileto:", "Sashimi de Salmão Trufado c/ Raspas de Limão Siciliano");
+      try {
+        const res = await fetch("/api/public/zuma/crm/cliente", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nome, telefone: tel, pratosFavoritos: [prato], segmentoRFV: "VIP Ouro" })
+        });
+        const data = await res.json();
+        alert(data.ok ? ("⭐ " + data.mensagem) : ("Erro: " + data.error));
+      } catch (err) {
+        alert("Erro ao cadastrar cliente: " + err.message);
+      }
+    }
+
+    // Inicialização ao carregar
+    window.addEventListener("DOMContentLoaded", () => {
+      carregarCardapioDinamicoErp();
+    });
+  </script>
+
 </body>
 </html>

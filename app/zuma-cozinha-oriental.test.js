@@ -1907,3 +1907,17 @@ test("Zuma Cozinha Oriental - Operações Avançadas de Estoque: Ajuste Rápido 
   assert.equal(ajusteRes.data.novoSaldo, 35.5);
   assert.equal(ESTOQUE_PESCADOS_ZUMA['ins-salmao-fresco'].saldoAtual, 35.5);
 });
+
+
+test("Zuma Cozinha Oriental - Central ERP PWA (erp.html): CRUD Dinâmico de Cardápio, Mesas, Insumos e Modais", () => {
+  const erpHtmlPath = path.join(__dirname, "public", "zuma", "erp.html");
+  assert.ok(fs.existsSync(erpHtmlPath), "erp.html deve existir em app/public/zuma/");
+  const content = fs.readFileSync(erpHtmlPath, "utf8");
+  assert.ok(content.includes("aba-cardapio-crud"), "Deve conter aba de CRUD de cardápio");
+  assert.ok(content.includes("modal-prato-erp"), "Deve conter modal de pratos");
+  assert.ok(content.includes("modal-insumo-erp"), "Deve conter modal de insumos");
+  assert.ok(content.includes("abrirModalDividirContaPrompt"), "Deve conter função de divisão de conta");
+  assert.ok(content.includes("abrirModalTransferirPrompt"), "Deve conter função de transferência de mesas");
+  assert.ok(content.includes("abrirModalAjusteRapidoPrompt"), "Deve conter função de ajuste rápido de estoque");
+  assert.ok(content.includes("carregarCardapioDinamicoErp"), "Deve conter inicialização de cardápio dinâmico");
+});

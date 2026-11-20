@@ -303,15 +303,18 @@ A entrega foi implantada em produção via Git na branch oficial `fix/kytto-coma
 | **Transferência de Mesas** | `POST /mesas/transferir-comanda` | **200 OK** | Comanda transferida entre mesas |
 | **Ajuste de Estoque** | `POST /estoque/ajuste-rapido` | **200 OK** | Ajuste rápido de inventário registrado |
 
-### 13.2. Suíte de Testes Automatizados (40/40 Aprovados)
+### 13.2. Suíte de Testes Automatizados (42/42 Aprovados)
 
 - **Comando de Execução:** `node --test app/zuma-cozinha-oriental.test.js`
-- **Total de Testes:** 40 cenários automatizados
-- **Testes Aprovados:** 40 (100% de sucesso)
+- **Total de Testes:** 42 cenários automatizados
+- **Testes Aprovados:** 42 (100% de sucesso)
 - **Falhas / Cancelados:** 0 falhas
 
 ### 13.3. Interfaces & Telas Homologadas
 
 - **URL da Suíte Completa:** [https://kytto.com.br/admin](https://kytto.com.br/admin)
 - **URL do Cardápio & Delivery:** [https://zuma.kytto.com.br](https://zuma.kytto.com.br)
+- **URL da Central ERP PWA Dedicada:** [https://zuma.kytto.com.br/erp.html](https://zuma.kytto.com.br/erp.html)
+- **URL da Frente de Caixa Touch PDV:** [https://zuma.kytto.com.br/caixa.html](https://zuma.kytto.com.br/caixa.html)
+- **URL do Cockpit do Proprietário:** [https://zuma.kytto.com.br/proprietario.html](https://zuma.kytto.com.br/proprietario.html)
 - **Serviço Render:** `srv-d8iudokm0tmc73c07iog` (Projeto Kytto Multi-Tenant)
