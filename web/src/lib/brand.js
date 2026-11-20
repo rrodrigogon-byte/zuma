@@ -136,7 +136,20 @@ export const PALATARE_LOGO = "/palatare-logo.png"
 export const PALATARE_BANNER = "/palatare-banner.png"
 export const CONCRETO_LOGO = "/brand/concreto-usina-logo.png"
 
+export function isZumaBrandContext(...contexts) {
+  return contexts.some((context) => {
+    const values = context && typeof context === "object"
+      ? [context.id, context.tipoNegocio, context.tipo_negocio, context.segmento, context.vertical, context.brandKey, context.brand_key, context.slug, context.codigo, context.alias, context.nome, context.nome_fantasia, context.razaoSocial, context.cnpj]
+      : [context]
+    return values.some((value) => {
+      const v = String(value || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      return /\bzuma\b|c3c3ac01-8e50-4b61-8c79-de4aaa916da3|36296848000157|\bcozinha oriental\b|\boriental\b|\bsushi\b/.test(v)
+    })
+  })
+}
+
 export function isRestauranteBrandContext(...contexts) {
+  if (isZumaBrandContext(...contexts)) return false
   return contexts.some((context) => {
     const values = context && typeof context === "object"
       ? [context.tipoNegocio, context.tipo_negocio, context.segmento, context.vertical, context.brandKey, context.brand_key, context.slug, context.codigo, context.alias, context.nome, context.nome_fantasia, context.razaoSocial]
