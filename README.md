@@ -4,7 +4,7 @@
 ![Segmento](https://img.shields.io/badge/segmento-Culinária%20Japonesa%20%26%20Rodízio-gold.svg)
 ![Local](https://img.shields.io/badge/local-Tangará%20da%20Serra--MT-green.svg)
 ![Barramento](https://img.shields.io/badge/barramento-A2%20Síncrono%20Ativo-emerald.svg)
-![Testes](https://img.shields.io/badge/testes-18%2F18%20Aprovados%20(100%25)-brightgreen.svg)
+![Testes](https://img.shields.io/badge/testes-19%2F19%20Aprovados%20(100%25)-brightgreen.svg)
 
 O repositório **Zuma** é a suíte tecnológica completa e standalone do restaurante **Zuma Cozinha Oriental LTDA** (Tangará da Serra - MT), construída utilizando como base o robusto ecossistema de ERP corporativo do **agro-open / Kytto**.
 
@@ -31,7 +31,7 @@ O sistema oferece três experiências web integradas com sincronização em temp
 ### 1. 📱 Cardápio Digital PWA & Autoatendimento (`/zuma`)
 * **URL:** `https://kytto.com.br/zuma/` (ou `/zuma/index.html`)
 * **Experiência do Cliente:** PWA instalável offline-first com tempo de resposta de 0,1s.
-* **211 Itens Reais em 23 Categorias:** Sashimis, combinados, hossomakis, uramakis, hots especiais, pratos quentes, robatas, sobremesas, sodas italianas e saquês.
+* **211 Itens Reais em 23 Categorias:** Sincronizado 100% com `https://zumacozinhaoriental.com.br/loja/pedidos`, incluindo 116 fotos reais oficiais de alta resolução hospedadas no CDN da Liga dos Pedidos (`cdnimages.ligafiles.com.br` e `alloydeliveryimages.ligafiles.com.br`), capas webp panorâmicas para todas as 23 categorias e grupos de complementos reais.
 * **Construtor Dinâmico de Barcas 360°:** O cliente monta barcas personalizadas peça por peça visualizando valor e foto.
 * **Sommelier de Saquês & Harmonização:** Sugestão de bebidas guiada por ocasião e preferência de paladar.
 * **Rodízio Tangará:** Rodízio tradicional a R$ 99,90/pessoa (segunda a sábado).
@@ -141,7 +141,17 @@ npm --prefix web run build
 ```bash
 npm run test:zuma
 ```
-*Saída esperada: 18 testes aprovados (100% pass).*
+*Saída esperada: 19 testes aprovados (100% pass).*
+
+### Sincronização Automatizada do Catálogo Real
+O repositório inclui a ferramenta de extração e sincronização direta com a loja oficial:
+```bash
+python3 scripts/sync_zuma_catalog.py
+```
+Ela atualiza simultaneamente:
+1. `app/public/zuma/cardapio-real-zuma.json`
+2. `app/zuma-cozinha-oriental-seed.js`
+3. `app/public/zuma/index.html` (catálogo offline e PWA)
 
 ### Inicialização do Servidor
 ```bash

@@ -448,3 +448,29 @@ test('Zuma Cozinha Oriental - Módulos de Diferenciação Japonesa no Cardápio 
   assert.ok(html.includes('abrirModalCustomizacao'), 'Deve conter função de abertura do modal');
 });
 
+test('Zuma Cozinha Oriental - Catálogo 100% Real Sincronizado com zumacozinhaoriental.com.br', () => {
+  const cardapioJsonPath = path.join(__dirname, 'public', 'zuma', 'cardapio-real-zuma.json');
+  assert.ok(fs.existsSync(cardapioJsonPath), 'cardapio-real-zuma.json deve existir');
+  const cardapio = JSON.parse(fs.readFileSync(cardapioJsonPath, 'utf8'));
+
+  assert.equal(cardapio.totalProdutos, 211, 'Deve ter exatamente 211 produtos reais');
+  assert.equal(cardapio.totalCategorias, 23, 'Deve ter exatamente 23 categorias reais');
+  assert.equal(cardapio.totalFotosReais, 116, 'Deve ter 116 produtos com foto real oficial de CDN');
+  assert.ok(cardapio.destaques.sugestao_da_casa, 'Deve conter sugestões da casa oficiais');
+  assert.equal(cardapio.destaques.sugestao_da_casa.itens.length, 11, 'Deve conter 11 itens nas sugestões da casa');
+
+  // Todas as 23 categorias devem conter capa oficial de CDN
+  const categoriasComCapa = cardapio.categorias.filter(c => c.capa_url && c.capa_url.includes('cdnimages.ligafiles.com.br'));
+  assert.equal(categoriasComCapa.length, 23, 'Todas as 23 categorias devem ter capa oficial de CDN');
+
+  // Produtos devem conter grupos de complementos reais da loja
+  const produtosComComplementos = cardapio.produtos.filter(p => p.categorias_complementos && p.categorias_complementos.length > 0);
+  assert.ok(produtosComComplementos.length >= 170, 'Pelo menos 170 produtos devem conter grupos de complementos oficiais');
+
+  // Verificar PWA index.html com os novos componentes
+  const indexHtml = fs.readFileSync(path.join(__dirname, 'public', 'zuma', 'index.html'), 'utf8');
+  assert.ok(indexHtml.includes('id="categoria-banner-container"'), 'PWA deve conter banner hero dinâmico de categoria');
+  assert.ok(indexHtml.includes('id="modal-complementos-dinamicos"'), 'Modal deve conter container de complementos dinâmicos');
+  assert.ok(indexHtml.includes('id="modal-fotos-galeria"'), 'Modal deve conter galeria multi-fotos');
+  assert.ok(indexHtml.includes('setFiltroRapido'), 'PWA deve conter função de filtros rápidos');
+});
