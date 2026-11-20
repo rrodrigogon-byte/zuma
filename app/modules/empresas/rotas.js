@@ -134,6 +134,7 @@ export function createEmpresasAdminRouter({ db, isPlatformAdmin = () => false, o
         empresaIdFiltro = autorizadas;
       }
     }
+    }
 
     const empresas = await svc.listarEmpresas(db, {
       incluirInativas: req.query.incluir_inativas === 'true' || req.query.incluirInativas === 'true',
