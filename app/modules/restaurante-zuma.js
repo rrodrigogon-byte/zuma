@@ -66,7 +66,7 @@ routerZuma.get('/storefront', (req, res) => {
 });
 
 // GET /api/public/zuma/cardapio — Catálogo dos 211 produtos com filtros de busca, categoria e setor
-routerZuma.get('/cardapio', (req, res) => {
+routerZuma.get(['/cardapio', '/cardapio/dinamico'], (req, res) => {
   const { categoria, setor, busca, destaque } = req.query;
   let itens = CARDAPIO_DINAMICO_ZUMA.map(p => ({
     ...p,
