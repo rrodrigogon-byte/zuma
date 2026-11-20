@@ -209,15 +209,3 @@ export function brandThemeMode(brand, pathname, preference = 'system') {
   if (!admin) return 'light'
   return mode === 'system' ? 'light' : mode
 }
-
-export function isZumaBrandContext(...contexts) {
-  return contexts.some((context) => {
-    const values = context && typeof context === "object"
-      ? [context.tipoNegocio, context.tipo_negocio, context.segmento, context.vertical, context.brandKey, context.brand_key, context.slug, context.codigo, context.alias, context.nome, context.nome_fantasia, context.razaoSocial]
-      : [context]
-    return values.some((value) => {
-      const v = String(value || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-      return /\bzuma\b|cozinha oriental|sushiman/.test(v)
-    })
-  })
-}
