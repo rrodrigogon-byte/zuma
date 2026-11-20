@@ -5653,9 +5653,11 @@ app.delete('/api/admin/comanda/:id', auth, (req,res)=>{
 
 // GET /api/admin/mesas — alias público (PDV e admin Mesas usam este path)
 app.get('/api/admin/mesas', auth, requireStaff, (req,res)=>{
-  const abertas = db().comandas.filter(c=>c.status==='aberta');
+  const empId = legacyEmpresaId(req);
+  const totalMesas = (empId === ZUMA_EMPRESA_ID || String(empId).includes('zuma')) ? 25 : getMesasFisicas();
+  const abertas = (db().comandas || []).filter(c=>c.status==='aberta' && (!c.empresaId || String(c.empresaId) === String(empId)));
   const fisicas = [];
-  for(let n=1;n<=getMesasFisicas();n++){
+  for(let n=1;n<=totalMesas;n++){
     const c = abertas.find(x=>x.tipo==='fisica' && x.mesaNum===n);
     fisicas.push({ num:n, tipo:'fisica', status: c?(c.contaPedida?'conta':'ocupada'):'livre',
       comandaId:c?c.id:null, total:c?comandaTotal(c):0, nome:c?c.nome:'', abertaEm:c?c.abertaEm:null,
@@ -5664,13 +5666,17 @@ app.get('/api/admin/mesas', auth, requireStaff, (req,res)=>{
   const virtuais = abertas.filter(c=>c.tipo==='virtual').map(c=>({ comandaId:c.id, tipo:'virtual', nome:c.nome,
     local:c.local||null, status: c.contaPedida?'conta':'ocupada', total:comandaTotal(c), abertaEm:c.abertaEm,
     aguardandoCozinha: c.itens.some(i=>i.cozinha && i.status==='em_preparo') }));
-  res.json({ fisicas, virtuais, totalMesasFisicas:getMesasFisicas() });
+  res.json({ fisicas, virtuais, totalMesasFisicas: totalMesas });
 });
 
 // GET /api/admin/comandas — listar todas as comandas (abertas + fechadas recentes)
 app.get('/api/admin/comandas', auth, requireStaff, (req,res)=>{
+  const empId = legacyEmpresaId(req);
   const hoje = new Date().toISOString().slice(0,10);
-  const lista = (db().comandas||[]).filter(c=> c.status==='aberta' || (c.fechadaEm||'').startsWith(hoje));
+  const lista = (db().comandas||[]).filter(c=> 
+    (!c.empresaId || String(c.empresaId) === String(empId)) &&
+    (c.status==='aberta' || (c.fechadaEm||'').startsWith(hoje))
+  );
   res.json(lista.map(c=>({ ...c, total: comandaTotal(c) })));
 });
 
@@ -5891,18 +5897,33 @@ function empresaDinoDoEstado() {
   return candidatas.length === 1 ? String(candidatas[0][0]) : '';
 }
 
+function hostZuma(req) {
+  const host = String(req.hostname || req.headers.host || '').split(':')[0].toLowerCase();
+  if (host === 'zuma.kytto.com.br' || host.endsWith('.zuma.kytto.com.br') || host.includes('zumacozinhaoriental')) return true;
+  const slug = String(req.query?.slug || req.headers?.['x-empresa-slug'] || req.headers?.['x-store-slug'] || '').trim().toLowerCase();
+  if (slug === 'zuma') return true;
+  const ref = String(req.headers?.referer || '').toLowerCase();
+  if (ref.includes('/zuma')) return true;
+  const path = String(req.originalUrl || req.path || '').toLowerCase();
+  if (path.startsWith('/api/zuma') || path.startsWith('/api/public/zuma') || path.startsWith('/api/admin/zuma')) return true;
+  return false;
+}
+
 function legacyEmpresaId(req) {
   const requested = String(req.headers['x-empresa-id'] || '').trim();
   const signed = String(req.user?.empresaId || '').trim();
+  if (requested === ZUMA_EMPRESA_ID || requested.toLowerCase().includes('zuma')) return ZUMA_EMPRESA_ID;
   if (req.barbeariaContext?.empresaId) return legacyEmpresaIdFromCommerce(req.barbeariaContext.empresaId);
   if (requested && (isPlatformAdminUser(req.user) || isMainAdminUser(req.user))) return legacyEmpresaIdFromCommerce(requested);
   if (signed) return legacyEmpresaIdFromCommerce(signed);
+  if (hostZuma(req)) return ZUMA_EMPRESA_ID;
   if (hostDino(req)) return legacyEmpresaIdFromCommerce(empresaDinoDoEstado()) || DINO_COMMERCE_EMPRESA_ID;
   return 'principal';
 }
 
 function legacyLojaId(req) {
   const requested = String(req.headers['x-loja-id'] || '').trim();
+  if (requested === 'c3c3ac01-8e50-4b61-8c79-de4aaa916da0' || (hostZuma(req) && !requested)) return 'c3c3ac01-8e50-4b61-8c79-de4aaa916da0';
   const signed = String(req.user?.lojaId || '').trim();
   const rawEmpresa = String(req.barbeariaContext?.empresaId || req.user?.empresaId || (isPlatformAdminUser(req.user) || isMainAdminUser(req.user) ? req.headers['x-empresa-id'] : '') || '').trim();
   if (req.barbeariaContext?.lojaId) return legacyLojaIdFromCommerce(req.barbeariaContext.lojaId, rawEmpresa);
@@ -9829,12 +9850,14 @@ app.get('/api/admin/barbearia/clientes/busca', (req, res) => {
 app.get(['/api/admin/barbearia/carteira-clientes', '/api/admin/dino/carteira-clientes'], (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
+    const force = req.query?.force === 'true' || req.query?.refresh === 'true';
     const resultado = dinoCarteiraClientes.listarCarteiraClientes(empresaId, {
       profissionalId: req.query?.profissionalId || '',
       lojaId: legacyLojaId(req),
       busca: req.query?.busca || '',
       filtroRetorno: req.query?.filtroRetorno || 'todos',
       limite: Number(req.query?.limite) || 300,
+      force,
     });
     res.json({ ok: true, ...resultado });
   } catch (error) {
@@ -9845,8 +9868,10 @@ app.get(['/api/admin/barbearia/carteira-clientes', '/api/admin/dino/carteira-cli
 app.get(['/api/admin/barbearia/carteira-clientes/resumo', '/api/admin/dino/carteira-clientes/resumo'], (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
+    const force = req.query?.force === 'true' || req.query?.refresh === 'true';
     const resumo = dinoCarteiraClientes.resumoCarteirasProfissionais(empresaId, {
       lojaId: legacyLojaId(req),
+      force,
     });
     res.json({ ok: true, ...resumo });
   } catch (error) {
@@ -9880,11 +9905,11 @@ app.post(['/api/admin/barbearia/carteira-clientes/disparar-reativacao', '/api/ad
       const listagem = dinoCarteiraClientes.listarCarteiraClientes(empresaId, {
         profissionalId,
         filtroRetorno,
-        limite: 100,
+        limite: 150,
       });
       clientesAlvo = listagem.clientes;
     }
-    const disparos = (clientesAlvo || []).map((c) => {
+    const disparos = (clientesAlvo || []).slice(0, 300).map((c) => {
       const msg = dinoCarteiraClientes.gerarMensagemWhatsappRetorno({
         clienteNome: c.nome,
         barbeiroApelido: c.barbeiroApelido || 'Dino',
@@ -9894,7 +9919,7 @@ app.post(['/api/admin/barbearia/carteira-clientes/disparar-reativacao', '/api/ad
       const tel = String(c.telefone || '').replace(/\D/g, '');
       const telCompleto = tel.startsWith('55') ? tel : `55${tel}`;
       return {
-        clienteId: c.clienteId,
+        clienteId: c.clienteId || c.id,
         nome: c.nome,
         telefone: c.telefone,
         whatsappUrl: tel.length >= 10 ? `https://wa.me/${telCompleto}?text=${encodeURIComponent(msg)}` : null,

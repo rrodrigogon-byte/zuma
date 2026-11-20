@@ -5160,6 +5160,44 @@ export async function provisionarZumaRestaurante({ commerceDb } = {}) {
       resultados.produtosCriados++;
     }
 
+    // 4.1 Cardápio e Estoque Oficial do ERP Kytto para Zuma
+    rootDb.cardapioPorEmpresa ||= {};
+    rootDb.cardapioPorEmpresa[ZUMA_EMPRESA_ID] = ZUMA_CARDAPIO_COMPLETO.map((p) => ({
+      id: `prod-zuma-${p.id}`,
+      empresaId: ZUMA_EMPRESA_ID,
+      nome: p.nome,
+      cat: p.categoria || 'Oriental',
+      categoria: p.categoria || 'Oriental',
+      preco: Number(p.preco || 0),
+      custo: Number(p.preco || 0) * 0.35,
+      estoqueAtual: Number(p.estoque || 50),
+      estoqueMinimo: Number(p.minimo || 10),
+      unidade: p.unidade || 'UN',
+      setor: p.setor || 'sushi_bar',
+      cozinha: true,
+      foto: p.foto || '',
+      codPdv: p.cod_pdv || ''
+    }));
+
+    rootDb.estoquePorEmpresa ||= {};
+    rootDb.estoquePorEmpresa[ZUMA_EMPRESA_ID] ||= {};
+    for (const item of rootDb.cardapioPorEmpresa[ZUMA_EMPRESA_ID]) {
+      rootDb.estoquePorEmpresa[ZUMA_EMPRESA_ID][item.id] = {
+        id: item.id,
+        produtoId: item.id,
+        empresaId: ZUMA_EMPRESA_ID,
+        nome: item.nome,
+        cat: item.cat,
+        preco: item.preco,
+        qtd: item.estoqueAtual,
+        custo: item.custo,
+        min: item.estoqueMinimo,
+        controlaEstoque: true,
+        unidade: item.unidade,
+        criadoEm: new Date().toISOString()
+      };
+    }
+
     // 5. Clientes CRM no Datastore JSON
     for (const c of ZUMA_CLIENTES_CRM) {
       let cIdx = rootDb.clientes.findIndex(x => x.empresa_id === ZUMA_EMPRESA_ID && x.telefone === c.whatsapp);

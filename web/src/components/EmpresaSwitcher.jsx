@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
+import { useAuth } from "../lib/auth";
 import {
   HOLDING_PALATARE_EMPRESA_ID,
   PALATARE_PIZZARIA_EMPRESA_ID,
@@ -9,6 +10,11 @@ import {
   isGrupoPalatareEmpresa,
   deduplicarEmpresas
 } from "../lib/palatare-constants";
+import {
+  ZUMA_EMPRESA_ID,
+  ZUMA_COMPANY,
+  isZumaEmpresa
+} from "../lib/zuma-constants";
 
 function iconeEmpresa(emp) {
   if (!emp) return "🏢";
@@ -17,6 +23,7 @@ function iconeEmpresa(emp) {
   if (emp.logoUrl) {
     return <img src={emp.logoUrl} alt={emp.nome || ''} style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover' }} />;
   }
+  if (nome.includes("zuma") || nome.includes("oriental") || nome.includes("sushi")) return "🍣";
   if (tipo === "restaurante" || nome.includes("palatare") || nome.includes("pizza")) return "🍕";
   if (tipo === "concreto" || nome.includes("concreto") || nome.includes("serrano") || nome.includes("usina")) return "🚚";
   if (tipo === 'barbearia' || nome.includes('dino')) return '💈';
@@ -34,6 +41,7 @@ export default function EmpresaSwitcher() {
   const [ehAdminPlataforma, setEhAdminPlataforma] = useState(false);
   const ref = useRef(null);
   const navigate = useNavigate();
+  const { trocarEmpresa: authTrocarEmpresa } = useAuth() || {};
 
   // Carregar empresa ativa inicial do localStorage
   useEffect(() => {
@@ -67,6 +75,10 @@ export default function EmpresaSwitcher() {
       // Garante SEMPRE as 3 empresas canônicas do Grupo Palatare (Holding, Pizzaria, Concreto)
       for (const empGp of GRUPO_PALATARE_EMPRESAS) {
         lista.push(empGp);
+      }
+      // Garante SEMPRE a presença canônica de Zuma Cozinha Oriental
+      if (!lista.some(e => e.id === ZUMA_EMPRESA_ID || isZumaEmpresa(e.id))) {
+        lista.push(ZUMA_COMPANY);
       }
       lista = deduplicarEmpresas(lista);
 
@@ -120,12 +132,17 @@ export default function EmpresaSwitcher() {
         localStorage.setItem("loja_ativa", JSON.stringify(emp.lojas[0]));
         localStorage.setItem("sp_loja_ativa", JSON.stringify(emp.lojas[0]));
       }
+      if (typeof authTrocarEmpresa === 'function') {
+        authTrocarEmpresa(emp.id);
+      }
       window.dispatchEvent(new CustomEvent("empresa_alterada", { detail: emp }));
     } catch {}
     setAberto(false);
-    if (emp.id === HOLDING_PALATARE_EMPRESA_ID || emp.tipoNegocio === 'holding') {
+    if (emp.id === ZUMA_EMPRESA_ID || isZumaEmpresa(emp.id) || isZumaEmpresa(emp.nome)) {
+      navigate('/admin/zuma');
+    } else if (emp.id === HOLDING_PALATARE_EMPRESA_ID || emp.tipoNegocio === 'holding') {
       navigate('/admin/concreto?secao=empresa-holding');
-    } else if (emp.id === PALATARE_PIZZARIA_EMPRESA_ID || emp.tipoNegocio === 'restaurante') {
+    } else if (emp.id === PALATARE_PIZZARIA_EMPRESA_ID || (emp.tipoNegocio === 'restaurante' && String(emp.nome || '').toLowerCase().includes('palatare'))) {
       navigate('/admin/pizzaria');
     } else if (emp.id === SERRANO_CONCRETO_EMPRESA_ID || emp.tipoNegocio === 'concreto') {
       navigate('/admin/concreto');
@@ -232,7 +249,8 @@ export default function EmpresaSwitcher() {
             {/* 1. SEÇÃO GRUPO PALATARE (HOLDING E CONTROLADAS) */}
             {(() => {
               const empresasPalatare = empresas.filter(e => isGrupoPalatareEmpresa(e.id) || isGrupoPalatareEmpresa(e.nome));
-              const outrasEmpresas = empresas.filter(e => !isGrupoPalatareEmpresa(e.id) && !isGrupoPalatareEmpresa(e.nome));
+              const empresasZuma = empresas.filter(e => isZumaEmpresa(e.id) || isZumaEmpresa(e.nome));
+              const outrasEmpresas = empresas.filter(e => !isGrupoPalatareEmpresa(e.id) && !isGrupoPalatareEmpresa(e.nome) && !isZumaEmpresa(e.id) && !isZumaEmpresa(e.nome));
               return (
                 <>
                   {empresasPalatare.length > 0 && (
@@ -334,7 +352,96 @@ export default function EmpresaSwitcher() {
                     </div>
                   )}
 
-                  {/* 2. OUTRAS EMPRESAS DA PLATAFORMA */}
+                  {/* 2. SEÇÃO ZUMA COZINHA ORIENTAL (RESTAURANTE ORIENTAL INDEPENDENTE) */}
+                  {empresasZuma.length > 0 && (
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{
+                        padding: "6px 10px 4px",
+                        fontSize: "10px",
+                        fontWeight: 800,
+                        color: "#E63946",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.6px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6
+                      }}>
+                        <span>🍣</span> ZUMA COZINHA ORIENTAL · GASTRONOMIA
+                      </div>
+                      {empresasZuma.map((emp) => {
+                        const selecionada = (empresaAtiva?.id === emp.id) || (empresaAtiva?.cnpj === emp.cnpj);
+                        return (
+                          <div
+                            key={emp.id}
+                            onClick={() => selecionarEmpresa(emp)}
+                            style={{
+                              padding: "8px 12px",
+                              borderRadius: "8px",
+                              cursor: "pointer",
+                              background: selecionada ? "rgba(230, 57, 70, 0.18)" : "transparent",
+                              border: selecionada ? "1px solid rgba(230, 57, 70, 0.4)" : "1px solid transparent",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "10px",
+                              marginBottom: "4px",
+                              transition: "all 0.1s ease"
+                            }}
+                          >
+                            <div style={{
+                              width: "30px",
+                              height: "30px",
+                              borderRadius: "6px",
+                              background: "#E63946",
+                              color: "#ffffff",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: "14px",
+                              fontWeight: 700,
+                              flexShrink: 0
+                            }}>
+                              🍣
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{
+                                fontSize: "13px",
+                                fontWeight: 700,
+                                color: selecionada ? "#ffffff" : "var(--text, #f8fafc)",
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis"
+                              }}>
+                                {emp.nome || emp.nomeFantasia || emp.razaoSocial}
+                                <span style={{ marginLeft: 6, fontSize: 10, background: "#E63946", color: "#fff", padding: "1px 5px", borderRadius: 4, fontWeight: 800 }}>Independente</span>
+                              </div>
+                              <div style={{ fontSize: "11px", color: "var(--muted, #94a3b8)", marginTop: 2, display: "flex", flexDirection: "column", gap: 2 }}>
+                                <div><strong>CNPJ:</strong> {emp.cnpj || '36.296.848/0001-57'}</div>
+                                <div style={{ color: "#10b981", fontWeight: 600 }}>
+                                  <strong>IE:</strong> {emp.inscricaoEstadual || "13.882.109-8"} (SEFAZ-MT · Regular)
+                                </div>
+                                <div style={{ color: "#38bdf8", fontWeight: 600 }}>
+                                  <strong>IM:</strong> {emp.inscricaoMunicipal || "94820"} (Tangará da Serra/MT)
+                                </div>
+                                <div style={{ display: "flex", gap: 4, marginTop: 3 }}>
+                                  <span style={{ fontSize: "9px", background: "rgba(16, 185, 129, 0.15)", color: "#10b981", padding: "1px 5px", borderRadius: "4px", fontWeight: 800 }}>
+                                    ✓ zuma.kytto.com.br
+                                  </span>
+                                  <span style={{ fontSize: "9px", background: "rgba(230, 57, 70, 0.15)", color: "#E63946", padding: "1px 5px", borderRadius: "4px", fontWeight: 800 }}>
+                                    Restaurante Oriental
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            {selecionada && (
+                              <span style={{ color: "#10b981", fontSize: "12px", fontWeight: 800 }}>✓</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* 3. DEMAIS EMPRESAS DA PLATAFORMA */}
                   {outrasEmpresas.length > 0 && (
                     <div>
                       <div style={{

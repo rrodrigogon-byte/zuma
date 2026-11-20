@@ -7,6 +7,7 @@
 import { db, save } from './db.js';
 import * as perdasInventarioKytto from './perdas-inventario-kytto.js';
 import * as fichasTecnicasKytto from './fichas-tecnicas-kytto.js';
+import { ZUMA_EMPRESA_ID, ZUMA_CARDAPIO_COMPLETO } from './zuma-cozinha-oriental-seed.js';
 
 function storeEstoque(empresaId) {
   const estado = db();
@@ -20,6 +21,27 @@ function storeCardapio(empresaId) {
   const estado = db();
   estado.cardapioPorEmpresa ||= {};
   const id = String(empresaId || 'principal');
+  if (id === ZUMA_EMPRESA_ID || id.toLowerCase().includes('zuma')) {
+    if (!estado.cardapioPorEmpresa[id] || estado.cardapioPorEmpresa[id].length === 0) {
+      estado.cardapioPorEmpresa[id] = (ZUMA_CARDAPIO_COMPLETO || []).map((p) => ({
+        id: `prod-zuma-${p.id}`,
+        empresaId: id,
+        nome: p.nome,
+        cat: p.categoria || 'Oriental',
+        categoria: p.categoria || 'Oriental',
+        preco: Number(p.preco || 0),
+        custo: Number(p.preco || 0) * 0.35,
+        estoqueAtual: Number(p.estoque || 50),
+        estoqueMinimo: Number(p.minimo || 10),
+        unidade: p.unidade || 'UN',
+        setor: p.setor || 'sushi_bar',
+        cozinha: true,
+        foto: p.foto || '',
+        codPdv: p.cod_pdv || ''
+      }));
+    }
+    return estado.cardapioPorEmpresa[id];
+  }
   if (!estado.cardapioPorEmpresa[id] && Array.isArray(estado.cardapio)) {
     estado.cardapioPorEmpresa[id] = estado.cardapio.map((item) => ({ ...item, empresaId: id }));
   }

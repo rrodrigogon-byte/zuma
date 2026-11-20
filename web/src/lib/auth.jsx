@@ -15,6 +15,13 @@ import {
   deduplicarEmpresas,
   deduplicarLojas
 } from './palatare-constants'
+import {
+  ZUMA_COMPANY,
+  ZUMA_STORE,
+  ZUMA_EMPRESA_ID,
+  isZumaEmpresa,
+  ehHostZuma
+} from './zuma-constants'
 
 const AuthContext = createContext(null)
 
@@ -40,6 +47,13 @@ function readEmpresaAtivaInicial() {
     if (path.startsWith('/admin/pizzaria')) {
       return PALATARE_PIZZARIA_EMPRESA
     }
+    if (path.startsWith('/admin/zuma') || path.startsWith('/admin/restaurante-zuma')) {
+      return ZUMA_COMPANY
+    }
+  }
+  if (ehHostZuma()) {
+    try { localStorage.setItem('sp_empresa_ativa', JSON.stringify(ZUMA_COMPANY)) } catch {}
+    return ZUMA_COMPANY
   }
   if (!isDinoDedicatedHost()) return atual
   const empresas = garantirEmpresasCanonicas(readStorage('sp_empresas_acessiveis', []))
@@ -99,6 +113,13 @@ function filtrarEmpresasPorUsuario(empresas, user) {
     return grupoPalatareOnly.length > 0 ? grupoPalatareOnly : GRUPO_PALATARE_EMPRESAS;
   }
 
+  const isZuma = ident.includes('zuma') || ident.includes('oriental') || ident.includes('sushiman') ||
+    String(user.empresaId || '').toLowerCase() === ZUMA_EMPRESA_ID.toLowerCase();
+  if (isZuma) {
+    const zumaOnly = lista.filter((e) => isZumaEmpresa(e.id) || isZumaEmpresa(e.nome));
+    return zumaOnly.length > 0 ? zumaOnly : [ZUMA_COMPANY];
+  }
+
   if (user.empresaId) {
     const doUsuario = lista.filter((e) => String(e.id || '').toLowerCase() === String(user.empresaId).toLowerCase())
     if (doUsuario.length > 0) return doUsuario
@@ -116,6 +137,8 @@ function garantirEmpresasCanonicas(empresas) {
   for (const empGp of GRUPO_PALATARE_EMPRESAS) {
     lista.push(empGp);
   }
+  // Garante SEMPRE a empresa canônica Zuma Cozinha Oriental
+  lista.push(ZUMA_COMPANY);
   return deduplicarEmpresas(lista)
 }
 
@@ -128,6 +151,8 @@ function garantirLojasCanonicas(lojas) {
   for (const lojaGp of GRUPO_PALATARE_LOJAS) {
     lista.push(lojaGp);
   }
+  // Garante SEMPRE a loja matriz do Zuma
+  lista.push(ZUMA_STORE);
   return deduplicarLojas(lista)
 }
 // Aliases de compatibilidade histórica
@@ -283,6 +308,7 @@ export function AuthProvider({ children }) {
     const proxima = empresasAcessiveis.find((empresa) => String(empresa.id).toLowerCase() === String(empresaId).toLowerCase())
       || GRUPO_PALATARE_EMPRESAS.find((e) => String(e.id).toLowerCase() === String(empresaId).toLowerCase())
       || (String(empresaId).toLowerCase() === DINO_COMPANY.id.toLowerCase() ? DINO_COMPANY : null)
+      || (String(empresaId).toLowerCase() === ZUMA_COMPANY.id.toLowerCase() ? ZUMA_COMPANY : null)
     if (!proxima) return false
     if (empresaAtiva?.id !== proxima.id || lojaAtiva?.id) desligarPushContextoAtual()
     // a unidade escolhida da última vez nesta empresa volta; no host da Dino vale a unidade Dino

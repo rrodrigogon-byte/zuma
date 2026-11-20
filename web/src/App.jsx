@@ -206,6 +206,7 @@ const ExpedicaoLogistica = lazy(() => import('./pages/admin/ExpedicaoLogistica')
 const PatrimonioAtivos = lazy(() => import('./pages/admin/PatrimonioAtivos'))
 const LojaModa        = lazy(() => import('./pages/admin/LojaModa'))
 const PalatarePizzariaSuite = lazyWithRetry(() => import("./pages/admin/PalatarePizzariaSuite"))
+const ZumaRestauranteSuite = lazyWithRetry(() => import("./pages/admin/ZumaRestauranteSuite"))
 const ConcretoUsinaERP = lazyWithRetry(() => import("./pages/admin/ConcretoUsinaERP"))
 const ConcretoPwaAssinatura = lazyWithRetry(() => import("./pages/public/ConcretoPwaAssinatura"))
 const ConcretoPortalCliente = lazyWithRetry(() => import("./pages/public/ConcretoPortalCliente"))
@@ -442,6 +443,9 @@ export default function App() {
 <Route path="/admin/pizzaria" element={<Layout><PalatarePizzariaSuite /></Layout>} />
           <Route path="/admin/pizzaria-erp" element={<Layout><PalatarePizzariaSuite /></Layout>} />
           <Route path="/admin/palatare" element={<Layout><PalatarePizzariaSuite /></Layout>} />
+          <Route path="/admin/zuma" element={<Layout><ZumaRestauranteSuite /></Layout>} />
+          <Route path="/admin/zuma-erp" element={<Layout><ZumaRestauranteSuite /></Layout>} />
+          <Route path="/admin/restaurante-zuma" element={<Layout><ZumaRestauranteSuite /></Layout>} />
           <Route path="/admin/concreto" element={<Layout><ConcretoUsinaERP /></Layout>} />
           <Route path="/admin/usina-concreto" element={<Layout><ConcretoUsinaERP /></Layout>} />
           <Route path="/admin/balanca" element={<Layout><BalancaRodoviariaCockpit /></Layout>} />

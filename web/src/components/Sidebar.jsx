@@ -7,7 +7,7 @@ import { catalogoPorArea, contagemPorEstado, ESTADOS } from '../lib/catalogo-mod
 import { itemVisivelNoPerfil } from '../lib/perfis-menu'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
-import { applyThemeMode, DINO_BARBERSHOP_LOGO, isClubeBrandContext, isDinoBrandContext, isStalloneBrandContext, isRestauranteBrandContext, isConcretoBrandContext, PALATARE_LOGO, CONCRETO_LOGO, STALLONE_LOGO, storedThemeMode } from '../lib/brand'
+import { applyThemeMode, DINO_BARBERSHOP_LOGO, isClubeBrandContext, isDinoBrandContext, isStalloneBrandContext, isRestauranteBrandContext, isConcretoBrandContext, isZumaBrandContext, PALATARE_LOGO, CONCRETO_LOGO, STALLONE_LOGO, storedThemeMode } from '../lib/brand'
 import {
   HOLDING_PALATARE_EMPRESA_ID,
   PALATARE_PIZZARIA_EMPRESA_ID,
@@ -16,6 +16,10 @@ import {
   deduplicarEmpresas,
   deduplicarLojas
 } from '../lib/palatare-constants'
+import {
+  ZUMA_EMPRESA_ID,
+  ehHostZuma
+} from '../lib/zuma-constants'
 import { DINO_STORE, isDinoDedicatedHost } from '../lib/dino-scope'
 import { empresaSemUnidade, sincronizarContextoComercial } from '../lib/contexto-comercial'
 import { useMenuEmGaveta } from '../lib/modo-menu'
@@ -495,6 +499,67 @@ const NAV_STALLONE_PUBLIC = [
   { to: '/ecommerce/stallone', icon: '↗', label: 'Abrir loja Stallone' },
 ]
 
+export const NAV_ZUMA_GROUPS = [
+  {
+    label: 'Zuma Cozinha Oriental', aberto: true,
+    items: [
+      { to: '/admin/zuma', icon: '🍣', label: 'Zuma Suite & Cockpit', end: true },
+      { to: '/admin/zuma?tab=mercado', icon: '🌐', label: 'Mercado & IA 360°', badge: 'Radar Tangará' },
+      { to: '/admin/zuma?tab=zumi', icon: '🤖', label: 'Zumi Atende (KyttoIA)', badge: 'WhatsApp' },
+      { to: '/admin/mesas', icon: '🪑', label: 'Mesas & Salão (25 mesas)' },
+      { to: '/pdv', icon: '🛒', label: 'PDV Balcão & Caixa', badge: true },
+      { to: '/kds', icon: '👨‍🍳', label: 'Sushi Bar & Cozinha KDS', badge: true },
+      { to: '/admin/zuma?tab=delivery', icon: '🛵', label: 'Delivery & Omnichannel' },
+    ],
+  },
+  {
+    label: 'Cardápio & Estoque Oriental', aberto: true,
+    items: [
+      { to: '/admin/cardapio', icon: '🥢', label: 'Cardápio Sushi Bar (211 itens)' },
+      { to: '/admin/zuma?tab=engenharia', icon: '📊', label: 'Engenharia de Cardápio' },
+      { to: '/admin/estoque', icon: '📦', label: 'Estoque de Pescados & Insumos' },
+      { to: '/admin/fichas-tecnicas', icon: '🧪', label: 'Fichas Técnicas & Sushis' },
+      { to: '/admin/modificadores-combos', icon: '➕', label: 'Combos & Adicionais' },
+      { to: '/admin/perdas-inventario', icon: '🧾', label: 'Perdas & Inventário de Pescados' },
+    ],
+  },
+  {
+    label: 'Clientes, Clube & Vendas',
+    items: [
+      { to: '/admin/zuma?tab=clube', icon: '👑', label: 'Clube Zumi (Assinaturas)' },
+      { to: '/admin/zuma?tab=crm', icon: '⭐', label: 'Clientes CRM & Preferências' },
+      { to: '/admin/clientes', icon: '👥', label: 'Base de Clientes' },
+      { to: '/admin/zuma?tab=campanhas', icon: '📢', label: 'Campanhas & Horários Vazios' },
+      { to: '/admin/cupons', icon: '🎟️', label: 'Cupons & Promoções' },
+    ],
+  },
+  {
+    label: 'Financeiro, CMV & Gestão',
+    items: [
+      { to: '/admin/zuma?tab=financeiro', icon: '💰', label: 'DRE, CMV & Margem Pescados' },
+      { to: '/admin/fechamento-diario', icon: '🔐', label: 'Fechamento de Caixa', razao: true },
+      { to: '/admin/financeiro', icon: '💰', label: 'Gestão Financeira' },
+      { to: '/admin/contas-pagar', icon: '🧾', label: 'Contas a Pagar', razao: true },
+      { to: '/admin/contas-receber', icon: '💳', label: 'Contas a Receber', razao: true },
+      { to: '/admin/dre', icon: '📈', label: 'DRE Demonstrativo' },
+      { to: '/admin/fiscal', icon: '📑', label: 'Fiscal (NFC-e / NF-e)' },
+    ],
+  },
+  {
+    label: 'Inteligência & Expansão',
+    items: [
+      { to: '/admin/zuma?tab=mercado', icon: '🎯', label: 'Benchmarking Concorrência' },
+      { to: '/admin/zuma?tab=pilot', icon: '⚡', label: 'Cockpit Pilot Completo' },
+      { to: '/admin/inteligencia-vendas', icon: '🚀', label: 'KyttoIA Vendas & Upsell' },
+      { to: '/admin/configuracoes', icon: '⚙️', label: 'Configurações da Loja' },
+    ],
+  },
+]
+
+export const NAV_ZUMA_PUBLIC = [
+  { to: 'https://zuma.kytto.com.br', icon: '↗', label: 'Cardápio Digital Zuma (zuma.kytto.com.br)' },
+  { to: '/zuma/pilot.html?locale=pt-BR#mercado', icon: '⚡', label: 'Pilot Inteligência Mercado' },
+]
 
 export const NAV_RESTAURANTE_GROUPS = [
   {
@@ -925,19 +990,23 @@ export default function Sidebar() {
   const naRotaConcreto = location.pathname.startsWith('/admin/concreto') || location.pathname.startsWith('/admin/usina-concreto')
   const naRotaHolding = (naRotaConcreto && location.search.includes('secao=empresa-holding')) || location.pathname.startsWith('/admin/consolidacao-grupo')
   const naRotaPizzaria = location.pathname.startsWith('/admin/pizzaria')
+  const naRotaZuma = location.pathname.startsWith('/admin/zuma') || location.pathname.startsWith('/admin/restaurante-zuma')
 
   // Contexto de Marca com Prioridade Correta:
-  const isHolding = (empresaAtiva?.id === HOLDING_PALATARE_EMPRESA_ID || empresaAtiva?.tipoNegocio === 'holding' || naRotaHolding)
-  const isRestaurante = !isHolding && (empresaAtiva?.id === PALATARE_PIZZARIA_EMPRESA_ID || isRestauranteBrandContext(empresaAtiva) || naRotaPizzaria)
-  const isConcreto = !isHolding && !isRestaurante && (empresaAtiva?.id === SERRANO_CONCRETO_EMPRESA_ID || isConcretoBrandContext(empresaAtiva) || naRotaConcreto)
-  const isGrupoPalatareAtivo = isHolding || isRestaurante || isConcreto || isGrupoPalatareEmpresa(empresaAtiva?.id)
-  const isDino = !isGrupoPalatareAtivo && (isDinoDedicatedHost() || isDinoBrandContext(empresaAtiva))
-  const isStallone = !isGrupoPalatareAtivo && !isDino && isStalloneBrandContext(empresaAtiva)
-  const isClube = !isGrupoPalatareAtivo && !isDino && !isStallone && isClubeBrandContext(empresaAtiva)
+  const isZuma = (empresaAtiva?.id === ZUMA_EMPRESA_ID || isZumaBrandContext(empresaAtiva) || ehHostZuma() || naRotaZuma)
+  const isHolding = !isZuma && (empresaAtiva?.id === HOLDING_PALATARE_EMPRESA_ID || empresaAtiva?.tipoNegocio === 'holding' || naRotaHolding)
+  const isRestaurante = !isZuma && !isHolding && (empresaAtiva?.id === PALATARE_PIZZARIA_EMPRESA_ID || isRestauranteBrandContext(empresaAtiva) || naRotaPizzaria)
+  const isConcreto = !isZuma && !isHolding && !isRestaurante && (empresaAtiva?.id === SERRANO_CONCRETO_EMPRESA_ID || isConcretoBrandContext(empresaAtiva) || naRotaConcreto)
+  const isGrupoPalatareAtivo = !isZuma && (isHolding || isRestaurante || isConcreto || isGrupoPalatareEmpresa(empresaAtiva?.id))
+  const isDino = !isZuma && !isGrupoPalatareAtivo && (isDinoDedicatedHost() || isDinoBrandContext(empresaAtiva))
+  const isStallone = !isZuma && !isGrupoPalatareAtivo && !isDino && isStalloneBrandContext(empresaAtiva)
+  const isClube = !isZuma && !isGrupoPalatareAtivo && !isDino && !isStallone && isClubeBrandContext(empresaAtiva)
 
   // Sincroniza a empresaAtiva ao navegar entre as empresas do Grupo Palatare
   useEffect(() => {
-    if (naRotaHolding && empresaAtiva?.id !== HOLDING_PALATARE_EMPRESA_ID) {
+    if (naRotaZuma && empresaAtiva?.id !== ZUMA_EMPRESA_ID) {
+      trocarEmpresa(ZUMA_EMPRESA_ID)
+    } else if (naRotaHolding && empresaAtiva?.id !== HOLDING_PALATARE_EMPRESA_ID) {
       trocarEmpresa(HOLDING_PALATARE_EMPRESA_ID)
     } else if (naRotaConcreto && !naRotaHolding && empresaAtiva?.id !== SERRANO_CONCRETO_EMPRESA_ID) {
       trocarEmpresa(SERRANO_CONCRETO_EMPRESA_ID)
@@ -1099,6 +1168,26 @@ export default function Sidebar() {
                 </div>
               </div>
             )}
+            {isZuma && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+                <div style={{
+                  width: 40, height: 40, borderRadius: 10,
+                  background: "linear-gradient(135deg, #E63946 0%, #D90429 100%)",
+                  color: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center",
+                  fontWeight: 900, fontSize: 18, boxShadow: "0 2px 8px rgba(230, 57, 70, 0.4)"
+                }}>
+                  🍣
+                </div>
+                <div>
+                  <div style={{ color: "#FFFFFF", fontWeight: 900, fontSize: 13.5, lineHeight: 1.15, letterSpacing: "0.3px" }}>
+                    ZUMA
+                  </div>
+                  <div style={{ color: "#FCA5A5", fontWeight: 800, fontSize: 9.5, textTransform: "uppercase", letterSpacing: "0.7px" }}>
+                    Cozinha Oriental &amp; Sushi
+                  </div>
+                </div>
+              </div>
+            )}
             {isRestaurante && (
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
                 <img
@@ -1222,7 +1311,7 @@ export default function Sidebar() {
             })()}
 
             {/* Switcher Rápido Multinegócio do Grupo Palatare */}
-            {(isRestaurante || isConcreto || isHolding || isGrupoPalatareEmpresa(empresaAtiva?.id)) && (
+            {!isZuma && (isRestaurante || isConcreto || isHolding || isGrupoPalatareEmpresa(empresaAtiva?.id)) && (
               <div style={{
                 background: 'linear-gradient(180deg, #16181B 0%, #1A1D21 100%)',
                 border: '1px solid rgba(197, 160, 89, 0.45)',
@@ -1465,9 +1554,16 @@ export default function Sidebar() {
         )}
         {isStaff && !isDino && !isStallone && !isHolding && (
           <Section
-            label={isRestaurante ? "Operação de Salão & Cozinha" : isConcreto ? "Operação da Usina" : isClube ? "Balcão, bar e portaria" : "Operações"}
+            label={isZuma ? "Operação de Salão & Sushi Bar" : isRestaurante ? "Operação de Salão & Cozinha" : isConcreto ? "Operação da Usina" : isClube ? "Balcão, bar e portaria" : "Operações"}
             items={opVisiveis(
-              isRestaurante
+              isZuma
+                ? [
+                    { to: "/pdv", icon: "🛒", label: "PDV Balcão", badge: true },
+                    { to: "/admin/mesas", icon: "🪑", label: "Mesas & Salão", badge: false },
+                    { to: "/kds", icon: "🍣", label: "Sushi Bar & KDS", badge: true },
+                    { to: "/garcom", icon: "🧑‍🍳", label: "Modo Garçom", badge: false },
+                  ]
+                : isRestaurante
                 ? [
                     { to: "/pdv", icon: "🛒", label: "PDV Balcão", badge: true },
                     { to: "/garcom", icon: "🧑‍🍳", label: "Modo Garçom", badge: false },
@@ -1506,7 +1602,9 @@ export default function Sidebar() {
         {isOrg && (
           <AdminGroups
             groups={
-              isHolding
+              isZuma
+                ? NAV_ZUMA_GROUPS
+                : isHolding
                 ? NAV_HOLDING_GROUPS
                 : isDino
                 ? NAV_DINO_GROUPS
@@ -1525,7 +1623,7 @@ export default function Sidebar() {
             empresa={empresaDoMenu}
             usuarioDeEmpresa={usuarioDeEmpresa}
             sidebarCollapsed={recolhido}
-            compacto={isHolding || isClube || isRestaurante || isConcreto}
+            compacto={isZuma || isHolding || isClube || isRestaurante || isConcreto}
           />
         )}
         {isPlatformAdmin && <Section label="Administração da Plataforma" items={NAV_PLATFORM} onNavClick={handleNavClick} sidebarCollapsed={recolhido} />}
@@ -1533,10 +1631,10 @@ export default function Sidebar() {
         {isAtleta && <Section label="Portal do Atleta" items={NAV_ATLETA} onNavClick={handleNavClick} sidebarCollapsed={recolhido} />}
         <Section
           label={
-            isHolding ? "Holding pública" : isDino ? "Dino público" : isStallone ? "Stallone público" : isRestaurante ? "Palatare público" : isConcreto ? "Usina pública" : "Site Público"
+            isZuma ? "Zuma público" : isHolding ? "Holding pública" : isDino ? "Dino público" : isStallone ? "Stallone público" : isRestaurante ? "Palatare público" : isConcreto ? "Usina pública" : "Site Público"
           }
           items={
-            isHolding ? NAV_HOLDING_PUBLIC : isDino ? NAV_DINO_PUBLIC : isStallone ? NAV_STALLONE_PUBLIC : isRestaurante ? NAV_PALATARE_PUBLIC : isConcreto ? NAV_CONCRETO_PUBLIC : NAV_PUBLIC
+            isZuma ? NAV_ZUMA_PUBLIC : isHolding ? NAV_HOLDING_PUBLIC : isDino ? NAV_DINO_PUBLIC : isStallone ? NAV_STALLONE_PUBLIC : isRestaurante ? NAV_PALATARE_PUBLIC : isConcreto ? NAV_CONCRETO_PUBLIC : NAV_PUBLIC
           }
           onNavClick={handleNavClick}
           sidebarCollapsed={recolhido}

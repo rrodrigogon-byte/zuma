@@ -1,1 +1,0 @@
-import{j as i}from"./index-Do0Mo2YX.js";import n from"./DinoInteligenciaVendasIa-DQAbel2i.js";function t(){return i.jsx("div",{style:{padding:"24px 28px",maxWidth:1400,margin:"0 auto"},children:i.jsx(n,{})})}export{t as default};

@@ -198,6 +198,36 @@ export function deduplicarEmpresas(empresas) {
       continue;
     }
 
+    // 5. Zuma Cozinha Oriental
+    if (
+      id === 'c3c3ac01-8e50-4b61-8c79-de4aaa916da3' ||
+      cnpj === '36296848000157' ||
+      (nome.includes('zuma') && (nome.includes('oriental') || nome.includes('cozinha'))) ||
+      nome === 'zuma'
+    ) {
+      mapa.set('c3c3ac01-8e50-4b61-8c79-de4aaa916da3', {
+        ...emp,
+        id: 'c3c3ac01-8e50-4b61-8c79-de4aaa916da3',
+        nome: 'Zuma Cozinha Oriental',
+        nomeFantasia: 'Zuma Cozinha Oriental',
+        razaoSocial: 'Zuma Cozinha Oriental LTDA',
+        cnpj: '36.296.848/0001-57',
+        cnpjNormalizado: '36296848000157',
+        inscricaoEstadual: '13.882.109-8',
+        inscricaoMunicipal: '94820',
+        brandKey: 'zuma',
+        tipoNegocio: 'restaurante',
+        segmento: 'alimentacao',
+        subsegmento: 'gastronomia_oriental_sushi',
+        telefone: '(65) 99800-1447',
+        whatsapp: '(65) 99800-1447',
+        email: 'contato@zumacozinhaoriental.com.br',
+        website: 'https://zuma.kytto.com.br',
+        ativa: true
+      });
+      continue;
+    }
+
     // Outras empresas: chave única por id ou cnpj
     const chave = id || (cnpj ? `cnpj_${cnpj}` : nome);
     if (!mapa.has(chave)) {
@@ -235,6 +265,19 @@ export function deduplicarLojas(lojas) {
     }
     if (id === SERRANO_CONCRETO_LOJA_ID.toLowerCase() || codigo === 'USINA-01') {
       mapa.set(SERRANO_CONCRETO_LOJA_ID, { ...lj, ...GRUPO_PALATARE_LOJAS[2], id: SERRANO_CONCRETO_LOJA_ID });
+      continue;
+    }
+
+    if (id === 'c3c3ac01-8e50-4b61-8c79-de4aaa916da0' || codigo === 'ZUMA-MATRIZ') {
+      mapa.set('c3c3ac01-8e50-4b61-8c79-de4aaa916da0', {
+        ...lj,
+        id: 'c3c3ac01-8e50-4b61-8c79-de4aaa916da0',
+        empresaId: 'c3c3ac01-8e50-4b61-8c79-de4aaa916da3',
+        codigo: 'ZUMA-MATRIZ',
+        nome: 'Zuma Cozinha Oriental - Principal',
+        nomeFantasia: 'Zuma Cozinha Oriental',
+        ativa: true
+      });
       continue;
     }
 

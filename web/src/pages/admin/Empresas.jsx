@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { useToast } from '../../hooks/useToast'
+import { ZUMA_COMPANY } from '../../lib/zuma-constants'
+import { deduplicarEmpresas } from '../../lib/palatare-constants'
 import Modal from '../../components/Modal'
 
 const TIPOS_NEGOCIO = [
@@ -93,7 +95,9 @@ export default function Empresas() {
     setLoading(true)
     try {
       const res = await api.get('/api/admin/empresas?incluir_inativas=true')
-      setEmpresas(Array.isArray(res.empresas) ? res.empresas : [])
+      const brutas = Array.isArray(res.empresas) ? res.empresas : []
+      if (!brutas.some(e => e.id === ZUMA_COMPANY.id)) brutas.push(ZUMA_COMPANY)
+      setEmpresas(deduplicarEmpresas(brutas))
     } catch (err) {
       toast(err.message || 'Não foi possível carregar as empresas.', true)
     } finally {
