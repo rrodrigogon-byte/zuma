@@ -13662,6 +13662,93 @@ app.get(['/agendar/:slug', '/avaliar/:slug', '/minha/:slug'], (req, res, next) =
   }
 });
 
+// ============================================================================
+// [kytto-zuma] ROTEAMENTO DE SUBDOMÍNIO DEDICADO: zuma.kytto.com.br
+// Garante que o Zuma funcione como empresa independente dentro do Kytto,
+// servindo Storefront, Central Operacional 360 e Pilot na raiz do subdomínio.
+// ============================================================================
+function isZumaHost(req) {
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || req.hostname || "").split(":")[0].toLowerCase();
+  return host === "zuma.kytto.com.br" || host.endsWith(".zuma.kytto.com.br") || host === "zuma-oriental.kytto.com.br";
+}
+
+const zumaPublicDir = path.join(__dirname, "public", "zuma");
+
+app.use((req, res, next) => {
+  if (!isZumaHost(req)) return next();
+  if (req.path.startsWith("/api/") || req.path.startsWith("/assets/") || req.path.startsWith("/zuma/assets/")) {
+    return next();
+  }
+
+  const p = req.path.toLowerCase().replace(/\/+$/, "");
+
+  // Central Operacional 360° (PDV Touch, KDS Sushiman, App Garçom, Motoboy)
+  if (p === "/operacao" || p === "/operacao.html" || p === "/pdv" || p === "/kds" || p === "/garcom" || p === "/motoboy") {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    return res.sendFile(path.join(zumaPublicDir, "operacao.html"));
+  }
+
+  // Cockpit Executivo Zuma Pilot 360 & Inteligência
+  if (p === "/pilot" || p === "/pilot.html" || p === "/cockpit" || p === "/gestao") {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    return res.sendFile(path.join(zumaPublicDir, "pilot.html"));
+  }
+
+  // Storefront & Cardápio Digital (Home, /cardapio, /loja, /pedidos, /barca, etc.)
+  if (p === "" || p === "/" || p === "/index.html" || p === "/cardapio" || p === "/loja" || p === "/pedidos" || p === "/barca" || p === "/saque" || p === "/frescor" || p === "/eventos") {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    return res.sendFile(path.join(zumaPublicDir, "index.html"));
+  }
+
+  const possibleStatic = path.join(zumaPublicDir, req.path.replace(/^\/+/, ""));
+  if (fs.existsSync(possibleStatic) && fs.statSync(possibleStatic).isFile()) {
+    return res.sendFile(possibleStatic);
+  }
+
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  return res.sendFile(path.join(zumaPublicDir, "index.html"));
+});
+
+// [kytto-zuma] Rotas Limpas Diretas para Zuma em Qualquer Domínio (com ou sem .html)
+app.get(["/zuma", "/zuma/"], (req, res) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.sendFile(path.join(zumaPublicDir, "index.html"));
+});
+
+app.get(["/zuma/index.html", "/zuma/cardapio", "/zuma/pedidos", "/zuma/loja", "/zuma/barca", "/zuma/saque", "/zuma/frescor", "/zuma/eventos"], (req, res) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.sendFile(path.join(zumaPublicDir, "index.html"));
+});
+
+app.get(["/zuma/operacao", "/zuma/operacao.html", "/zuma/pdv", "/zuma/kds", "/zuma/garcom", "/zuma/motoboy"], (req, res) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.sendFile(path.join(zumaPublicDir, "operacao.html"));
+});
+
+app.get(["/zuma/pilot", "/zuma/pilot.html", "/zuma/cockpit", "/zuma/gestao"], (req, res) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.sendFile(path.join(zumaPublicDir, "pilot.html"));
+});
+
+// Suporte direto para /operacao e /pilot no caso de requisições de origem zuma
+app.get(["/operacao", "/operacao.html"], (req, res, next) => {
+  const ref = String(req.headers.referer || "").toLowerCase();
+  if (isZumaHost(req) || ref.includes("zuma")) {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    return res.sendFile(path.join(zumaPublicDir, "operacao.html"));
+  }
+  next();
+});
+
+app.get(["/pilot", "/pilot.html"], (req, res, next) => {
+  const ref = String(req.headers.referer || "").toLowerCase();
+  if (isZumaHost(req) || ref.includes("zuma")) {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    return res.sendFile(path.join(zumaPublicDir, "pilot.html"));
+  }
+  next();
+});
+
 // SPA fallback — React Router client-side routing
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'not found' });

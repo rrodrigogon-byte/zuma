@@ -222,6 +222,31 @@ const EMPRESAS_CANONICAS_PADRAO = [
     ativa: true,
     permitirEstoqueNegativo: true,
     totalLojas: 1
+  },
+  {
+    id: "c3c3ac01-8e50-4b61-8c79-de4aaa916da3",
+    nome: "Zuma Cozinha Oriental",
+    nomeFantasia: "Zuma Cozinha Oriental",
+    razaoSocial: "Zuma Cozinha Oriental LTDA",
+    cnpj: "36.296.848/0001-57",
+    cnpjNormalizado: "36296848000157",
+    inscricaoEstadual: "13.882.109-8",
+    inscricaoMunicipal: "94820",
+    tipoNegocio: "restaurante",
+    segmento: "culinaria_japonesa",
+    telefone: "(65) 99800-1447",
+    email: "contato@zumacozinhaoriental.com.br",
+    website: "https://zuma.kytto.com.br",
+    logoUrl: "https://cdnimages.ligafiles.com.br/preset=logo_square_400/empresa_images/4304/6abafc96a35a9e82qq.webp",
+    enderecoCidade: "Tangará da Serra",
+    enderecoEstado: "MT",
+    endereco: "Av. Brasil, nº 1605-S, Jardim Cidade Alta, Tangará da Serra/MT, CEP 78300-000",
+    subdominio: "zuma.kytto.com.br",
+    slug: "zuma",
+    brandKey: "zuma",
+    ativa: true,
+    permitirEstoqueNegativo: false,
+    totalLojas: 1
   }
 ];
 
