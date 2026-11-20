@@ -47,7 +47,7 @@ function identidadePublica(slugRecebido) {
     const configuracao = dados?.configuracao || {};
     const empresa = empresaCadastrada(estado, empresaId);
     const slugConfigurado = slug(configuracao.slugPublico || configuracao.slugAgendamento);
-    const aliasDino = !explicita && solicitado === 'dino' && empresaId === EMPRESA_PADRAO_ID;
+    const aliasDino = !explicita && solicitado === 'dino' && (empresaId === EMPRESA_PADRAO_ID || empresaId === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6' || String(empresaId).toLowerCase().includes('dino'));
     if (!aliasDino && (!slugConfigurado || slugConfigurado !== solicitado)) continue;
     if (configuracao.agendamentoPublicoAtivo === false || empresa?.ativa === false) return null;
     let whatsappFinal = texto(configuracao.whatsappPublico || empresa?.telefone, 30);

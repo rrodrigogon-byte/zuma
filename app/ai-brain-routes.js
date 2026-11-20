@@ -10,7 +10,8 @@ import {
   searchCustomerMemory, setFactStatus,
 } from './core/ai-memory.js';
 import { routerStatus, spentTodayCents } from './core/ai-router.js';
-import { decideProposal, learningQuality, listLearningRuns, listProposals, runLearningCycle } from './core/ai-learning.js';
+import { currentDay, decideProposal, learningQuality, listLearningRuns, listProposals, previousDay, runLearningCycle } from './core/ai-learning.js';
+import { autoApproveHighConfidenceLearnings, runTrexAutoLearner } from './core/trex-auto-learner.js';
 import { automationResults, DAILY_CAP, runAutomationRound } from './core/ai-automations.js';
 import { buildCustomerGraph, customerEgo, customerToken, customerView, graphSummary, isCustomerPhoneUnambiguous, nextBestOffers, PURCHASE_STATUSES } from './dino-grafo.js';
 import { loadBrainExecutiveSources, loadBrainGraph } from './ai-brain-data.js';
@@ -342,10 +343,30 @@ export function registerAiBrainRoutes(app, deps) {
   app.post(`${BASE}/aprender`, async (req, res) => {
     const s = await scope(req, res, 'settings.write'); if (!s) return;
     try {
-      const dia = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.dia || '')) ? req.body.dia : undefined;
+      const hoje = currentDay();
+      const ontem = previousDay();
+      let dia = req.body?.dia;
+      if (dia === 'hoje') dia = hoje;
+      else if (dia === 'ontem') dia = ontem;
+      else if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dia || ''))) {
+        dia = undefined;
+      }
       const result = await runLearningCycle({ empresaId: s.empresaId, ...(dia ? { dia } : {}), force: true });
-      note(req, 'cerebro_ia_aprender', result);
-      res.json(result);
+      const trexLearner = await runTrexAutoLearner({
+        empresaId: s.empresaId,
+        lojaId: s.lojaId || null,
+        dia: dia || hoje,
+        force: true
+      }).catch((e) => ({ erro: e?.message }));
+      const autoAprovadas = await autoApproveHighConfidenceLearnings(s.empresaId).catch(() => 0);
+      const consolidado = {
+        ...result,
+        trexAudit: trexLearner,
+        propostasAutoAprovadas: autoAprovadas,
+        diaExecutado: dia || ontem
+      };
+      note(req, 'cerebro_ia_aprender', consolidado);
+      res.json(consolidado);
     } catch (error) { send(res, error); }
   });
 

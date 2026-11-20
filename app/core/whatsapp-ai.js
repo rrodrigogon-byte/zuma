@@ -103,7 +103,8 @@ import {
   whatsappAiPolicy,
   whatsappAiPolicyMetrics,
 } from './whatsapp-ai-profile.js';
-import { approvedAnswers, getBrainSettings, memoryForPrompt, recordAutomationOptOut } from './ai-memory.js';
+import { approvedAnswers, customerMemory, getBrainSettings, memoryForPrompt, recordAutomationOptOut } from './ai-memory.js';
+import { learnFromSingleSession } from './ai-learning.js';
 import { estimateCostCents, providerConfigured, recordRouterRun, runAnthropicWithTools, spentTodayCents } from './ai-router.js';
 import { releaseExpiredStaffPauses, STAFF_REASON } from './whatsapp-staff-takeover.js';
 import { motivoLegivel } from './whatsapp-handoff-labels.js';
@@ -3859,10 +3860,35 @@ export async function getWhatsappAiConversation(context = {}, sessionId, { limit
     [empresaId, lojaId, s.id, safeLimit],
   )).rows.reverse();
   const digits = String(s.telefone || '').replace(/\D/g, '');
+  let memoriaIa = null;
+  try {
+    const mem = await customerMemory(empresaId, s.telefone, { lojaId });
+    if (mem && (mem.facts?.length > 0 || mem.summaries?.length > 0)) {
+      memoriaIa = {
+        disponivel: true,
+        fatos: (mem.facts || []).filter(f => f.status === 'ativo').map(f => ({
+          id: f.id,
+          categoria: f.categoria,
+          categoriaLabel: f.categoriaLabel || f.categoria,
+          valor: f.valor,
+          confianca: f.confianca
+        })),
+        resumosRecentes: (mem.summaries || []).slice(0, 3).map(sm => ({
+          dia: sm.dia,
+          resumo: sm.resumo,
+          resultado: sm.resultado,
+          nota: sm.nota
+        }))
+      };
+    }
+  } catch {
+    memoriaIa = null;
+  }
   return {
     sessao: {
       id: s.id,
       telefone: digits.length >= 4 ? `***${digits.slice(-4)}` : 'contato',
+      telefoneCompleto: s.telefone || null,
       nome: cleanText(s.nome, 80) || null,
       status: s.status,
       motivo: s.handoff_reason ? cleanText(s.handoff_reason, 80) : null,
@@ -3871,6 +3897,7 @@ export async function getWhatsappAiConversation(context = {}, sessionId, { limit
       assumidaEm: s.assigned_at, encerradaEm: s.closed_at, ultimaInteracao: s.ultima_interacao_em,
       hasPendingAction: Boolean(s.acao_pendente),
       pendingSummary: s.acao_pendente?.summary ? cleanText(s.acao_pendente.summary, 220) : null,
+      memoriaIa,
     },
     mensagens: rows.map((row) => ({
       id: row.id,
@@ -3991,6 +4018,9 @@ export async function closeWhatsappAiHandoff(context = {}, sessionId) {
       throw error;
     }
     await auditHandoff(trx, context, result.rows[0].id, 'closed');
+    learnFromSingleSession({ empresaId, sessaoId: result.rows[0].id }).catch((err) => {
+      console.warn('[closeWhatsappAiHandoff] aviso ao consolidar aprendizado:', err?.message);
+    });
     return result.rows[0];
   });
 }

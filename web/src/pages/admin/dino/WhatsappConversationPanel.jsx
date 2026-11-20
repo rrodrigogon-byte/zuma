@@ -252,9 +252,7 @@ export default function WhatsappConversationPanel({
           <div className="wa-conv__atalhos">
             <a href="/admin/barbearia?tab=agenda" target="_blank" rel="noreferrer" className="wa-conv__atalho-link">📅 Ver Agenda</a>
             <a href="/admin/barbearia?tab=clientes" target="_blank" rel="noreferrer" className="wa-conv__atalho-link">👤 Clientes</a>
-            {sessao?.telefone && !sessao.telefone.includes("*") && (
-              <a href={`https://wa.me/55${sessao.telefone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" className="wa-conv__atalho-link">💬 WhatsApp Web</a>
-            )}
+            <a href="/admin/cerebro-ia" target="_blank" rel="noreferrer" className="wa-conv__atalho-link">🧠 Cérebro KyttoIA</a>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -285,6 +283,42 @@ export default function WhatsappConversationPanel({
 
       {erro && <p className="dadm-note danger" role="alert">{erro}</p>}
       {aviso && <p className="dadm-note" role="status">{aviso}</p>}
+      {sessao?.memoriaIa && (sessao.memoriaIa.fatos?.length > 0 || sessao.memoriaIa.resumosRecentes?.length > 0) && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(168, 85, 247, 0.08) 100%)',
+          border: '1px solid rgba(139, 92, 246, 0.25)',
+          borderRadius: 8,
+          padding: '8px 12px',
+          margin: '0 14px 10px',
+          fontSize: 12,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontWeight: 700, color: '#6366f1' }}>🧠 O que a KyttoIA aprendeu sobre este cliente:</span>
+            <a href="/admin/cerebro-ia?tab=aprendizado" target="_blank" rel="noreferrer" style={{ fontSize: 11, color: '#8b5cf6', textDecoration: 'none' }}>Ver Cérebro Completo →</a>
+          </div>
+          {sessao.memoriaIa.fatos?.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: sessao.memoriaIa.resumosRecentes?.length ? 4 : 0 }}>
+              {sessao.memoriaIa.fatos.map((f, idx) => (
+                <span key={f.id || idx} style={{
+                  background: 'rgba(255, 255, 255, 0.85)',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: 6,
+                  padding: '2px 7px',
+                  fontSize: 11,
+                  color: '#334155'
+                }}>
+                  <b>{f.categoriaLabel}:</b> {f.valor}
+                </span>
+              ))}
+            </div>
+          )}
+          {sessao.memoriaIa.resumosRecentes?.[0] && (
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+              <i>Última conversa ({sessao.memoriaIa.resumosRecentes[0].dia}):</i> {sessao.memoriaIa.resumosRecentes[0].resumo}
+            </div>
+          )}
+        </div>
+      )}
       {sessao?.hasPendingAction && !encerrada && (
         <div className="dadm-note" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', borderColor: 'rgba(245, 158, 11, 0.5)', background: 'rgba(245, 158, 11, 0.12)' }}>
           <span style={{ fontSize: 12 }}>
