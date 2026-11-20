@@ -35,6 +35,7 @@ export default function WhatsappConversationPanel({
   lojaId,
   tipoCanal = 'cliente',
   canAct = false,
+  initialText = '',
   onClose,
   onNovaConversa,
   onChanged,
@@ -42,7 +43,15 @@ export default function WhatsappConversationPanel({
   const [dados, setDados] = useState(null)
   const [erro, setErro] = useState('')
   const [aviso, setAviso] = useState('')
-  const [texto, setTexto] = useState('')
+  const [texto, setTexto] = useState(() => {
+    if (initialText) return initialText
+    try {
+      const p = new URLSearchParams(window.location.search)
+      return p.get('mensagem') || p.get('texto') || ''
+    } catch {
+      return ''
+    }
+  })
   const [ocupado, setOcupado] = useState('')
   const [retomar, setRetomar] = useState(true)
   const [confirmar, setConfirmar] = useState('')
@@ -52,6 +61,12 @@ export default function WhatsappConversationPanel({
   const vivoRef = useRef(true)
   const canalQuery = tipoCanal === 'cliente' ? '' : `?canal=${tipoCanal}`
   const headers = { 'X-Empresa-Id': empresaId || '', 'X-Loja-Id': lojaId || '' }
+
+  useEffect(() => {
+    if (initialText) {
+      setTexto(initialText)
+    }
+  }, [initialText])
 
   useEffect(() => {
     let ativo = true

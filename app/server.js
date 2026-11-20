@@ -9922,6 +9922,7 @@ app.post(['/api/admin/barbearia/carteira-clientes/disparar-reativacao', '/api/ad
         clienteId: c.clienteId || c.id,
         nome: c.nome,
         telefone: c.telefone,
+        trexUrl: tel.length >= 10 ? `/admin/whatsapp-fila?telefone=${telCompleto}&nome=${encodeURIComponent(c.nome || '')}&mensagem=${encodeURIComponent(msg)}&origem=carteira_lote` : null,
         whatsappUrl: tel.length >= 10 ? `https://wa.me/${telCompleto}?text=${encodeURIComponent(msg)}` : null,
         mensagem: msg,
         status: tel.length >= 10 ? 'pronto' : 'sem_telefone',

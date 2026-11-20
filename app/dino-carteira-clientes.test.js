@@ -157,4 +157,18 @@ test('Carteira de clientes por profissional - mapeamento e resumo', async (t) =>
     const r3 = carteira.mapearCarteiras(empId);
     assert.notEqual(r1, r3);
   });
+
+  await t.test('gerarLink Whatsapp e T-Rex: gera url trexUrl com destino painel do T-Rex', () => {
+    const msg = carteira.gerarMensagemWhatsappRetorno({
+      clienteNome: 'Carlos Silva',
+      barbeiroApelido: 'Dino',
+      servicoFavorito: 'Corte Degradê',
+      diasSemRetorno: 15,
+    });
+    const tel = '5565999991111';
+    const trexUrl = `/admin/whatsapp-fila?telefone=${tel}&nome=${encodeURIComponent('Carlos Silva')}&mensagem=${encodeURIComponent(msg)}&origem=carteira_lote`;
+    assert(trexUrl.startsWith('/admin/whatsapp-fila?telefone=5565999991111'));
+    assert(trexUrl.includes('origem=carteira_lote'));
+    assert(trexUrl.includes('Carlos'));
+  });
 });

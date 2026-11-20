@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../../../lib/api'
 import {
   RotateCcw,
@@ -70,6 +71,7 @@ const GATILHOS_CRM = [
   },
 ]
 export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda, empresaId }) {
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [dados, setDados] = useState({
     itens: [],
@@ -448,11 +450,21 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda, empresaId }) {
     setTimeout(() => setCopiadoKey(null), 2500)
   }
 
-  const linkWa = (cliente) => {
-    const d = String(cliente.telefone || '').replace(/\D/g, '')
-    if (!d) return '#'
+  const abrirTrex = (cliente) => {
+    const d = String(cliente?.telefone || '').replace(/\D/g, '')
+    if (!d) {
+      alert('Cliente sem telefone cadastrado.')
+      return
+    }
     const phone = d.startsWith('55') ? d : `55${d}`
-    return `https://wa.me/${phone}?text=${encodeURIComponent(cliente.mensagemWhatsapp || '')}`
+    const params = new URLSearchParams({
+      telefone: phone,
+      nome: cliente.nome || '',
+      mensagem: cliente.mensagemWhatsapp || '',
+      origem: 'recuperacao_avec',
+      novo: '1',
+    })
+    navigate(`/admin/whatsapp-fila?${params.toString()}`)
   }
 
   const listaProfissionais = useMemo(() => {
@@ -1170,16 +1182,16 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda, empresaId }) {
                       <div className="dino-recup-actions">
                         {/* BOTÃO ENVIAR WHATSAPP */}
                         {c.telefone && (
-                          <a
-                            href={linkWa(c)}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <button
+                            type="button"
+                            onClick={() => abrirTrex(c)}
                             className="dino-recup-btn-wa"
-                            title="Abrir WhatsApp com mensagem de resgate pronta"
+                            style={{ cursor: 'pointer', border: 'none' }}
+                            title="Abrir no Painel do T-Rex para enviar via WhatsApp oficial do sistema"
                           >
                             <MessageSquare size={14} />
-                            WhatsApp
-                          </a>
+                            WhatsApp (T-Rex)
+                          </button>
                         )}
 
                         {/* COPIAR MENSAGEM */}
@@ -1393,16 +1405,16 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda, empresaId }) {
                     {copiadoKey === modalCliente.key ? '✓ Copiado!' : 'Copiar Texto'}
                   </button>
                   {modalCliente.telefone && (
-                    <a
-                      href={linkWa(modalCliente)}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      type="button"
+                      onClick={() => abrirTrex(modalCliente)}
                       className="dino-recup-btn-wa"
-                      style={{ minHeight: '34px' }}
+                      style={{ minHeight: '34px', cursor: 'pointer', border: 'none' }}
+                      title="Abrir no Painel do T-Rex para enviar via WhatsApp oficial do sistema"
                     >
                       <MessageSquare size={14} />
-                      Enviar pelo WhatsApp Web
-                    </a>
+                      Enviar via T-Rex
+                    </button>
                   )}
                 </div>
               </div>
