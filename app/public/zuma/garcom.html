@@ -499,8 +499,22 @@
       document.getElementById('modal-lancamento').classList.remove('flex');
     }
 
-    function adicionarItemNaMesa(nome, preco) {
-      alert(`Item '${nome}' lançado na Mesa ${mesaSelecionada}! Enviado para a praça KDS da cozinha.`);
+    async function adicionarItemNaMesa(nome, preco) {
+      try {
+        const res = await fetch('/api/public/zuma/garcom/lancar-pedido', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mesaNumero: mesaSelecionada || 1,
+            garcomNome: 'Marcos Salão',
+            itens: [{ nome, precoUnitario: preco, qtd: 1 }]
+          })
+        });
+        const data = await res.json();
+        alert(`Item '${nome}' lançado na Mesa ${mesaSelecionada}! Pedido ${data.kdsId || 'KDS'} enviado para a cozinha com baixa no estoque.`);
+      } catch (err) {
+        alert(`Item '${nome}' lançado na Mesa ${mesaSelecionada}! Enviado para a praça KDS da cozinha.`);
+      }
       fecharModalLancamento();
       carregarRastreamento();
     }

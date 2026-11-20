@@ -2253,3 +2253,81 @@ test('Zuma - Hub de Administração de Conexões e Open APIs de Concorrência', 
   assert.ok(adminContent.includes('KyttoIA'), 'Motor KyttoIA deve estar presente');
   assert.ok(!adminContent.toLowerCase().includes('gemini'), 'Não deve exibir Gemini externamente (Diretriz Kytto)');
 });
+
+test('Zuma Cozinha Oriental - Backend Completo: Fluxo Unificado de Vendas, Ficha Técnica, KDS, Fechamento de Mesas e Health Check 360°', async () => {
+  const { routerZuma, processarPedidoCicloCompletoZuma } = await import('./modules/restaurante-zuma.js');
+  const callRoute = (method, p, body = {}, params = {}) => {
+    return new Promise((resolve) => {
+      let matchedPath = p;
+      const req = { method, path: matchedPath, url: matchedPath, query: {}, body, params };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      const layer = routerZuma.stack.find(l => {
+        if (!l.route || !l.route.methods[method.toLowerCase()]) return false;
+        if (Array.isArray(l.route.path)) return l.route.path.includes(p);
+        return l.route.path === p;
+      });
+      if (layer) layer.route.stack[0].handle(req, res);
+      else resolve({ status: 404, data: { error: 'Route not found: ' + p } });
+    });
+  };
+
+  // 1. Validar função de ciclo completo de pedido/venda
+  assert.equal(typeof processarPedidoCicloCompletoZuma, 'function', 'Função processarPedidoCicloCompletoZuma deve ser exportada');
+  const cicloRes = processarPedidoCicloCompletoZuma({
+    origem: "delivery",
+    clienteNome: "Rodrigo Gonçalves",
+    clienteTelefone: "(65) 99988-7766",
+    enderecoEntrega: "Rua 24, 500 - Jardim Europa",
+    bairroEntrega: "Jardim Europa",
+    itens: [
+      { id: "combinado-30", nome: "Combinado Zuma Especial 30 Peças", qtd: 1, precoUnitario: 119.90 }
+    ],
+    taxaEntrega: 12.00,
+    formaPagamento: "pix"
+  });
+
+  assert.equal(cicloRes.ok, true);
+  assert.ok(cicloRes.vendaId.startsWith('VND-'));
+  assert.ok(cicloRes.kdsId.startsWith('KDS-'));
+  assert.ok(cicloRes.reciboFiscal.chaveNFCe.startsWith('512611'));
+  assert.ok(cicloRes.reciboFiscal.qrCodeUrl.includes('sefaz.mt.gov.br'));
+  assert.equal(cicloRes.corridaDelivery.bairro, "Jardim Europa");
+  assert.ok(cicloRes.baixasRealizadasQtd > 0, 'Deve registrar baixas de estoque por ficha técnica');
+
+  // 2. Fechamento de mesa via /mesas/fechar-conta
+  const fechaMesaRes = await callRoute('POST', '/mesas/fechar-conta', {
+    mesaNumero: 12,
+    formaPagamento: "pix",
+    garcomNome: "Marcos Salão"
+  });
+  assert.equal(fechaMesaRes.status, 200);
+  assert.equal(fechaMesaRes.data.ok, true);
+  assert.equal(fechaMesaRes.data.statusMesa, "LIVRE");
+  assert.ok(fechaMesaRes.data.reciboFiscal.chaveNFCe);
+
+  // 3. Health Check 360° do ecossistema
+  const healthRes = await callRoute('GET', '/health');
+  assert.equal(healthRes.status, 200);
+  assert.equal(healthRes.data.ok, true);
+  assert.equal(healthRes.data.status, "OPERACIONAL_100%");
+  assert.equal(healthRes.data.cidade, "Tangará da Serra - MT");
+  assert.ok(healthRes.data.entidadesContadores.mesas >= 25);
+  assert.ok(healthRes.data.entidadesContadores.conectoresApis >= 5);
+  assert.ok(healthRes.data.persistente.arquivo);
+
+  // 4. Verificação de chamadas reais integradas no front-end
+  const garcomHtmlPath = path.join(__dirname, 'public', 'zuma', 'garcom.html');
+  const garcomContent = fs.readFileSync(garcomHtmlPath, 'utf8');
+  assert.ok(garcomContent.includes('/garcom/lancar-pedido'), 'garcom.html deve disparar pedido via fetch');
+
+  const operacaoHtmlPath = path.join(__dirname, 'public', 'zuma', 'operacao.html');
+  const operacaoContent = fs.readFileSync(operacaoHtmlPath, 'utf8');
+  assert.ok(operacaoContent.includes('/caixa/sangria'), 'operacao.html deve chamar /caixa/sangria');
+  assert.ok(operacaoContent.includes('/caixa/suprimento'), 'operacao.html deve chamar /caixa/suprimento');
+  assert.ok(operacaoContent.includes('/cozinha/atualizar-status'), 'operacao.html deve atualizar KDS via fetch');
+});

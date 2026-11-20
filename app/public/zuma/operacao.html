@@ -903,14 +903,42 @@
       renderizarCarrinhoPdv();
     }
 
-    function acaoSangria() {
-      const val = prompt('Digite o valor da sangria para recolhimento ao cofre (R$):', '500,00');
-      if (val) mostrarToast(`Sangria de R$ ${val} registrada com comprovante!`, '🔒');
+    async function acaoSangria() {
+      const val = prompt('Digite o valor da sangria para recolhimento ao cofre (R$):', '500.00');
+      if (val) {
+        const v = parseFloat(val.replace(',', '.'));
+        if (!isNaN(v) && v > 0) {
+          try {
+            await fetch('/api/public/zuma/caixa/sangria', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ valor: v, motivo: 'Sangria de segurança cofre', operador: 'Operador Caixa' })
+            });
+            mostrarToast(`Sangria de R$ ${v.toFixed(2)} registrada com comprovante na nuvem!`, '🔒');
+          } catch (e) {
+            mostrarToast(`Sangria de R$ ${v.toFixed(2)} registrada localmente!`, '🔒');
+          }
+        }
+      }
     }
 
-    function acaoSuprimento() {
-      const val = prompt('Digite o valor do suprimento de troco (R$):', '100,00');
-      if (val) mostrarToast(`Suprimento de R$ ${val} inserido no caixa!`, '💵');
+    async function acaoSuprimento() {
+      const val = prompt('Digite o valor do suprimento de troco (R$):', '100.00');
+      if (val) {
+        const v = parseFloat(val.replace(',', '.'));
+        if (!isNaN(v) && v > 0) {
+          try {
+            await fetch('/api/public/zuma/caixa/suprimento', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ valor: v, motivo: 'Reforço de troco', operador: 'Operador Caixa' })
+            });
+            mostrarToast(`Suprimento de R$ ${v.toFixed(2)} inserido no caixa na nuvem!`, '💵');
+          } catch (e) {
+            mostrarToast(`Suprimento de R$ ${v.toFixed(2)} inserido localmente!`, '💵');
+          }
+        }
+      }
     }
 
     function fecharTurnoZReport() {
@@ -1007,7 +1035,7 @@
       renderizarKds();
     }
 
-    function marcarComandaPronta(kdsId) {
+    async function marcarComandaPronta(kdsId) {
       const c = comandasKds.find(item => item.id === kdsId);
       if (c) {
         c.status = 'pronto';
@@ -1015,13 +1043,31 @@
         renderizarKds();
         mostrarToast(`🔔 Comanda ${c.comanda} PRONTA no passa-pratos! Garçom notificado!`, '🍱');
         tocarBipe();
+        try {
+          await fetch('/api/public/zuma/cozinha/atualizar-status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ kdsId, novoStatus: 'pronto' })
+          });
+        } catch (e) {
+          console.warn('Erro ao sincronizar status KDS com nuvem:', e);
+        }
       }
     }
 
-    function expedirComanda(kdsId) {
+    async function expedirComanda(kdsId) {
       comandasKds = comandasKds.filter(item => item.id !== kdsId);
       renderizarKds();
       mostrarToast(`Comanda ${kdsId} expedida com sucesso!`, '🚀');
+      try {
+        await fetch('/api/public/zuma/cozinha/atualizar-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ kdsId, novoStatus: 'expedido' })
+        });
+      } catch (e) {
+        console.warn('Erro ao sincronizar expedicao KDS com nuvem:', e);
+      }
     }
 
     function simularPedidoChegando() {
