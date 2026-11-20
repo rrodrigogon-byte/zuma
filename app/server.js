@@ -233,6 +233,7 @@ import { registerPainelGestaoRoutes } from './dino-painel-gestao-routes.js';
 import { registerGestaoSalaoAvancadaRoutes } from './dino-gestao-salao-avancada.js';
 import { registerInteligenciaVendasRoutes } from './dino-inteligencia-vendas-routes.js';
 import { registerAiBrainRoutes } from './ai-brain-routes.js';
+import { registerMobileRoutes } from './modules/mobile-api-routes.js';
 import { startAiBrainSchedulers } from './ai-brain-scheduler.js';
 import { registerAtivacaoRoutes } from './dino-ativacao-routes.js';
 import { vincularClienteAoAtendimento } from './dino-clientes-vinculo.js';
@@ -6014,6 +6015,9 @@ registerWhatsappConexaoRoutes(app, { legacyEmpresaId: whatsappEmpresaId, legacyL
 registerWhatsappConexaoRoutes(app, { legacyEmpresaId: whatsappEmpresaId, legacyLojaId: whatsappLojaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user), basePath: '/api/admin/barbearia/whatsapp-conexao-gestao', tipoCanal: 'gestao' });
 registerWhatsappConexaoRoutes(app, { legacyEmpresaId: whatsappEmpresaId, legacyLojaId: whatsappLojaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user), basePath: '/api/admin/barbearia/whatsapp-conexao-lancamentos', tipoCanal: 'lancamentos' });
 registerWhatsappCloudRoutes(app, { isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user) });
+
+// Rotas da API Mobile (React Native + PWA) e Sincronização Offline
+registerMobileRoutes(app, { db, save, legacyEmpresaId, legacyLojaId, auth, barbeariaErpKytto, listarAgendamentosBarbearia, financeiroKytto, caixaKytto, clientesKytto, comandaPlanoKytto, enviarWhatsappCore });
 
 // Rotas do Relatório Diário de Performance & Auditoria Operacional do T-Rex (Motor KyttoIA)
 app.get('/api/admin/dino/report-grafico/preview', auth, requireStaff, async (req, res) => {

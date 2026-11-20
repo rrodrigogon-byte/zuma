@@ -843,10 +843,68 @@ function custoMaterialNormalizado(valor, anterior) {
   return custo;
 }
 
+
+export function estimarDuracaoPorNomeServico(nome = '') {
+  const n = String(nome || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  if (!n) return 30;
+  // Combos e pacotes completos: no mínimo 60 minutos (Corte e Barba, etc.)
+  if (/corte.*barba|barba.*corte|cabelo.*barba|barba.*cabelo|combo|completo/i.test(n) || (n.includes('corte') && n.includes('barba'))) {
+    return 60;
+  }
+  // Prótese capilar: 90 minutos
+  if (n.includes('protese')) {
+    return 90;
+  }
+  // Procedimentos químicos e capilares demorados: 45 a 60 minutos
+  if (n.includes('selagem') || n.includes('desondulacao') || n.includes('progressiva') || n.includes('relaxamento') || n.includes('alisamento')) {
+    return 45;
+  }
+  // Limpeza de pele e estética facial: 45 minutos
+  if (n.includes('limpeza de pele') || n.includes('limpeza pele') || n.includes('dermaplaning')) {
+    return 45;
+  }
+  // Manicure e Pedicure juntas: 60 minutos
+  if (n.includes('manicure e pedicure') || (n.includes('manicure') && n.includes('pedicure'))) {
+    return 60;
+  }
+  // Corte Visagista: 45 minutos
+  if (n.includes('visagista') || n.includes('visagismo')) {
+    return 45;
+  }
+  // Corte masculino / cabelo da equipe: 40 minutos (ou no mínimo 30)
+  if (n.includes('corte') || n.includes('cabelo')) {
+    return 40;
+  }
+  // Barba avulsa / barboterapia / detox de barba: 30 minutos
+  if (n.includes('barba') || n.includes('barboterapia')) {
+    return 30;
+  }
+  // Massagem relaxante: 30 minutos
+  if (n.includes('massagem')) {
+    return 30;
+  }
+  // Manicure ou Pedicure avulsas: 30 minutos
+  if (n.includes('manicure') || n.includes('pedicure')) {
+    return 30;
+  }
+  // Hidratação / Detox capilar: 30 minutos
+  if (n.includes('hidratacao') || n.includes('detox')) {
+    return 30;
+  }
+  // Procedimentos express rápidos: 15 minutos
+  if (n.includes('sobrancelha') || n.includes('pezinho') || n.includes('pesinho') || n.includes('acabamento') || n.includes('nariz') || n.includes('orelha')) {
+    return 15;
+  }
+  // Padrão geral seguro para qualquer serviço de barbearia
+  return 30;
+}
+
 function servicoNormalizado(dados = {}, anterior = {}) {
   const tipoPreco = tipoPrecoNormalizado(dados.tipoPreco ?? dados.tipo_preco, anterior.tipoPreco);
   const preco = dinheiro(dados.preco ?? anterior.preco);
-  const duracao = Math.max(5, Math.min(480, Math.round(numero(dados.duracaoMinutos ?? dados.duracao_minutos ?? anterior.duracaoMinutos, 30))));
+  const duracaoEstimada = estimarDuracaoPorNomeServico(dados.nome ?? anterior.nome);
+  const duracaoInformada = numero(dados.duracaoMinutos ?? dados.duracao_minutos ?? anterior.duracaoMinutos, null);
+  const duracao = Math.max(5, Math.min(480, Math.round(duracaoInformada && duracaoInformada > 0 ? duracaoInformada : duracaoEstimada)));
   return {
     nome: texto(dados.nome ?? anterior.nome, 120),
     descricao: texto(dados.descricao ?? anterior.descricao, 500),
@@ -946,22 +1004,35 @@ function calendarioNormalizado(dados = {}, anterior = {}) {
 }
 
 export function duracaoAtendimentoProfissional(servico, profissional, calendario = {}) {
+  const duracaoBaseServico = Number(servico?.duracaoMinutos || servico?.duracao_minutos || servico?.duracao_min || servico?.duracao)
+    || estimarDuracaoPorNomeServico(servico?.nome)
+    || 30;
+
   if (profissional && Number(profissional.duracaoAtendimentoMinutos) > 0) {
-    return Number(profissional.duracaoAtendimentoMinutos);
+    const durProf = Number(profissional.duracaoAtendimentoMinutos);
+    // Para serviços combo (corte e barba >= 60m) ou procedimentos longos (prótese, química),
+    // a duração do procedimento NÃO pode ser encolhida pelo tempo de corte rápido do profissional
+    if (duracaoBaseServico >= 60 || durProf < 20) {
+      return Math.max(duracaoBaseServico, durProf >= 20 ? durProf : 0);
+    }
+    return durProf;
   }
+
   // A duração do procedimento reflete primariamente o tempo necessário cadastrado no Catálogo de Serviços do ERP
   // (ex: Corte 40min, Barba 30min, Corte e Barba 60min, Selagem 45min, Prótese 90min, etc.).
-  if (servico && Number(servico.duracaoMinutos) > 0) {
+  if (duracaoBaseServico > 0) {
     // Se tempoAtendimentoDinoMinutos foi configurado explicitamente no painel e o serviço é o genérico básico de 30 min:
-    if (ehProfissionalDino(profissional) && Number(calendario?.tempoAtendimentoDinoMinutos) > 0 && servico.duracaoMinutos === 30 && !String(servico.nome || '').toLowerCase().includes('barba')) {
+    if (ehProfissionalDino(profissional) && Number(calendario?.tempoAtendimentoDinoMinutos) > 0 && duracaoBaseServico === 30 && !String(servico?.nome || '').toLowerCase().includes('barba')) {
       return Number(calendario.tempoAtendimentoDinoMinutos);
     }
-    return Number(servico.duracaoMinutos);
+    return duracaoBaseServico;
   }
+
   if (ehProfissionalDino(profissional) && Number(calendario?.tempoAtendimentoDinoMinutos) > 0) {
     return Number(calendario.tempoAtendimentoDinoMinutos);
   }
-  return Number(calendario?.intervaloMinutos) || 15;
+
+  return 30; // NUNCA retornar o intervalo de 15 minutos da grade como duração de procedimento!
 }
 
 function agendamentoNormalizado(dados = {}, anterior = {}, opcoes = {}) {
@@ -1269,7 +1340,15 @@ export function listarServicos(empresaId, { incluirInativos = false } = {}) {
     .filter((item) => incluirInativos || item.ativo !== false)
     .filter((item) => incluirInativos || !temServicosReais || !String(item.id || '').startsWith('srv-dino-'))
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
-    .map(item=>({...item,grupoServico:serviceGroup(item),grupoServicoSugerido:!item.grupoServico}));
+    .map((item) => {
+      const duracaoMinutos = Number(item.duracaoMinutos || item.duracao_minutos) || estimarDuracaoPorNomeServico(item.nome) || 30;
+      return {
+        ...item,
+        duracaoMinutos,
+        grupoServico: serviceGroup(item),
+        grupoServicoSugerido: !item.grupoServico
+      };
+    });
 }
 
 function validarConsumoInternoServico(estado, empresaId, servico) {
@@ -4596,12 +4675,18 @@ export function criarAgendamento(empresaId, dados = {}, opcoes = {}) {
   if (agendamento.profissionalId && (!estado.profissionais[agendamento.profissionalId] || estado.profissionais[agendamento.profissionalId].ativo === false)) throw new Error('Profissional não encontrado ou inativo.');
   const profissional = agendamento.profissionalId ? estado.profissionais[agendamento.profissionalId] : null;
   const servico = estado.servicos[agendamento.servicoId];
+  const duracaoPadraoCriacao = duracaoAtendimentoProfissional(servico, profissional, obterCalendarioLoja(estado, agendamento.lojaId));
   if (dados.duracaoMinutos) {
-    agendamento.duracaoMinutos = Math.max(5, Math.min(480, Math.round(Number(dados.duracaoMinutos))));
-  } else if (false) {
-    agendamento.duracaoMinutos = atual.duracaoMinutos;
+    const durManual = Math.max(5, Math.min(480, Math.round(Number(dados.duracaoMinutos))));
+    const durMinimaProcedimento = estimarDuracaoPorNomeServico(servico?.nome);
+    // Blindagem de segurança: serviços combo (corte e barba) NUNCA podem ser marcados com duração < 45 minutos (ex: 15 min acidental)
+    if (durMinimaProcedimento >= 60 && durManual < 45) {
+      agendamento.duracaoMinutos = duracaoPadraoCriacao;
+    } else {
+      agendamento.duracaoMinutos = durManual;
+    }
   } else {
-    agendamento.duracaoMinutos = duracaoAtendimentoProfissional(servico, profissional, obterCalendarioLoja(estado, agendamento.lojaId));
+    agendamento.duracaoMinutos = duracaoPadraoCriacao;
   }
   const precoCalculado = calcularPrecoServicoHorario(servico, profissional, agendamento.horaLocal);
   const permiteCustom = dados.permitirValorPersonalizado === true || dados.valorManual === true || opcoes.permitirValorPersonalizado === true || dados.origem === 'admin';
@@ -4680,9 +4765,18 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}, opcoe
   if (!agendamento.servicoId || !estado.servicos[agendamento.servicoId] || estado.servicos[agendamento.servicoId].ativo === false) throw new Error('Serviço ativo é obrigatório.');
   const profissional = agendamento.profissionalId ? estado.profissionais[agendamento.profissionalId] : null;
   const servico = estado.servicos[agendamento.servicoId];
-  agendamento.duracaoMinutos = dados.duracaoMinutos
-    ? Math.max(5, Math.min(480, Math.round(Number(dados.duracaoMinutos))))
-    : duracaoAtendimentoProfissional(servico, profissional, obterCalendarioLoja(estado, agendamento.lojaId));
+  const duracaoPadraoAtualizacao = duracaoAtendimentoProfissional(servico, profissional, obterCalendarioLoja(estado, agendamento.lojaId));
+  if (dados.duracaoMinutos) {
+    const durManual = Math.max(5, Math.min(480, Math.round(Number(dados.duracaoMinutos))));
+    const durMinimaProcedimento = estimarDuracaoPorNomeServico(servico?.nome);
+    if (durMinimaProcedimento >= 60 && durManual < 45) {
+      agendamento.duracaoMinutos = duracaoPadraoAtualizacao;
+    } else {
+      agendamento.duracaoMinutos = durManual;
+    }
+  } else {
+    agendamento.duracaoMinutos = atual.duracaoMinutos || duracaoPadraoAtualizacao;
+  }
   const precoCalculado = calcularPrecoServicoHorario(servico, profissional, agendamento.horaLocal);
   const valorEsperado = agendamento.servicoId === atual.servicoId && Number(atual.valor) > 0 ? atual.valor : precoCalculado;
   const permiteCustom = dados.permitirValorPersonalizado === true || dados.valorManual === true || opcoes.permitirValorPersonalizado === true || dados.origem === 'admin';
@@ -5817,4 +5911,42 @@ export function obterResumoAgendamentosIa(empresaId, { de = '', ate = '', lojaId
       vagaRecuperada: 'Uma nova reserva ativa com vínculo gravado, na mesma empresa, unidade, profissional, data e horário, criada depois do cancelamento. Uma ocorrência por horário. O valor soma o preço dos serviços reservados.',
     },
   };
+}
+
+
+export function garantirDuracoesServicosBarbearia(empresaId) {
+  const estado = estadoEmpresa(empresaId, false);
+  if (!estado) return false;
+  let alterou = false;
+  if (estado.servicos) {
+    for (const servico of Object.values(estado.servicos)) {
+      if (!servico) continue;
+      const duracaoAtual = Number(servico.duracaoMinutos);
+      const duracaoEstimada = estimarDuracaoPorNomeServico(servico.nome);
+      if (!duracaoAtual || duracaoAtual <= 15 || (duracaoEstimada >= 60 && duracaoAtual < 45)) {
+        servico.duracaoMinutos = duracaoEstimada;
+        servico.atualizadoEm = dataAtual();
+        alterou = true;
+      }
+    }
+  }
+  if (estado.agendamentos) {
+    const agoraIso = new Date().toISOString();
+    for (const ag of Object.values(estado.agendamentos)) {
+      if (!ag || ag.status === 'cancelado' || ag.status === 'nao_compareceu') continue;
+      if (ag.dataHora && ag.dataHora >= agoraIso) {
+        const srv = estado.servicos[ag.servicoId];
+        const durEstimada = estimarDuracaoPorNomeServico(srv?.nome);
+        if (durEstimada >= 60 && Number(ag.duracaoMinutos) <= 15) {
+          ag.duracaoMinutos = durEstimada;
+          ag.atualizadoEm = dataAtual();
+          alterou = true;
+        }
+      }
+    }
+  }
+  if (alterou) {
+    save();
+  }
+  return alterou;
 }
