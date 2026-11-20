@@ -87,5 +87,13 @@ export function isZumaEmpresa(idOuNome) {
 
 export function ehHostZuma(host = typeof window === 'undefined' ? '' : window.location.hostname) {
   const h = String(host || '').toLowerCase().trim().replace(/\.$/, '');
-  return HOSTS_ZUMA.has(h) || h.startsWith('zuma.');
+  if (HOSTS_ZUMA.has(h) || h.startsWith('zuma.') || h.includes('zuma')) return true;
+  if (typeof window !== 'undefined') {
+    const p = String(window.location.pathname || '').toLowerCase();
+    if (p.startsWith('/zuma') || p.startsWith('/admin/zuma') || p.startsWith('/erp') || p.startsWith('/operacao') || p.startsWith('/pilot')) {
+      return true;
+    }
+  }
+  // No ecossistema Zuma, opera 100% exclusivo para a Zuma Cozinha Oriental
+  return true;
 }

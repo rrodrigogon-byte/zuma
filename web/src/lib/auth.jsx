@@ -70,6 +70,9 @@ function readEmpresasAcessiveisInicial() {
 }
 
 function filtrarEmpresasPorUsuario(empresas, user) {
+  if (ehHostZuma()) {
+    return [ZUMA_COMPANY];
+  }
   const lista = garantirEmpresasCanonicas(Array.isArray(empresas) ? empresas : [])
   if (!user) return lista
 
@@ -129,6 +132,9 @@ function filtrarEmpresasPorUsuario(empresas, user) {
 }
 
 function garantirEmpresasCanonicas(empresas) {
+  if (ehHostZuma()) {
+    return [ZUMA_COMPANY];
+  }
   let lista = Array.isArray(empresas) ? [...empresas] : []
   if (isDinoDedicatedHost() && !lista.some((empresa) => isDinoBrandContext(empresa))) {
     lista.push(DINO_COMPANY)
@@ -143,6 +149,9 @@ function garantirEmpresasCanonicas(empresas) {
 }
 
 function garantirLojasCanonicas(lojas) {
+  if (ehHostZuma()) {
+    return [ZUMA_STORE];
+  }
   // Entradas antigas da loja Dino gravadas sem vínculo de empresa são reparadas aqui.
   let lista = repararLojasSemEmpresa(Array.isArray(lojas) ? lojas : [], [DINO_STORE])
   if (isDinoDedicatedHost() && !lista.some((loja) => String(loja?.id || '') === DINO_STORE.id)) {

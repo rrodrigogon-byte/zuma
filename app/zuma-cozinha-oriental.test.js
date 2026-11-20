@@ -642,3 +642,191 @@ test('Zuma Cozinha Oriental - Catálogo 100% Real Sincronizado com zumacozinhaor
   assert.ok(indexHtml.includes('id="modal-fotos-galeria"'), 'Modal deve conter galeria multi-fotos');
   assert.ok(indexHtml.includes('setFiltroRapido'), 'PWA deve conter função de filtros rápidos');
 });
+
+test("Zuma Cozinha Oriental - Módulos Especializados v2: Fiscal NFC-e, Reservas/Fila Hostess, Matriz BCG, Spool Impressão, Compras e Zumi IA", async () => {
+  const { routerZuma } = await import("./modules/restaurante-zuma.js");
+
+  const callRoute = (method, p, body = {}, query = {}) => {
+    return new Promise((resolve) => {
+      let matchedLayer = null;
+      let params = {};
+      for (const layer of routerZuma.stack) {
+        if (layer.route && layer.route.methods[method.toLowerCase()]) {
+          const match = layer.match(p);
+          if (match) {
+            matchedLayer = layer;
+            params = layer.params || {};
+            break;
+          }
+        }
+      }
+
+      if (!matchedLayer) {
+        return resolve({ status: 404, data: { error: "Route not found: " + p } });
+      }
+
+      const req = { method, url: p, path: p, body, query, params };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      matchedLayer.route.stack[0].handle(req, res);
+    });
+  };
+
+  // 1. Fiscal NFC-e SEFAZ-MT
+  const notasEmitidas = await callRoute("GET", "/fiscal/notas-emitidas");
+  assert.equal(notasEmitidas.status, 200);
+  assert.equal(notasEmitidas.data.ok, true);
+  assert.ok(notasEmitidas.data.notas.length >= 1);
+  assert.equal(notasEmitidas.data.ambiente, "producao");
+
+  const emitirNfce = await callRoute("POST", "/fiscal/emitir-nfce", {
+    valorTotal: 159.90,
+    cpfConsumidor: "123.456.789-00",
+    itens: [{ descricao: "Barca Zuma Especial 40 Peças", qtd: 1, valorUnit: 159.90 }]
+  });
+  assert.equal(emitirNfce.status, 201);
+  assert.equal(emitirNfce.data.ok, true);
+  assert.equal(emitirNfce.data.nota.chaveAcesso.length, 44);
+  assert.ok(emitirNfce.data.nota.protocoloAutorizacao.length > 5);
+
+  const danfe = await callRoute("GET", `/fiscal/danfe-xml/${emitirNfce.data.nota.chaveAcesso}`);
+  assert.equal(danfe.status, 200);
+  assert.ok(danfe.data.danfeSimplificadaText.includes("ZUMA COZINHA ORIENTAL"));
+  assert.ok(danfe.data.xmlString.includes(emitirNfce.data.nota.chaveAcesso));
+
+  const cancelarNfce = await callRoute("POST", "/fiscal/cancelar-nfce", {
+    chaveAcesso: emitirNfce.data.nota.chaveAcesso,
+    motivo: "Erro de teste homologação"
+  });
+  assert.equal(cancelarNfce.status, 200);
+  assert.equal(cancelarNfce.data.ok, true);
+  assert.equal(cancelarNfce.data.nota.status, "cancelada");
+
+  const regrasFiscais = await callRoute("GET", "/fiscal/regras-tributarias");
+  assert.equal(regrasFiscais.status, 200);
+  assert.ok(regrasFiscais.data.regimeTributario.includes("Simples Nacional"));
+  assert.ok(regrasFiscais.data.regras.length >= 2);
+
+  // 2. Reservas e Fila de Espera Hostess
+  const fila = await callRoute("GET", "/fila");
+  assert.equal(fila.status, 200);
+  assert.equal(fila.data.ok, true);
+  assert.ok(Array.isArray(fila.data.fila));
+
+  const entrarFila = await callRoute("POST", "/fila/entrar", {
+    clienteNome: "Família Souza",
+    qtdPessoas: 4,
+    telefoneWhatsapp: "65999881122"
+  });
+  assert.equal(entrarFila.status, 201);
+  assert.equal(entrarFila.data.ok, true);
+  assert.equal(entrarFila.data.entrada.clienteNome, "Família Souza");
+
+  const chamarFila = await callRoute("POST", "/fila/chamar", {
+    id: entrarFila.data.entrada.id,
+    mesaNumero: 6
+  });
+  assert.equal(chamarFila.status, 200);
+  assert.equal(chamarFila.data.ok, true);
+  assert.equal(chamarFila.data.item.status, "chamada");
+
+  const acomodarFila = await callRoute("POST", "/fila/acomodar", {
+    id: entrarFila.data.entrada.id,
+    mesaNumero: 6
+  });
+  assert.equal(acomodarFila.status, 200);
+  assert.equal(acomodarFila.data.ok, true);
+  assert.equal(acomodarFila.data.item.status, "sentada");
+
+  const reservas = await callRoute("GET", "/reservas");
+  assert.equal(reservas.status, 200);
+  assert.equal(reservas.data.ok, true);
+  assert.ok(reservas.data.reservas.length >= 2);
+
+  const criarReserva = await callRoute("POST", "/reservas/criar", {
+    clienteNome: "Dr. Leonardo",
+    qtdPessoas: 4,
+    data: "2026-11-20",
+    hora: "21:00",
+    setorDesejado: "Tatame VIP 1"
+  });
+  assert.equal(criarReserva.status, 201);
+  assert.equal(criarReserva.data.ok, true);
+  assert.equal(criarReserva.data.reserva.setorDesejado, "Tatame VIP 1");
+
+  // 3. Matriz BCG do Cardápio
+  const matrizBcg = await callRoute("GET", "/engenharia-cardapio/matriz-bcg");
+  assert.equal(matrizBcg.status, 200);
+  assert.equal(matrizBcg.data.ok, true);
+  assert.equal(matrizBcg.data.totalProdutosAnalisados, 211);
+  assert.ok(matrizBcg.data.matrizBcg.estrelas.total > 0);
+  assert.ok(matrizBcg.data.matrizBcg.burrosDeCarga.total > 0);
+  assert.ok(matrizBcg.data.matrizBcg.quebraCabecasOportunidades.total > 0);
+  assert.ok(matrizBcg.data.matrizBcg.caesParaSubstituir.total > 0);
+
+  // 4. Spool de Impressão Térmica ESC/POS 80mm
+  const spoolMesa = await callRoute("POST", "/impressao/comanda-mesa", { mesaNumero: 4, garcom: "Leandro" });
+  assert.equal(spoolMesa.status, 200);
+  assert.equal(spoolMesa.data.ok, true);
+  assert.ok(spoolMesa.data.spool.conteudoFormatado.includes("ZUMA COZINHA ORIENTAL"));
+  assert.equal(spoolMesa.data.spool.tamanho, "80mm");
+
+  const spoolKds = await callRoute("POST", "/impressao/tiquete-kds", { mesaNumero: 4, setor: "Sushi Bar", sushiman: "Rafael" });
+  assert.equal(spoolKds.status, 200);
+  assert.equal(spoolKds.data.ok, true);
+  assert.ok(spoolKds.data.spool.conteudoFormatado.includes("PRODUÇÃO") || spoolKds.data.spool.conteudoFormatado.includes("PRODUCAO"));
+
+  const spoolHist = await callRoute("GET", "/impressao/historico");
+  assert.equal(spoolHist.status, 200);
+  assert.equal(spoolHist.data.ok, true);
+  assert.ok(spoolHist.data.spools.length >= 2);
+
+  // 5. Compras de Pescados Nobres com Controle de Temperatura
+  const compras = await callRoute("GET", "/compras/pedidos");
+  assert.equal(compras.status, 200);
+  assert.equal(compras.data.ok, true);
+  assert.ok(Array.isArray(compras.data.compras));
+
+  const novaCompra = await callRoute("POST", "/compras/lancar-ordem", {
+    fornecedor: "Costa Sul Pescados",
+    itens: [{ insumo: "Salmão Fresco", qtdKg: 40.0, precoKg: 68.50 }]
+  });
+  assert.equal(novaCompra.status, 201);
+  assert.equal(novaCompra.data.ok, true);
+  assert.equal(novaCompra.data.ordemCompra.fornecedor, "Costa Sul Pescados");
+
+  // 6. Zumi & Akira IA: Processamento de Pedidos em Linguagem Natural
+  const iaPedido = await callRoute("POST", "/ia/interpretar-pedido", {
+    textoMensagem: "Boa noite! Quero pedir 1 barco supremo de 40 peças, 1 temaki e 2 cocas para o Jardim Tangará II"
+  });
+  assert.equal(iaPedido.status, 200);
+  assert.equal(iaPedido.data.ok, true);
+  assert.equal(iaPedido.data.pedido.bairro, "Jardim Tangará II");
+  assert.equal(iaPedido.data.pedido.taxaEntrega, 9.0);
+  assert.ok(iaPedido.data.pedido.itens.length >= 2);
+  assert.ok(iaPedido.data.pedido.mensagemWhatsapp.includes("Zuma Cozinha Oriental"));
+  assert.ok(iaPedido.data.pedido.pixCopiaECola.length > 30);
+
+  // 7. Persistência de Estado em Disco
+  const estadoPersistidoPath = path.join(__dirname, "data", "zuma-erp-estado.json");
+  assert.ok(fs.existsSync(estadoPersistidoPath), "Arquivo app/data/zuma-erp-estado.json deve existir");
+  const estadoJson = JSON.parse(fs.readFileSync(estadoPersistidoPath, "utf8"));
+  assert.equal(estadoJson.empresaId, "c3c3ac01-8e50-4b61-8c79-de4aaa916da3");
+  assert.ok(estadoJson.turnoCaixa);
+  assert.ok(estadoJson.fiscalNotasEmitidas);
+  assert.ok(estadoJson.reservasMesas);
+
+  // 8. Novas Abas no erp.html
+  const erpHtmlPath = path.join(__dirname, "public", "zuma", "erp.html");
+  const erpHtml = fs.readFileSync(erpHtmlPath, "utf8");
+  assert.ok(erpHtml.includes("aba-fiscal-nfce"), "Deve conter aba Fiscal & NFC-e");
+  assert.ok(erpHtml.includes("aba-reservas-fila"), "Deve conter aba Reservas & Fila Hostess");
+  assert.ok(erpHtml.includes("aba-engenharia-bcg"), "Deve conter aba Matriz BCG");
+  assert.ok(erpHtml.includes("aba-impressao-termica"), "Deve conter aba Impressão Térmica");
+  assert.ok(erpHtml.includes("aba-compras-pescados"), "Deve conter aba Compras Pescados");
+  assert.ok(erpHtml.includes("aba-zumi-ia-pedidos"), "Deve conter aba Zumi IA");
+});
