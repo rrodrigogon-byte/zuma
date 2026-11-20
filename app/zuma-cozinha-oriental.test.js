@@ -422,3 +422,29 @@ test('Zuma Cozinha Oriental - Máquina de Vendas & Leads 360° (Tráfego, Indica
   assert.equal(recRes.data.taxaMediaRecuperacao, 34.8);
   assert.ok(recRes.data.reguasAutomacao.length === 3);
 });
+
+test('Zuma Cozinha Oriental - Módulos de Diferenciação Japonesa no Cardápio Digital', () => {
+  const indexHtmlPath = path.join(__dirname, 'public', 'zuma', 'index.html');
+  assert.ok(fs.existsSync(indexHtmlPath), 'index.html deve existir');
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+
+  // Abas de Diferenciação Especializada em Sushi & Gastronomia Oriental
+  assert.ok(html.includes('id="tab-btn-monte-barca"'), 'Deve conter botão da aba Monte sua Barca');
+  assert.ok(html.includes('id="tab-monte-barca"'), 'Deve conter seção Monte sua Barca');
+  assert.ok(html.includes('id="tab-btn-sommelier-saque"'), 'Deve conter botão da aba Carta de Saquês');
+  assert.ok(html.includes('id="tab-sommelier-saque"'), 'Deve conter seção Carta de Saquês e Harmonização');
+  assert.ok(html.includes('id="tab-btn-rastreabilidade-frescor"'), 'Deve conter botão da aba Selo de Frescor');
+  assert.ok(html.includes('id="tab-rastreabilidade-frescor"'), 'Deve conter seção Selo de Frescor & Cadeia Fria');
+  assert.ok(html.includes('id="tab-btn-eventos-buffet"'), 'Deve conter botão da aba Buffet & Eventos');
+  assert.ok(html.includes('id="tab-eventos-buffet"'), 'Deve conter seção Calculadora de Eventos');
+
+  // Modal de Customização Artesanal do Sushiman
+  assert.ok(html.includes('id="modal-customizacao-sushi"'), 'Deve conter modal de customização do sushiman');
+  assert.ok(html.includes('opt-ponto-cru'), 'Deve permitir ponto do peixe fresco cru');
+  assert.ok(html.includes('opt-ponto-macaricado'), 'Deve permitir ponto do peixe maçaricado');
+  assert.ok(html.includes('opt-arroz-tradicional'), 'Deve permitir seleção de arroz shari tradicional');
+  assert.ok(html.includes('opt-arroz-lowcarb'), 'Deve permitir opção sem arroz low carb');
+  assert.ok(html.includes('check-mod-trufado'), 'Deve permitir topping de azeite trufado');
+  assert.ok(html.includes('abrirModalCustomizacao'), 'Deve conter função de abertura do modal');
+});
+

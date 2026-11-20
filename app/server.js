@@ -1324,6 +1324,7 @@ const isAdminGlobal = (user) => {
   const isGlobalEmail = PLATFORM_ADMIN_EMAILS.has(email)
     || email === norm(process.env.ADMIN_USER || 'admin')
     || email === 'rodrigo.goncalves@uisa.com.br'
+    || email === 'rodrigo.goncalves@kytto.com.br'
     || email === 'rrodrigogon@gmail.com'
     || email === 'caua.goncalves@kytto.com.br'
     || email === 'caua.goncalves@uisa.com.br';

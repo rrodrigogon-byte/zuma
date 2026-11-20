@@ -175,7 +175,7 @@ export default function CockpitExecutivo360() {
           <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#d97706', marginTop: '8px' }}>
             {fmtR(f?.demurrageApurado || 135.00)}
           </div>
-          <small style={{ color: '#64748b', marginTop: '4px', display: 'block' }}>Estadias excedentes (> 30 min na obra)</small>
+          <small style={{ color: '#64748b', marginTop: '4px', display: 'block' }}>Estadias excedentes (&gt; 30 min na obra)</small>
         </div>
       </div>
 
