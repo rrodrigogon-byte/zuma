@@ -2388,8 +2388,9 @@ Cães: ${res.resumo?.caes || 46} itens`);
       try {
         const res = await fetch("/api/public/zuma/cardapio/dinamico");
         const data = await res.json();
-        if (data.ok && Array.isArray(data.cardapio)) {
-          cardapioLocalErp = data.cardapio;
+        const lista = data.itens || data.cardapio || [];
+        if (data.ok && Array.isArray(lista)) {
+          cardapioLocalErp = lista;
           renderizarCardapioErp(cardapioLocalErp);
         }
       } catch (err) {
