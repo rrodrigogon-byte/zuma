@@ -263,34 +263,55 @@ A suíte completa de testes de regressão e homologação operacional (`app/zuma
 7. KDS Cozinha Multi-Praças e Transições de Status
 8. Livro Razão Kardex de Movimentações Contínuas de Estoque
 9. Gestão Fiscal Avançada SEFAZ-MT: Cancelamento Homologado, CC-e e Livro de Apuração
-10. CRUD Completo de Cardápio (Incluir, Modificar e Excluir Item)
-11. CRUD Completo de Mesas (Incluir, Modificar e Excluir Mesa)
-12. CRUD Completo de Estoque e Insumos (Incluir, Modificar e Excluir Insumo)
-13. CRUD Completo de Cozinha KDS (Incluir, Modificar e Excluir Pedido Manual)
-
+10. CRUD Completo de Cardápio (Incluir, Modificar, Salvar e Excluir Item)
+11. CRUD Completo de Mesas (Incluir, Modificar, Salvar e Excluir Mesa)
+12. CRUD Completo de Estoque e Insumos (Incluir, Modificar, Salvar e Excluir Insumo)
+13. CRUD Completo de Cozinha KDS (Incluir, Modificar, Salvar e Excluir Pedido Manual)
+14. CRUD Completo de Clientes VIP no CRM (Incluir, Modificar, Salvar e Excluir Cliente)
+15. CRUD Completo de Delivery & Expedição (Incluir, Modificar, Salvar e Excluir Corrida)
+16. Operações Avançadas de Mesas: Divisão de Conta (com cálculo por pessoa e chave PIX) e Transferência de Comandas entre Mesas
+17. Operações Avançadas de Estoque: Ajuste Rápido de Inventário, Balanço Físico e Apuração de Quebras Técnicas
 ---
 
 ## 13. Evidências de Validação em Produção (PRD)
 
-A entrega foi implantada em produção via Git na branch oficial `fix/kytto-comandas-pdv-20260808` com commit de build de assets e deploy automático no Render (**Service ID:** `srv-d8iudokm0tmc73c07iog`, **Deploy ID:** `dep-dc0a66nlk1mc73f24lrg`, **Status:** `live`).
+A entrega foi implantada em produção via Git na branch oficial `fix/kytto-comandas-pdv-20260808` com commit de build de assets e deploy automático no Render (**Service ID:** `srv-d8iudokm0tmc73c07iog`).
 
 ### 13.1. Validação Forense de Endpoints em Produção (`https://kytto.com.br/api/public/zuma`)
+
 | Módulo / Operação | Método & Endpoint | Status HTTP | Mensagem de Retorno em Produção |
 | :--- | :--- | :---: | :--- |
-| **Cardápio (Incluir)** | `POST /cardapio/item` | **201 Created** | Prato "Sashimi Trufado Especial PRD" incluído com sucesso |
+| **Cardápio (Incluir)** | `POST /cardapio/item` | **201 Created** | Prato incluído com sucesso no cardápio |
 | **Cardápio (Modificar)** | `PUT /cardapio/item/:id` | **200 OK** | Prato modificado e salvo com sucesso |
 | **Cardápio (Excluir)** | `DELETE /cardapio/item/:id` | **200 OK** | Prato excluído do cardápio com sucesso |
-| **Mesas (Incluir)** | `POST /mesas` | **201 Created** | Mesa 77 cadastrada com sucesso |
-| **Mesas (Modificar)** | `PUT /mesas/:id` | **200 OK** | Mesa 77 modificada e salva com sucesso |
-| **Mesas (Excluir)** | `DELETE /mesas/:id` | **200 OK** | Mesa 77 (Deck Climatizado VIP) excluída com sucesso |
-| **Estoque (Incluir)** | `POST /estoque/insumo` | **201 Created** | Insumo "Polvo Espanhol Congelado Especial" incluído no estoque |
+| **Mesas (Incluir)** | `POST /mesas` | **201 Created** | Mesa cadastrada com sucesso no salão |
+| **Mesas (Modificar)** | `PUT /mesas/:id` | **200 OK** | Mesa modificada e salva com sucesso |
+| **Mesas (Excluir)** | `DELETE /mesas/:id` | **200 OK** | Mesa excluída com sucesso |
+| **Estoque (Incluir)** | `POST /estoque/insumo` | **201 Created** | Insumo cadastrado com sucesso no estoque |
 | **Estoque (Modificar)** | `PUT /estoque/insumo/:id` | **200 OK** | Insumo modificado e salvo com sucesso |
 | **Estoque (Excluir)** | `DELETE /estoque/insumo/:id` | **200 OK** | Insumo excluído do estoque com sucesso |
-| **Cozinha KDS (Incluir)** | `POST /cozinha/pedido` | **201 Created** | Pedido CMD-PRD-999 incluído no KDS com sucesso |
-| **Cozinha KDS (Modificar)** | `PUT /cozinha/pedido/:id` | **200 OK** | Pedido CMD-PRD-999 modificado e salvo com sucesso |
-| **Cozinha KDS (Excluir)** | `DELETE /cozinha/pedido/:id` | **200 OK** | Pedido CMD-PRD-999 cancelado e removido do KDS |
+| **Cozinha KDS (Incluir)** | `POST /cozinha/pedido` | **201 Created** | Pedido incluído no KDS com sucesso |
+| **Cozinha KDS (Modificar)** | `PUT /cozinha/pedido/:id` | **200 OK** | Pedido modificado e salvo com sucesso |
+| **Cozinha KDS (Excluir)** | `DELETE /cozinha/pedido/:id` | **200 OK** | Pedido cancelado e removido do KDS |
+| **CRM (Incluir)** | `POST /crm/cliente` | **201 Created** | Cliente VIP cadastrado no CRM |
+| **CRM (Modificar)** | `PUT /crm/cliente/:id` | **200 OK** | Cliente VIP atualizado e salvo |
+| **CRM (Excluir)** | `DELETE /crm/cliente/:id` | **200 OK** | Cliente VIP excluído do CRM |
+| **Delivery (Incluir)** | `POST /delivery/corrida` | **201 Created** | Corrida de delivery despachada |
+| **Delivery (Modificar)** | `PUT /delivery/corrida/:id` | **200 OK** | Corrida de delivery modificada |
+| **Delivery (Excluir)** | `DELETE /delivery/corrida/:id` | **200 OK** | Corrida de delivery cancelada |
+| **Divisão de Mesas** | `POST /mesas/dividir-conta` | **200 OK** | Divisão de conta calculada com sucesso |
+| **Transferência de Mesas** | `POST /mesas/transferir-comanda` | **200 OK** | Comanda transferida entre mesas |
+| **Ajuste de Estoque** | `POST /estoque/ajuste-rapido` | **200 OK** | Ajuste rápido de inventário registrado |
 
-### 13.2. Interfaces & Telas Homologadas
+### 13.2. Suíte de Testes Automatizados (40/40 Aprovados)
+
+- **Comando de Execução:** `node --test app/zuma-cozinha-oriental.test.js`
+- **Total de Testes:** 40 cenários automatizados
+- **Testes Aprovados:** 40 (100% de sucesso)
+- **Falhas / Cancelados:** 0 falhas
+
+### 13.3. Interfaces & Telas Homologadas
+
 - **URL da Suíte Completa:** [https://kytto.com.br/admin](https://kytto.com.br/admin)
 - **URL do Cardápio & Delivery:** [https://zuma.kytto.com.br](https://zuma.kytto.com.br)
-- **Status do Deploy Render:** `live` (Deploy ID: `dep-dc0a66nlk1mc73f24lrg`)
+- **Serviço Render:** `srv-d8iudokm0tmc73c07iog` (Projeto Kytto Multi-Tenant)

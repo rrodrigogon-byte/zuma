@@ -46,6 +46,7 @@ import {
 } from '../zuma-cozinha-oriental-seed.js';
 
 export const routerZuma = express.Router();
+export { ZUMA_CLIENTES_CRM };
 
 // Base de dados dinâmica em memória para operações CRUD em tempo real
 export let CARDAPIO_DINAMICO_ZUMA = [...ZUMA_CARDAPIO_COMPLETO];
@@ -1968,24 +1969,7 @@ routerZuma.post('/mesas/adicionar-item', (req, res) => {
 });
 
 // POST /api/public/zuma/mesas/dividir-conta
-routerZuma.post('/mesas/dividir-conta', (req, res) => {
-  const { valorTotal, qtdPessoas, incluirTaxaServico } = req.body || {};
-  const totalBase = parseFloat(valorTotal) || 0;
-  const pessoas = Math.max(1, parseInt(qtdPessoas) || 1);
-  const taxa = incluirTaxaServico !== false ? totalBase * 0.10 : 0;
-  const totalFinal = totalBase + taxa;
-  const valorPorPessoa = totalFinal / pessoas;
 
-  res.json({
-    ok: true,
-    subtotal: totalBase,
-    taxaServico10Pct: taxa,
-    totalComServico: totalFinal,
-    qtdPessoas: pessoas,
-    valorPorPessoa: parseFloat(valorPorPessoa.toFixed(2)),
-    mensagemPixCopiaCola: `Pix Zuma Tangará: R$ ${valorPorPessoa.toFixed(2)} por pessoa para chave 36.296.848/0001-57`
-  });
-});
 
 // POST /api/public/zuma/mesas/transferir
 routerZuma.post('/mesas/transferir', (req, res) => {
@@ -3535,7 +3519,8 @@ routerZuma.post('/estoque/perda-descarte', (req, res) => {
     sushiman = "Sushiman Plantão"
   } = req.body || {};
 
-  const insumo = ESTOQUE_PESCADOS_ZUMA[insumoId];
+  const chaveInsumo = Object.keys(ESTOQUE_PESCADOS_ZUMA).find(k => k === insumoId || k.includes(insumoId) || ESTOQUE_PESCADOS_ZUMA[k].codigo === insumoId);
+  const insumo = chaveInsumo ? ESTOQUE_PESCADOS_ZUMA[chaveInsumo] : null;
   if (insumo) {
     insumo.saldoAtual = parseFloat(Math.max(0, insumo.saldoAtual - parseFloat(quantidadeKg)).toFixed(3));
   }
@@ -4720,7 +4705,7 @@ let POSICAO_MOTOBOY_ATUAL = {
   ultimaAtualizacao: new Date().toISOString()
 };
 
-let CORRIDAS_ENTREGADOR_ZUMA = [
+export const CORRIDAS_ENTREGADOR_ZUMA = [
   {
     id: "CORR-701",
     pedidoId: "ZUM-8841",
@@ -5437,4 +5422,214 @@ routerZuma.delete('/cozinha/pedido/:id', (req, res) => {
   }
   const removido = PEDIDOS_COZINHA_KDS_ZUMA.splice(index, 1)[0];
   res.json({ ok: true, mensagem: `Pedido ${removido.numeroComanda} cancelado e removido do KDS!`, pedidoCancelado: removido });
+});
+// ============================================================================
+// 16.5 CRM & CLIENTES: INCLUIR, MODIFICAR E EXCLUIR
+// ============================================================================
+routerZuma.post("/crm/cliente", (req, res) => {
+  const { nome, telefone, email, bairro, cidade, aniversario, pratosFavoritos, restricoes, observacoes, segmentoRFV } = req.body || {};
+  if (!nome || !telefone) {
+    return res.status(400).json({ ok: false, error: "Nome e telefone são obrigatórios para cadastro de cliente no CRM." });
+  }
+  const novoCliente = {
+    id: `cli-zuma-${Date.now()}`,
+    nome: String(nome).trim(),
+    telefone: String(telefone).trim(),
+    whatsapp: String(telefone).replace(/\D/g, ""),
+    email: email || "",
+    cidade: cidade || "Tangará da Serra",
+    uf: "MT",
+    bairro: bairro || "Centro",
+    aniversario: aniversario || "",
+    segmentoRFV: segmentoRFV || "VIP Ouro",
+    rfvScore: 85,
+    totalPedidos: 1,
+    totalGasto: 180.00,
+    ticketMedio: 180.00,
+    canalPreferido: "salao",
+    pratosFavoritos: Array.isArray(pratosFavoritos) ? pratosFavoritos : (pratosFavoritos ? [pratosFavoritos] : ["Combinado Zuma 30 Peças"]),
+    bebidaFavorita: "Heineken Long Neck",
+    restricoes: restricoes || "Nenhuma",
+    observacoes: observacoes || "Cadastrado diretamente pelo Zuma ERP 360.",
+    dataCadastro: new Date().toISOString()
+  };
+  ZUMA_CLIENTES_CRM.unshift(novoCliente);
+  salvarEstadoPersistidoZuma();
+  res.status(201).json({ ok: true, mensagem: `Cliente "${novoCliente.nome}" incluído no CRM com sucesso!`, cliente: novoCliente });
+});
+
+routerZuma.put("/crm/cliente/:id", (req, res) => {
+  const { id } = req.params;
+  const cliente = ZUMA_CLIENTES_CRM.find(c => c.id === id);
+  if (!cliente) {
+    return res.status(404).json({ ok: false, error: "Cliente não encontrado para modificação." });
+  }
+  const { nome, telefone, email, bairro, cidade, aniversario, pratosFavoritos, restricoes, observacoes, segmentoRFV } = req.body || {};
+  if (nome) cliente.nome = String(nome).trim();
+  if (telefone) {
+    cliente.telefone = String(telefone).trim();
+    cliente.whatsapp = String(telefone).replace(/\D/g, "");
+  }
+  if (email !== undefined) cliente.email = email;
+  if (bairro) cliente.bairro = bairro;
+  if (cidade) cliente.cidade = cidade;
+  if (aniversario !== undefined) cliente.aniversario = aniversario;
+  if (segmentoRFV) cliente.segmentoRFV = segmentoRFV;
+  if (pratosFavoritos) cliente.pratosFavoritos = Array.isArray(pratosFavoritos) ? pratosFavoritos : [pratosFavoritos];
+  if (restricoes !== undefined) cliente.restricoes = restricoes;
+  if (observacoes !== undefined) cliente.observacoes = observacoes;
+  cliente.dataModificacao = new Date().toISOString();
+  salvarEstadoPersistidoZuma();
+  res.json({ ok: true, mensagem: `Cliente "${cliente.nome}" modificado e salvo com sucesso!`, cliente });
+});
+
+routerZuma.delete("/crm/cliente/:id", (req, res) => {
+  const { id } = req.params;
+  const index = ZUMA_CLIENTES_CRM.findIndex(c => c.id === id);
+  if (index === -1) {
+    return res.status(404).json({ ok: false, error: "Cliente não encontrado para exclusão." });
+  }
+  const removido = ZUMA_CLIENTES_CRM.splice(index, 1)[0];
+  salvarEstadoPersistidoZuma();
+  res.json({ ok: true, mensagem: `Cliente "${removido.nome}" excluído do CRM com sucesso!`, clienteExcluido: removido });
+});
+
+// ============================================================================
+// 16.6 DELIVERY & EXPEDIÇÃO: INCLUIR, MODIFICAR E EXCLUIR CORRIDAS
+// ============================================================================
+routerZuma.post("/delivery/corrida", (req, res) => {
+  const { clienteNome, telefone, endereco, bairro, itens, valorTotal, taxaEntrega, formaPagamento, observacoes } = req.body || {};
+  if (!clienteNome || !endereco) {
+    return res.status(400).json({ ok: false, error: "Nome do cliente e endereço completo são obrigatórios para despacho de delivery." });
+  }
+  const novaCorrida = {
+    id: `CORR-${Math.floor(700 + Math.random() * 200)}`,
+    pedidoId: `ZUM-${Math.floor(1000 + Math.random() * 9000)}`,
+    cliente: {
+      nome: String(clienteNome).trim(),
+      telefone: telefone || "(65) 99999-0000",
+      endereco: String(endereco).trim(),
+      bairro: bairro || "Centro",
+      cidade: "Tangará da Serra - MT",
+      lat: -14.622915 + (Math.random() - 0.5) * 0.02,
+      lng: -57.493922 + (Math.random() - 0.5) * 0.02
+    },
+    itens: Array.isArray(itens) && itens.length ? itens : [{ nome: "Combinado Especial Delivery", qtd: 1, preco: parseFloat(valorTotal) || 89.90 }],
+    distanciaKm: 2.3,
+    tempoEstimadoMin: 18,
+    taxaEntrega: parseFloat(taxaEntrega) || 10.00,
+    valorTotal: parseFloat(valorTotal) || 99.90,
+    formaPagamento: formaPagamento || "PIX Pago Online",
+    status: "aguardando_coleta",
+    historicoStatus: [
+      { status: "pedido_recebido_expedicao", hora: new Date().toISOString() }
+    ],
+    codigoOtp: String(Math.floor(1000 + Math.random() * 9000)),
+    observacoes: observacoes || ""
+  };
+  CORRIDAS_ENTREGADOR_ZUMA.unshift(novaCorrida);
+  salvarEstadoPersistidoZuma();
+  res.status(201).json({ ok: true, mensagem: `Corrida ${novaCorrida.id} despachada para o entregador com sucesso!`, corrida: novaCorrida });
+});
+
+routerZuma.put("/delivery/corrida/:id", (req, res) => {
+  const { id } = req.params;
+  const corrida = CORRIDAS_ENTREGADOR_ZUMA.find(c => c.id === id);
+  if (!corrida) {
+    return res.status(404).json({ ok: false, error: "Corrida de delivery não encontrada para modificação." });
+  }
+  const { clienteNome, telefone, endereco, bairro, taxaEntrega, status, formaPagamento, valorTotal } = req.body || {};
+  if (clienteNome) corrida.cliente.nome = clienteNome;
+  if (telefone) corrida.cliente.telefone = telefone;
+  if (endereco) corrida.cliente.endereco = endereco;
+  if (bairro) corrida.cliente.bairro = bairro;
+  if (taxaEntrega !== undefined) corrida.taxaEntrega = parseFloat(taxaEntrega);
+  if (valorTotal !== undefined) corrida.valorTotal = parseFloat(valorTotal);
+  if (formaPagamento) corrida.formaPagamento = formaPagamento;
+  if (status && status !== corrida.status) {
+    corrida.status = status;
+    corrida.historicoStatus.push({ status, hora: new Date().toISOString() });
+    if (status === "entregue") {
+      corrida.horaConclusao = new Date().toISOString();
+      corrida.concluidaEm = corrida.horaConclusao;
+    }
+  }
+  salvarEstadoPersistidoZuma();
+  res.json({ ok: true, mensagem: `Corrida ${corrida.id} modificada e salva com sucesso!`, corrida });
+});
+
+routerZuma.delete("/delivery/corrida/:id", (req, res) => {
+  const { id } = req.params;
+  const index = CORRIDAS_ENTREGADOR_ZUMA.findIndex(c => c.id === id);
+  if (index === -1) {
+    return res.status(404).json({ ok: false, error: "Corrida de delivery não encontrada para cancelamento." });
+  }
+  const removida = CORRIDAS_ENTREGADOR_ZUMA.splice(index, 1)[0];
+  salvarEstadoPersistidoZuma();
+  res.json({ ok: true, mensagem: `Corrida ${removida.id} cancelada e removida com sucesso!`, corridaCancelada: removida });
+});
+
+// ============================================================================
+// 16.7 OPERAÇÕES AVANÇADAS DE MESAS: DIVISÃO DE CONTA E TRANSFERÊNCIA
+// ============================================================================
+routerZuma.post("/mesas/dividir-conta", (req, res) => {
+  const { numeroMesa, numeroPessoas, incluirDezPorcento } = req.body || {};
+  const mesa = MESAS_SALAO_ZUMA.find(m => String(m.numero) === String(numeroMesa));
+  const valorTotalBase = mesa?.valorConta || 189.50;
+  const pessoas = parseInt(numeroPessoas) || 2;
+  const taxaServico = incluirDezPorcento ? valorTotalBase * 0.10 : 0;
+  const valorFinal = valorTotalBase + taxaServico;
+  const valorPorPessoa = valorFinal / pessoas;
+  res.json({
+    ok: true,
+    numeroMesa,
+    pessoas,
+    valorConsumo: valorTotalBase,
+    taxaServico,
+    valorTotal: valorFinal,
+    valorPorPessoa: parseFloat(valorPorPessoa.toFixed(2)),
+    mensagem: `Conta da Mesa ${numeroMesa} dividida em ${pessoas} pessoas: R$ ${valorPorPessoa.toFixed(2)} por pessoa.`
+  });
+});
+
+routerZuma.post("/mesas/transferir-comanda", (req, res) => {
+  const { mesaOrigem, mesaDestino, garcom } = req.body || {};
+  const orig = MESAS_SALAO_ZUMA.find(m => parseInt(m.numero, 10) === parseInt(mesaOrigem, 10) || String(m.numero) === String(mesaOrigem));
+  const dest = MESAS_SALAO_ZUMA.find(m => parseInt(m.numero, 10) === parseInt(mesaDestino, 10) || String(m.numero) === String(mesaDestino));
+  if (!orig || !dest) {
+    return res.status(404).json({ ok: false, error: "Mesa de origem ou destino não encontrada." });
+  }
+  dest.status = "OCUPADA";
+  dest.valorConta = (dest.valorConta || 0) + (orig.valorConta || 0);
+  orig.status = "LIVRE";
+  orig.valorConta = 0;
+  salvarEstadoPersistidoZuma();
+  res.json({
+    ok: true,
+    mensagem: `Comanda transferida da Mesa ${mesaOrigem} para a Mesa ${mesaDestino} com sucesso por ${garcom || "Garçom Chefe"}!`
+  });
+});
+
+// ============================================================================
+// 16.8 ESTOQUE: AJUSTE RÁPIDO E REGISTRO DE PERDAS
+// ============================================================================
+routerZuma.post("/estoque/ajuste-rapido", (req, res) => {
+  const { insumoId, novoSaldo, motivo, responsavel } = req.body || {};
+  const chave = Object.keys(ESTOQUE_PESCADOS_ZUMA).find(k => k === insumoId || k.includes(insumoId) || ESTOQUE_PESCADOS_ZUMA[k].codigo === insumoId);
+  const insumo = chave ? ESTOQUE_PESCADOS_ZUMA[chave] : null;
+  if (!insumo) {
+    return res.status(404).json({ ok: false, error: "Insumo não encontrado no estoque para ajuste rápido." });
+  }
+  const saldoAnterior = insumo.saldoAtual;
+  insumo.saldoAtual = parseFloat(novoSaldo);
+  insumo.status = insumo.saldoAtual <= insumo.saldoMinimo ? "Repor Urgente" : "OK";
+  salvarEstadoPersistidoZuma();
+  res.json({
+    ok: true,
+    mensagem: `Estoque de "${insumo.nome}" ajustado de ${saldoAnterior} ${insumo.unidade} para ${insumo.saldoAtual} ${insumo.unidade}.`,
+    saldoAnterior,
+    novoSaldo: insumo.saldoAtual,
+    motivo: motivo || "Inventário / Balanço Físico",
+    responsavel: responsavel || "Chef Sushiman"
+  });
 });

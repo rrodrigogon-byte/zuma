@@ -96,6 +96,31 @@ export default function ZumaRestauranteSuite() {
   const [camarasFrias, setCamarasFrias] = useState([]);
   const [perdasRecentes, setPerdasRecentes] = useState([]);
   const [dadosFiscal, setDadosFiscal] = useState(null);
+  // Estados de CRM & Clientes VIP
+  const [clientesCrm, setClientesCrm] = useState([]);
+  const [modalCliente, setModalCliente] = useState(null); // { modo: "novo" | "editar", cliente: {} }
+  const [buscaCrm, setBuscaCrm] = useState("");
+  const [segmentoCrmFiltro, setSegmentoCrmFiltro] = useState("todos");
+
+  // Estados de Delivery & Expedição
+  const [corridasDelivery, setCorridasDelivery] = useState([]);
+  const [modalCorrida, setModalCorrida] = useState(null); // { modo: "novo" | "editar", corrida: {} }
+  const [filtroStatusDelivery, setFiltroStatusDelivery] = useState("todos");
+
+  // Estados de Operações Avançadas de Mesas
+  const [modalDividirConta, setModalDividirConta] = useState(null); // { mesaNumero, valorBase }
+  const [resultadoDivisao, setResultadoDivisao] = useState(null);
+  const [pessoasDivisao, setPessoasDivisao] = useState(2);
+  const [incluirTaxaDivisao, setIncluirTaxaDivisao] = useState(true);
+
+  const [modalTransferirMesa, setModalTransferirMesa] = useState(null); // { mesaOrigem: "" }
+  const [mesaDestinoTransf, setMesaDestinoTransf] = useState("08");
+
+  // Estados de Ajuste Rápido de Estoque
+  const [modalAjusteEstoque, setModalAjusteEstoque] = useState(null); // { insumoId, nome, saldoAtual, unidade }
+  const [novoSaldoAjuste, setNovoSaldoAjuste] = useState("");
+  const [motivoAjuste, setMotivoAjuste] = useState("Inventário / Balanço Físico");
+
   const [emitindoNota, setEmitindoNota] = useState(false);
 
   // Estados de PDV (Frente de Caixa)
@@ -863,10 +888,173 @@ export default function ZumaRestauranteSuite() {
     }
   };
 
+
+  const carregarCrmEDelivery = async () => {
+    try {
+      const [resCrm, resDeliv] = await Promise.allSettled([
+        api.get("/api/public/zuma/crm/clientes"),
+        api.get("/api/public/zuma/entregador/corridas")
+      ]);
+      if (resCrm.status === "fulfilled" && resCrm.value?.clientes) {
+        setClientesCrm(resCrm.value.clientes);
+      }
+      if (resDeliv.status === "fulfilled" && resDeliv.value?.corridas) {
+        setCorridasDelivery(resDeliv.value.corridas);
+      }
+    } catch (e) {
+      console.warn("Erro ao carregar CRM e Delivery do Zuma:", e);
+    }
+  };
+
+  const salvarClienteCrm = async (e) => {
+    e.preventDefault();
+    if (!modalCliente?.cliente?.nome || !modalCliente?.cliente?.telefone) return;
+    try {
+      const { modo, cliente } = modalCliente;
+      let res;
+      if (modo === "novo") {
+        res = await api.post("/api/public/zuma/crm/cliente", cliente);
+      } else {
+        res = await api.put(`/api/public/zuma/crm/cliente/${cliente.id}`, cliente);
+      }
+      if (res && res.ok) {
+        setMensagemSucesso(res.mensagem || "Cliente salvo com sucesso!");
+        setTimeout(() => setMensagemSucesso(null), 3500);
+        setModalCliente(null);
+        carregarCrmEDelivery();
+      }
+    } catch (err) {
+      console.error("Erro ao salvar cliente no CRM:", err);
+      alert("Erro ao salvar cliente no CRM.");
+    }
+  };
+
+  const excluirClienteCrm = async (cli) => {
+    if (!window.confirm(`Deseja realmente excluir o cliente "${cli.nome}" da base de CRM?`)) return;
+    try {
+      const res = await api.delete(`/api/public/zuma/crm/cliente/${cli.id}`);
+      if (res && res.ok) {
+        setMensagemSucesso(`Cliente "${cli.nome}" excluído com sucesso!`);
+        setTimeout(() => setMensagemSucesso(null), 3500);
+        carregarCrmEDelivery();
+      }
+    } catch (err) {
+      console.error("Erro ao excluir cliente:", err);
+    }
+  };
+
+  const salvarCorridaDelivery = async (e) => {
+    e.preventDefault();
+    if (!modalCorrida?.corrida?.clienteNome || !modalCorrida?.corrida?.endereco) return;
+    try {
+      const { modo, corrida } = modalCorrida;
+      let res;
+      if (modo === "novo") {
+        res = await api.post("/api/public/zuma/delivery/corrida", corrida);
+      } else {
+        res = await api.put(`/api/public/zuma/delivery/corrida/${corrida.id}`, corrida);
+      }
+      if (res && res.ok) {
+        setMensagemSucesso(res.mensagem || "Corrida despachada com sucesso!");
+        setTimeout(() => setMensagemSucesso(null), 3500);
+        setModalCorrida(null);
+        carregarCrmEDelivery();
+      }
+    } catch (err) {
+      console.error("Erro ao salvar corrida de delivery:", err);
+      alert("Erro ao salvar corrida.");
+    }
+  };
+
+  const avancarStatusCorrida = async (corridaId, novoStatus) => {
+    try {
+      const res = await api.put(`/api/public/zuma/delivery/corrida/${corridaId}`, { status: novoStatus });
+      if (res && res.ok) {
+        setMensagemSucesso(`Status da corrida atualizado para "${novoStatus}"!`);
+        setTimeout(() => setMensagemSucesso(null), 3500);
+        carregarCrmEDelivery();
+      }
+    } catch (err) {
+      console.error("Erro ao avançar status da corrida:", err);
+    }
+  };
+
+  const excluirCorridaDelivery = async (corrida) => {
+    if (!window.confirm(`Deseja realmente cancelar a corrida ${corrida.id} de ${corrida.cliente?.nome}?`)) return;
+    try {
+      const res = await api.delete(`/api/public/zuma/delivery/corrida/${corrida.id}`);
+      if (res && res.ok) {
+        setMensagemSucesso(`Corrida ${corrida.id} cancelada com sucesso!`);
+        setTimeout(() => setMensagemSucesso(null), 3500);
+        carregarCrmEDelivery();
+      }
+    } catch (err) {
+      console.error("Erro ao cancelar corrida:", err);
+    }
+  };
+
+  const executarDividirConta = async () => {
+    if (!modalDividirConta) return;
+    try {
+      const res = await api.post("/api/public/zuma/mesas/dividir-conta", {
+        numeroMesa: modalDividirConta.mesaNumero,
+        numeroPessoas: pessoasDivisao,
+        incluirDezPorcento: incluirTaxaDivisao
+      });
+      if (res && res.ok) {
+        setResultadoDivisao(res);
+      }
+    } catch (err) {
+      console.error("Erro ao dividir conta:", err);
+    }
+  };
+
+  const executarTransferirMesa = async (e) => {
+    e.preventDefault();
+    if (!modalTransferirMesa) return;
+    try {
+      const res = await api.post("/api/public/zuma/mesas/transferir-comanda", {
+        mesaOrigem: modalTransferirMesa.mesaOrigem,
+        mesaDestino: mesaDestinoTransf,
+        garcom: "Marcos Salão"
+      });
+      if (res && res.ok) {
+        setMensagemSucesso(res.mensagem || "Mesa transferida com sucesso!");
+        setTimeout(() => setMensagemSucesso(null), 3500);
+        setModalTransferirMesa(null);
+        carregarModulosAvancados();
+      }
+    } catch (err) {
+      console.error("Erro ao transferir mesa:", err);
+    }
+  };
+
+  const executarAjusteEstoque = async (e) => {
+    e.preventDefault();
+    if (!modalAjusteEstoque || !novoSaldoAjuste) return;
+    try {
+      const res = await api.post("/api/public/zuma/estoque/ajuste-rapido", {
+        insumoId: modalAjusteEstoque.insumoId,
+        novoSaldo: parseFloat(novoSaldoAjuste),
+        motivo: motivoAjuste,
+        responsavel: "Chef Sushiman Executivo"
+      });
+      if (res && res.ok) {
+        setMensagemSucesso(res.mensagem || "Estoque ajustado com sucesso!");
+        setTimeout(() => setMensagemSucesso(null), 3500);
+        setModalAjusteEstoque(null);
+        carregarEstoqueEFichas();
+      }
+    } catch (err) {
+      console.error("Erro ao ajustar estoque:", err);
+    }
+  };
+
   useEffect(() => {
     carregarDadosZuma();
     carregarEstoqueEFichas();
     carregarModulosAvancados();
+    carregarCrmEDelivery();
   }, []);
 
   // Categorias únicas
@@ -1121,7 +1309,25 @@ export default function ZumaRestauranteSuite() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button
+              onClick={handleAbrirNovaMesa}
+              style={{
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                color: '#ffffff',
+                border: 'none',
+                padding: '6px 14px',
+                borderRadius: 8,
+                fontSize: 12,
+                fontWeight: 800,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4
+              }}
+            >
+              ➕ Incluir Mesa
+            </button>
               <button
                 onClick={() => alert(`Sangria de R$ 200,00 registrada com sucesso no cofre blindado!`)}
                 style={{
@@ -1501,7 +1707,25 @@ export default function ZumaRestauranteSuite() {
               </p>
             </div>
 
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <button
+                onClick={handleAbrirNovoPedidoKds}
+                style={{
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  fontSize: 11,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4
+                }}
+              >
+                ➕ Incluir Pedido
+              </button>
               {[
                 { id: 'TODAS', label: 'Todas as Praças' },
                 { id: 'SUSHI_BAR', label: '🍣 Sushi Bar' },
@@ -1579,6 +1803,40 @@ export default function ZumaRestauranteSuite() {
                       </div>
                     </div>
 
+                    <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+                      <button
+                        onClick={() => handleAbrirEditarPedidoKds(ped)}
+                        style={{
+                          flex: 1,
+                          background: 'rgba(59, 130, 246, 0.15)',
+                          border: '1px solid #3b82f6',
+                          color: '#38bdf8',
+                          padding: '4px',
+                          borderRadius: 6,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ✏️ Modificar
+                      </button>
+                      <button
+                        onClick={() => handleExcluirPedidoKds(ped)}
+                        style={{
+                          flex: 1,
+                          background: 'rgba(239, 68, 68, 0.15)',
+                          border: '1px solid #ef4444',
+                          color: '#ef4444',
+                          padding: '4px',
+                          borderRadius: 6,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🗑️ Excluir
+                      </button>
+                    </div>
                     <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                       {ped.status === 'EM_PREPARO' ? (
                         <button
@@ -2111,21 +2369,55 @@ export default function ZumaRestauranteSuite() {
                     <span style={{ fontSize: 15, fontWeight: 900, color: '#10b981' }}>
                       R$ {Number(p.preco || 0).toFixed(2).replace('.', ',')}
                     </span>
-                    <button
-                      onClick={() => navigate('/pdv')}
-                      style={{
-                        padding: '4px 10px',
-                        borderRadius: 6,
-                        background: 'rgba(230, 57, 70, 0.2)',
-                        border: '1px solid #E63946',
-                        color: '#FF6B6B',
-                        fontSize: 11,
-                        fontWeight: 700,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Lançar no PDV
-                    </button>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button
+                        onClick={() => handleAbrirEditarItemCardapio(p)}
+                        title="Modificar Prato"
+                        style={{
+                          padding: '4px 8px',
+                          borderRadius: 6,
+                          background: 'rgba(59, 130, 246, 0.15)',
+                          border: '1px solid #3b82f6',
+                          color: '#38bdf8',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ✏️ Modificar
+                      </button>
+                      <button
+                        onClick={() => handleExcluirItemCardapio(p)}
+                        title="Excluir Prato"
+                        style={{
+                          padding: '4px 8px',
+                          borderRadius: 6,
+                          background: 'rgba(239, 68, 68, 0.15)',
+                          border: '1px solid #ef4444',
+                          color: '#ef4444',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🗑️
+                      </button>
+                      <button
+                        onClick={() => navigate('/pdv')}
+                        style={{
+                          padding: '4px 8px',
+                          borderRadius: 6,
+                          background: 'rgba(230, 57, 70, 0.2)',
+                          border: '1px solid #E63946',
+                          color: '#FF6B6B',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        PDV
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2393,6 +2685,68 @@ export default function ZumaRestauranteSuite() {
                   </div>
 
                   {/* Ações da Mesa */}
+                  <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                    <button
+                      onClick={() => setModalDividirConta({ mesaNumero: mesa.numero, valorBase: mesa.valorAcumulado || 189.50 })}
+                      style={{
+                        background: 'rgba(16, 185, 129, 0.15)',
+                        border: '1px solid #10b981',
+                        color: '#10b981',
+                        padding: '4px',
+                        borderRadius: 6,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      💸 Dividir Conta
+                    </button>
+                    <button
+                      onClick={() => setModalTransferirMesa({ mesaOrigem: mesa.numero })}
+                      style={{
+                        background: 'rgba(230, 57, 70, 0.15)',
+                        border: '1px solid #E63946',
+                        color: '#FF6B6B',
+                        padding: '4px',
+                        borderRadius: 6,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🔄 Transferir
+                    </button>
+                    <button
+                      onClick={() => handleAbrirEditarMesa(mesa)}
+                      style={{
+                        background: 'rgba(59, 130, 246, 0.15)',
+                        border: '1px solid #3b82f6',
+                        color: '#38bdf8',
+                        padding: '4px',
+                        borderRadius: 6,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ✏️ Modificar
+                    </button>
+                    <button
+                      onClick={() => handleExcluirMesa(mesa)}
+                      style={{
+                        background: 'rgba(239, 68, 68, 0.15)',
+                        border: '1px solid #ef4444',
+                        color: '#ef4444',
+                        padding: '4px',
+                        borderRadius: 6,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🗑️ Excluir
+                    </button>
+                  </div>
                   <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid #334155', display: 'flex', gap: 6 }}>
                     {mesa.status === 'livre' ? (
                       <button
@@ -2997,6 +3351,24 @@ export default function ZumaRestauranteSuite() {
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button
+                onClick={handleAbrirNovoInsumo}
+                style={{
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '8px 14px',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6
+                }}
+              >
+                ➕ Incluir Insumo
+              </button>
+              <button
                 onClick={carregarEstoqueEFichas}
                 style={{
                   background: 'var(--surface, #0f172a)',
@@ -3080,6 +3452,53 @@ export default function ZumaRestauranteSuite() {
                     <span style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>
                       Total: R$ {Number(insumo.valorTotalEmEstoque || 0).toFixed(2).replace('.', ',')}
                     </span>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      <button
+                        onClick={() => setModalAjusteEstoque({ insumoId: insumo.id, nome: insumo.nome, saldoAtual: insumo.quantidadeAtual, unidade: insumo.unidade })}
+                        style={{
+                          background: 'rgba(16, 185, 129, 0.15)',
+                          border: '1px solid #10b981',
+                          color: '#10b981',
+                          padding: '4px 6px',
+                          borderRadius: 6,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ⚖️ Ajuste
+                      </button>
+                      <button
+                        onClick={() => handleAbrirEditarInsumo(insumo)}
+                        style={{
+                          background: 'rgba(59, 130, 246, 0.15)',
+                          border: '1px solid #3b82f6',
+                          color: '#38bdf8',
+                          padding: '4px 6px',
+                          borderRadius: 6,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ✏️ Modificar
+                      </button>
+                      <button
+                        onClick={() => handleExcluirInsumo(insumo)}
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.15)',
+                          border: '1px solid #ef4444',
+                          color: '#ef4444',
+                          padding: '4px 6px',
+                          borderRadius: 6,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🗑️
+                      </button>
+                    </div>
                     <button
                       onClick={() => reporEstoque(insumo.id, insumo.unidade === 'kg' ? 5 : 20)}
                       style={{
@@ -3715,33 +4134,398 @@ export default function ZumaRestauranteSuite() {
         </div>
       )}
 
-      {/* DEMAIS ABAS (CRM / DELIVERY) */}
-      {(abaAtiva === 'crm' || abaAtiva === 'delivery') && (
-        <div style={{ background: 'var(--card, #1e293b)', border: '1px solid var(--line, #334155)', borderRadius: 12, padding: 24, textAlign: 'center' }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>
-            {abaAtiva === 'crm' ? 'Clientes & Clube Zumi' : 'Delivery & Canais Omnichannel'}
-          </h3>
-          <p style={{ fontSize: 13, color: 'var(--muted, #94a3b8)', marginTop: 8, maxWidth: 500, marginInline: 'auto' }}>
-            {abaAtiva === 'crm'
-              ? 'Gestão da carteira de clientes, cálculo de LTV, preferências gastronômicas e assinaturas mensais.'
-              : 'Roteirização de entregas em Tangará da Serra, integração com WhatsApp Zumi e desintermediação de taxas de marketplace.'}
-          </p>
-          <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center', gap: 10 }}>
+{/* ========================================================================= */}
+      {/* ABA: CRM, FIDELIDADE & CLUBE ZUMI */}
+      {/* ========================================================================= */}
+      {abaAtiva === "crm" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
+            <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: "16px 18px" }}>
+              <div style={{ fontSize: 12, color: "#94a3b8", fontWeight: 600 }}>Clientes na Base VIP</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: "#ffffff", marginTop: 4 }}>
+                {clientesCrm.length || 12} <span style={{ fontSize: 12, color: "#10b981", fontWeight: 700 }}>+4 este mês</span>
+              </div>
+              <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>Segmentados pelo Motor KyttoIA</div>
+            </div>
+            <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: "16px 18px" }}>
+              <div style={{ fontSize: 12, color: "#94a3b8", fontWeight: 600 }}>Ticket Médio Gastronômico</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: "#f59e0b", marginTop: 4 }}>R$ 164,20</div>
+              <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>Salão + Delivery VIP</div>
+            </div>
+            <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: "16px 18px" }}>
+              <div style={{ fontSize: 12, color: "#94a3b8", fontWeight: 600 }}>LTV Médio Estimado</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: "#10b981", marginTop: 4 }}>R$ 2.450,00</div>
+              <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>Retorno a cada 11 dias</div>
+            </div>
+            <div style={{ background: "linear-gradient(135deg, rgba(230,57,70,0.15) 0%, #1e293b 100%)", border: "1px solid rgba(230, 57, 70, 0.4)", borderRadius: 12, padding: "16px 18px" }}>
+              <div style={{ fontSize: 12, color: "#fca5a5", fontWeight: 700 }}>Clube Zumi Assinaturas</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: "#E63946", marginTop: 4 }}>18 Membros</div>
+              <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>Recorrência mensal ativa</div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, background: "#1e293b", padding: "14px 18px", borderRadius: 12, border: "1px solid #334155" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 260 }}>
+              <Search size={18} color="#94a3b8" />
+              <input
+                type="text"
+                placeholder="Buscar cliente por nome, telefone, prato favorito..."
+                value={buscaCrm}
+                onChange={e => setBuscaCrm(e.target.value)}
+                style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, padding: "8px 14px", color: "#ffffff", fontSize: 13, width: "100%" }}
+              />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <select
+                value={segmentoCrmFiltro}
+                onChange={e => setSegmentoCrmFiltro(e.target.value)}
+                style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, padding: "8px 12px", color: "#ffffff", fontSize: 13 }}
+              >
+                <option value="todos">Todos os Segmentos</option>
+                <option value="VIP Diamante">VIP Diamante</option>
+                <option value="VIP Ouro">VIP Ouro</option>
+                <option value="VIP Prata">VIP Prata</option>
+                <option value="Recorrente">Recorrente</option>
+              </select>
+              <button
+                onClick={() => setModalCliente({
+                  modo: "novo",
+                  cliente: {
+                    nome: "",
+                    profissao: "",
+                    telefone: "",
+                    email: "",
+                    bairro: "Centro",
+                    aniversario: "",
+                    segmentoRFV: "VIP Ouro",
+                    pratosFavoritos: "Combinado Zuma 30 Peças",
+                    restricoes: "",
+                    observacoes: ""
+                  }
+                })}
+                style={{
+                  background: "linear-gradient(135deg, #E63946 0%, #D90429 100%)",
+                  color: "#ffffff",
+                  border: "none",
+                  padding: "9px 18px",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  boxShadow: "0 4px 12px rgba(230, 57, 70, 0.4)"
+                }}
+              >
+                <Plus size={16} /> + Incluir Novo Cliente VIP
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
+            {clientesCrm
+              .filter(c => {
+                if (segmentoCrmFiltro !== "todos" && c.segmentoRFV !== segmentoCrmFiltro) return false;
+                if (!buscaCrm.trim()) return true;
+                const b = buscaCrm.toLowerCase();
+                const n = (c.nome || "").toLowerCase();
+                const t = (c.telefone || "").toLowerCase();
+                const p = Array.isArray(c.pratosFavoritos) ? c.pratosFavoritos.join(" ").toLowerCase() : (c.pratosFavoritos || "").toLowerCase();
+                return n.includes(b) || t.includes(b) || p.includes(b);
+              })
+              .map(cli => (
+                <div key={cli.id} style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: 18, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 10, background: "linear-gradient(135deg, #E63946 0%, #7f1d1d 100%)", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 15 }}>
+                          {cli.nome.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 15, fontWeight: 800, color: "#ffffff" }}>{cli.nome}</div>
+                          <div style={{ fontSize: 11, color: "#94a3b8" }}>{cli.profissao || "Cliente VIP"} · {cli.bairro || "Tangará da Serra"}</div>
+                        </div>
+                      </div>
+                      <span style={{
+                        fontSize: 10,
+                        fontWeight: 800,
+                        padding: "3px 8px",
+                        borderRadius: 6,
+                        background: cli.segmentoRFV?.includes("Diamante") ? "rgba(56, 189, 248, 0.2)" : "rgba(245, 158, 11, 0.2)",
+                        color: cli.segmentoRFV?.includes("Diamante") ? "#38bdf8" : "#f59e0b",
+                        border: "1px solid currentColor"
+                      }}>
+                        {cli.segmentoRFV || "VIP Ouro"}
+                      </span>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, margin: "12px 0", padding: "10px 12px", background: "#0f172a", borderRadius: 8, fontSize: 11 }}>
+                      <div>
+                        <span style={{ color: "#64748b" }}>Total Gasto:</span>
+                        <div style={{ fontWeight: 800, color: "#10b981", fontSize: 13 }}>R$ {(cli.totalGasto || 0).toFixed(2)}</div>
+                      </div>
+                      <div>
+                        <span style={{ color: "#64748b" }}>Pedidos Feitos:</span>
+                        <div style={{ fontWeight: 800, color: "#ffffff", fontSize: 13 }}>{cli.totalPedidos || cli.pedidosFeitos || 1} visitas</div>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: 12, marginBottom: 8 }}>
+                      <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600 }}>Pratos Favoritos:</span>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+                        {(Array.isArray(cli.pratosFavoritos) ? cli.pratosFavoritos : [cli.pratosFavoritos || "Combinado Zuma"]).map((pf, idx) => (
+                          <span key={idx} style={{ background: "#334155", color: "#e2e8f0", padding: "2px 8px", borderRadius: 4, fontSize: 11 }}>
+                            🍣 {pf}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {cli.restricoes && (
+                      <div style={{ fontSize: 11, color: "#f87171", background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)", padding: "6px 10px", borderRadius: 6, marginBottom: 8 }}>
+                        ⚠️ Restrições: {cli.restricoes}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, paddingTop: 12, borderTop: "1px solid #334155", marginTop: 10 }}>
+                    <a
+                      href={`https://wa.me/${cli.whatsapp || cli.telefone?.replace(/\D/g, "")}?text=${encodeURIComponent(`Olá ${cli.nome}, tudo bem? Aqui é do Zuma Cozinha Oriental! Separamos uma mesa especial para você hoje.`)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{
+                        padding: "6px 10px",
+                        background: "#10b981",
+                        color: "#ffffff",
+                        borderRadius: 6,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        textDecoration: "none",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4
+                      }}
+                    >
+                      <Phone size={12} /> WhatsApp
+                    </a>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button
+                        onClick={() => setModalCliente({
+                          modo: "editar",
+                          cliente: {
+                            ...cli,
+                            pratosFavoritos: Array.isArray(cli.pratosFavoritos) ? cli.pratosFavoritos.join(", ") : cli.pratosFavoritos
+                          }
+                        })}
+                        style={{ padding: "6px 10px", background: "#334155", border: "1px solid #475569", borderRadius: 6, color: "#ffffff", fontSize: 11, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}
+                      >
+                        <Edit size={12} /> Modificar
+                      </button>
+                      <button
+                        onClick={() => excluirClienteCrm(cli)}
+                        style={{ padding: "6px 10px", background: "rgba(239, 68, 68, 0.15)", border: "1px solid #ef4444", borderRadius: 6, color: "#ef4444", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ABA: DELIVERY, LOGÍSTICA & OMNICHANNEL */}
+      {/* ========================================================================= */}
+      {abaAtiva === "delivery" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
+            <div style={{ background: "linear-gradient(135deg, rgba(230, 57, 70, 0.15) 0%, #1e293b 100%)", border: "1px solid rgba(230, 57, 70, 0.4)", borderRadius: 12, padding: "16px 20px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 10, background: "#E63946", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Truck size={22} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: "#ffffff" }}>Carlos "Ninja" Silva</div>
+                    <div style={{ fontSize: 11, color: "#94a3b8" }}>Honda CG 160 Fan · Placa RTO-4A12</div>
+                  </div>
+                </div>
+                <span style={{ background: "rgba(16, 185, 129, 0.2)", color: "#10b981", border: "1px solid #10b981", padding: "4px 8px", borderRadius: 6, fontSize: 11, fontWeight: 800 }}>
+                  EM ROTA (34 km/h)
+                </span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#cbd5e1", marginTop: 14, paddingTop: 10, borderTop: "1px solid #334155" }}>
+                <span>Bateria: <strong>88%</strong></span>
+                <span>Região: <strong>Centro / Jd. Tangará II</strong></span>
+                <span>Hoje: <strong>8 entregas</strong></span>
+              </div>
+            </div>
+
+            <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: "16px 20px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontSize: 12, color: "#94a3b8", fontWeight: 600 }}>Desintermediação de Marketplaces</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: "#10b981", marginTop: 4 }}>+ R$ 1.840,00 economizados</div>
+                <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>Sem taxas de 27% de apps terceiros. Canal próprio direto!</div>
+              </div>
+              <div style={{ marginTop: 10 }}>
+                <span style={{ fontSize: 11, background: "#0f172a", padding: "4px 10px", borderRadius: 6, color: "#cbd5e1" }}>
+                  Base Sede: Rua Celso Rosa Lima, 142-W · Tangará da Serra - MT
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, background: "#1e293b", padding: "14px 18px", borderRadius: 12, border: "1px solid #334155" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <select
+                value={filtroStatusDelivery}
+                onChange={e => setFiltroStatusDelivery(e.target.value)}
+                style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, padding: "8px 12px", color: "#ffffff", fontSize: 13 }}
+              >
+                <option value="todos">Todas as Corridas</option>
+                <option value="aguardando_coleta">Aguardando Coleta</option>
+                <option value="em_rota">Em Rota</option>
+                <option value="entregue">Entregues</option>
+              </select>
+            </div>
             <button
-              onClick={() => navigate(abaAtiva === 'crm' ? '/admin/clientes' : '/admin/zuma?tab=mercado')}
+              onClick={() => setModalCorrida({
+                modo: "novo",
+                corrida: {
+                  clienteNome: "",
+                  telefone: "(65) 99999-0000",
+                  endereco: "",
+                  bairro: "Jardim Europa",
+                  valorTotal: 120.00,
+                  taxaEntrega: 10.00,
+                  formaPagamento: "PIX Pago Online",
+                  observacoes: ""
+                }
+              })}
               style={{
-                background: '#E63946',
-                color: '#ffffff',
-                border: 'none',
-                padding: '8px 18px',
+                background: "linear-gradient(135deg, #E63946 0%, #D90429 100%)",
+                color: "#ffffff",
+                border: "none",
+                padding: "9px 18px",
                 borderRadius: 8,
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer'
+                fontSize: 13,
+                fontWeight: 800,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                boxShadow: "0 4px 12px rgba(230, 57, 70, 0.4)"
               }}
             >
-              {abaAtiva === 'crm' ? 'Ver Base no ERP →' : 'Ver Calculadora de Margem →'}
+              <Plus size={16} /> + Despachar Nova Entrega Delivery
             </button>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 16 }}>
+            {corridasDelivery
+              .filter(c => filtroStatusDelivery === "todos" || c.status === filtroStatusDelivery)
+              .map(corrida => (
+                <div key={corrida.id} style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: 18, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 14, fontWeight: 900, color: "#E63946" }}>{corrida.id}</span>
+                        <span style={{ fontSize: 11, color: "#94a3b8", background: "#0f172a", padding: "2px 6px", borderRadius: 4 }}>{corrida.pedidoId}</span>
+                      </div>
+                      <span style={{
+                        fontSize: 10,
+                        fontWeight: 800,
+                        padding: "3px 8px",
+                        borderRadius: 6,
+                        background: corrida.status === "entregue" ? "rgba(16, 185, 129, 0.2)" : (corrida.status === "em_rota" ? "rgba(56, 189, 248, 0.2)" : "rgba(245, 158, 11, 0.2)"),
+                        color: corrida.status === "entregue" ? "#10b981" : (corrida.status === "em_rota" ? "#38bdf8" : "#f59e0b"),
+                        border: "1px solid currentColor"
+                      }}>
+                        {corrida.status?.toUpperCase().replace("_", " ")}
+                      </span>
+                    </div>
+
+                    <div style={{ fontSize: 14, fontWeight: 800, color: "#ffffff", marginBottom: 2 }}>{corrida.cliente?.nome}</div>
+                    <div style={{ fontSize: 12, color: "#cbd5e1", display: "flex", alignItems: "center", gap: 4, marginBottom: 4 }}>
+                      <MapPin size={12} color="#E63946" /> {corrida.cliente?.endereco} ({corrida.cliente?.bairro})
+                    </div>
+                    <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 10 }}>Contato: {corrida.cliente?.telefone}</div>
+
+                    <div style={{ background: "#0f172a", borderRadius: 8, padding: "10px 12px", fontSize: 11, marginBottom: 10 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                        <span style={{ color: "#94a3b8" }}>Total Pedido:</span>
+                        <strong style={{ color: "#10b981" }}>R$ {(corrida.valorTotal || 0).toFixed(2)}</strong>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                        <span style={{ color: "#94a3b8" }}>Taxa Entrega:</span>
+                        <span style={{ color: "#ffffff" }}>R$ {(corrida.taxaEntrega || 0).toFixed(2)}</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span style={{ color: "#94a3b8" }}>Pagamento:</span>
+                        <span style={{ color: "#cbd5e1" }}>{corrida.formaPagamento}</span>
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(230, 57, 70, 0.1)", border: "1px dashed #E63946", borderRadius: 6, padding: "6px 10px", fontSize: 11 }}>
+                      <span style={{ color: "#fca5a5" }}>Código OTP:</span>
+                      <strong style={{ color: "#ffffff", fontSize: 14, letterSpacing: 1 }}>{corrida.codigoOtp}</strong>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, paddingTop: 12, borderTop: "1px solid #334155", marginTop: 12 }}>
+                    {corrida.status !== "entregue" ? (
+                      <button
+                        onClick={() => avancarStatusCorrida(corrida.id, corrida.status === "aguardando_coleta" ? "em_rota" : "entregue")}
+                        style={{
+                          padding: "6px 12px",
+                          background: corrida.status === "aguardando_coleta" ? "#3b82f6" : "#10b981",
+                          color: "#ffffff",
+                          border: "none",
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 800,
+                          cursor: "pointer"
+                        }}
+                      >
+                        {corrida.status === "aguardando_coleta" ? "🚀 Coletar / Em Rota" : "✅ Entregue"}
+                      </button>
+                    ) : (
+                      <span style={{ fontSize: 11, color: "#10b981", fontWeight: 700 }}>Concluído</span>
+                    )}
+
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button
+                        onClick={() => setModalCorrida({
+                          modo: "editar",
+                          corrida: {
+                            id: corrida.id,
+                            clienteNome: corrida.cliente?.nome,
+                            telefone: corrida.cliente?.telefone,
+                            endereco: corrida.cliente?.endereco,
+                            bairro: corrida.cliente?.bairro,
+                            valorTotal: corrida.valorTotal,
+                            taxaEntrega: corrida.taxaEntrega,
+                            formaPagamento: corrida.formaPagamento,
+                            status: corrida.status
+                          }
+                        })}
+                        style={{ padding: "6px 10px", background: "#334155", border: "1px solid #475569", borderRadius: 6, color: "#ffffff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+                      >
+                        <Edit size={12} /> Modificar
+                      </button>
+                      <button
+                        onClick={() => excluirCorridaDelivery(corrida)}
+                        style={{ padding: "6px 10px", background: "rgba(239, 68, 68, 0.15)", border: "1px solid #ef4444", borderRadius: 6, color: "#ef4444", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
           </div>
         </div>
       )}
@@ -4157,6 +4941,349 @@ export default function ZumaRestauranteSuite() {
       {/* ========================================================================= */}
       {/* MODAL 4: INCLUIR / MODIFICAR PEDIDO NO KDS DA COZINHA */}
       {/* ========================================================================= */}
+
+      {/* ========================================================================= */}
+      {/* MODAL: INCLUIR / MODIFICAR CLIENTE CRM */}
+      {/* ========================================================================= */}
+      {modalCliente && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0, 0, 0, 0.8)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: 16 }}>
+          <div style={{ background: "#1e293b", border: "1px solid rgba(230, 57, 70, 0.5)", borderRadius: 16, width: "100%", maxWidth: 520, maxHeight: "90vh", overflowY: "auto", padding: 24, boxShadow: "0 20px 40px rgba(0, 0, 0, 0.7)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, paddingBottom: 14, borderBottom: "1px solid #334155" }}>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "#ffffff" }}>
+                {modalCliente.modo === "novo" ? "👤 + Incluir Novo Cliente VIP" : "✏️ Modificar Cliente VIP"}
+              </h3>
+              <button onClick={() => setModalCliente(null)} style={{ background: "transparent", border: "none", color: "#94a3b8", cursor: "pointer" }}><X size={20} /></button>
+            </div>
+            <form onSubmit={salvarClienteCrm} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#cbd5e1", marginBottom: 6 }}>Nome do Cliente *</label>
+                <input
+                  type="text"
+                  required
+                  value={modalCliente.cliente.nome || ""}
+                  onChange={e => setModalCliente({ ...modalCliente, cliente: { ...modalCliente.cliente, nome: e.target.value } })}
+                  style={{ width: "100%", padding: "10px 12px", background: "#0f172a", border: "1px solid #334155", borderRadius: 8, color: "#ffffff", fontSize: 13 }}
+                />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#cbd5e1", marginBottom: 6 }}>Telefone / WhatsApp *</label>
+                  <input
+                    type="text"
+                    required
+                    value={modalCliente.cliente.telefone || ""}
+                    onChange={e => setModalCliente({ ...modalCliente, cliente: { ...modalCliente.cliente, telefone: e.target.value } })}
+                    style={{ width: "100%", padding: "10px 12px", background: "#0f172a", border: "1px solid #334155", borderRadius: 8, color: "#ffffff", fontSize: 13 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#cbd5e1", marginBottom: 6 }}>Segmento RFV</label>
+                  <select
+                    value={modalCliente.cliente.segmentoRFV || "VIP Ouro"}
+                    onChange={e => setModalCliente({ ...modalCliente, cliente: { ...modalCliente.cliente, segmentoRFV: e.target.value } })}
+                    style={{ width: "100%", padding: "10px 12px", background: "#0f172a", border: "1px solid #334155", borderRadius: 8, color: "#ffffff", fontSize: 13 }}
+                  >
+                    <option value="VIP Diamante">VIP Diamante</option>
+                    <option value="VIP Ouro">VIP Ouro</option>
+                    <option value="VIP Prata">VIP Prata</option>
+                    <option value="Recorrente">Recorrente</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#cbd5e1", marginBottom: 6 }}>Pratos Favoritos</label>
+                <input
+                  type="text"
+                  value={modalCliente.cliente.pratosFavoritos || ""}
+                  onChange={e => setModalCliente({ ...modalCliente, cliente: { ...modalCliente.cliente, pratosFavoritos: e.target.value } })}
+                  placeholder="Ex: Sashimi Trufado, Uramaki Ebi"
+                  style={{ width: "100%", padding: "10px 12px", background: "#0f172a", border: "1px solid #334155", borderRadius: 8, color: "#ffffff", fontSize: 13 }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#cbd5e1", marginBottom: 6 }}>Restrições / Preferências Especiais</label>
+                <input
+                  type="text"
+                  value={modalCliente.cliente.restricoes || ""}
+                  onChange={e => setModalCliente({ ...modalCliente, cliente: { ...modalCliente.cliente, restricoes: e.target.value } })}
+                  placeholder="Ex: Sem gergelim, alérgico a camarão"
+                  style={{ width: "100%", padding: "10px 12px", background: "#0f172a", border: "1px solid #334155", borderRadius: 8, color: "#ffffff", fontSize: 13 }}
+                />
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 12, paddingTop: 14, borderTop: "1px solid #334155" }}>
+                <button type="button" onClick={() => setModalCliente(null)} style={{ padding: "10px 16px", background: "transparent", border: "1px solid #475569", borderRadius: 8, color: "#cbd5e1", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Cancelar</button>
+                <button type="submit" style={{ padding: "10px 20px", background: "linear-gradient(135deg, #10b981 0%, #059669 100%)", border: "none", borderRadius: 8, color: "#ffffff", fontSize: 13, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                  <Save size={16} /> Salvar Cliente
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: INCLUIR / MODIFICAR CORRIDA DELIVERY */}
+      {/* ========================================================================= */}
+      {modalCorrida && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0, 0, 0, 0.8)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: 16 }}>
+          <div style={{ background: "#1e293b", border: "1px solid rgba(230, 57, 70, 0.5)", borderRadius: 16, width: "100%", maxWidth: 520, maxHeight: "90vh", overflowY: "auto", padding: 24, boxShadow: "0 20px 40px rgba(0, 0, 0, 0.7)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, paddingBottom: 14, borderBottom: "1px solid #334155" }}>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "#ffffff" }}>
+                {modalCorrida.modo === "novo" ? "🚀 + Despachar Nova Corrida" : "✏️ Modificar Corrida Delivery"}
+              </h3>
+              <button onClick={() => setModalCorrida(null)} style={{ background: "transparent", border: "none", color: "#94a3b8", cursor: "pointer" }}><X size={20} /></button>
+            </div>
+            <form onSubmit={salvarCorridaDelivery} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#cbd5e1", marginBottom: 6 }}>Nome do Cliente *</label>
+                <input
+                  type="text"
+                  required
+                  value={modalCorrida.corrida.clienteNome || ""}
+                  onChange={e => setModalCorrida({ ...modalCorrida, corrida: { ...modalCorrida.corrida, clienteNome: e.target.value } })}
+                  style={{ width: "100%", padding: "10px 12px", background: "#0f172a", border: "1px solid #334155", borderRadius: 8, color: "#ffffff", fontSize: 13 }}
+                />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#cbd5e1", marginBottom: 6 }}>Telefone</label>
+                  <input
+                    type="text"
+                    value={modalCorrida.corrida.telefone || ""}
+                    onChange={e => setModalCorrida({ ...modalCorrida, corrida: { ...modalCorrida.corrida, telefone: e.target.value } })}
+                    style={{ width: "100%", padding: "10px 12px", background: "#0f172a", border: "1px solid #334155", borderRadius: 8, color: "#ffffff", fontSize: 13 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#cbd5e1", marginBottom: 6 }}>Bairro em Tangará</label>
+                  <input
+                    type="text"
+                    value={modalCorrida.corrida.bairro || ""}
+                    onChange={e => setModalCorrida({ ...modalCorrida, corrida: { ...modalCorrida.corrida, bairro: e.target.value } })}
+                    style={{ width: "100%", padding: "10px 12px", background: "#0f172a", border: "1px solid #334155", borderRadius: 8, color: "#ffffff", fontSize: 13 }}
+                  />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#cbd5e1", marginBottom: 6 }}>Endereço Completo de Entrega *</label>
+                <input
+                  type="text"
+                  required
+                  value={modalCorrida.corrida.endereco || ""}
+                  onChange={e => setModalCorrida({ ...modalCorrida, corrida: { ...modalCorrida.corrida, endereco: e.target.value } })}
+                  placeholder="Rua, número e complemento"
+                  style={{ width: "100%", padding: "10px 12px", background: "#0f172a", border: "1px solid #334155", borderRadius: 8, color: "#ffffff", fontSize: 13 }}
+                />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#cbd5e1", marginBottom: 6 }}>Valor Pedido (R$)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={modalCorrida.corrida.valorTotal || 0}
+                    onChange={e => setModalCorrida({ ...modalCorrida, corrida: { ...modalCorrida.corrida, valorTotal: parseFloat(e.target.value) } })}
+                    style={{ width: "100%", padding: "10px 12px", background: "#0f172a", border: "1px solid #334155", borderRadius: 8, color: "#ffffff", fontSize: 13 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#cbd5e1", marginBottom: 6 }}>Taxa Entrega (R$)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={modalCorrida.corrida.taxaEntrega || 10}
+                    onChange={e => setModalCorrida({ ...modalCorrida, corrida: { ...modalCorrida.corrida, taxaEntrega: parseFloat(e.target.value) } })}
+                    style={{ width: "100%", padding: "10px 12px", background: "#0f172a", border: "1px solid #334155", borderRadius: 8, color: "#ffffff", fontSize: 13 }}
+                  />
+                </div>
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 12, paddingTop: 14, borderTop: "1px solid #334155" }}>
+                <button type="button" onClick={() => setModalCorrida(null)} style={{ padding: "10px 16px", background: "transparent", border: "1px solid #475569", borderRadius: 8, color: "#cbd5e1", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Cancelar</button>
+                <button type="submit" style={{ padding: "10px 20px", background: "linear-gradient(135deg, #E63946 0%, #D90429 100%)", border: "none", borderRadius: 8, color: "#ffffff", fontSize: 13, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                  <Save size={16} /> Salvar e Despachar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+
+      {/* ========================================================================= */}
+      {/* MODAL: DIVISÃO DE CONTA DA MESA */}
+      {/* ========================================================================= */}
+      {modalDividirConta && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.8)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
+          <div style={{ background: '#1e293b', border: '1px solid rgba(230, 57, 70, 0.5)', borderRadius: 16, width: '100%', maxWidth: 460, padding: 24, boxShadow: '0 20px 40px rgba(0, 0, 0, 0.7)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, paddingBottom: 12, borderBottom: '1px solid #334155' }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#ffffff' }}>
+                💸 Divisão de Conta · Mesa {modalDividirConta.mesaNumero}
+              </h3>
+              <button onClick={() => { setModalDividirConta(null); setResultadoDivisao(null); }} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={20} /></button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ background: '#0f172a', padding: '12px 14px', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: '#94a3b8' }}>Consumo Atual da Mesa:</span>
+                <strong style={{ fontSize: 16, color: '#10b981' }}>R$ {(modalDividirConta.valorBase || 189.50).toFixed(2)}</strong>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Dividir entre quantas pessoas?</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {[2, 3, 4, 5, 6].map(num => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setPessoasDivisao(num)}
+                      style={{
+                        flex: 1,
+                        padding: '8px 0',
+                        borderRadius: 8,
+                        border: '1px solid',
+                        borderColor: pessoasDivisao === num ? '#E63946' : '#334155',
+                        background: pessoasDivisao === num ? '#E63946' : '#0f172a',
+                        color: '#ffffff',
+                        fontWeight: 800,
+                        fontSize: 13,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {num}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#cbd5e1', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={incluirTaxaDivisao}
+                  onChange={e => setIncluirTaxaDivisao(e.target.checked)}
+                />
+                Incluir 10% de taxa de serviço do garçom
+              </label>
+              <button
+                type="button"
+                onClick={executarDividirConta}
+                style={{
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '10px',
+                  borderRadius: 8,
+                  fontWeight: 800,
+                  fontSize: 13,
+                  cursor: 'pointer'
+                }}
+              >
+                ⚡ Calcular Valor por Pessoa
+              </button>
+              {resultadoDivisao && (
+                <div style={{ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid #10b981', borderRadius: 10, padding: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 12 }}>
+                    <span style={{ color: '#cbd5e1' }}>Total com Serviço:</span>
+                    <strong style={{ color: '#ffffff' }}>R$ {(resultadoDivisao.valorTotal || resultadoDivisao.totalComServico || 0).toFixed(2)}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingTop: 8, borderTop: '1px dashed rgba(16, 185, 129, 0.4)' }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#ffffff' }}>Valor por Pessoa ({pessoasDivisao}x):</span>
+                    <span style={{ fontSize: 20, fontWeight: 900, color: '#10b981' }}>R$ {(resultadoDivisao.valorPorPessoa || 0).toFixed(2)}</span>
+                  </div>
+                  <div style={{ fontSize: 10.5, color: '#cbd5e1', marginTop: 8, background: '#0f172a', padding: '6px 8px', borderRadius: 6 }}>
+                    Chave PIX: 36.296.848/0001-57 (Zuma Cozinha Oriental LTDA)
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: TRANSFERÊNCIA DE MESA */}
+      {/* ========================================================================= */}
+      {modalTransferirMesa && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.8)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
+          <div style={{ background: '#1e293b', border: '1px solid rgba(230, 57, 70, 0.5)', borderRadius: 16, width: '100%', maxWidth: 420, padding: 24, boxShadow: '0 20px 40px rgba(0, 0, 0, 0.7)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, paddingBottom: 12, borderBottom: '1px solid #334155' }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#ffffff' }}>
+                🔄 Transferir Comanda da Mesa {modalTransferirMesa.mesaOrigem}
+              </h3>
+              <button onClick={() => setModalTransferirMesa(null)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={20} /></button>
+            </div>
+            <form onSubmit={executarTransferirMesa} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Transferir para qual mesa?</label>
+                <select
+                  value={mesaDestinoTransf}
+                  onChange={e => setMesaDestinoTransf(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                >
+                  {[1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25].map(n => (
+                    <option key={n} value={String(n).padStart(2, '0')}>Mesa {String(n).padStart(2, '0')} · Salão Zuma</option>
+                  ))}
+                </select>
+              </div>
+              <p style={{ fontSize: 11, color: '#94a3b8', margin: 0 }}>
+                Ao confirmar, todos os itens consumidos e valor acumulado da Mesa {modalTransferirMesa.mesaOrigem} serão movidos para a nova mesa.
+              </p>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
+                <button type="button" onClick={() => setModalTransferirMesa(null)} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid #475569', borderRadius: 8, color: '#cbd5e1', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Cancelar</button>
+                <button type="submit" style={{ padding: '8px 18px', background: '#E63946', border: 'none', borderRadius: 8, color: '#ffffff', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Confirmar Transferência</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: AJUSTE RÁPIDO DE ESTOQUE / INVENTÁRIO */}
+      {/* ========================================================================= */}
+      {modalAjusteEstoque && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.8)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
+          <div style={{ background: '#1e293b', border: '1px solid rgba(230, 57, 70, 0.5)', borderRadius: 16, width: '100%', maxWidth: 460, padding: 24, boxShadow: '0 20px 40px rgba(0, 0, 0, 0.7)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, paddingBottom: 12, borderBottom: '1px solid #334155' }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#ffffff' }}>
+                ⚖️ Ajuste Rápido / Inventário · {modalAjusteEstoque.nome}
+              </h3>
+              <button onClick={() => setModalAjusteEstoque(null)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={20} /></button>
+            </div>
+            <form onSubmit={executarAjusteEstoque} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ background: '#0f172a', padding: '10px 14px', borderRadius: 8, display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 12, color: '#94a3b8' }}>Saldo Registrado:</span>
+                <strong style={{ fontSize: 14, color: '#ffffff' }}>{modalAjusteEstoque.saldoAtual} {modalAjusteEstoque.unidade}</strong>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Novo Saldo Real Aferido ({modalAjusteEstoque.unidade}) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  placeholder={"Ex: " + modalAjusteEstoque.saldoAtual}
+                  value={novoSaldoAjuste}
+                  onChange={e => setNovoSaldoAjuste(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Motivo do Ajuste</label>
+                <select
+                  value={motivoAjuste}
+                  onChange={e => setMotivoAjuste(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                >
+                  <option value="Inventário / Balanço Físico">Inventário / Balanço Físico</option>
+                  <option value="Ajuste de Quebra / Descongelamento">Ajuste de Quebra / Descongelamento</option>
+                  <option value="Sobra Técnica de Corte Limpo">Sobra Técnica de Corte Limpo</option>
+                  <option value="Correção de Digitação">Correção de Digitação</option>
+                </select>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+                <button type="button" onClick={() => setModalAjusteEstoque(null)} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid #475569', borderRadius: 8, color: '#cbd5e1', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Cancelar</button>
+                <button type="submit" style={{ padding: '8px 18px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', border: 'none', borderRadius: 8, color: '#ffffff', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Salvar Ajuste</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {modalPedidoKds && (
         <div style={{
           position: 'fixed',

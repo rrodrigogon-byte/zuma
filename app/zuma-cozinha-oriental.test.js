@@ -1606,3 +1606,198 @@ test('Zuma Cozinha Oriental - CRUD Completo de Cozinha KDS: Incluir, Modificar e
   assert.equal(delRes.data.pedidoCancelado.id, pedId);
   assert.equal(PEDIDOS_COZINHA_KDS_ZUMA.length, totalAntes);
 });
+test("Zuma Cozinha Oriental - CRUD Completo de Clientes no CRM: Incluir, Modificar e Excluir Cliente VIP", async () => {
+  const { routerZuma, ZUMA_CLIENTES_CRM } = await import("./modules/restaurante-zuma.js");
+  const callRoute = (method, p, body = {}, params = {}) => {
+    return new Promise((resolve) => {
+      const [pathname] = p.split("?");
+      const req = { method, path: pathname, query: {}, body, params };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      for (const layer of routerZuma.stack) {
+        if (layer.route && layer.route.methods[method.toLowerCase()]) {
+          if (layer.match(pathname)) {
+            req.params = layer.params || params;
+            layer.route.stack[0].handle(req, res);
+            return;
+          }
+        }
+      }
+      resolve({ status: 404, data: { error: "Route not found: " + p } });
+    });
+  };
+
+  const totalAntes = ZUMA_CLIENTES_CRM.length;
+
+  // 1. Incluir Cliente VIP
+  const incRes = await callRoute("POST", "/crm/cliente", {
+    nome: "Dra. Renata Vasconcelos",
+    telefone: "(65) 99911-8844",
+    email: "renata.vasconcelos@tga.adv.br",
+    bairro: "Jardim Tangará II",
+    cidade: "Tangará da Serra",
+    aniversario: "1988-09-12",
+    pratosFavoritos: ["Sashimi Nobre de Salmão", "Uramaki Ebi Especial"],
+    segmentoRFV: "VIP Diamante"
+  });
+  assert.equal(incRes.status, 201);
+  assert.equal(incRes.data.ok, true);
+  const cliId = incRes.data.cliente.id;
+  assert.equal(ZUMA_CLIENTES_CRM.length, totalAntes + 1);
+
+  // 2. Modificar Cliente VIP
+  const modRes = await callRoute("PUT", `/crm/cliente/${cliId}`, {
+    observacoes: "Prefere mesas reservadas no deck climatizado às sextas-feiras.",
+    segmentoRFV: "VIP Black Master"
+  }, { id: cliId });
+  assert.equal(modRes.status, 200);
+  assert.equal(modRes.data.ok, true);
+  assert.equal(modRes.data.cliente.segmentoRFV, "VIP Black Master");
+
+  // 3. Excluir Cliente VIP
+  const delRes = await callRoute("DELETE", `/crm/cliente/${cliId}`, {}, { id: cliId });
+  assert.equal(delRes.status, 200);
+  assert.equal(delRes.data.ok, true);
+  assert.equal(delRes.data.clienteExcluido.id, cliId);
+  assert.equal(ZUMA_CLIENTES_CRM.length, totalAntes);
+});
+
+test("Zuma Cozinha Oriental - CRUD Completo de Delivery & Expedição: Incluir, Modificar e Excluir Corrida", async () => {
+  const { routerZuma, CORRIDAS_ENTREGADOR_ZUMA } = await import("./modules/restaurante-zuma.js");
+  const callRoute = (method, p, body = {}, params = {}) => {
+    return new Promise((resolve) => {
+      const [pathname] = p.split("?");
+      const req = { method, path: pathname, query: {}, body, params };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      for (const layer of routerZuma.stack) {
+        if (layer.route && layer.route.methods[method.toLowerCase()]) {
+          if (layer.match(pathname)) {
+            req.params = layer.params || params;
+            layer.route.stack[0].handle(req, res);
+            return;
+          }
+        }
+      }
+      resolve({ status: 404, data: { error: "Route not found: " + p } });
+    });
+  };
+
+  const totalAntes = CORRIDAS_ENTREGADOR_ZUMA.length;
+
+  // 1. Incluir Corrida de Delivery
+  const incRes = await callRoute("POST", "/delivery/corrida", {
+    clienteNome: "Rodrigo Gonçalves",
+    telefone: "(65) 99905-6008",
+    endereco: "Av. Brasil, nº 880 - Centro",
+    bairro: "Centro",
+    valorTotal: 178.50,
+    taxaEntrega: 12.00,
+    formaPagamento: "PIX Dinâmico KyttoPay"
+  });
+  assert.equal(incRes.status, 201);
+  assert.equal(incRes.data.ok, true);
+  const corridaId = incRes.data.corrida.id;
+  assert.equal(CORRIDAS_ENTREGADOR_ZUMA.length, totalAntes + 1);
+
+  // 2. Modificar Corrida
+  const modRes = await callRoute("PUT", `/delivery/corrida/${corridaId}`, {
+    status: "em_rota",
+    taxaEntrega: 15.00
+  }, { id: corridaId });
+  assert.equal(modRes.status, 200);
+  assert.equal(modRes.data.ok, true);
+  assert.equal(modRes.data.corrida.status, "em_rota");
+  assert.equal(modRes.data.corrida.taxaEntrega, 15.00);
+
+  // 3. Excluir / Cancelar Corrida
+  const delRes = await callRoute("DELETE", `/delivery/corrida/${corridaId}`, {}, { id: corridaId });
+  assert.equal(delRes.status, 200);
+  assert.equal(delRes.data.ok, true);
+  assert.equal(delRes.data.corridaCancelada.id, corridaId);
+  assert.equal(CORRIDAS_ENTREGADOR_ZUMA.length, totalAntes);
+});
+
+test("Zuma Cozinha Oriental - Operações Avançadas de Mesas: Divisão de Conta e Transferência de Comanda", async () => {
+  const { routerZuma } = await import("./modules/restaurante-zuma.js");
+  const callRoute = (method, p, body = {}) => {
+    return new Promise((resolve) => {
+      const [pathname] = p.split("?");
+      const req = { method, path: pathname, query: {}, body, params: {} };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      const layer = routerZuma.stack.find(l => l.route && l.route.path === pathname && l.route.methods[method.toLowerCase()]);
+      if (layer) {
+        layer.route.stack[0].handle(req, res);
+      } else {
+        resolve({ status: 404, data: { error: "Route not found: " + p } });
+      }
+    });
+  };
+
+  // 1. Divisão de Conta em 3 pessoas com 10%
+  const divRes = await callRoute("POST", "/mesas/dividir-conta", {
+    numeroMesa: "04",
+    numeroPessoas: 3,
+    incluirDezPorcento: true
+  });
+  assert.equal(divRes.status, 200);
+  assert.equal(divRes.data.ok, true);
+  assert.equal(divRes.data.pessoas, 3);
+  assert.ok(divRes.data.valorPorPessoa > 0);
+  assert.ok(divRes.data.taxaServico > 0);
+
+  // 2. Transferência de Comanda
+  const transfRes = await callRoute("POST", "/mesas/transferir-comanda", {
+    mesaOrigem: "04",
+    mesaDestino: "12",
+    garcom: "Marcos Salão"
+  });
+  assert.equal(transfRes.status, 200);
+  assert.equal(transfRes.data.ok, true);
+});
+
+test("Zuma Cozinha Oriental - Operações Avançadas de Estoque: Ajuste Rápido de Inventário e Balanço Físico", async () => {
+  const { routerZuma, ESTOQUE_PESCADOS_ZUMA } = await import("./modules/restaurante-zuma.js");
+  const callRoute = (method, p, body = {}) => {
+    return new Promise((resolve) => {
+      const [pathname] = p.split("?");
+      const req = { method, path: pathname, query: {}, body, params: {} };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      const layer = routerZuma.stack.find(l => l.route && l.route.path === pathname && l.route.methods[method.toLowerCase()]);
+      if (layer) {
+        layer.route.stack[0].handle(req, res);
+      } else {
+        resolve({ status: 404, data: { error: "Route not found: " + p } });
+      }
+    });
+  };
+
+  const ajusteRes = await callRoute("POST", "/estoque/ajuste-rapido", {
+    insumoId: "salmao",
+    novoSaldo: 35.5,
+    motivo: "Inventário semanal de pescados nobres",
+    responsavel: "Chef Sushiman Executivo"
+  });
+  assert.equal(ajusteRes.status, 200);
+  assert.equal(ajusteRes.data.ok, true);
+  assert.equal(ajusteRes.data.novoSaldo, 35.5);
+  assert.equal(ESTOQUE_PESCADOS_ZUMA['ins-salmao-fresco'].saldoAtual, 35.5);
+});
