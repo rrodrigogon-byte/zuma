@@ -107,7 +107,22 @@
         <label class="block text-[11px] font-bold uppercase tracking-wider text-zuma-muted">Perfis Pré-Configurados (Acesso Imediato)</label>
         <div class="grid grid-cols-2 gap-2 text-left">
           
-          <!-- Perfil 1: Proprietário / Sócio (Palma da Mão) -->
+          <!-- Perfil 1: Rodrigo Gonçalves (Superadmin PRD) -->
+          <button onclick="selecionarPerfil('admin')" type="button" class="col-span-2 p-3 rounded-xl border-2 border-emerald-500/60 bg-emerald-500/15 hover:border-emerald-400 hover:bg-emerald-500/25 transition-all text-left group touch-btn shadow-lg">
+            <div class="w-full flex items-center justify-between">
+              <div>
+                <div class="flex items-center space-x-1.5">
+                  <span class="text-base">🛡️</span>
+                  <span class="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-300">Superadmin PRD Oficial</span>
+                </div>
+                <div class="text-xs sm:text-sm font-black text-white mt-1 group-hover:text-emerald-300">Rodrigo Gonçalves</div>
+                <div class="text-[10px] text-emerald-200/80 font-mono">rrodrigogon@gmail.com · Senha PRD Ativa</div>
+              </div>
+              <span class="text-xs font-black text-emerald-400 px-2.5 py-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40">1-Toque ⚡</span>
+            </div>
+          </button>
+
+          <!-- Perfil 2: Proprietário / Sócio (Palma da Mão) -->
           <button onclick="selecionarPerfil('proprietario')" type="button" class="p-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:border-amber-400 hover:bg-amber-500/20 transition-all text-left group touch-btn">
             <div class="w-full">
               <div class="flex items-center justify-between">
@@ -167,17 +182,7 @@
             </div>
           </button>
 
-          <!-- Perfil 6: Administrador Plataforma -->
-          <button onclick="selecionarPerfil('admin')" type="button" class="p-2.5 rounded-xl border border-zuma-border bg-zuma-card hover:border-zuma-salmon hover:bg-zuma-salmon/10 transition-all text-left group touch-btn">
-            <div class="w-full">
-              <div class="flex items-center justify-between">
-                <span class="text-base">🛡️</span>
-                <span class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Kytto</span>
-              </div>
-              <div class="text-xs font-bold text-white mt-1 group-hover:text-zuma-salmon">Rodrigo Gonçalves</div>
-              <div class="text-[10px] text-zuma-muted">Diretoria / Admin</div>
-            </div>
-          </button>
+
 
         </div>
       </div>
@@ -187,7 +192,7 @@
         <div>
           <label class="block text-[11px] font-bold uppercase tracking-wider text-zuma-muted mb-1">E-mail do Usuário</label>
           <div class="relative">
-            <input type="email" id="login-email" required placeholder="seu-email@zumacozinhaoriental.com.br" value="leandro@zumacozinhaoriental.com.br"
+            <input type="email" id="login-email" required placeholder="seu-email@zumacozinhaoriental.com.br" value="rrodrigogon@gmail.com"
                    class="w-full bg-zuma-card border border-zuma-border rounded-xl px-3.5 py-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-zuma-salmon touch-btn">
             <span class="absolute right-3.5 top-3.5 text-zuma-muted text-xs">✉️</span>
           </div>
@@ -196,10 +201,10 @@
         <div>
           <div class="flex justify-between items-center mb-1">
             <label class="text-[11px] font-bold uppercase tracking-wider text-zuma-muted">Senha de Acesso</label>
-            <span class="text-[10px] text-emerald-400 font-semibold">Padrão PRD: 123456</span>
+            <span class="text-[10px] text-emerald-400 font-semibold">Padrão PRD: #080581verdao</span>
           </div>
           <div class="relative">
-            <input type="password" id="login-senha" required placeholder="••••••" value="123456"
+            <input type="password" id="login-senha" required placeholder="••••••" value="#080581verdao"
                    class="w-full bg-zuma-card border border-zuma-border rounded-xl px-3.5 py-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-zuma-salmon touch-btn">
             <button type="button" onclick="toggleSenha()" class="absolute right-3.5 top-3 text-zuma-muted hover:text-white text-xs p-1">
               👁️

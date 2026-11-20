@@ -282,14 +282,15 @@ function criarAdminPadrao() {
 // Rota: Login Admin (Painel)
 app.post('/api/admin/login', authLimiter, (req, res) => {
   try {
-    const { user, pass, senha } = req.body || {};
+    const { user, email: bodyEmail, usuario: bodyUsuario, pass, senha } = req.body || {};
+    const usuarioInformado = user || bodyEmail || bodyUsuario;
     const senhaInformada = pass || senha;
 
-    if (!user || !senhaInformada) {
+    if (!usuarioInformado || !senhaInformada) {
       return res.status(400).json({ error: 'Usuário e senha são obrigatórios' });
     }
 
-    const email = String(user).trim().toLowerCase();
+    const email = String(usuarioInformado).trim().toLowerCase();
     const usuario = usuarios.get(email) || espelharUsuarioEmMemoria(cadastrosMestres.obterUsuarioPorEmail(email));
 
     if (!usuario || !verificarPassword(senhaInformada, usuario.senhaHash || usuario.senha)) {
