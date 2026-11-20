@@ -233,9 +233,9 @@ export async function linkedAccountForLocalUser(userId, database = db) {
   return result.rows[0] || null;
 }
 export function accountCredential(account, legacyUsers = []) {
-  if (account.origem !== 'legacy') return account.senha_hash;
+  if (account.origem !== 'legacy' || !account.origem_id) return account.senha_hash || null;
   const source = legacyUsers.find(item => String(item.id) === account.origem_id && item.ativo !== false && normalizeLoose(item.email) === account.email);
-  return source?.senhaHash || (account.origem_id ? null : account.senha_hash);
+  return source?.senhaHash || account.senha_hash || null;
 }
 export async function resolveAccountUser(accountId, { legacyUsers = [], database = db } = {}) {
   const id = assertUuid(accountId, 'accountId');
