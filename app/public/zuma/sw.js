@@ -1,5 +1,5 @@
 // Service Worker - Zuma Cozinha Oriental / Kytto Station
-const CACHE_NAME = 'zuma-kytto-v3';
+const CACHE_NAME = 'zuma-kytto-v4';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -7,12 +7,14 @@ const ASSETS_TO_CACHE = [
   './pilot.html',
   './login.html',
   './apps.html',
+  './proprietario.html',
   './entregador.html',
   './garcom.html',
   './pagamentos.html',
   './caixa.html',
   './erp.html',
   './manifest.json',
+  './manifest-proprietario.json',
   './manifest-garcom.json',
   './manifest-entregador.json',
   './manifest-caixa.json',
@@ -45,11 +47,18 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request).catch(() => {
-        if (event.request.mode === 'navigate') {
-          return caches.match('./operacao.html') || caches.match('./apps.html') || caches.match('./index.html');
+    caches.match(event.request).then((cachedResponse) => {
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+      return fetch(event.request).then((networkResponse) => {
+        return networkResponse;
+      }).catch(() => {
+        // Fallback offline caso perca conexao
+        if (event.request.headers.get('accept')?.includes('text/html')) {
+          return caches.match('./apps.html') || caches.match('./index.html');
         }
       });
     })

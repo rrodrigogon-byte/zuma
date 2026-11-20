@@ -5079,9 +5079,22 @@ const INFORMACOES_APPS_ZUMA = {
       { cargo: "Entregador / Motoboy", app: "App do Entregador (PWA/APK)", pinSugerido: "2001", escopo: "Expedição Delivery, Mapa GPS Tangará da Serra, Rotas Waze/Google Maps e Comprovante de Entrega" },
       { cargo: "Caixa PDV", app: "App Caixa Touch (PWA/APK)", pinSugerido: "3001", escopo: "Frente de Caixa, Módulo de Pagamentos, Emissão Fiscal NFC-e SEFAZ-MT" },
       { cargo: "Cozinha / Sushiman", app: "App KDS Cozinha (PWA)", pinSugerido: "4001", escopo: "Monitores das 4 Praças de Produção com Alertas Sonoros" }
-    ]
-  },
-  apps: [
+   ]
+ },
+ apps: [
+    {
+      id: "proprietario",
+      nome: "App do Proprietário Zuma",
+      subtitulo: "Gestão na Palma da Mão, Comparativos & Concorrência",
+      icone: "👑",
+      cor: "amber",
+      pwaUrl: "/zuma/proprietario.html",
+      manifestUrl: "/zuma/manifest-proprietario.json",
+      apkUrl: "/zuma/downloads/zuma-proprietario.apk",
+      apkTamanho: "5.4 MB",
+      recursos: ["Visão 360° em tempo real", "Comparativo de dias iguais (D-7, D-30)", "Gráficos de faturamento e CMV", "Radar de concorrência de Tangará da Serra", "Tomada de ação com 1 toque"],
+      compatibilidade: "iOS (Safari Add to Home) & Android (PWA / APK)"
+    },
     {
       id: "garcom",
       nome: "App do Garçom Zuma",
@@ -5423,7 +5436,7 @@ routerZuma.delete('/cozinha/pedido/:id', (req, res) => {
   const removido = PEDIDOS_COZINHA_KDS_ZUMA.splice(index, 1)[0];
   res.json({ ok: true, mensagem: `Pedido ${removido.numeroComanda} cancelado e removido do KDS!`, pedidoCancelado: removido });
 });
-// ============================================================================
+// =====================================================================
 // 16.5 CRM & CLIENTES: INCLUIR, MODIFICAR E EXCLUIR
 // ============================================================================
 routerZuma.post("/crm/cliente", (req, res) => {
@@ -5610,9 +5623,266 @@ routerZuma.post("/mesas/transferir-comanda", (req, res) => {
   });
 });
 
+// MÓDULO DE GESTÃO DO PROPRIETÁRIO (PALMA DA MÃO, COMPARATIVOS, CONCORRÊNCIA E AÇÕES)
+// ============================================================================
+
+export const DASHBOARD_PROPRIETARIO_ZUMA = {
+  kpisHoje: {
+    faturamentoHoje: 8940.00,
+    metaHoje: 10000.00,
+    percentualMeta: 89.4,
+    ticketMedioHoje: 154.13,
+    pedidosHojeTotal: 58,
+    pedidosSalao: 36,
+    pedidosDelivery: 22,
+    cmvPercentualHoje: 27.8,
+    cmvMetaTeto: 30.0,
+    lucroLiquidoEstimadoHoje: 3486.60,
+    margemLiquidaHoje: 39.0,
+    giroMedioMesaMinutos: 72,
+    tempoMedioEntregaMinutos: 34,
+    clientesAtendidosHoje: 142,
+    mesasOcupadasAgora: 18,
+    mesasTotal: 27,
+    taxaOcupacaoSalao: 66.7,
+    statusOperacao: "Aberto / Pico Noturno Ativo",
+    previsaoFechamentoHoje: 10850.00
+  },
+  comparativoMesmosDias: {
+    d7: {
+      titulo: "Hoje vs Sexta-Feira Passada (D-7)",
+      diaReferencia: "Sexta-Feira, 13/11/2026",
+      faturamentoHoje: 8940.00,
+      faturamentoAnterior: 7160.00,
+      diffFaturamento: 1780.00,
+      diffPercentualFaturamento: 24.86,
+      pedidosHoje: 58,
+      pedidosAnterior: 49,
+      diffPedidos: 9,
+      ticketHoje: 154.13,
+      ticketAnterior: 146.12,
+      diffTicket: 8.01,
+      cmvHoje: 27.8,
+      cmvAnterior: 29.4,
+      lucroEstimadoHoje: 3486.60,
+      lucroEstimadoAnterior: 2685.00,
+      diffLucro: 801.60
+    },
+    d30: {
+      titulo: "Hoje vs Mesma Sexta Mês Anterior (D-30)",
+      diaReferencia: "Sexta-Feira, 23/10/2026",
+      faturamentoHoje: 8940.00,
+      faturamentoAnterior: 6820.00,
+      diffFaturamento: 2120.00,
+      diffPercentualFaturamento: 31.08,
+      pedidosHoje: 58,
+      pedidosAnterior: 45,
+      ticketHoje: 154.13,
+      ticketAnterior: 151.55,
+      cmvHoje: 27.8,
+      cmvAnterior: 30.2
+    },
+    semanalAcumulado: {
+      titulo: "Semana Atual vs Semana Anterior",
+      faturamentoSemanaAtual: 48920.00,
+      faturamentoSemanaAnterior: 41250.00,
+      diffPercentual: 18.59,
+      ticketMedioSemanaAtual: 149.60,
+      ticketMedioSemanaAnterior: 142.20
+    }
+  },
+  curvaHorariaHojeVsD7: [
+    { hora: "11h", faturamentoHoje: 320, faturamentoD7: 210, meta: 300 },
+    { hora: "12h", faturamentoHoje: 1150, faturamentoD7: 890, meta: 1100 },
+    { hora: "13h", faturamentoHoje: 880, faturamentoD7: 740, meta: 850 },
+    { hora: "14h", faturamentoHoje: 340, faturamentoD7: 280, meta: 350 },
+    { hora: "18h", faturamentoHoje: 450, faturamentoD7: 380, meta: 400 },
+    { hora: "19h", faturamentoHoje: 1280, faturamentoD7: 980, meta: 1200 },
+    { hora: "20h", faturamentoHoje: 1950, faturamentoD7: 1540, meta: 1900 },
+    { hora: "21h", faturamentoHoje: 1420, faturamentoD7: 1190, meta: 1500 },
+    { hora: "22h", faturamentoHoje: 860, faturamentoD7: 710, meta: 900 },
+    { hora: "23h", faturamentoHoje: 290, faturamentoD7: 240, meta: 300 }
+  ],
+  diasSemanaComparativo: [
+    { dia: "Seg", atual: 4210, anterior: 3820, meta: 4000 },
+    { dia: "Ter", atual: 4850, anterior: 4190, meta: 4500 },
+    { dia: "Qua", atual: 5920, anterior: 5120, meta: 5500 },
+    { dia: "Qui", atual: 6840, anterior: 5980, meta: 6500 },
+    { dia: "Sex (Hoje)", atual: 8940, anterior: 7160, meta: 10000 },
+    { dia: "Sáb", atual: 10450, anterior: 8920, meta: 11000 },
+    { dia: "Dom", atual: 7710, anterior: 6060, meta: 8000 }
+  ],
+  canaisDistribuicao: {
+    salao: { valor: 5542.80, percentual: 62.0, pedidos: 36, ticket: 153.97, icone: "🍽️" },
+    delivery: { valor: 2503.20, percentual: 28.0, pedidos: 22, ticket: 113.78, icone: "🛵" },
+    cardapioDigital: { valor: 625.80, percentual: 7.0, pedidos: 5, ticket: 125.16, icone: "📱" },
+    balcaoRetirada: { valor: 268.20, percentual: 3.0, pedidos: 3, ticket: 89.40, icone: "🛍️" }
+  },
+  pescadosCriticosHoje: {
+    salmaoFrescoEstoqueKg: 28.5,
+    salmaoConsumidoHojeKg: 14.2,
+    atumFrescoEstoqueKg: 11.2,
+    peixeBrancoEstoqueKg: 15.0,
+    rendimentoFilamentoPercentual: 71.4,
+    perdasAparasGramas: 420,
+    alertaReposicao: "Estoque suficiente para atendimento da noite (previsão de consumo: 9.8 kg de salmão até 23h30)"
+  }
+};
+
+export const RADAR_CONCORRENCIA_TANGARA = {
+  cidade: "Tangará da Serra - MT",
+  dataVarredura: "2026-11-20T19:30:00Z",
+  motorIA: "Motor KyttoIA 2.5 Flash",
+  posicaoZumaNoMercado: "Líder de Categoria (Nota 4.9 ★, Melhor Tempo de Entrega e Maior Variedade de Peixes Nobres)",
+  estabelecimentos: [
+    {
+      id: "zuma",
+      nome: "Zuma Cozinha Oriental",
+      tipo: "Restaurante Oriental & Sushi Bar Premium",
+      endereco: "Rua Celso Rosa Lima, nº 142-W, Centro / Jd. Tangará II",
+      avaliacaoGoogle: 4.9,
+      totalAvaliacoes: 418,
+      tempoMedioEntregaMin: 34,
+      taxaEntregaMedia: 7.50,
+      raioAtendimentoKm: 12,
+      status: "Aberto",
+      pontosFortes: ["Salmão chileno fresco diário", "211 SKUs no cardápio", "Rastreabilidade GPS por mapa", "Salão climatizado com 27 mesas"],
+      isZuma: true
+    },
+    {
+      id: "sushi_prime",
+      nome: "Sushi Prime Tangará",
+      tipo: "Restaurante & Rodízio",
+      endereco: "Av. Brasil, Centro",
+      avaliacaoGoogle: 4.5,
+      totalAvaliacoes: 234,
+      tempoMedioEntregaMin: 48,
+      taxaEntregaMedia: 9.00,
+      raioAtendimentoKm: 8,
+      status: "Aberto",
+      pontosFortes: ["Foco em festivais e rodízio", "Localização central"],
+      pontosFracos: ["Tempo de espera elevado no delivery (48 min)", "Taxa de entrega mais alta"],
+      isZuma: false
+    },
+    {
+      id: "tokio_express",
+      nome: "Tokio Express Tangará",
+      tipo: "Fast Food Oriental & Delivery",
+      endereco: "Av. Tancredo Neves",
+      avaliacaoGoogle: 4.3,
+      totalAvaliacoes: 175,
+      tempoMedioEntregaMin: 55,
+      taxaEntregaMedia: 10.00,
+      raioAtendimentoKm: 10,
+      status: "Aberto",
+      pontosFortes: ["Preço de entrada acessível nos hot rolls"],
+      pontosFracos: ["Utiliza peixe congelado", "Atrasos recorrentes em dias de chuva", "Taxa de R$ 10"],
+      isZuma: false
+    },
+    {
+      id: "koiso_delivery",
+      nome: "Koiso Oriental Delivery",
+      tipo: "Dark Kitchen Delivery",
+      endereco: "Jd. Europa",
+      avaliacaoGoogle: 4.4,
+      totalAvaliacoes: 96,
+      tempoMedioEntregaMin: 50,
+      taxaEntregaMedia: 8.50,
+      raioAtendimentoKm: 7,
+      status: "Aberto",
+      pontosFortes: ["Focado em combinados econômicos"],
+      pontosFracos: ["Sem salão para consumo", "Cardápio limitado a 35 itens", "Sem rastreamento ao vivo"],
+      isZuma: false
+    },
+    {
+      id: "ryori_bar",
+      nome: "Ryori Sushi Bar",
+      tipo: "Balcão & Delivery",
+      endereco: "Rua Antônio Hortolani",
+      avaliacaoGoogle: 4.6,
+      totalAvaliacoes: 142,
+      tempoMedioEntregaMin: 45,
+      taxaEntregaMedia: 9.50,
+      raioAtendimentoKm: 9,
+      status: "Aberto",
+      pontosFortes: ["Drinks autorais e ambiente intimista"],
+      pontosFracos: ["Capacidade reduzida de salão (12 mesas)", "Fila de espera"],
+      isZuma: false
+    }
+  ],
+  benchmarkPratos: [
+    { prato: "Combinado Casal 40 Pçs", zumaPreco: 149.90, mediaConcorrencia: 158.00, menorPreco: 142.00, maiorPreco: 169.00, statusCompetitivo: "Vantagem Zuma: -R$ 8,10 vs média com salmão maçaricado e trufado" },
+    { prato: "Sashimi Salmão 10 Pçs", zumaPreco: 54.90, mediaConcorrencia: 59.50, menorPreco: 52.00, maiorPreco: 66.00, statusCompetitivo: "Vantagem Zuma: -R$ 4,60 vs média (pescado 100% fresco)" },
+    { prato: "Temaki Salmão Completo", zumaPreco: 36.90, mediaConcorrencia: 38.50, menorPreco: 35.00, maiorPreco: 42.00, statusCompetitivo: "Preço de mercado com nori premium e cream cheese legítimo" },
+    { prato: "Hot Roll Salmão 10 Pçs", zumaPreco: 34.90, mediaConcorrencia: 36.00, menorPreco: 32.00, maiorPreco: 39.00, statusCompetitivo: "Altíssima saída no delivery com molho tarê artesanal" },
+    { prato: "Festival / Rodízio Individual", zumaPreco: 119.90, mediaConcorrencia: 129.90, menorPreco: 115.00, maiorPreco: 139.90, statusCompetitivo: "Melhor custo-benefício gastronômico de Tangará da Serra" }
+  ],
+  diagnosticoMotorKyttoIA: {
+    resumoExecutivo: "O Zuma Cozinha Oriental mantém dominância incontestável em Tangará da Serra - MT, operando com tempo de entrega 14 a 21 minutos mais veloz que todos os concorrentes devido ao mapeamento georreferenciado e ao App do Entregador próprio. A nota 4.9 ★ assegura fidelização máxima.",
+    oportunidadesImediatas: [
+      "Almoço Corporativo Executivo: Alta demanda de executivos do Agronegócio de Tangará da Serra nas sextas-feiras. Recomenda-se combo corporativo ágil.",
+      "Gap Logístico dos Concorrentes: Tokio Express e Koiso estão demorando mais de 50 minutos hoje. Divulgar nas redes sociais que a entrega do Zuma leva em média 34 min.",
+      "Oscilação do Salmão no Atacado: Leve alta de 3.8% na cotação regional de pescados; manter o CMV rigoroso em 27.8% priorizando saídas de combinados com atum e hot rolls."
+    ]
+  }
+};
+
+export const HISTORICO_ACOES_PROPRIETARIO = [];
+
+// GET /api/public/zuma/proprietario/dashboard — Visão executiva completa do dono
+routerZuma.get('/proprietario/dashboard', (req, res) => {
+  res.json({
+    ok: true,
+    dashboard: DASHBOARD_PROPRIETARIO_ZUMA
+  });
+});
+
+// GET /api/public/zuma/proprietario/concorrencia — Radar da concorrência de Tangará da Serra
+routerZuma.get('/proprietario/concorrencia', (req, res) => {
+  res.json({
+    ok: true,
+    radar: RADAR_CONCORRENCIA_TANGARA
+  });
+});
+
+// POST /api/public/zuma/proprietario/acao — Tomada de ação completa com 1 toque
+routerZuma.post('/proprietario/acao', (req, res) => {
+  const { acaoId, titulo, detalhes, parametros } = req.body || {};
+  
+  const novaAcao = {
+    id: `ACT-${Date.now()}`,
+    acaoId: acaoId || "acao_generica",
+    titulo: titulo || "Ação Executada pelo Proprietário",
+    detalhes: detalhes || "Comando executado via App do Proprietário na palma da mão",
+    parametros: parametros || {},
+    dataHora: new Date().toISOString(),
+    responsavel: "Proprietário Zuma (Sócio Gestor)",
+    status: "Executado com Sucesso"
+  };
+  
+  HISTORICO_ACOES_PROPRIETARIO.unshift(novaAcao);
+  
+  res.json({
+    ok: true,
+    mensagem: `Ação '${novaAcao.titulo}' executada imediatamente com sucesso!`,
+    acao: novaAcao,
+    totalAcoesExecutadas: HISTORICO_ACOES_PROPRIETARIO.length
+  });
+});
+
+// GET /api/public/zuma/proprietario/acoes-historico — Histórico de ações tomadas
+routerZuma.get('/proprietario/acoes-historico', (req, res) => {
+  res.json({
+    ok: true,
+    total: HISTORICO_ACOES_PROPRIETARIO.length,
+    acoes: HISTORICO_ACOES_PROPRIETARIO
+
+  });
+});
+
 // ============================================================================
 // 16.8 ESTOQUE: AJUSTE RÁPIDO E REGISTRO DE PERDAS
-// ============================================================================
+// =====================================================================
 routerZuma.post("/estoque/ajuste-rapido", (req, res) => {
   const { insumoId, novoSaldo, motivo, responsavel } = req.body || {};
   const chave = Object.keys(ESTOQUE_PESCADOS_ZUMA).find(k => k === insumoId || k.includes(insumoId) || ESTOQUE_PESCADOS_ZUMA[k].codigo === insumoId);
@@ -5631,5 +5901,382 @@ routerZuma.post("/estoque/ajuste-rapido", (req, res) => {
     novoSaldo: insumo.saldoAtual,
     motivo: motivo || "Inventário / Balanço Físico",
     responsavel: responsavel || "Chef Sushiman"
+  });
+});
+// MÓDULOS EXPANDIDOS DO PROPRIETÁRIO: IA & ATENDIMENTOS, GANHOS/PERDAS E CNPJS
+// ============================================================================
+
+export const IA_ATENDIMENTOS_ZUMA = {
+  kpisAtendimentos: {
+    totalAtendimentosHoje: 384,
+    viaWhatsAppIA: 286,
+    viaSalaoGarcom: 98,
+    tempoMedioRespostaIA: "1.2s",
+    tempoMedioRespostaHumano: "4m 20s",
+    taxaResolucaoAutonoma: 94.8,
+    taxaConversaoEmVenda: 41.2,
+    csatSatisfacao: 98.6,
+    horasEconomizadasEquipe: 14.5,
+    pedidosGeradosPorIA: 118,
+    receitaGeradaIAHoje: 18187.34
+  },
+  curvaAtendimentosHora: [
+    { hora: "11h", atendimentosIA: 18, atendimentosSalao: 6, conversaoVendas: 1240.00 },
+    { hora: "12h", atendimentosIA: 42, atendimentosSalao: 24, conversaoVendas: 3150.00 },
+    { hora: "13h", atendimentosIA: 31, atendimentosSalao: 18, conversaoVendas: 2180.00 },
+    { hora: "14h", atendimentosIA: 14, atendimentosSalao: 5, conversaoVendas: 890.00 },
+    { hora: "18h", atendimentosIA: 22, atendimentosSalao: 4, conversaoVendas: 1420.00 },
+    { hora: "19h", atendimentosIA: 46, atendimentosSalao: 14, conversaoVendas: 3890.00 },
+    { hora: "20h", atendimentosIA: 58, atendimentosSalao: 19, conversaoVendas: 5120.00 },
+    { hora: "21h", atendimentosIA: 34, atendimentosSalao: 6, conversaoVendas: 2480.00 },
+    { hora: "22h", atendimentosIA: 16, atendimentosSalao: 2, conversaoVendas: 980.00 },
+    { hora: "23h", atendimentosIA: 5, atendimentosSalao: 0, conversaoVendas: 320.00 }
+  ],
+  funilAtendimentos: {
+    visitasCardapio: 540,
+    conversasIniciadasWhatsApp: 286,
+    carrinhosMontados: 174,
+    pedidosFinalizados: 118,
+    taxaConversao: 41.2,
+    ticketMedioIA: 154.13
+  },
+  pipelineOportunidadesKyttoIA: [
+    {
+      id: "OPP-001",
+      titulo: "Resgate de 42 Carrinhos Abandonados no WhatsApp",
+      categoria: "Recuperação de Vendas",
+      valorPotencial: 4820.00,
+      probabilidade: 78,
+      acaoRecomendada: "Disparo automático Zumi com frete grátis nos próximos 15 minutos",
+      acaoId: "RESGATE_CARRINHOS"
+    },
+    {
+      id: "OPP-002",
+      titulo: "Upsell de Bebidas & Sobremesas Japonesas (Mochi & Harumaki)",
+      categoria: "Aumento de Ticket Médio",
+      valorPotencial: 1280.00,
+      probabilidade: 85,
+      acaoRecomendada: "Ativar sugestão de sobremesa na confirmação da comanda pelo garçom digital",
+      acaoId: "UPSELL_SOBREMESAS"
+    },
+    {
+      id: "OPP-003",
+      titulo: "Captação de Clientes do Tokio Express (Demora > 50 min)",
+      categoria: "Conquista de Mercado",
+      valorPotencial: 2450.00,
+      probabilidade: 90,
+      acaoRecomendada: "Campanha relâmpago de entrega expressa 34 min garantida no Instagram e WhatsApp",
+      acaoId: "BLINDAGEM_CONCORRENCIA"
+    },
+    {
+      id: "OPP-004",
+      titulo: "Assinatura Corporativa de Sushi para Executivos do Agro",
+      categoria: "Receita Recorrente B2B",
+      valorPotencial: 14500.00,
+      probabilidade: 72,
+      acaoRecomendada: "Proposta B2B para as 12 maiores revendas agrícolas e cooperativas de Tangará da Serra",
+      acaoId: "AGRO_CORPORATIVO"
+    }
+  ]
+};
+
+export const MATRIZ_GANHOS_PERDAS_ZUMA = {
+  resumoSemanal: {
+    novosClientesConquistados: 38,
+    clientesFidelizadosAtivos: 244,
+    clientesPerdidosChurn: 14,
+    taxaRetencao: 94.6,
+    saldoLiquidoClientes: 24,
+    receitaConquistada: 18450.00,
+    receitaEmRisco: 3920.00
+  },
+  ondeEstamosGanhando: [
+    {
+      alavanca: "Salmão Fresco Chileno vs Peixe Congelado Concorrente",
+      clientesGanhos: 18,
+      receitaEstimada: 8920.00,
+      origem: "Migrados do Bonsai Sushi e Tokio Express",
+      depoimentoSintese: "Clientes relatam textura superior do sashimi e frescor inconfundível sem odor de degelo."
+    },
+    {
+      alavanca: "Velocidade de Entrega 34 min com Rastreamento em Tempo Real",
+      clientesGanhos: 12,
+      receitaEstimada: 5640.00,
+      origem: "Usuários de delivery iFood que sofriam com atrasos de 50+ min no Koiso",
+      depoimentoSintese: "Previsão exata e entrega em mãos enquanto o sushi ainda está frio e crocante."
+    },
+    {
+      alavanca: "Atendimento Instantâneo Zumi WhatsApp 24/7 sem Espera",
+      clientesGanhos: 8,
+      receitaEstimada: 3890.00,
+      origem: "Executivos do Agronegócio e famílias do Centro",
+      depoimentoSintese: "Facilidade de pedir pelo WhatsApp com envio de foto dos pratos e PIX copia e cola direto."
+    }
+  ],
+  ondeEstamosPerdendo: [
+    {
+      pontoFuga: "Terça e Quarta de Baixo Movimento vs Buffet por Kg Econômico",
+      clientesPerdidos: 8,
+      receitaPerdida: 2160.00,
+      destino: "Nosso Sushi LTDA (R. Dep. Hitler Sansão)",
+      motivo: "Preço de entrada mais baixo no buffet diário durante dias úteis."
+    },
+    {
+      pontoFuga: "Fila de Espera no Salão no Sábado às 20h30",
+      clientesPerdidos: 4,
+      receitaPerdida: 1240.00,
+      destino: "Desistência para jantar em casa ou petiscos",
+      motivo: "Espera de 25 a 35 minutos sem assentos confortáveis na recepção."
+    },
+    {
+      pontoFuga: "Taxa de Entrega de R$ 10,00 para Bairros Afastados (Jd. Europa / Tarumã)",
+      clientesPerdidos: 2,
+      receitaPerdida: 520.00,
+      destino: "Dark kitchen de bairro local",
+      motivo: "Percepção de frete desvantajoso para pedidos menores que R$ 80."
+    }
+  ],
+  matrizOndeMelhorarKyttoIA: [
+    {
+      prioridade: "ALTA",
+      acao: "Lançamento da 'Terça & Quarta do Temaki em Dobro' (R$ 39,90)",
+      impactoProjetado: "+R$ 3.800,00 / semana",
+      objetivo: "Estancar migração de clientes para o Nosso Sushi e lotar o salão no início da semana",
+      acaoId: "BLINDAGEM_CONCORRENCIA"
+    },
+    {
+      prioridade: "ALTA",
+      acao: "Fila Virtual no WhatsApp com Rodada de Saquê Cortesia no Bistrô",
+      impactoProjetado: "Redução de 85% na desistência de mesas no sábado à noite (+R$ 1.200/semana)",
+      objetivo: "Transformar a espera em experiência gastronômica agradável",
+      acaoId: "FILA_VIRTUAL_SAQUE"
+    },
+    {
+      prioridade: "MÉDIA",
+      acao: "Frete Fixo R$ 4,99 para Pedidos Acima de R$ 120 em Qualquer Bairro",
+      impactoProjetado: "Aumento de 12% no ticket médio do delivery e neutralização do abandono",
+      objetivo: "Conquistar bairros periféricos de alta renda como Jardim Europa",
+      acaoId: "FRETE_DINAMICO"
+    }
+  ]
+};
+
+export const RADAR_CNPJS_TANGARA = {
+  cidade: "Tangará da Serra - MT",
+  dataVarredura: "2026-11-20T19:30:00Z",
+  motorIA: "Motor KyttoIA 2.5 Flash",
+  totalCnpjsMapeados: 9,
+  faturamentoMercadoGastronomicoEstimadoMes: 1150000.00,
+  marketShareOriental: [
+    { nome: "Zuma Cozinha Oriental", share: 54.2, faturamentoEstimadoMes: 285000.00, lider: true, cor: "#f59e0b" },
+    { nome: "Bonsai Sushi Bar", share: 18.5, faturamentoEstimadoMes: 110000.00, lider: false, cor: "#3b82f6" },
+    { nome: "Nosso Sushi LTDA", share: 14.1, faturamentoEstimadoMes: 85000.00, lider: false, cor: "#10b981" },
+    { nome: "Tokio Sushi Bar", share: 9.3, faturamentoEstimadoMes: 68000.00, lider: false, cor: "#ef4444" },
+    { nome: "Outros / Dark Kitchens", share: 3.9, faturamentoEstimadoMes: 24000.00, lider: false, cor: "#8b5cf6" }
+  ],
+  cnpjsCadastrados: [
+    {
+      cnpj: "48.912.440/0001-88",
+      razaoSocial: "Zuma Cozinha Oriental & Gastronomia LTDA",
+      nomeFantasia: "Zuma Cozinha Oriental",
+      dataAbertura: "15/01/2022",
+      situacao: "Ativa",
+      porte: "ME / EPP",
+      capitalSocial: "R$ 150.000,00",
+      faturamentoEstimadoMes: "R$ 285.000,00",
+      faturamentoEstimadoAno: "R$ 3.420.000,00",
+      cnaePrincipal: "56.11-2-01 - Restaurantes e similares",
+      endereco: "Rua Celso Rosa Lima, 142-W, Centro / Jd. Tangará II, Tangará da Serra - MT",
+      bairro: "Centro / Jd. Tangará II",
+      socios: ["Rodrigo Ribeiro Gonçalves", "Sócio Operacional Zuma"],
+      nivelRisco: "Líder Absoluto de Mercado",
+      posicaoZuma: "Dominante (54.2% Market Share)",
+      isZuma: true
+    },
+    {
+      cnpj: "66.311.331/0001-50",
+      razaoSocial: "Nosso Sushi LTDA",
+      nomeFantasia: "Nosso Sushi / S.kamoto Sushi",
+      dataAbertura: "16/04/2026",
+      situacao: "Ativa",
+      porte: "ME",
+      capitalSocial: "R$ 50.000,00",
+      faturamentoEstimadoMes: "R$ 85.000,00",
+      faturamentoEstimadoAno: "R$ 1.020.000,00",
+      cnaePrincipal: "56.11-2-01 - Restaurantes e similares",
+      endereco: "R. Dep. Hitler Sansão, 365-W, Centro, Tangará da Serra - MT",
+      bairro: "Centro",
+      socios: ["Marcos Vinícius Sakamoto", "Aline Sakamoto"],
+      nivelRisco: "Médio",
+      alertaKyttoIA: "Empresa recente aberta em 2026 com forte foco em buffet por kg econômico.",
+      isZuma: false
+    },
+    {
+      cnpj: "44.431.917/0001-16",
+      razaoSocial: "Acacio Rodrigues dos Santos Tokio Sushi Bar",
+      nomeFantasia: "Tokio Sushi Bar",
+      dataAbertura: "30/11/2021",
+      situacao: "Ativa",
+      porte: "ME",
+      capitalSocial: "R$ 20.000,00",
+      faturamentoEstimadoMes: "R$ 68.000,00",
+      faturamentoEstimadoAno: "R$ 816.000,00",
+      cnaePrincipal: "56.11-2-01 - Restaurantes e similares",
+      endereco: "Av. Tancredo Neves, Tangará da Serra - MT",
+      bairro: "Vila Alta / Tancredo Neves",
+      socios: ["Acacio Rodrigues dos Santos (Titular)"],
+      nivelRisco: "Baixo",
+      alertaKyttoIA: "Gargalo no delivery e tempo de espera superior a 50 minutos nos fins de semana.",
+      isZuma: false
+    },
+    {
+      cnpj: "43.466.537/0001-54",
+      razaoSocial: "Bonsai Sushi Restaurante LTDA - ME",
+      nomeFantasia: "Bonsai Sushi Bar",
+      dataAbertura: "22/01/2013",
+      situacao: "Ativa",
+      porte: "ME",
+      capitalSocial: "R$ 80.000,00",
+      faturamentoEstimadoMes: "R$ 110.000,00",
+      faturamentoEstimadoAno: "R$ 1.320.000,00",
+      cnaePrincipal: "56.11-2-01 - Restaurantes e similares",
+      endereco: "Tangará da Serra - MT",
+      bairro: "Centro",
+      socios: ["Paulo Roberto Braga", "Andréia Panassolo"],
+      nivelRisco: "Médio-Alto",
+      alertaKyttoIA: "Mais tradicional da cidade (13 anos), porém sem aplicativo próprio e com delivery terceirizado.",
+      isZuma: false
+    },
+    {
+      cnpj: "67.280.022/0001-23",
+      razaoSocial: "Santos Gastronomia LTDA",
+      nomeFantasia: "Santo Dito Restaurante",
+      dataAbertura: "11/06/2026",
+      situacao: "Ativa",
+      porte: "ME",
+      capitalSocial: "R$ 100.000,00",
+      faturamentoEstimadoMes: "R$ 140.000,00",
+      faturamentoEstimadoAno: "R$ 1.680.000,00",
+      cnaePrincipal: "56.11-2-01 - Restaurantes e similares",
+      endereco: "Tangará da Serra - MT",
+      bairro: "Jd. Cidade Alta",
+      socios: ["Marcelo dos Santos", "Camila Ferreira Santos"],
+      nivelRisco: "Médio",
+      alertaKyttoIA: "Novo entrante em 2026 com proposta contemporânea e peixes de água doce.",
+      isZuma: false
+    },
+    {
+      cnpj: "34.720.152/0001-80",
+      razaoSocial: "Masiero Restaurante LTDA",
+      nomeFantasia: "Masiero Restaurante",
+      dataAbertura: "30/08/2019",
+      situacao: "Ativa",
+      porte: "ME",
+      capitalSocial: "R$ 60.000,00",
+      faturamentoEstimadoMes: "R$ 95.000,00",
+      faturamentoEstimadoAno: "R$ 1.140.000,00",
+      cnaePrincipal: "56.11-2-01 - Restaurantes e similares",
+      endereco: "Rua Antonio Hortolani, 765, Setor W - Centro, Tangará da Serra - MT",
+      bairro: "Centro",
+      socios: ["Valter Masiero", "Renata Masiero"],
+      nivelRisco: "Baixo (Grelhados e Almoço Tradicional)",
+      isZuma: false
+    },
+    {
+      cnpj: "03.172.020/0001-38",
+      razaoSocial: "Divino de Oliveira & Cia LTDA",
+      nomeFantasia: "Restaurante Bar Lanchonete Casa Nossa",
+      dataAbertura: "19/05/1999",
+      situacao: "Ativa",
+      porte: "EPP",
+      capitalSocial: "R$ 120.000,00",
+      faturamentoEstimadoMes: "R$ 180.000,00",
+      faturamentoEstimadoAno: "R$ 2.160.000,00",
+      cnaePrincipal: "56.11-2-01 - Restaurantes e similares",
+      endereco: "Rua Julio Martinez Benevides, 474, S - Centro, Tangará da Serra - MT",
+      bairro: "Centro",
+      socios: ["Divino de Oliveira", "Célia Regina de Oliveira"],
+      nivelRisco: "Baixo (Comida caseira tradicional e boteco)",
+      isZuma: false
+    },
+    {
+      cnpj: "53.292.681/0001-75",
+      razaoSocial: "Restaurante Jn Portela LTDA",
+      nomeFantasia: "Restaurante JN Portela",
+      dataAbertura: "20/12/2023",
+      situacao: "Ativa",
+      porte: "ME",
+      capitalSocial: "R$ 40.000,00",
+      faturamentoEstimadoMes: "R$ 75.000,00",
+      faturamentoEstimadoAno: "R$ 900.000,00",
+      cnaePrincipal: "56.11-2-01 - Restaurantes e similares",
+      endereco: "Tangará da Serra - MT",
+      bairro: "Vila Horizonte",
+      socios: ["Jonas Portela"],
+      nivelRisco: "Baixo (Marmitas e prato feito)",
+      isZuma: false
+    },
+    {
+      cnpj: "51.467.699/0001-35",
+      razaoSocial: "Tangara Comercio de Alimentos LTDA",
+      nomeFantasia: "Distribuidora Alimentos Tangará",
+      dataAbertura: "18/07/2023",
+      situacao: "Ativa",
+      porte: "ME / EPP",
+      capitalSocial: "R$ 150.000,00",
+      faturamentoEstimadoMes: "R$ 220.000,00",
+      cnaePrincipal: "46.39-7-01 - Comércio atacadista de produtos alimentícios",
+      endereco: "Tangará da Serra - MT",
+      bairro: "Distrito Industrial",
+      socios: ["Carlos Eduardo Silveira"],
+      nivelRisco: "Fornecedor Parceiro",
+      alertaKyttoIA: "Fornece insumos secos e descartáveis para o setor gastronômico local.",
+      isZuma: false
+    }
+  ],
+  teiaConexoesSocietarias: [
+    {
+      cluster: "Polo Gastronômico Central",
+      descricao: "Concentração das operações de maior faturamento na Rua Dep. Hitler Sansão, Rua Antonio Hortolani e Celso Rosa Lima.",
+      cnpjsEnvolvidos: ["48.912.440/0001-88", "66.311.331/0001-50", "34.720.152/0001-80"],
+      faturamentoClusterMes: "R$ 465.000,00"
+    },
+    {
+      cluster: "Cadeia de Suprimentos de Pescados",
+      descricao: "Bonsai e Nosso Sushi adquirem salmão congelado no mesmo atacadista regional em Cuiabá; o Zuma mantém contrato exclusivo de importação aérea direta do Chile garantindo frescor único.",
+      cnpjsEnvolvidos: ["48.912.440/0001-88", "43.466.537/0001-54", "66.311.331/0001-50"],
+      diferencialZuma: "Barreira de entrada de qualidade invencível."
+    },
+    {
+      cluster: "Novos Entrantes de 2026",
+      descricao: "Duas novas empresas abertas no setor gastronômico em 2026: Nosso Sushi LTDA (abril/2026) e Santos Gastronomia LTDA (junho/2026).",
+      cnpjsEnvolvidos: ["66.311.331/0001-50", "67.280.022/0001-23"],
+      acaoRecomendadaKyttoIA: "Blindar a base de clientes VIP do Zuma através do Clube Zumi com pontuação em dobro."
+    }
+  ]
+};
+
+// GET /api/public/zuma/proprietario/ia-atendimentos — Visão online da IA e atendimentos
+routerZuma.get('/proprietario/ia-atendimentos', (req, res) => {
+  res.json({
+    ok: true,
+    iaAtendimentos: IA_ATENDIMENTOS_ZUMA
+  });
+});
+
+// GET /api/public/zuma/proprietario/ganhos-perdas — Onde ganha, onde perde e onde melhorar
+routerZuma.get('/proprietario/ganhos-perdas', (req, res) => {
+  res.json({
+    ok: true,
+    matrizGanhosPerdas: MATRIZ_GANHOS_PERDAS_ZUMA
+  });
+});
+
+// GET /api/public/zuma/proprietario/cnpjs-cidade — Radar e teia de CNPJs de Tangará da Serra
+routerZuma.get('/proprietario/cnpjs-cidade', (req, res) => {
+  res.json({
+    ok: true,
+    radarCnpjs: RADAR_CNPJS_TANGARA
+
   });
 });

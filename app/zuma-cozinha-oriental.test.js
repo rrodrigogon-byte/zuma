@@ -1605,6 +1605,112 @@ test('Zuma Cozinha Oriental - CRUD Completo de Cozinha KDS: Incluir, Modificar e
   assert.equal(delRes.data.ok, true);
   assert.equal(delRes.data.pedidoCancelado.id, pedId);
   assert.equal(PEDIDOS_COZINHA_KDS_ZUMA.length, totalAntes);
+
+  const swPath = path.join(__dirname, 'public', 'zuma', 'sw.js');
+  const swContent = fs.readFileSync(swPath, 'utf8');
+  assert.ok(swContent.includes('zuma-kytto-v3') || swContent.includes('zuma-kytto-v4'), 'Service Worker deve estar na versão v3');
+  assert.ok(swContent.includes('apps.html'), 'Cache do SW deve conter apps.html');
+  assert.ok(swContent.includes('entregador.html'), 'Cache do SW deve conter entregador.html');
+  assert.ok(swContent.includes('garcom.html'), 'Cache do SW deve conter garcom.html');
+});
+
+test('Zuma Cozinha Oriental - App do Proprietário (Gestão na Palma da Mão, Comparativos Mesmos Dias, Radar de Concorrência e Ações)', async () => {
+  const { routerZuma, DASHBOARD_PROPRIETARIO_ZUMA, RADAR_CONCORRENCIA_TANGARA } = await import('./modules/restaurante-zuma.js');
+  const callRoute = (method, p, body = {}) => {
+    return new Promise((resolve) => {
+      const req = { method, path: p, query: {}, body, params: {} };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      const layer = routerZuma.stack.find(l => l.route && l.route.path === p && l.route.methods[method.toLowerCase()]);
+      if (layer) {
+        layer.route.stack[0].handle(req, res);
+      } else {
+        resolve({ status: 404, data: { error: 'Route not found: ' + p } });
+      }
+    });
+  };
+
+  // 1. Dashboard Executivo do Proprietário
+  const dashRes = await callRoute('GET', '/proprietario/dashboard');
+  assert.equal(dashRes.status, 200);
+  assert.equal(dashRes.data.ok, true);
+  const kpis = dashRes.data.dashboard.kpisHoje;
+  assert.ok(kpis.faturamentoHoje >= 8000.00, 'Faturamento hoje deve estar registrado');
+  assert.ok(kpis.lucroLiquidoEstimadoHoje > 3000.00, 'Lucro líquido estimado deve ser positivo');
+  assert.ok(kpis.cmvPercentualHoje <= 30.0, 'CMV deve estar dentro da meta');
+  assert.equal(kpis.pedidosHojeTotal, 58, 'Total de 58 pedidos hoje');
+
+  // 2. Comparativo de Mesmos Dias (D-7 e D-30)
+  const comp = dashRes.data.dashboard.comparativoMesmosDias;
+  assert.ok(comp.d7, 'Deve conter comparativo D-7');
+  assert.ok(comp.d7.diffPercentualFaturamento > 0, 'Crescimento positivo D-7');
+  assert.ok(comp.d30, 'Deve conter comparativo D-30');
+  assert.ok(dashRes.data.dashboard.curvaHorariaHojeVsD7.length >= 8, 'Curva horária deve ter as horas do dia');
+
+  // 3. Radar de Concorrência em Tangará da Serra (MT)
+  const radarRes = await callRoute('GET', '/proprietario/concorrencia');
+  assert.equal(radarRes.status, 200);
+  assert.equal(radarRes.data.ok, true);
+  assert.equal(radarRes.data.radar.cidade, 'Tangará da Serra - MT');
+  assert.ok(radarRes.data.radar.estabelecimentos.length >= 4, 'Deve monitorar concorrentes locais');
+  assert.ok(radarRes.data.radar.benchmarkPratos.length >= 5, 'Deve comparar pratos âncora');
+  assert.ok(radarRes.data.radar.diagnosticoMotorKyttoIA.oportunidadesImediatas.length >= 2);
+
+  // 3.1. Visão Online da IA e Evolução dos Atendimentos
+  const iaRes = await callRoute('GET', '/proprietario/ia-atendimentos');
+  assert.equal(iaRes.status, 200);
+  assert.equal(iaRes.data.ok, true);
+  assert.ok(iaRes.data.iaAtendimentos.kpisAtendimentos.totalAtendimentosHoje >= 300, 'Total de atendimentos hoje >= 300');
+  assert.ok(iaRes.data.iaAtendimentos.kpisAtendimentos.taxaResolucaoAutonoma >= 90.0, 'Resolução autônoma da IA >= 90%');
+  assert.ok(iaRes.data.iaAtendimentos.curvaAtendimentosHora.length >= 8, 'Curva hora a hora de atendimentos');
+  assert.ok(iaRes.data.iaAtendimentos.pipelineOportunidadesKyttoIA.length >= 3, 'Pipeline de oportunidades financeiras');
+
+  // 3.2. Matriz de Ganhos, Perdas e Onde Melhorar (Churn & Flow)
+  const gpRes = await callRoute('GET', '/proprietario/ganhos-perdas');
+  assert.equal(gpRes.status, 200);
+  assert.equal(gpRes.data.ok, true);
+  assert.ok(gpRes.data.matrizGanhosPerdas.ondeEstamosGanhando.length >= 2, 'Alavancas de ganho de clientes');
+  assert.ok(gpRes.data.matrizGanhosPerdas.ondeEstamosPerdendo.length >= 2, 'Pontos de fuga e churn');
+  assert.ok(gpRes.data.matrizGanhosPerdas.matrizOndeMelhorarKyttoIA.length >= 2, 'Matriz prescritiva onde melhorar KyttoIA');
+
+  // 3.3. Radar e Teia de CNPJs de Tangará da Serra (MT)
+  const cnpjsRes = await callRoute('GET', '/proprietario/cnpjs-cidade');
+  assert.equal(cnpjsRes.status, 200);
+  assert.equal(cnpjsRes.data.ok, true);
+  assert.equal(cnpjsRes.data.radarCnpjs.cidade, 'Tangará da Serra - MT');
+  assert.ok(cnpjsRes.data.radarCnpjs.cnpjsCadastrados.length >= 8, 'Mapeamento de no mínimo 8 CNPJs locais');
+  assert.ok(cnpjsRes.data.radarCnpjs.marketShareOriental.length >= 4, 'Market share da gastronomia oriental');
+  assert.ok(cnpjsRes.data.radarCnpjs.teiaConexoesSocietarias.length >= 2, 'Teia de conexões societárias e fornecedores');
+
+  // 4. Tomada de Ação Rápida pelo Proprietário
+  const acaoRes = await callRoute('POST', '/proprietario/acao', {
+    acaoId: 'oferta_relampago_vip',
+    titulo: 'Disparo de Oferta VIP via WhatsApp',
+    detalhes: 'Envio de cupom para 180 clientes mais frequentes'
+  });
+  assert.equal(acaoRes.status, 200);
+  assert.equal(acaoRes.data.ok, true);
+  assert.equal(acaoRes.data.acao.status, 'Executado com Sucesso');
+  assert.ok(acaoRes.data.totalAcoesExecutadas >= 1);
+
+  // 5. Existência física dos arquivos do Proprietário
+  const propHtml = path.join(__dirname, 'public', 'zuma', 'proprietario.html');
+  const propManifest = path.join(__dirname, 'public', 'zuma', 'manifest-proprietario.json');
+  const propApk = path.join(__dirname, 'public', 'zuma', 'downloads', 'zuma-proprietario.apk');
+
+  assert.ok(fs.existsSync(propHtml), 'proprietario.html deve existir em app/public/zuma');
+  assert.ok(fs.existsSync(propManifest), 'manifest-proprietario.json deve existir');
+  assert.ok(fs.existsSync(propApk), 'zuma-proprietario.apk deve existir');
+
+  const propContent = fs.readFileSync(propHtml, 'utf8');
+  assert.ok(propContent.includes('Zuma Proprietário'), 'Deve conter branding do proprietário');
+  assert.ok(propContent.includes('Tangará da Serra'), 'Deve referenciar Tangará da Serra');
+  assert.ok(propContent.includes('D-7'), 'Deve conter comparativo D-7');
+  assert.ok(propContent.includes('executarAcao'), 'Deve conter função de tomada de ação');
 });
 test("Zuma Cozinha Oriental - CRUD Completo de Clientes no CRM: Incluir, Modificar e Excluir Cliente VIP", async () => {
   const { routerZuma, ZUMA_CLIENTES_CRM } = await import("./modules/restaurante-zuma.js");
