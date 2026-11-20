@@ -5707,3 +5707,381 @@ routerZuma.get('/proprietario/acoes-historico', (req, res) => {
     acoes: HISTORICO_ACOES_PROPRIETARIO
   });
 });
+
+// ============================================================================
+// MÓDULOS EXPANDIDOS DO PROPRIETÁRIO: IA & ATENDIMENTOS, GANHOS/PERDAS E CNPJS
+// ============================================================================
+
+export const IA_ATENDIMENTOS_ZUMA = {
+  kpisAtendimentos: {
+    totalAtendimentosHoje: 384,
+    viaWhatsAppIA: 286,
+    viaSalaoGarcom: 98,
+    tempoMedioRespostaIA: "1.2s",
+    tempoMedioRespostaHumano: "4m 20s",
+    taxaResolucaoAutonoma: 94.8,
+    taxaConversaoEmVenda: 41.2,
+    csatSatisfacao: 98.6,
+    horasEconomizadasEquipe: 14.5,
+    pedidosGeradosPorIA: 118,
+    receitaGeradaIAHoje: 18187.34
+  },
+  curvaAtendimentosHora: [
+    { hora: "11h", atendimentosIA: 18, atendimentosSalao: 6, conversaoVendas: 1240.00 },
+    { hora: "12h", atendimentosIA: 42, atendimentosSalao: 24, conversaoVendas: 3150.00 },
+    { hora: "13h", atendimentosIA: 31, atendimentosSalao: 18, conversaoVendas: 2180.00 },
+    { hora: "14h", atendimentosIA: 14, atendimentosSalao: 5, conversaoVendas: 890.00 },
+    { hora: "18h", atendimentosIA: 22, atendimentosSalao: 4, conversaoVendas: 1420.00 },
+    { hora: "19h", atendimentosIA: 46, atendimentosSalao: 14, conversaoVendas: 3890.00 },
+    { hora: "20h", atendimentosIA: 58, atendimentosSalao: 19, conversaoVendas: 5120.00 },
+    { hora: "21h", atendimentosIA: 34, atendimentosSalao: 6, conversaoVendas: 2480.00 },
+    { hora: "22h", atendimentosIA: 16, atendimentosSalao: 2, conversaoVendas: 980.00 },
+    { hora: "23h", atendimentosIA: 5, atendimentosSalao: 0, conversaoVendas: 320.00 }
+  ],
+  funilAtendimentos: {
+    visitasCardapio: 540,
+    conversasIniciadasWhatsApp: 286,
+    carrinhosMontados: 174,
+    pedidosFinalizados: 118,
+    taxaConversao: 41.2,
+    ticketMedioIA: 154.13
+  },
+  pipelineOportunidadesKyttoIA: [
+    {
+      id: "OPP-001",
+      titulo: "Resgate de 42 Carrinhos Abandonados no WhatsApp",
+      categoria: "Recuperação de Vendas",
+      valorPotencial: 4820.00,
+      probabilidade: 78,
+      acaoRecomendada: "Disparo automático Zumi com frete grátis nos próximos 15 minutos",
+      acaoId: "RESGATE_CARRINHOS"
+    },
+    {
+      id: "OPP-002",
+      titulo: "Upsell de Bebidas & Sobremesas Japonesas (Mochi & Harumaki)",
+      categoria: "Aumento de Ticket Médio",
+      valorPotencial: 1280.00,
+      probabilidade: 85,
+      acaoRecomendada: "Ativar sugestão de sobremesa na confirmação da comanda pelo garçom digital",
+      acaoId: "UPSELL_SOBREMESAS"
+    },
+    {
+      id: "OPP-003",
+      titulo: "Captação de Clientes do Tokio Express (Demora > 50 min)",
+      categoria: "Conquista de Mercado",
+      valorPotencial: 2450.00,
+      probabilidade: 90,
+      acaoRecomendada: "Campanha relâmpago de entrega expressa 34 min garantida no Instagram e WhatsApp",
+      acaoId: "BLINDAGEM_CONCORRENCIA"
+    },
+    {
+      id: "OPP-004",
+      titulo: "Assinatura Corporativa de Sushi para Executivos do Agro",
+      categoria: "Receita Recorrente B2B",
+      valorPotencial: 14500.00,
+      probabilidade: 72,
+      acaoRecomendada: "Proposta B2B para as 12 maiores revendas agrícolas e cooperativas de Tangará da Serra",
+      acaoId: "AGRO_CORPORATIVO"
+    }
+  ]
+};
+
+export const MATRIZ_GANHOS_PERDAS_ZUMA = {
+  resumoSemanal: {
+    novosClientesConquistados: 38,
+    clientesFidelizadosAtivos: 244,
+    clientesPerdidosChurn: 14,
+    taxaRetencao: 94.6,
+    saldoLiquidoClientes: 24,
+    receitaConquistada: 18450.00,
+    receitaEmRisco: 3920.00
+  },
+  ondeEstamosGanhando: [
+    {
+      alavanca: "Salmão Fresco Chileno vs Peixe Congelado Concorrente",
+      clientesGanhos: 18,
+      receitaEstimada: 8920.00,
+      origem: "Migrados do Bonsai Sushi e Tokio Express",
+      depoimentoSintese: "Clientes relatam textura superior do sashimi e frescor inconfundível sem odor de degelo."
+    },
+    {
+      alavanca: "Velocidade de Entrega 34 min com Rastreamento em Tempo Real",
+      clientesGanhos: 12,
+      receitaEstimada: 5640.00,
+      origem: "Usuários de delivery iFood que sofriam com atrasos de 50+ min no Koiso",
+      depoimentoSintese: "Previsão exata e entrega em mãos enquanto o sushi ainda está frio e crocante."
+    },
+    {
+      alavanca: "Atendimento Instantâneo Zumi WhatsApp 24/7 sem Espera",
+      clientesGanhos: 8,
+      receitaEstimada: 3890.00,
+      origem: "Executivos do Agronegócio e famílias do Centro",
+      depoimentoSintese: "Facilidade de pedir pelo WhatsApp com envio de foto dos pratos e PIX copia e cola direto."
+    }
+  ],
+  ondeEstamosPerdendo: [
+    {
+      pontoFuga: "Terça e Quarta de Baixo Movimento vs Buffet por Kg Econômico",
+      clientesPerdidos: 8,
+      receitaPerdida: 2160.00,
+      destino: "Nosso Sushi LTDA (R. Dep. Hitler Sansão)",
+      motivo: "Preço de entrada mais baixo no buffet diário durante dias úteis."
+    },
+    {
+      pontoFuga: "Fila de Espera no Salão no Sábado às 20h30",
+      clientesPerdidos: 4,
+      receitaPerdida: 1240.00,
+      destino: "Desistência para jantar em casa ou petiscos",
+      motivo: "Espera de 25 a 35 minutos sem assentos confortáveis na recepção."
+    },
+    {
+      pontoFuga: "Taxa de Entrega de R$ 10,00 para Bairros Afastados (Jd. Europa / Tarumã)",
+      clientesPerdidos: 2,
+      receitaPerdida: 520.00,
+      destino: "Dark kitchen de bairro local",
+      motivo: "Percepção de frete desvantajoso para pedidos menores que R$ 80."
+    }
+  ],
+  matrizOndeMelhorarKyttoIA: [
+    {
+      prioridade: "ALTA",
+      acao: "Lançamento da 'Terça & Quarta do Temaki em Dobro' (R$ 39,90)",
+      impactoProjetado: "+R$ 3.800,00 / semana",
+      objetivo: "Estancar migração de clientes para o Nosso Sushi e lotar o salão no início da semana",
+      acaoId: "BLINDAGEM_CONCORRENCIA"
+    },
+    {
+      prioridade: "ALTA",
+      acao: "Fila Virtual no WhatsApp com Rodada de Saquê Cortesia no Bistrô",
+      impactoProjetado: "Redução de 85% na desistência de mesas no sábado à noite (+R$ 1.200/semana)",
+      objetivo: "Transformar a espera em experiência gastronômica agradável",
+      acaoId: "FILA_VIRTUAL_SAQUE"
+    },
+    {
+      prioridade: "MÉDIA",
+      acao: "Frete Fixo R$ 4,99 para Pedidos Acima de R$ 120 em Qualquer Bairro",
+      impactoProjetado: "Aumento de 12% no ticket médio do delivery e neutralização do abandono",
+      objetivo: "Conquistar bairros periféricos de alta renda como Jardim Europa",
+      acaoId: "FRETE_DINAMICO"
+    }
+  ]
+};
+
+export const RADAR_CNPJS_TANGARA = {
+  cidade: "Tangará da Serra - MT",
+  dataVarredura: "2026-11-20T19:30:00Z",
+  motorIA: "Motor KyttoIA 2.5 Flash",
+  totalCnpjsMapeados: 9,
+  faturamentoMercadoGastronomicoEstimadoMes: 1150000.00,
+  marketShareOriental: [
+    { nome: "Zuma Cozinha Oriental", share: 54.2, faturamentoEstimadoMes: 285000.00, lider: true, cor: "#f59e0b" },
+    { nome: "Bonsai Sushi Bar", share: 18.5, faturamentoEstimadoMes: 110000.00, lider: false, cor: "#3b82f6" },
+    { nome: "Nosso Sushi LTDA", share: 14.1, faturamentoEstimadoMes: 85000.00, lider: false, cor: "#10b981" },
+    { nome: "Tokio Sushi Bar", share: 9.3, faturamentoEstimadoMes: 68000.00, lider: false, cor: "#ef4444" },
+    { nome: "Outros / Dark Kitchens", share: 3.9, faturamentoEstimadoMes: 24000.00, lider: false, cor: "#8b5cf6" }
+  ],
+  cnpjsCadastrados: [
+    {
+      cnpj: "48.912.440/0001-88",
+      razaoSocial: "Zuma Cozinha Oriental & Gastronomia LTDA",
+      nomeFantasia: "Zuma Cozinha Oriental",
+      dataAbertura: "15/01/2022",
+      situacao: "Ativa",
+      porte: "ME / EPP",
+      capitalSocial: "R$ 150.000,00",
+      faturamentoEstimadoMes: "R$ 285.000,00",
+      faturamentoEstimadoAno: "R$ 3.420.000,00",
+      cnaePrincipal: "56.11-2-01 - Restaurantes e similares",
+      endereco: "Rua Celso Rosa Lima, 142-W, Centro / Jd. Tangará II, Tangará da Serra - MT",
+      bairro: "Centro / Jd. Tangará II",
+      socios: ["Rodrigo Ribeiro Gonçalves", "Sócio Operacional Zuma"],
+      nivelRisco: "Líder Absoluto de Mercado",
+      posicaoZuma: "Dominante (54.2% Market Share)",
+      isZuma: true
+    },
+    {
+      cnpj: "66.311.331/0001-50",
+      razaoSocial: "Nosso Sushi LTDA",
+      nomeFantasia: "Nosso Sushi / S.kamoto Sushi",
+      dataAbertura: "16/04/2026",
+      situacao: "Ativa",
+      porte: "ME",
+      capitalSocial: "R$ 50.000,00",
+      faturamentoEstimadoMes: "R$ 85.000,00",
+      faturamentoEstimadoAno: "R$ 1.020.000,00",
+      cnaePrincipal: "56.11-2-01 - Restaurantes e similares",
+      endereco: "R. Dep. Hitler Sansão, 365-W, Centro, Tangará da Serra - MT",
+      bairro: "Centro",
+      socios: ["Marcos Vinícius Sakamoto", "Aline Sakamoto"],
+      nivelRisco: "Médio",
+      alertaKyttoIA: "Empresa recente aberta em 2026 com forte foco em buffet por kg econômico.",
+      isZuma: false
+    },
+    {
+      cnpj: "44.431.917/0001-16",
+      razaoSocial: "Acacio Rodrigues dos Santos Tokio Sushi Bar",
+      nomeFantasia: "Tokio Sushi Bar",
+      dataAbertura: "30/11/2021",
+      situacao: "Ativa",
+      porte: "ME",
+      capitalSocial: "R$ 20.000,00",
+      faturamentoEstimadoMes: "R$ 68.000,00",
+      faturamentoEstimadoAno: "R$ 816.000,00",
+      cnaePrincipal: "56.11-2-01 - Restaurantes e similares",
+      endereco: "Av. Tancredo Neves, Tangará da Serra - MT",
+      bairro: "Vila Alta / Tancredo Neves",
+      socios: ["Acacio Rodrigues dos Santos (Titular)"],
+      nivelRisco: "Baixo",
+      alertaKyttoIA: "Gargalo no delivery e tempo de espera superior a 50 minutos nos fins de semana.",
+      isZuma: false
+    },
+    {
+      cnpj: "43.466.537/0001-54",
+      razaoSocial: "Bonsai Sushi Restaurante LTDA - ME",
+      nomeFantasia: "Bonsai Sushi Bar",
+      dataAbertura: "22/01/2013",
+      situacao: "Ativa",
+      porte: "ME",
+      capitalSocial: "R$ 80.000,00",
+      faturamentoEstimadoMes: "R$ 110.000,00",
+      faturamentoEstimadoAno: "R$ 1.320.000,00",
+      cnaePrincipal: "56.11-2-01 - Restaurantes e similares",
+      endereco: "Tangará da Serra - MT",
+      bairro: "Centro",
+      socios: ["Paulo Roberto Braga", "Andréia Panassolo"],
+      nivelRisco: "Médio-Alto",
+      alertaKyttoIA: "Mais tradicional da cidade (13 anos), porém sem aplicativo próprio e com delivery terceirizado.",
+      isZuma: false
+    },
+    {
+      cnpj: "67.280.022/0001-23",
+      razaoSocial: "Santos Gastronomia LTDA",
+      nomeFantasia: "Santo Dito Restaurante",
+      dataAbertura: "11/06/2026",
+      situacao: "Ativa",
+      porte: "ME",
+      capitalSocial: "R$ 100.000,00",
+      faturamentoEstimadoMes: "R$ 140.000,00",
+      faturamentoEstimadoAno: "R$ 1.680.000,00",
+      cnaePrincipal: "56.11-2-01 - Restaurantes e similares",
+      endereco: "Tangará da Serra - MT",
+      bairro: "Jd. Cidade Alta",
+      socios: ["Marcelo dos Santos", "Camila Ferreira Santos"],
+      nivelRisco: "Médio",
+      alertaKyttoIA: "Novo entrante em 2026 com proposta contemporânea e peixes de água doce.",
+      isZuma: false
+    },
+    {
+      cnpj: "34.720.152/0001-80",
+      razaoSocial: "Masiero Restaurante LTDA",
+      nomeFantasia: "Masiero Restaurante",
+      dataAbertura: "30/08/2019",
+      situacao: "Ativa",
+      porte: "ME",
+      capitalSocial: "R$ 60.000,00",
+      faturamentoEstimadoMes: "R$ 95.000,00",
+      faturamentoEstimadoAno: "R$ 1.140.000,00",
+      cnaePrincipal: "56.11-2-01 - Restaurantes e similares",
+      endereco: "Rua Antonio Hortolani, 765, Setor W - Centro, Tangará da Serra - MT",
+      bairro: "Centro",
+      socios: ["Valter Masiero", "Renata Masiero"],
+      nivelRisco: "Baixo (Grelhados e Almoço Tradicional)",
+      isZuma: false
+    },
+    {
+      cnpj: "03.172.020/0001-38",
+      razaoSocial: "Divino de Oliveira & Cia LTDA",
+      nomeFantasia: "Restaurante Bar Lanchonete Casa Nossa",
+      dataAbertura: "19/05/1999",
+      situacao: "Ativa",
+      porte: "EPP",
+      capitalSocial: "R$ 120.000,00",
+      faturamentoEstimadoMes: "R$ 180.000,00",
+      faturamentoEstimadoAno: "R$ 2.160.000,00",
+      cnaePrincipal: "56.11-2-01 - Restaurantes e similares",
+      endereco: "Rua Julio Martinez Benevides, 474, S - Centro, Tangará da Serra - MT",
+      bairro: "Centro",
+      socios: ["Divino de Oliveira", "Célia Regina de Oliveira"],
+      nivelRisco: "Baixo (Comida caseira tradicional e boteco)",
+      isZuma: false
+    },
+    {
+      cnpj: "53.292.681/0001-75",
+      razaoSocial: "Restaurante Jn Portela LTDA",
+      nomeFantasia: "Restaurante JN Portela",
+      dataAbertura: "20/12/2023",
+      situacao: "Ativa",
+      porte: "ME",
+      capitalSocial: "R$ 40.000,00",
+      faturamentoEstimadoMes: "R$ 75.000,00",
+      faturamentoEstimadoAno: "R$ 900.000,00",
+      cnaePrincipal: "56.11-2-01 - Restaurantes e similares",
+      endereco: "Tangará da Serra - MT",
+      bairro: "Vila Horizonte",
+      socios: ["Jonas Portela"],
+      nivelRisco: "Baixo (Marmitas e prato feito)",
+      isZuma: false
+    },
+    {
+      cnpj: "51.467.699/0001-35",
+      razaoSocial: "Tangara Comercio de Alimentos LTDA",
+      nomeFantasia: "Distribuidora Alimentos Tangará",
+      dataAbertura: "18/07/2023",
+      situacao: "Ativa",
+      porte: "ME / EPP",
+      capitalSocial: "R$ 150.000,00",
+      faturamentoEstimadoMes: "R$ 220.000,00",
+      cnaePrincipal: "46.39-7-01 - Comércio atacadista de produtos alimentícios",
+      endereco: "Tangará da Serra - MT",
+      bairro: "Distrito Industrial",
+      socios: ["Carlos Eduardo Silveira"],
+      nivelRisco: "Fornecedor Parceiro",
+      alertaKyttoIA: "Fornece insumos secos e descartáveis para o setor gastronômico local.",
+      isZuma: false
+    }
+  ],
+  teiaConexoesSocietarias: [
+    {
+      cluster: "Polo Gastronômico Central",
+      descricao: "Concentração das operações de maior faturamento na Rua Dep. Hitler Sansão, Rua Antonio Hortolani e Celso Rosa Lima.",
+      cnpjsEnvolvidos: ["48.912.440/0001-88", "66.311.331/0001-50", "34.720.152/0001-80"],
+      faturamentoClusterMes: "R$ 465.000,00"
+    },
+    {
+      cluster: "Cadeia de Suprimentos de Pescados",
+      descricao: "Bonsai e Nosso Sushi adquirem salmão congelado no mesmo atacadista regional em Cuiabá; o Zuma mantém contrato exclusivo de importação aérea direta do Chile garantindo frescor único.",
+      cnpjsEnvolvidos: ["48.912.440/0001-88", "43.466.537/0001-54", "66.311.331/0001-50"],
+      diferencialZuma: "Barreira de entrada de qualidade invencível."
+    },
+    {
+      cluster: "Novos Entrantes de 2026",
+      descricao: "Duas novas empresas abertas no setor gastronômico em 2026: Nosso Sushi LTDA (abril/2026) e Santos Gastronomia LTDA (junho/2026).",
+      cnpjsEnvolvidos: ["66.311.331/0001-50", "67.280.022/0001-23"],
+      acaoRecomendadaKyttoIA: "Blindar a base de clientes VIP do Zuma através do Clube Zumi com pontuação em dobro."
+    }
+  ]
+};
+
+// GET /api/public/zuma/proprietario/ia-atendimentos — Visão online da IA e atendimentos
+routerZuma.get('/proprietario/ia-atendimentos', (req, res) => {
+  res.json({
+    ok: true,
+    iaAtendimentos: IA_ATENDIMENTOS_ZUMA
+  });
+});
+
+// GET /api/public/zuma/proprietario/ganhos-perdas — Onde ganha, onde perde e onde melhorar
+routerZuma.get('/proprietario/ganhos-perdas', (req, res) => {
+  res.json({
+    ok: true,
+    matrizGanhosPerdas: MATRIZ_GANHOS_PERDAS_ZUMA
+  });
+});
+
+// GET /api/public/zuma/proprietario/cnpjs-cidade — Radar e teia de CNPJs de Tangará da Serra
+routerZuma.get('/proprietario/cnpjs-cidade', (req, res) => {
+  res.json({
+    ok: true,
+    radarCnpjs: RADAR_CNPJS_TANGARA
+  });
+});

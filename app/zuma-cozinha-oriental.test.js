@@ -1660,6 +1660,32 @@ test('Zuma Cozinha Oriental - App do Proprietário (Gestão na Palma da Mão, Co
   assert.ok(radarRes.data.radar.benchmarkPratos.length >= 5, 'Deve comparar pratos âncora');
   assert.ok(radarRes.data.radar.diagnosticoMotorKyttoIA.oportunidadesImediatas.length >= 2);
 
+  // 3.1. Visão Online da IA e Evolução dos Atendimentos
+  const iaRes = await callRoute('GET', '/proprietario/ia-atendimentos');
+  assert.equal(iaRes.status, 200);
+  assert.equal(iaRes.data.ok, true);
+  assert.ok(iaRes.data.iaAtendimentos.kpisAtendimentos.totalAtendimentosHoje >= 300, 'Total de atendimentos hoje >= 300');
+  assert.ok(iaRes.data.iaAtendimentos.kpisAtendimentos.taxaResolucaoAutonoma >= 90.0, 'Resolução autônoma da IA >= 90%');
+  assert.ok(iaRes.data.iaAtendimentos.curvaAtendimentosHora.length >= 8, 'Curva hora a hora de atendimentos');
+  assert.ok(iaRes.data.iaAtendimentos.pipelineOportunidadesKyttoIA.length >= 3, 'Pipeline de oportunidades financeiras');
+
+  // 3.2. Matriz de Ganhos, Perdas e Onde Melhorar (Churn & Flow)
+  const gpRes = await callRoute('GET', '/proprietario/ganhos-perdas');
+  assert.equal(gpRes.status, 200);
+  assert.equal(gpRes.data.ok, true);
+  assert.ok(gpRes.data.matrizGanhosPerdas.ondeEstamosGanhando.length >= 2, 'Alavancas de ganho de clientes');
+  assert.ok(gpRes.data.matrizGanhosPerdas.ondeEstamosPerdendo.length >= 2, 'Pontos de fuga e churn');
+  assert.ok(gpRes.data.matrizGanhosPerdas.matrizOndeMelhorarKyttoIA.length >= 2, 'Matriz prescritiva onde melhorar KyttoIA');
+
+  // 3.3. Radar e Teia de CNPJs de Tangará da Serra (MT)
+  const cnpjsRes = await callRoute('GET', '/proprietario/cnpjs-cidade');
+  assert.equal(cnpjsRes.status, 200);
+  assert.equal(cnpjsRes.data.ok, true);
+  assert.equal(cnpjsRes.data.radarCnpjs.cidade, 'Tangará da Serra - MT');
+  assert.ok(cnpjsRes.data.radarCnpjs.cnpjsCadastrados.length >= 8, 'Mapeamento de no mínimo 8 CNPJs locais');
+  assert.ok(cnpjsRes.data.radarCnpjs.marketShareOriental.length >= 4, 'Market share da gastronomia oriental');
+  assert.ok(cnpjsRes.data.radarCnpjs.teiaConexoesSocietarias.length >= 2, 'Teia de conexões societárias e fornecedores');
+
   // 4. Tomada de Ação Rápida pelo Proprietário
   const acaoRes = await callRoute('POST', '/proprietario/acao', {
     acaoId: 'oferta_relampago_vip',
