@@ -32,7 +32,7 @@ const pool = new Pool({
   ...poolConfig,
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 10000,
 });
 
 // Tratamento de erros do pool
@@ -44,17 +44,33 @@ pool.on('error', (err) => {
  * Executar query com pool
  */
 export async function query(text, params = []) {
-  const start = Date.now();
-  try {
-    const result = await pool.query(text, params);
-    const duration = Date.now() - start;
-    if (duration > 1000) {
-      console.warn(`[SLOW QUERY] ${duration}ms: ${text.substring(0, 50)}...`);
+  let attempts = 0;
+  while (true) {
+    const start = Date.now();
+    try {
+      const result = await pool.query(text, params);
+      const duration = Date.now() - start;
+      if (duration > 1000) {
+        console.warn(`[SLOW QUERY] ${duration}ms: ${text.substring(0, 50)}...`);
+      }
+      return result;
+    } catch (error) {
+      attempts++;
+      const isTransient =
+        error?.code === '57P03' ||
+        error?.code === '57P01' ||
+        error?.code === 'ECONNREFUSED' ||
+        error?.code === 'ETIMEDOUT' ||
+        error?.message?.includes('not yet accepting connections') ||
+        error?.message?.includes('timeout exceeded');
+      if (isTransient && attempts < 5) {
+        console.warn(`[db-pg query] Conexão transitória com PostgreSQL (${error.code || error.message}), retry ${attempts}/5 em 2s...`);
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        continue;
+      }
+      console.error('Erro na query:', text, params, error);
+      throw error;
     }
-    return result;
-  } catch (error) {
-    console.error('Erro na query:', text, params, error);
-    throw error;
   }
 }
 
@@ -63,7 +79,27 @@ export async function query(text, params = []) {
  * mesma sessão PostgreSQL, como advisory locks e migrations.
  */
 export async function acquireClient() {
-  return pool.connect();
+  let attempts = 0;
+  while (true) {
+    try {
+      return await pool.connect();
+    } catch (err) {
+      attempts++;
+      const isTransient =
+        err?.code === '57P03' ||
+        err?.code === '57P01' ||
+        err?.code === 'ECONNREFUSED' ||
+        err?.code === 'ETIMEDOUT' ||
+        err?.message?.includes('not yet accepting connections') ||
+        err?.message?.includes('timeout exceeded');
+      if (isTransient && attempts < 10) {
+        console.warn(`[db-pg acquireClient] PostgreSQL inicializando (${err.code || err.message}), retry ${attempts}/10 em 3s...`);
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 /**
@@ -77,7 +113,7 @@ export function releaseClient(client) {
  * Iniciar transação
  */
 export async function beginTransaction() {
-  const client = await pool.connect();
+  const client = await acquireClient();
   try {
     await client.query('BEGIN');
     return client;
