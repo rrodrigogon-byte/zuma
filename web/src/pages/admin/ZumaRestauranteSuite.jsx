@@ -27,7 +27,12 @@ import {
   Check,
   ArrowDownRight,
   Percent,
-  Package
+  Package,
+  Plus,
+  Edit,
+  Trash2,
+  Save,
+  X
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -111,6 +116,405 @@ export default function ZumaRestauranteSuite() {
     totalVendas: 4850.00,
     saldoGavetaEsperado: 850.00
   });
+
+  // --- ESTADOS E HANDLERS PARA CRUD COMPLETO (INCLUIR, MODIFICAR, SALVAR, EXCLUIR) ---
+  const [modalItemCardapio, setModalItemCardapio] = useState(null); // { modo: 'novo' | 'editar', item: {...} }
+  const [modalMesa, setModalMesa] = useState(null); // { modo: 'novo' | 'editar', mesa: {...} }
+  const [modalInsumo, setModalInsumo] = useState(null); // { modo: 'novo' | 'editar', insumo: {...} }
+  const [modalPedidoKds, setModalPedidoKds] = useState(null); // { modo: 'novo' | 'editar', pedido: {...} }
+  const [comandasAbertasPDV, setComandasAbertasPDV] = useState([
+    { id: 'CMD-AB-01', identificador: 'Mesa 04 · Salão', total: 189.90, itensQtd: 3, hora: '19:10' },
+    { id: 'CMD-AB-02', identificador: 'Balcão #12 (Rodrigo)', total: 78.00, itensQtd: 2, hora: '19:25' }
+  ]);
+
+  // Handlers CRUD Cardápio
+  const handleAbrirNovoItemCardapio = () => {
+    setModalItemCardapio({
+      modo: 'novo',
+      item: {
+        nome: '',
+        categoria: 'Combinados Especiais',
+        preco: '',
+        cod_pdv: '',
+        setor_producao: 'sushi_bar',
+        descricao: '',
+        foto: ''
+      }
+    });
+  };
+
+  const handleAbrirEditarItemCardapio = (p) => {
+    setModalItemCardapio({
+      modo: 'editar',
+      item: {
+        id: p.id,
+        nome: p.nome || '',
+        categoria: p.categoria_nome || p.categoria || 'Combinados Especiais',
+        preco: p.preco || '',
+        cod_pdv: p.cod_pdv || p.codigo_pdv || '',
+        setor_producao: p.setor_producao || p.setor || 'sushi_bar',
+        descricao: p.descricao || '',
+        foto: p.foto || ''
+      }
+    });
+  };
+
+  const handleSalvarItemCardapio = async (e) => {
+    e.preventDefault();
+    const { modo, item } = modalItemCardapio;
+    try {
+      if (modo === 'novo') {
+        const res = await api.post('/api/public/zuma/cardapio/item', item);
+        if (res.ok) {
+          setCardapio(prev => [res.item, ...prev]);
+          setMensagemSucesso(`Prato "${res.item.nome}" incluído com sucesso no cardápio!`);
+        }
+      } else {
+        const res = await api.put(`/api/public/zuma/cardapio/item/${item.id}`, item);
+        if (res.ok) {
+          setCardapio(prev => prev.map(p => (p.id === item.id ? res.item : p)));
+          setMensagemSucesso(`Prato "${res.item.nome}" modificado e salvo com sucesso!`);
+        }
+      }
+      setModalItemCardapio(null);
+      setTimeout(() => setMensagemSucesso(null), 4000);
+    } catch (err) {
+      alert('Erro ao salvar item do cardápio: ' + err.message);
+    }
+  };
+
+  const handleExcluirItemCardapio = async (p) => {
+    if (!window.confirm(`Deseja realmente excluir o prato "${p.nome}" do cardápio?`)) return;
+    try {
+      await api.delete(`/api/public/zuma/cardapio/item/${p.id || p.cod_pdv}`);
+      setCardapio(prev => prev.filter(item => (item.id !== p.id && item.cod_pdv !== p.cod_pdv)));
+      setMensagemSucesso(`Prato "${p.nome}" excluído com sucesso do cardápio!`);
+      setTimeout(() => setMensagemSucesso(null), 4000);
+    } catch (err) {
+      alert('Erro ao excluir prato: ' + err.message);
+    }
+  };
+
+  // Handlers CRUD Mesas
+  const handleAbrirNovaMesa = () => {
+    setModalMesa({
+      modo: 'novo',
+      mesa: {
+        numero: (mapaMesas?.mesas?.length || 25) + 1,
+        setor: 'Salão Principal',
+        capacidade: 4,
+        garcom: 'Carlos Silva',
+        tempAmbiente: 22.0
+      }
+    });
+  };
+
+  const handleAbrirEditarMesa = (m) => {
+    setModalMesa({
+      modo: 'editar',
+      mesa: {
+        id: m.id,
+        numero: m.numero,
+        setor: m.setor || 'Salão Principal',
+        capacidade: m.capacidade || 4,
+        garcom: m.garcom || 'Carlos Silva',
+        status: m.status || 'livre',
+        tempAmbiente: m.tempAmbiente || 22.0
+      }
+    });
+  };
+
+  const handleSalvarMesa = async (e) => {
+    e.preventDefault();
+    const { modo, mesa } = modalMesa;
+    try {
+      if (modo === 'novo') {
+        const res = await api.post('/api/public/zuma/mesas', mesa);
+        if (res.ok) {
+          if (mapaMesas) {
+            setMapaMesas(prev => ({
+              ...prev,
+              totalMesas: (prev.totalMesas || 0) + 1,
+              mesas: [...(prev.mesas || []), res.mesa]
+            }));
+          }
+          setMensagemSucesso(`Mesa ${res.mesa.numero} incluída com sucesso no salão!`);
+        }
+      } else {
+        const res = await api.put(`/api/public/zuma/mesas/${mesa.id}`, mesa);
+        if (res.ok) {
+          if (mapaMesas) {
+            setMapaMesas(prev => ({
+              ...prev,
+              mesas: (prev.mesas || []).map(m => (m.id === mesa.id ? { ...m, ...res.mesa } : m))
+            }));
+          }
+          setMensagemSucesso(`Mesa ${res.mesa.numero} modificada e salva com sucesso!`);
+        }
+      }
+      setModalMesa(null);
+      setTimeout(() => setMensagemSucesso(null), 4000);
+    } catch (err) {
+      alert('Erro ao salvar mesa: ' + err.message);
+    }
+  };
+
+  const handleExcluirMesa = async (m) => {
+    if (!window.confirm(`Deseja realmente excluir a Mesa ${m.numero} (${m.setor})?`)) return;
+    try {
+      await api.delete(`/api/public/zuma/mesas/${m.id || m.numero}`);
+      if (mapaMesas) {
+        setMapaMesas(prev => ({
+          ...prev,
+          totalMesas: Math.max(0, (prev.totalMesas || 1) - 1),
+          mesas: (prev.mesas || []).filter(item => item.id !== m.id && item.numero !== m.numero)
+        }));
+      }
+      setMensagemSucesso(`Mesa ${m.numero} excluída com sucesso!`);
+      setTimeout(() => setMensagemSucesso(null), 4000);
+    } catch (err) {
+      alert('Erro ao excluir mesa: ' + err.message);
+    }
+  };
+
+  // Handlers CRUD Estoque / Insumos
+  const handleAbrirNovoInsumo = () => {
+    setModalInsumo({
+      modo: 'novo',
+      insumo: {
+        nome: '',
+        codigo: '',
+        unidade: 'kg',
+        saldoAtual: '',
+        saldoMinimo: '',
+        custoMedioUnitario: '',
+        fornecedor: '',
+        loteAtual: ''
+      }
+    });
+  };
+
+  const handleAbrirEditarInsumo = (ins) => {
+    setModalInsumo({
+      modo: 'editar',
+      insumo: {
+        id: ins.id,
+        nome: ins.nome || '',
+        codigo: ins.codigo || '',
+        unidade: ins.unidade || 'kg',
+        saldoAtual: ins.quantidadeAtual ?? ins.saldoAtual ?? '',
+        saldoMinimo: ins.estoqueMinimo ?? ins.saldoMinimo ?? '',
+        custoMedioUnitario: ins.custoMedioUnitario ?? ins.custoPorKgInteiro ?? '',
+        fornecedor: ins.fornecedorPadrao ?? ins.fornecedor ?? '',
+        loteAtual: ins.loteAtual || ''
+      }
+    });
+  };
+
+  const handleSalvarInsumo = async (e) => {
+    e.preventDefault();
+    const { modo, insumo } = modalInsumo;
+    try {
+      if (modo === 'novo') {
+        const res = await api.post('/api/public/zuma/estoque/insumo', insumo);
+        if (res.ok) {
+          const formatado = {
+            id: res.insumo.id,
+            nome: res.insumo.nome,
+            codigo: res.insumo.codigo,
+            unidade: res.insumo.unidade,
+            quantidadeAtual: res.insumo.saldoAtual,
+            estoqueMinimo: res.insumo.saldoMinimo,
+            custoMedioUnitario: res.insumo.custoPorKgInteiro,
+            fornecedorPadrao: res.insumo.fornecedor,
+            valorTotalEmEstoque: res.insumo.saldoAtual * res.insumo.custoPorKgInteiro
+          };
+          setEstoquePescados(prev => [formatado, ...prev]);
+          setMensagemSucesso(`Insumo "${res.insumo.nome}" cadastrado com sucesso no estoque!`);
+        }
+      } else {
+        const res = await api.put(`/api/public/zuma/estoque/insumo/${insumo.id}`, insumo);
+        if (res.ok) {
+          setEstoquePescados(prev => prev.map(ins => {
+            if (ins.id === insumo.id) {
+              return {
+                ...ins,
+                nome: res.insumo.nome,
+                codigo: res.insumo.codigo,
+                unidade: res.insumo.unidade,
+                quantidadeAtual: res.insumo.saldoAtual,
+                estoqueMinimo: res.insumo.saldoMinimo,
+                custoMedioUnitario: res.insumo.custoPorKgInteiro,
+                fornecedorPadrao: res.insumo.fornecedor,
+                valorTotalEmEstoque: res.insumo.saldoAtual * res.insumo.custoPorKgInteiro
+              };
+            }
+            return ins;
+          }));
+          setMensagemSucesso(`Insumo "${res.insumo.nome}" modificado e salvo com sucesso!`);
+        }
+      }
+      setModalInsumo(null);
+      setTimeout(() => setMensagemSucesso(null), 4000);
+    } catch (err) {
+      alert('Erro ao salvar insumo: ' + err.message);
+    }
+  };
+
+  const handleExcluirInsumo = async (ins) => {
+    if (!window.confirm(`Deseja realmente excluir o insumo "${ins.nome}" do estoque?`)) return;
+    try {
+      await api.delete(`/api/public/zuma/estoque/insumo/${ins.id}`);
+      setEstoquePescados(prev => prev.filter(item => item.id !== ins.id));
+      setMensagemSucesso(`Insumo "${ins.nome}" excluído com sucesso do estoque!`);
+      setTimeout(() => setMensagemSucesso(null), 4000);
+    } catch (err) {
+      alert('Erro ao excluir insumo: ' + err.message);
+    }
+  };
+
+  // Handlers CRUD Cozinha KDS
+  const handleAbrirNovoPedidoKds = () => {
+    setModalPedidoKds({
+      modo: 'novo',
+      pedido: {
+        numeroComanda: `CMD-${Math.floor(100 + Math.random() * 900)}`,
+        origem: 'Mesa 05 · Salão',
+        praca: 'SUSHI_BAR',
+        garcom: 'Carlos Silva',
+        prioridade: 'NORMAL',
+        itensTexto: '1x Combinado Zuma Casal 40 Peças\\n2x Temaki Especial Salmão'
+      }
+    });
+  };
+
+  const handleAbrirEditarPedidoKds = (ped) => {
+    setModalPedidoKds({
+      modo: 'editar',
+      pedido: {
+        id: ped.id,
+        numeroComanda: ped.comanda || ped.numeroComanda || '',
+        origem: ped.origem || 'Balcão PDV',
+        praca: ped.praca || 'SUSHI_BAR',
+        garcom: ped.garcom || 'Caixa Salão',
+        prioridade: ped.prioridade || 'NORMAL',
+        itensTexto: Array.isArray(ped.itens) ? ped.itens.map(i => typeof i === 'string' ? i : `${i.qtd || 1}x ${i.nome} ${i.obs ? '(' + i.obs + ')' : ''}`).join('\n') : ''
+      }
+    });
+  };
+
+  const handleSalvarPedidoKds = async (e) => {
+    e.preventDefault();
+    const { modo, pedido } = modalPedidoKds;
+    const itensArray = pedido.itensTexto.split('\n').filter(Boolean).map(linha => ({
+      nome: linha.replace(/^[0-9]+x\s*/, ''),
+      qtd: parseInt(linha.match(/^[0-9]+/)?.[0]) || 1
+    }));
+    try {
+      if (modo === 'novo') {
+        const payload = {
+          numeroComanda: pedido.numeroComanda,
+          origem: pedido.origem,
+          praca: pedido.praca,
+          prioridade: pedido.prioridade,
+          garcom: pedido.garcom,
+          itens: itensArray
+        };
+        const res = await api.post('/api/public/zuma/cozinha/pedido', payload);
+        if (res.ok) {
+          const novoKds = {
+            id: res.pedido.id,
+            comanda: res.pedido.numeroComanda,
+            origem: res.pedido.origem,
+            praca: res.pedido.praca,
+            minutos: 0,
+            status: 'EM_PREPARO',
+            prioridade: res.pedido.prioridade,
+            itens: pedido.itensTexto.split('\n').filter(Boolean)
+          };
+          setPedidosKds(prev => [novoKds, ...prev]);
+          setMensagemSucesso(`Pedido ${res.pedido.numeroComanda} enviado com sucesso para a cozinha!`);
+        }
+      } else {
+        const payload = {
+          origem: pedido.origem,
+          praca: pedido.praca,
+          prioridade: pedido.prioridade,
+          garcom: pedido.garcom,
+          itens: itensArray
+        };
+        const res = await api.put(`/api/public/zuma/cozinha/pedido/${pedido.id}`, payload);
+        if (res.ok) {
+          setPedidosKds(prev => prev.map(p => {
+            if (p.id === pedido.id) {
+              return {
+                ...p,
+                origem: res.pedido.origem,
+                praca: res.pedido.praca,
+                prioridade: res.pedido.prioridade,
+                itens: pedido.itensTexto.split('\n').filter(Boolean)
+              };
+            }
+            return p;
+          }));
+          setMensagemSucesso(`Pedido ${pedido.numeroComanda} modificado e salvo com sucesso!`);
+        }
+      }
+      setModalPedidoKds(null);
+      setTimeout(() => setMensagemSucesso(null), 4000);
+    } catch (err) {
+      alert('Erro ao salvar pedido KDS: ' + err.message);
+    }
+  };
+
+  const handleExcluirPedidoKds = async (ped) => {
+    if (!window.confirm(`Deseja realmente cancelar o pedido ${ped.comanda || ped.numeroComanda} do KDS?`)) return;
+    try {
+      await api.delete(`/api/public/zuma/cozinha/pedido/${ped.id}`);
+      setPedidosKds(prev => prev.filter(p => p.id !== ped.id));
+      setMensagemSucesso(`Pedido ${ped.comanda || ped.numeroComanda} cancelado do KDS!`);
+      setTimeout(() => setMensagemSucesso(null), 4000);
+    } catch (err) {
+      alert('Erro ao cancelar pedido: ' + err.message);
+    }
+  };
+
+  // Handlers de Carrinho PDV (+, -, Excluir, Salvar Comanda Aberta)
+  const alterarQtdCarrinhoPDV = (index, delta) => {
+    setCarrinhoPDV(prev => {
+      return prev.map((item, idx) => {
+        if (idx === index) {
+          const novaQtd = (item.qtd || 1) + delta;
+          return novaQtd > 0 ? { ...item, qtd: novaQtd } : null;
+        }
+        return item;
+      }).filter(Boolean);
+    });
+  };
+
+  const removerItemCarrinhoPDV = (index) => {
+    setCarrinhoPDV(prev => prev.filter((_, idx) => idx !== index));
+  };
+
+  const salvarComandaAbertaPDV = () => {
+    if (carrinhoPDV.length === 0) {
+      alert('O carrinho está vazio para salvar comanda.');
+      return;
+    }
+    const total = carrinhoPDV.reduce((acc, it) => acc + (it.preco * it.qtd), 0);
+    const novaComanda = {
+      id: `CMD-AB-${Date.now().toString().slice(-4)}`,
+      identificador: tipoVendaPDV === 'MESA' ? `Mesa ${mesaSelecionadaPDV} (Salão)` : `Balcão (${nomeClientePDV})`,
+      total,
+      itensQtd: carrinhoPDV.reduce((acc, it) => acc + it.qtd, 0),
+      hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    };
+    setComandasAbertasPDV(prev => [novaComanda, ...prev]);
+    setCarrinhoPDV([]);
+    setMensagemSucesso(`Comanda ${novaComanda.id} salva em aberto com sucesso!`);
+    setTimeout(() => setMensagemSucesso(null), 4000);
+  };
+
 
   // Estados de Cozinha KDS
   const [pracaKdsFiltro, setPracaKdsFiltro] = useState('TODAS');
@@ -1572,6 +1976,29 @@ export default function ZumaRestauranteSuite() {
       {abaAtiva === 'cardapio' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           {/* Barra de Filtro e Busca */}
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                onClick={handleAbrirNovoItemCardapio}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  fontSize: 12,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)'
+                }}
+              >
+                <Plus size={15} /> Incluir Novo Prato
+              </button>
+            </div>
+
           <div style={{
             background: 'var(--card, #1e293b)',
             border: '1px solid var(--line, #334155)',
@@ -3318,6 +3745,532 @@ export default function ZumaRestauranteSuite() {
           </div>
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 1: INCLUIR / MODIFICAR PRATO DO CARDÁPIO */}
+      {/* ========================================================================= */}
+      {modalItemCardapio && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: 16
+        }}>
+          <div style={{
+            background: '#1e293b',
+            border: '1px solid #E63946',
+            borderRadius: 16,
+            width: '100%',
+            maxWidth: 520,
+            padding: 24,
+            boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+            maxHeight: '90vh',
+            overflowY: 'auto'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, borderBottom: '1px solid #334155', paddingBottom: 12 }}>
+              <div style={{ fontSize: 17, fontWeight: 900, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ color: '#E63946' }}>{modalItemCardapio.modo === 'novo' ? '➕ Incluir Prato' : '✏️ Modificar Prato'}</span>
+              </div>
+              <button
+                onClick={() => setModalItemCardapio(null)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 4 }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSalvarItemCardapio} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Nome do Prato / Produto *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Niguiri Salmão Trufado (4 un)"
+                  value={modalItemCardapio.item.nome}
+                  onChange={e => setModalItemCardapio({ ...modalItemCardapio, item: { ...modalItemCardapio.item, nome: e.target.value } })}
+                  style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Categoria *</label>
+                  <select
+                    value={modalItemCardapio.item.categoria}
+                    onChange={e => setModalItemCardapio({ ...modalItemCardapio, item: { ...modalItemCardapio.item, categoria: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  >
+                    <option value="Combinados Especiais">Combinados Especiais</option>
+                    <option value="Sashimis Nobres">Sashimis Nobres</option>
+                    <option value="Uramakis & Rolls">Uramakis & Rolls</option>
+                    <option value="Niguiris & Dyo">Niguiris & Dyo</option>
+                    <option value="Hot Rolls">Hot Rolls</option>
+                    <option value="Temakis Especiais">Temakis Especiais</option>
+                    <option value="Cozinha Quente (Yakissoba/Guioza)">Cozinha Quente</option>
+                    <option value="Bebidas & Sakês">Bebidas & Sakês</option>
+                    <option value="Sobremesas Orientais">Sobremesas Orientais</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Preço R$ *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    placeholder="0.00"
+                    value={modalItemCardapio.item.preco}
+                    onChange={e => setModalItemCardapio({ ...modalItemCardapio, item: { ...modalItemCardapio.item, preco: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Código PDV</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: ZUM-045"
+                    value={modalItemCardapio.item.cod_pdv}
+                    onChange={e => setModalItemCardapio({ ...modalItemCardapio, item: { ...modalItemCardapio.item, cod_pdv: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Praça de Preparo</label>
+                  <select
+                    value={modalItemCardapio.item.setor_producao}
+                    onChange={e => setModalItemCardapio({ ...modalItemCardapio, item: { ...modalItemCardapio.item, setor_producao: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  >
+                    <option value="sushi_bar">Sushi Bar (Frios)</option>
+                    <option value="cozinha_quente">Cozinha Quente</option>
+                    <option value="bar">Bar & Bebidas</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Descrição dos Ingredientes</label>
+                <textarea
+                  rows={3}
+                  placeholder="Descreva os insumos, técnica de preparo e detalhes para o cliente..."
+                  value={modalItemCardapio.item.descricao}
+                  onChange={e => setModalItemCardapio({ ...modalItemCardapio, item: { ...modalItemCardapio.item, descricao: e.target.value } })}
+                  style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13, resize: 'vertical' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>URL da Foto Ilustrativa</label>
+                <input
+                  type="text"
+                  placeholder="https://..."
+                  value={modalItemCardapio.item.foto}
+                  onChange={e => setModalItemCardapio({ ...modalItemCardapio, item: { ...modalItemCardapio.item, foto: e.target.value } })}
+                  style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 12, paddingTop: 14, borderTop: '1px solid #334155' }}>
+                <button
+                  type="button"
+                  onClick={() => setModalItemCardapio(null)}
+                  style={{ padding: '10px 16px', background: 'transparent', border: '1px solid #475569', borderRadius: 8, color: '#cbd5e1', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '10px 20px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', border: 'none', borderRadius: 8, color: '#ffffff', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <Save size={16} /> Salvar Prato
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 2: INCLUIR / MODIFICAR MESA DO SALÃO */}
+      {/* ========================================================================= */}
+      {modalMesa && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: 16
+        }}>
+          <div style={{
+            background: '#1e293b',
+            border: '1px solid #E63946',
+            borderRadius: 16,
+            width: '100%',
+            maxWidth: 480,
+            padding: 24,
+            boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, borderBottom: '1px solid #334155', paddingBottom: 12 }}>
+              <div style={{ fontSize: 17, fontWeight: 900, color: '#ffffff' }}>
+                <span style={{ color: '#E63946' }}>{modalMesa.modo === 'novo' ? '➕ Incluir Nova Mesa' : '✏️ Modificar Mesa'}</span>
+              </div>
+              <button onClick={() => setModalMesa(null)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSalvarMesa} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Número da Mesa *</label>
+                  <input
+                    type="number"
+                    required
+                    value={modalMesa.mesa.numero}
+                    onChange={e => setModalMesa({ ...modalMesa, mesa: { ...modalMesa.mesa, numero: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Capacidade de Lugares</label>
+                  <select
+                    value={modalMesa.mesa.capacidade}
+                    onChange={e => setModalMesa({ ...modalMesa, mesa: { ...modalMesa.mesa, capacidade: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  >
+                    <option value={2}>2 Lugares (Bistrô / Casal)</option>
+                    <option value={4}>4 Lugares (Padrão)</option>
+                    <option value={6}>6 Lugares (Família)</option>
+                    <option value={8}>8 Lugares (Grupo)</option>
+                    <option value={12}>12 Lugares (Mesa Grande VIP)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Setor do Salão *</label>
+                <select
+                  value={modalMesa.mesa.setor}
+                  onChange={e => setModalMesa({ ...modalMesa, mesa: { ...modalMesa.mesa, setor: e.target.value } })}
+                  style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                >
+                  <option value="Salão Principal">Salão Principal Climatizado</option>
+                  <option value="Deck Lounge">Deck Lounge Externo</option>
+                  <option value="Sushi Bar Omakase">Sushi Bar Omakase (Balcão)</option>
+                  <option value="Sala VIP">Sala VIP Corporativa Agro</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Garçom Responsável</label>
+                  <input
+                    type="text"
+                    value={modalMesa.mesa.garcom}
+                    onChange={e => setModalMesa({ ...modalMesa, mesa: { ...modalMesa.mesa, garcom: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Temperatura Clima (°C)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={modalMesa.mesa.tempAmbiente}
+                    onChange={e => setModalMesa({ ...modalMesa, mesa: { ...modalMesa.mesa, tempAmbiente: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 12, paddingTop: 14, borderTop: '1px solid #334155' }}>
+                <button
+                  type="button"
+                  onClick={() => setModalMesa(null)}
+                  style={{ padding: '10px 16px', background: 'transparent', border: '1px solid #475569', borderRadius: 8, color: '#cbd5e1', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '10px 20px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', border: 'none', borderRadius: 8, color: '#ffffff', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <Save size={16} /> Salvar Mesa
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 3: INCLUIR / MODIFICAR INSUMO NO ESTOQUE */}
+      {/* ========================================================================= */}
+      {modalInsumo && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: 16
+        }}>
+          <div style={{
+            background: '#1e293b',
+            border: '1px solid #E63946',
+            borderRadius: 16,
+            width: '100%',
+            maxWidth: 500,
+            padding: 24,
+            boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, borderBottom: '1px solid #334155', paddingBottom: 12 }}>
+              <div style={{ fontSize: 17, fontWeight: 900, color: '#ffffff' }}>
+                <span style={{ color: '#E63946' }}>{modalInsumo.modo === 'novo' ? '➕ Incluir Novo Insumo' : '✏️ Modificar Insumo'}</span>
+              </div>
+              <button onClick={() => setModalInsumo(null)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSalvarInsumo} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Nome do Insumo *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Robalo Fresco do Litoral"
+                  value={modalInsumo.insumo.nome}
+                  onChange={e => setModalInsumo({ ...modalInsumo, insumo: { ...modalInsumo.insumo, nome: e.target.value } })}
+                  style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Código</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: PESC-009"
+                    value={modalInsumo.insumo.codigo}
+                    onChange={e => setModalInsumo({ ...modalInsumo, insumo: { ...modalInsumo.insumo, codigo: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Unidade</label>
+                  <select
+                    value={modalInsumo.insumo.unidade}
+                    onChange={e => setModalInsumo({ ...modalInsumo, insumo: { ...modalInsumo.insumo, unidade: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  >
+                    <option value="kg">kg (Quilograma)</option>
+                    <option value="g">g (Grama)</option>
+                    <option value="un">un (Unidade)</option>
+                    <option value="l">l (Litro)</option>
+                    <option value="cx">cx (Caixa)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Saldo Atual</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={modalInsumo.insumo.saldoAtual}
+                    onChange={e => setModalInsumo({ ...modalInsumo, insumo: { ...modalInsumo.insumo, saldoAtual: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 8px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Estoque Mínimo</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={modalInsumo.insumo.saldoMinimo}
+                    onChange={e => setModalInsumo({ ...modalInsumo, insumo: { ...modalInsumo.insumo, saldoMinimo: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 8px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Custo Médio R$</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={modalInsumo.insumo.custoMedioUnitario}
+                    onChange={e => setModalInsumo({ ...modalInsumo, insumo: { ...modalInsumo.insumo, custoMedioUnitario: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 8px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Fornecedor Principal</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Distribuidora Mar & Rio Cuiabá"
+                  value={modalInsumo.insumo.fornecedor}
+                  onChange={e => setModalInsumo({ ...modalInsumo, insumo: { ...modalInsumo.insumo, fornecedor: e.target.value } })}
+                  style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 12, paddingTop: 14, borderTop: '1px solid #334155' }}>
+                <button
+                  type="button"
+                  onClick={() => setModalInsumo(null)}
+                  style={{ padding: '10px 16px', background: 'transparent', border: '1px solid #475569', borderRadius: 8, color: '#cbd5e1', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '10px 20px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', border: 'none', borderRadius: 8, color: '#ffffff', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <Save size={16} /> Salvar Insumo
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: INCLUIR / MODIFICAR PEDIDO NO KDS DA COZINHA */}
+      {/* ========================================================================= */}
+      {modalPedidoKds && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: 16
+        }}>
+          <div style={{
+            background: '#1e293b',
+            border: '1px solid #E63946',
+            borderRadius: 16,
+            width: '100%',
+            maxWidth: 520,
+            padding: 24,
+            boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, borderBottom: '1px solid #334155', paddingBottom: 12 }}>
+              <div style={{ fontSize: 17, fontWeight: 900, color: '#ffffff' }}>
+                <span style={{ color: '#E63946' }}>{modalPedidoKds.modo === 'novo' ? '➕ Incluir Pedido Manual' : '✏️ Modificar Pedido KDS'}</span>
+              </div>
+              <button onClick={() => setModalPedidoKds(null)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSalvarPedidoKds} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Comanda / Código</label>
+                  <input
+                    type="text"
+                    required
+                    value={modalPedidoKds.pedido.numeroComanda}
+                    onChange={e => setModalPedidoKds({ ...modalPedidoKds, pedido: { ...modalPedidoKds.pedido, numeroComanda: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Origem do Pedido</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ex: Mesa 08 · Salão"
+                    value={modalPedidoKds.pedido.origem}
+                    onChange={e => setModalPedidoKds({ ...modalPedidoKds, pedido: { ...modalPedidoKds.pedido, origem: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Praça Responsável</label>
+                  <select
+                    value={modalPedidoKds.pedido.praca}
+                    onChange={e => setModalPedidoKds({ ...modalPedidoKds, pedido: { ...modalPedidoKds.pedido, praca: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  >
+                    <option value="SUSHI_BAR">Sushi Bar (Sushis & Pescados)</option>
+                    <option value="COZINHA_QUENTE">Cozinha Quente (Pratos Quentes)</option>
+                    <option value="BAR_BEBIDAS">Bar & Bebidas</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Prioridade</label>
+                  <select
+                    value={modalPedidoKds.pedido.prioridade}
+                    onChange={e => setModalPedidoKds({ ...modalPedidoKds, pedido: { ...modalPedidoKds.pedido, prioridade: e.target.value } })}
+                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13 }}
+                  >
+                    <option value="NORMAL">Normal (Até 15 min)</option>
+                    <option value="ALTA">Alta (Até 10 min)</option>
+                    <option value="URGENTE">Urgente (Imediato)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6 }}>Itens e Observações (1 item por linha) *</label>
+                <textarea
+                  rows={4}
+                  required
+                  placeholder="1x Combinado Zuma 30 Peças&#10;2x Temaki Salmão Grelhado (sem cream cheese)&#10;1x Coca-Cola Zero"
+                  value={modalPedidoKds.pedido.itensTexto}
+                  onChange={e => setModalPedidoKds({ ...modalPedidoKds, pedido: { ...modalPedidoKds.pedido, itensTexto: e.target.value } })}
+                  style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#ffffff', fontSize: 13, resize: 'vertical' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 12, paddingTop: 14, borderTop: '1px solid #334155' }}>
+                <button
+                  type="button"
+                  onClick={() => setModalPedidoKds(null)}
+                  style={{ padding: '10px 16px', background: 'transparent', border: '1px solid #475569', borderRadius: 8, color: '#cbd5e1', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '10px 20px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', border: 'none', borderRadius: 8, color: '#ffffff', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <Save size={16} /> Salvar Pedido KDS
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

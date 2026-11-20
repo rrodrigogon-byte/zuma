@@ -47,6 +47,9 @@ import {
 
 export const routerZuma = express.Router();
 
+// Base de dados dinâmica em memória para operações CRUD em tempo real
+export let CARDAPIO_DINAMICO_ZUMA = [...ZUMA_CARDAPIO_COMPLETO];
+
 // GET /api/public/zuma/storefront — Metadados completos do storefront e da loja
 routerZuma.get('/storefront', (req, res) => {
   res.json({
@@ -64,7 +67,7 @@ routerZuma.get('/storefront', (req, res) => {
 // GET /api/public/zuma/cardapio — Catálogo dos 211 produtos com filtros de busca, categoria e setor
 routerZuma.get('/cardapio', (req, res) => {
   const { categoria, setor, busca, destaque } = req.query;
-  let itens = ZUMA_CARDAPIO_COMPLETO.map(p => ({
+  let itens = CARDAPIO_DINAMICO_ZUMA.map(p => ({
     ...p,
     codigo_pdv: p.cod_pdv || p.codigo_pdv,
     categoria_codigo: p.slug || p.categoria_id || p.categoria_codigo,
@@ -111,7 +114,7 @@ routerZuma.get('/cardapio', (req, res) => {
   res.json({
     ok: true,
     totalItens: itens.length,
-    totalGeralCardapio: ZUMA_CARDAPIO_COMPLETO.length,
+    totalGeralCardapio: CARDAPIO_DINAMICO_ZUMA.length,
     categorias: categoriasNormalizadas,
     itens
   });
@@ -609,8 +612,7 @@ routerZuma.get('/kds', (req, res) => {
   });
 });
 
-// ============================================================================
-// SUÍTE OPERACIONAL INTEGRADA: FRENTE DE CAIXA, KDS, GARÇOM & MOTOBOY
+// =====================================================================// SUÍTE OPERACIONAL INTEGRADA: FRENTE DE CAIXA, KDS, GARÇOM & MOTOBOY
 // ============================================================================
 
 // Base de dados simulada em memória para operações de turno
@@ -4700,6 +4702,7 @@ routerZuma.get('/pagamentos/historico', (req, res) => {
 const COORDENADAS_ZUMA_SEDE = {
   lat: -14.622915,
   lng: -57.493922,
+  cidade: "Tangará da Serra - MT",
   endereco: "Rua Celso Rosa Lima, nº 142-W, Centro / Jd. Tangará II, Tangará da Serra - MT",
   cep: "78300-000"
 };
@@ -4816,8 +4819,16 @@ let CORRIDAS_ENTREGADOR_ZUMA = [
   }
 ];
 
+// GET /api/public/zuma/entregador/posicao-atual — Posição e status do entregador
+routerZuma.get("/entregador/posicao-atual", (req, res) => {
+  res.json({
+    ok: true,
+    motoboy: POSICAO_MOTOBOY_ATUAL
+  });
+});
+
 // GET /api/public/zuma/entregador/corridas — Lista de corridas e status da expedição
-routerZuma.get('/entregador/corridas', (req, res) => {
+routerZuma.get("/entregador/corridas", (req, res) => {
   const { status } = req.query;
   let lista = CORRIDAS_ENTREGADOR_ZUMA;
   if (status) {
@@ -4825,6 +4836,7 @@ routerZuma.get('/entregador/corridas', (req, res) => {
   }
   res.json({
     ok: true,
+    sede: COORDENADAS_ZUMA_SEDE,
     sedeZuma: COORDENADAS_ZUMA_SEDE,
     posicaoEntregador: POSICAO_MOTOBOY_ATUAL,
     totalCorridas: CORRIDAS_ENTREGADOR_ZUMA.length,
@@ -4834,6 +4846,39 @@ routerZuma.get('/entregador/corridas', (req, res) => {
     taxasAcumuladasHoje: 98.00,
     corridas: lista
   });
+});
+
+// POST /api/public/zuma/entregador/atualizar-status — Atualiza status da entrega
+// GET /api/public/zuma/entregador/fechamento-diaria — Fechamento de diária do entregador
+routerZuma.get("/entregador/fechamento-diaria", (req, res) => {
+  const { motoboyId } = req.query || {};
+  res.json({
+    ok: true,
+    motoboyId: motoboyId || "MOTO-01",
+    motoboyNome: "Carlos 'Ninja' Silva",
+    dataFechamento: new Date().toISOString().split("T")[0],
+    totalEntregasConcluidas: 8,
+    totalTaxasRepasse: 76.00,
+    taxaFixaDiaria: 50.00,
+    totalGeralLiquido: 126.00,
+    metodoPagamento: "PIX Chave Celular (65) 99812-4401",
+    statusRepasse: "DISPONIVEL_PARA_TRANSFERENCIA"
+  });
+});
+
+routerZuma.post("/entregador/atualizar-status", (req, res) => {
+  const { corridaId, novoStatus, codigoOtp, assinaturaBase64 } = req.body || {};
+  const corrida = CORRIDAS_ENTREGADOR_ZUMA.find(c => c.id === corridaId);
+  if (!corrida) {
+    return res.status(404).json({ ok: false, erro: "Corrida não encontrada" });
+  }
+  if (novoStatus === "entregue" && codigoOtp && codigoOtp !== corrida.codigoOtp) {
+    return res.status(400).json({ ok: false, erro: "Código de entrega (OTP) incorreto. Solicite o código ao cliente." });
+  }
+  corrida.status = novoStatus;
+  corrida.horaConclusao = new Date().toISOString();
+  corrida.concluidaEm = corrida.horaConclusao;
+  res.json({ ok: true, mensagem: "Status atualizado com sucesso!", corrida });
 });
 
 // POST /api/public/zuma/entregador/atualizar-posicao — Atualiza GPS do entregador
@@ -5126,4 +5171,270 @@ routerZuma.get('/apps/info', (req, res) => {
     ok: true,
     info: INFORMACOES_APPS_ZUMA
   });
+});
+
+// ============================================================================
+// 16. OPERAÇÕES CRUD COMPLETAS (INCLUIR, MODIFICAR/SALVAR, EXCLUIR) — ZUMA
+// ============================================================================
+
+// --- 16.1 CARDÁPIO: INCLUIR, MODIFICAR E EXCLUIR ---
+routerZuma.post('/cardapio/item', (req, res) => {
+  const { nome, categoria, preco, descricao, cod_pdv, setor_producao, foto, destaque } = req.body || {};
+  if (!nome || preco === undefined || preco === null || isNaN(Number(preco))) {
+    return res.status(400).json({ ok: false, error: "Nome e preço numérico válido são obrigatórios." });
+  }
+  const codigoGerado = cod_pdv || `ZUM-${String(CARDAPIO_DINAMICO_ZUMA.length + 1).padStart(3, '0')}`;
+  const novoItem = {
+    id: `item-zuma-${Date.now()}`,
+    codigo_pdv: codigoGerado,
+    cod_pdv: codigoGerado,
+    nome: String(nome).trim(),
+    categoria: categoria || 'Combinados Especiais',
+    categoria_nome: categoria || 'Combinados Especiais',
+    categoria_codigo: String(categoria || 'combinados').toLowerCase().replace(/\s+/g, '-'),
+    preco: parseFloat(preco),
+    descricao: descricao || 'Preparado na hora com pescados nobres e técnica japonesa tradicional.',
+    setor_producao: setor_producao || 'sushi_bar',
+    setor: setor_producao || 'sushi_bar',
+    foto: foto || 'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=600&auto=format&fit=crop&q=80',
+    destaque: destaque === true,
+    ativo: true,
+    dataCriacao: new Date().toISOString()
+  };
+  CARDAPIO_DINAMICO_ZUMA.unshift(novoItem);
+  res.status(201).json({ ok: true, mensagem: `Prato "${novoItem.nome}" incluído no cardápio com sucesso!`, item: novoItem });
+});
+
+routerZuma.put('/cardapio/item/:id', (req, res) => {
+  const { id } = req.params;
+  const index = CARDAPIO_DINAMICO_ZUMA.findIndex(p => String(p.id) === String(id) || String(p.codigo_pdv) === String(id) || String(p.cod_pdv) === String(id));
+  if (index === -1) {
+    return res.status(404).json({ ok: false, error: "Item do cardápio não encontrado para alteração." });
+  }
+  const atual = CARDAPIO_DINAMICO_ZUMA[index];
+  const { nome, categoria, preco, descricao, cod_pdv, setor_producao, foto, destaque, ativo } = req.body || {};
+
+  if (nome) atual.nome = String(nome).trim();
+  if (categoria) {
+    atual.categoria = categoria;
+    atual.categoria_nome = categoria;
+    atual.categoria_codigo = String(categoria).toLowerCase().replace(/\s+/g, '-');
+  }
+  if (preco !== undefined && !isNaN(Number(preco))) atual.preco = parseFloat(preco);
+  if (descricao !== undefined) atual.descricao = descricao;
+  if (cod_pdv) {
+    atual.cod_pdv = cod_pdv;
+    atual.codigo_pdv = cod_pdv;
+  }
+  if (setor_producao) {
+    atual.setor_producao = setor_producao;
+    atual.setor = setor_producao;
+  }
+  if (foto) atual.foto = foto;
+  if (destaque !== undefined) atual.destaque = destaque === true;
+  if (ativo !== undefined) atual.ativo = ativo === true;
+  atual.dataModificacao = new Date().toISOString();
+
+  res.json({ ok: true, mensagem: `Prato "${atual.nome}" modificado e salvo com sucesso!`, item: atual });
+});
+
+routerZuma.delete('/cardapio/item/:id', (req, res) => {
+  const { id } = req.params;
+  const index = CARDAPIO_DINAMICO_ZUMA.findIndex(p => String(p.id) === String(id) || String(p.codigo_pdv) === String(id) || String(p.cod_pdv) === String(id));
+  if (index === -1) {
+    return res.status(404).json({ ok: false, error: "Item do cardápio não encontrado para exclusão." });
+  }
+  const removido = CARDAPIO_DINAMICO_ZUMA.splice(index, 1)[0];
+  res.json({ ok: true, mensagem: `Prato "${removido.nome}" excluído do cardápio com sucesso!`, itemExcluido: removido });
+});
+
+// --- 16.2 MESAS: INCLUIR, MODIFICAR E EXCLUIR ---
+routerZuma.post('/mesas', (req, res) => {
+  const { numero, setor, capacidade, garcom, tempAmbiente } = req.body || {};
+  const numInt = parseInt(numero) || (MESAS_SALAO_ZUMA.length + 1);
+  const existe = MESAS_SALAO_ZUMA.find(m => m.numero === numInt);
+  if (existe) {
+    return res.status(400).json({ ok: false, error: `Já existe uma mesa cadastrada com o número ${numInt}.` });
+  }
+  const novaMesa = {
+    id: numInt,
+    numero: numInt,
+    setor: setor || "Salão Principal",
+    capacidade: parseInt(capacidade) || 4,
+    status: "livre",
+    tempoMinutos: 0,
+    garcom: garcom || "Carlos Silva",
+    comanda: null,
+    valorAcumulado: 0.0,
+    clientesNaMesa: 0,
+    ticketMedioPessoa: 0.0,
+    tempAmbiente: parseFloat(tempAmbiente) || 22.0,
+    solicitouConta: false,
+    itens: []
+  };
+  MESAS_SALAO_ZUMA.push(novaMesa);
+  res.status(201).json({ ok: true, mensagem: `Mesa ${novaMesa.numero} cadastrada com sucesso!`, mesa: novaMesa });
+});
+
+routerZuma.put('/mesas/:id', (req, res) => {
+  const { id } = req.params;
+  const mesa = MESAS_SALAO_ZUMA.find(m => m.id === parseInt(id) || m.numero === parseInt(id));
+  if (!mesa) {
+    return res.status(404).json({ ok: false, error: "Mesa não encontrada para modificação." });
+  }
+  const { numero, setor, capacidade, garcom, status, tempAmbiente, clientesNaMesa } = req.body || {};
+  if (numero && parseInt(numero) !== mesa.numero) {
+    const colidiu = MESAS_SALAO_ZUMA.find(m => m.numero === parseInt(numero) && m.id !== mesa.id);
+    if (colidiu) {
+      return res.status(400).json({ ok: false, error: `Número ${numero} já utilizado por outra mesa.` });
+    }
+    mesa.numero = parseInt(numero);
+  }
+  if (setor) mesa.setor = setor;
+  if (capacidade) mesa.capacidade = parseInt(capacidade);
+  if (garcom) mesa.garcom = garcom;
+  if (status) mesa.status = status;
+  if (tempAmbiente) mesa.tempAmbiente = parseFloat(tempAmbiente);
+  if (clientesNaMesa !== undefined) mesa.clientesNaMesa = parseInt(clientesNaMesa);
+
+  res.json({ ok: true, mensagem: `Mesa ${mesa.numero} modificada e salva com sucesso!`, mesa });
+});
+
+routerZuma.delete('/mesas/:id', (req, res) => {
+  const { id } = req.params;
+  const index = MESAS_SALAO_ZUMA.findIndex(m => m.id === parseInt(id) || m.numero === parseInt(id));
+  if (index === -1) {
+    return res.status(404).json({ ok: false, error: "Mesa não encontrada para exclusão." });
+  }
+  const removida = MESAS_SALAO_ZUMA.splice(index, 1)[0];
+  res.json({ ok: true, mensagem: `Mesa ${removida.numero} (${removida.setor}) excluída com sucesso!`, mesaExcluida: removida });
+});
+
+// --- 16.3 ESTOQUE / INSUMOS: INCLUIR, MODIFICAR E EXCLUIR ---
+routerZuma.post('/estoque/insumo', (req, res) => {
+  const { nome, codigo, unidade, saldoAtual, saldoMinimo, custoMedioUnitario, fornecedor, loteAtual, validadeLote, especificacao } = req.body || {};
+  if (!nome) {
+    return res.status(400).json({ ok: false, error: "Nome do insumo é obrigatório." });
+  }
+  const id = `ins-${Date.now()}`;
+  const novoInsumo = {
+    id,
+    codigo: codigo || `INS-${String(Object.keys(ESTOQUE_PESCADOS_ZUMA).length + 1).padStart(3, '0')}`,
+    nome: String(nome).trim(),
+    especificacao: especificacao || `${nome} padrão de qualidade Zuma`,
+    unidade: unidade || 'kg',
+    saldoAtual: parseFloat(saldoAtual) || 0,
+    saldoMinimo: parseFloat(saldoMinimo) || 5,
+    custoPorKgInteiro: parseFloat(custoMedioUnitario) || 0,
+    custoEfetivoPorKgLimpo: parseFloat(custoMedioUnitario) || 0,
+    rendimentoFileNobrePct: req.body.rendimentoFileNobrePct || 100,
+    status: (parseFloat(saldoAtual) || 0) <= (parseFloat(saldoMinimo) || 5) ? 'Repor Urgente' : 'OK',
+    fornecedor: fornecedor || 'Fornecedor Credenciado MT',
+    temperaturaCamara: req.body.temperaturaCamara || '-2°C a +2°C (Monitorada IoT)',
+    loteAtual: loteAtual || `LOTE-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`,
+    validadeLote: validadeLote || '25/12/2026'
+  };
+  ESTOQUE_PESCADOS_ZUMA[id] = novoInsumo;
+  res.status(201).json({ ok: true, mensagem: `Insumo "${novoInsumo.nome}" incluído no estoque com sucesso!`, insumo: novoInsumo });
+});
+
+routerZuma.put('/estoque/insumo/:id', (req, res) => {
+  const { id } = req.params;
+  const insumo = ESTOQUE_PESCADOS_ZUMA[id];
+  if (!insumo) {
+    return res.status(404).json({ ok: false, error: "Insumo de estoque não encontrado para alteração." });
+  }
+  const { nome, codigo, unidade, saldoAtual, saldoMinimo, custoMedioUnitario, fornecedor, loteAtual, validadeLote, especificacao } = req.body || {};
+  if (nome) insumo.nome = String(nome).trim();
+  if (codigo) insumo.codigo = codigo;
+  if (unidade) insumo.unidade = unidade;
+  if (saldoAtual !== undefined) {
+    insumo.saldoAtual = parseFloat(saldoAtual);
+    insumo.status = insumo.saldoAtual <= insumo.saldoMinimo ? 'Repor Urgente' : 'OK';
+  }
+  if (saldoMinimo !== undefined) {
+    insumo.saldoMinimo = parseFloat(saldoMinimo);
+    insumo.status = insumo.saldoAtual <= insumo.saldoMinimo ? 'Repor Urgente' : 'OK';
+  }
+  if (custoMedioUnitario !== undefined) {
+    insumo.custoPorKgInteiro = parseFloat(custoMedioUnitario);
+    insumo.custoEfetivoPorKgLimpo = parseFloat(custoMedioUnitario);
+  }
+  if (fornecedor) insumo.fornecedor = fornecedor;
+  if (loteAtual) insumo.loteAtual = loteAtual;
+  if (validadeLote) insumo.validadeLote = validadeLote;
+  if (especificacao) insumo.especificacao = especificacao;
+
+  res.json({ ok: true, mensagem: `Insumo "${insumo.nome}" modificado e salvo com sucesso!`, insumo });
+});
+
+routerZuma.delete('/estoque/insumo/:id', (req, res) => {
+  const { id } = req.params;
+  const insumo = ESTOQUE_PESCADOS_ZUMA[id];
+  if (!insumo) {
+    return res.status(404).json({ ok: false, error: "Insumo não encontrado para exclusão." });
+  }
+  delete ESTOQUE_PESCADOS_ZUMA[id];
+  res.json({ ok: true, mensagem: `Insumo "${insumo.nome}" excluído do estoque com sucesso!`, insumoExcluido: insumo });
+});
+
+// --- 16.4 COZINHA KDS: INCLUIR, MODIFICAR E EXCLUIR ---
+routerZuma.post('/cozinha/pedido', (req, res) => {
+  const { numeroComanda, origem, praca, itens, prioridade, garcom } = req.body || {};
+  if (!itens || !Array.isArray(itens) || itens.length === 0) {
+    return res.status(400).json({ ok: false, error: "O pedido da cozinha deve conter ao menos um item." });
+  }
+  const novoPedido = {
+    id: `KDS-${Date.now()}`,
+    numeroComanda: numeroComanda || `CMD-${Math.floor(1000 + Math.random() * 9000)}`,
+    origem: origem || "Balcão PDV",
+    praca: praca || "SUSHI_BAR",
+    itens: itens.map((it, idx) => ({
+      id: `it-${Date.now()}-${idx}`,
+      nome: it.nome,
+      qtd: parseInt(it.qtd || it.quantidade) || 1,
+      obs: it.obs || it.observacao || ""
+    })),
+    horaPedido: new Date().toISOString(),
+    minutosEmEspera: 0,
+    status: "EM_PREPARO",
+    prioridade: prioridade || "NORMAL",
+    garcom: garcom || "Caixa Salão"
+  };
+  PEDIDOS_COZINHA_KDS_ZUMA.unshift(novoPedido);
+  res.status(201).json({ ok: true, mensagem: `Pedido ${novoPedido.numeroComanda} incluído no KDS com sucesso!`, pedido: novoPedido });
+});
+
+routerZuma.put('/cozinha/pedido/:id', (req, res) => {
+  const { id } = req.params;
+  const pedido = PEDIDOS_COZINHA_KDS_ZUMA.find(p => p.id === id);
+  if (!pedido) {
+    return res.status(404).json({ ok: false, error: "Pedido KDS não encontrado para modificação." });
+  }
+  const { origem, praca, itens, prioridade, garcom, status } = req.body || {};
+  if (origem) pedido.origem = origem;
+  if (praca) pedido.praca = praca;
+  if (prioridade) pedido.prioridade = prioridade;
+  if (garcom) pedido.garcom = garcom;
+  if (status) pedido.status = status;
+  if (itens && Array.isArray(itens)) {
+    pedido.itens = itens.map((it, idx) => ({
+      id: it.id || `it-${Date.now()}-${idx}`,
+      nome: it.nome,
+      qtd: parseInt(it.qtd || it.quantidade) || 1,
+      obs: it.obs || it.observacao || ""
+    }));
+  }
+
+  res.json({ ok: true, mensagem: `Pedido ${pedido.numeroComanda} modificado e salvo com sucesso!`, pedido });
+});
+
+routerZuma.delete('/cozinha/pedido/:id', (req, res) => {
+  const { id } = req.params;
+  const index = PEDIDOS_COZINHA_KDS_ZUMA.findIndex(p => p.id === id);
+  if (index === -1) {
+    return res.status(404).json({ ok: false, error: "Pedido KDS não encontrado para exclusão." });
+  }
+  const removido = PEDIDOS_COZINHA_KDS_ZUMA.splice(index, 1)[0];
+  res.json({ ok: true, mensagem: `Pedido ${removido.numeroComanda} cancelado e removido do KDS!`, pedidoCancelado: removido });
 });

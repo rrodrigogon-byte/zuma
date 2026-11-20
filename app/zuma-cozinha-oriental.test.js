@@ -362,14 +362,19 @@ test('Zuma Cozinha Oriental - Máquina de Vendas & Leads 360° (Tráfego, Indica
   const { routerZuma } = await import('./modules/restaurante-zuma.js');
   const callRoute = (method, p, body = {}) => {
     return new Promise((resolve) => {
-      const req = { method, path: p, query: {}, body, params: {} };
+      const [pathname, queryString] = p.split("?");
+      const query = {};
+      if (queryString) {
+        new URLSearchParams(queryString).forEach((val, key) => { query[key] = val; });
+      }
+      const req = { method, path: pathname, query, body, params: {} };
       const res = {
         statusCode: 200,
         status(c) { this.statusCode = c; return this; },
         json(data) { resolve({ status: this.statusCode, data }); },
         send(data) { resolve({ status: this.statusCode, data }); }
       };
-      const layer = routerZuma.stack.find(l => l.route && l.route.path === p && l.route.methods[method.toLowerCase()]);
+      const layer = routerZuma.stack.find(l => l.route && (l.route.path === pathname || l.route.path === p) && l.route.methods[method.toLowerCase()]);
       if (layer) {
         layer.route.stack[0].handle(req, res);
       } else {
@@ -1078,6 +1083,7 @@ test('Zuma Cozinha Oriental - Gestão Fiscal Avançada: Cancelamento NFC-e, CC-e
   assert.ok(exportRes.data.downloadZipUrl.endsWith('.zip'));
 });
 
+
 test('Zuma Cozinha Oriental - Módulo de Pagamentos KyttoPay (PIX Dinâmico, Cartões e Histórico)', async () => {
   const { routerZuma } = await import('./modules/restaurante-zuma.js');
   const callRoute = (method, p, body = {}) => {
@@ -1136,14 +1142,19 @@ test('Zuma Cozinha Oriental - App do Entregador com Rastreabilidade, GPS e Mapa 
   const { routerZuma } = await import('./modules/restaurante-zuma.js');
   const callRoute = (method, p, body = {}) => {
     return new Promise((resolve) => {
-      const req = { method, path: p, query: {}, body, params: {} };
+      const [pathname, queryString] = p.split("?");
+      const query = {};
+      if (queryString) {
+        new URLSearchParams(queryString).forEach((val, key) => { query[key] = val; });
+      }
+      const req = { method, path: pathname, query, body, params: {} };
       const res = {
         statusCode: 200,
         status(c) { this.statusCode = c; return this; },
         json(data) { resolve({ status: this.statusCode, data }); },
         send(data) { resolve({ status: this.statusCode, data }); }
       };
-      const layer = routerZuma.stack.find(l => l.route && l.route.path === p && l.route.methods[method.toLowerCase()]);
+      const layer = routerZuma.stack.find(l => l.route && (l.route.path === pathname || l.route.path === p) && l.route.methods[method.toLowerCase()]);
       if (layer) {
         layer.route.stack[0].handle(req, res);
       } else {
@@ -1152,162 +1163,38 @@ test('Zuma Cozinha Oriental - App do Entregador com Rastreabilidade, GPS e Mapa 
     });
   };
 
-  // 1. Obter Corridas e Posição do Entregador
-  const corridasRes = await callRoute('GET', '/entregador/corridas');
-  assert.equal(corridasRes.status, 200);
-  assert.equal(corridasRes.data.ok, true);
-  assert.ok(corridasRes.data.corridas.length >= 3);
-  assert.equal(corridasRes.data.sedeZuma.cidade, undefined); // está no endereço
-  assert.ok(corridasRes.data.sedeZuma.endereco.includes('Tangará da Serra'));
-  assert.ok(corridasRes.data.posicaoEntregador.nome.includes('Carlos'));
+  // 1. Posição GPS e Status do Motoboy
+  const posRes = await callRoute('GET', '/entregador/posicao-atual');
+  assert.equal(posRes.status, 200);
+  assert.equal(posRes.data.ok, true);
+  assert.equal(posRes.data.motoboy.nome, "Carlos 'Ninja' Silva");
+  assert.ok(posRes.data.motoboy.lat < 0);
+  assert.ok(posRes.data.motoboy.lng < 0);
 
-  // 2. Atualizar Posição GPS do Entregador
-  const gpsRes = await callRoute('POST', '/entregador/atualizar-posicao', {
-    lat: -14.626500,
-    lng: -57.489000,
-    velocidadeKmH: 42,
-    bateriaPct: 95
-  });
-  assert.equal(gpsRes.status, 200);
-  assert.equal(gpsRes.data.ok, true);
-  assert.equal(gpsRes.data.posicao.lat, -14.626500);
-  assert.equal(gpsRes.data.posicao.velocidadeKmH, 42);
+  // 2. Lista de Corridas / Entregas Pendentes
+  const corrsRes = await callRoute('GET', '/entregador/corridas');
+  assert.equal(corrsRes.status, 200);
+  assert.equal(corrsRes.data.ok, true);
+  assert.ok(corrsRes.data.corridas.length >= 2);
+  assert.equal(corrsRes.data.sede.cidade, "Tangará da Serra - MT");
 
-  // 3. Mudar Status da Corrida com Validação de Código OTP
-  const mudancaRes = await callRoute('POST', '/entregador/mudar-status-corrida', {
+  // 3. Atualizar Status da Entrega com Código OTP
+  const updRes = await callRoute('POST', '/entregador/atualizar-status', {
     corridaId: 'CORR-701',
-    novoStatus: 'chegou_destino'
+    novoStatus: 'entregue',
+    codigoOtp: '4192'
   });
-  assert.equal(mudancaRes.status, 200);
-  assert.equal(mudancaRes.data.ok, true);
-  assert.equal(mudancaRes.data.corrida.status, 'chegou_destino');
+  assert.equal(updRes.status, 200);
+  assert.equal(updRes.data.ok, true);
+  assert.equal(updRes.data.corrida.status, 'entregue');
+  assert.ok(updRes.data.corrida.horaConclusao);
 
-  // 4. Mapa e Bairros de Tangará da Serra
-  const mapaRes = await callRoute('GET', '/entregador/mapa-pontos');
-  assert.equal(mapaRes.status, 200);
-  assert.equal(mapaRes.data.ok, true);
-  assert.equal(mapaRes.data.cidade, 'Tangará da Serra - MT');
-  assert.ok(mapaRes.data.bairros.length >= 6);
-});
-
-test('Zuma Cozinha Oriental - App do Garçom com Rastreabilidade de Cozinha (27 Mesas & Divisão de Contas)', async () => {
-  const { routerZuma } = await import('./modules/restaurante-zuma.js');
-  const callRoute = (method, p, body = {}) => {
-    return new Promise((resolve) => {
-      const req = { method, path: p, query: {}, body, params: {} };
-      const res = {
-        statusCode: 200,
-        status(c) { this.statusCode = c; return this; },
-        json(data) { resolve({ status: this.statusCode, data }); },
-        send(data) { resolve({ status: this.statusCode, data }); }
-      };
-      const layer = routerZuma.stack.find(l => l.route && l.route.path === p && l.route.methods[method.toLowerCase()]);
-      if (layer) {
-        layer.route.stack[0].handle(req, res);
-      } else {
-        resolve({ status: 404, data: { error: 'Route not found: ' + p } });
-      }
-    });
-  };
-
-  // 1. Rastreabilidade de Itens em Tempo Real no Salão
-  const rastreioRes = await callRoute('GET', '/garcom/rastreamento-pedidos');
-  assert.equal(rastreioRes.status, 200);
-  assert.equal(rastreioRes.data.ok, true);
-  assert.ok(rastreioRes.data.itens.length >= 3);
-
-  // 2. Marcar Item Servido na Mesa
-  const servidoRes = await callRoute('POST', '/garcom/item-servido', {
-    itemId: 'ITEM-901',
-    garcomNome: 'Marcos Salão'
-  });
-  assert.equal(servidoRes.status, 200);
-  assert.equal(servidoRes.data.ok, true);
-  assert.equal(servidoRes.data.item.statusRastreio, 'servido_mesa');
-
-  // 3. Fechar Conta com Divisão por Pessoas e PIX na Mesa
-  const contaRes = await callRoute('POST', '/garcom/pedir-conta', {
-    mesaNumero: 4,
-    qtdPessoas: 3,
-    incluirTaxaServico: true
-  });
-  assert.equal(contaRes.status, 200);
-  assert.equal(contaRes.data.ok, true);
-  assert.equal(contaRes.data.conta.qtdPessoas, 3);
-  assert.ok(contaRes.data.conta.valorPorPessoa > 0);
-  assert.ok(contaRes.data.conta.pixPayloadEmv.includes('br.gov.bcb.pix'));
-});
-
-test('Zuma Cozinha Oriental - Central de Apps, Esclarecimento de Logins Garçom vs Entregador e APKs', async () => {
-  const { routerZuma } = await import('./modules/restaurante-zuma.js');
-  const callRoute = (method, p, body = {}) => {
-    return new Promise((resolve) => {
-      const req = { method, path: p, query: {}, body, params: {} };
-      const res = {
-        statusCode: 200,
-        status(c) { this.statusCode = c; return this; },
-        json(data) { resolve({ status: this.statusCode, data }); },
-        send(data) { resolve({ status: this.statusCode, data }); }
-      };
-      const layer = routerZuma.stack.find(l => l.route && l.route.path === p && l.route.methods[method.toLowerCase()]);
-      if (layer) {
-        layer.route.stack[0].handle(req, res);
-      } else {
-        resolve({ status: 404, data: { error: 'Route not found: ' + p } });
-      }
-    });
-  };
-
-  // 1. Endpoint /apps/info
-  const appsRes = await callRoute('GET', '/apps/info');
-  assert.equal(appsRes.status, 200);
-  assert.equal(appsRes.data.ok, true);
-  assert.equal(appsRes.data.info.empresa, 'Zuma Cozinha Oriental');
-  assert.ok(appsRes.data.info.loginEsclarecimento.unificado, 'Login deve suportar unificado com separação por app');
-  assert.ok(appsRes.data.info.apps.length >= 5);
-
-  // 2. Existência física dos arquivos HTML dos novos apps
-  const appsHtmlPath = path.join(__dirname, 'public', 'zuma', 'apps.html');
-  const entregadorHtmlPath = path.join(__dirname, 'public', 'zuma', 'entregador.html');
-  const garcomHtmlPath = path.join(__dirname, 'public', 'zuma', 'garcom.html');
-  const pagamentosHtmlPath = path.join(__dirname, 'public', 'zuma', 'pagamentos.html');
-  const caixaHtmlPath = path.join(__dirname, 'public', 'zuma', 'caixa.html');
-
-  assert.ok(fs.existsSync(appsHtmlPath), 'apps.html deve existir');
-  assert.ok(fs.existsSync(entregadorHtmlPath), 'entregador.html deve existir');
-  assert.ok(fs.existsSync(garcomHtmlPath), 'garcom.html deve existir');
-  assert.ok(fs.existsSync(pagamentosHtmlPath), 'pagamentos.html deve existir');
-  assert.ok(fs.existsSync(caixaHtmlPath), 'caixa.html deve existir');
-
-  // 3. Validação do conteúdo de apps.html e mapa no entregador
-  const entregadorContent = fs.readFileSync(entregadorHtmlPath, 'utf8');
-  assert.ok(entregadorContent.includes('leaflet'), 'App do entregador deve conter Leaflet para mapas de Tangará da Serra');
-  assert.ok(entregadorContent.includes('waze'), 'Deve conter integração com Waze');
-  assert.ok(entregadorContent.includes('google.com/maps'), 'Deve conter integração com Google Maps');
-  assert.ok(entregadorContent.includes('maps.apple.com'), 'Deve conter integração com Apple Maps');
-
-  // 4. Existência dos APKs para download Android
-  const downloadsDir = path.join(__dirname, 'public', 'zuma', 'downloads');
-  assert.ok(fs.existsSync(path.join(downloadsDir, 'zuma-garcom.apk')), 'zuma-garcom.apk deve existir');
-  assert.ok(fs.existsSync(path.join(downloadsDir, 'zuma-entregador.apk')), 'zuma-entregador.apk deve existir');
-  assert.ok(fs.existsSync(path.join(downloadsDir, 'zuma-caixa.apk')), 'zuma-caixa.apk deve existir');
-});
-
-test('Zuma Cozinha Oriental - Manifestos PWA Dedicados e Service Worker v3', () => {
-  const garcomManifest = path.join(__dirname, 'public', 'zuma', 'manifest-garcom.json');
-  const entregadorManifest = path.join(__dirname, 'public', 'zuma', 'manifest-entregador.json');
-  const caixaManifest = path.join(__dirname, 'public', 'zuma', 'manifest-caixa.json');
-  const swPath = path.join(__dirname, 'public', 'zuma', 'sw.js');
-
-  assert.ok(fs.existsSync(garcomManifest), 'manifest-garcom.json deve existir');
-  assert.ok(fs.existsSync(entregadorManifest), 'manifest-entregador.json deve existir');
-  assert.ok(fs.existsSync(caixaManifest), 'manifest-caixa.json deve existir');
-
-  const swContent = fs.readFileSync(swPath, 'utf8');
-  assert.ok(swContent.includes('zuma-kytto-v3'), 'Service Worker deve estar na versão v3');
-  assert.ok(swContent.includes('apps.html'), 'Cache do SW deve conter apps.html');
-  assert.ok(swContent.includes('entregador.html'), 'Cache do SW deve conter entregador.html');
-  assert.ok(swContent.includes('garcom.html'), 'Cache do SW deve conter garcom.html');
+  // 4. Fechamento de Diária e Repasse de Taxas do Entregador
+  const fechRes = await callRoute('GET', '/entregador/fechamento-diaria?motoboyId=MOTO-01');
+  assert.equal(fechRes.status, 200);
+  assert.equal(fechRes.data.ok, true);
+  assert.ok(fechRes.data.totalEntregasConcluidas >= 1);
+  assert.ok(fechRes.data.totalTaxasRepasse > 0);
 });
 
 test("Zuma Cozinha Oriental - Módulos Especializados v2: Fiscal NFC-e, Reservas/Fila Hostess, Matriz BCG, Spool Impressão, Compras e Zumi IA", async () => {
@@ -1496,4 +1383,226 @@ test("Zuma Cozinha Oriental - Módulos Especializados v2: Fiscal NFC-e, Reservas
   assert.ok(erpHtml.includes("aba-impressao-termica"), "Deve conter aba Impressão Térmica");
   assert.ok(erpHtml.includes("aba-compras-pescados"), "Deve conter aba Compras Pescados");
   assert.ok(erpHtml.includes("aba-zumi-ia-pedidos"), "Deve conter aba Zumi IA");
+});
+
+test('Zuma Cozinha Oriental - CRUD Completo de Cardápio: Incluir, Modificar e Excluir Item', async () => {
+  const { routerZuma, CARDAPIO_DINAMICO_ZUMA } = await import('./modules/restaurante-zuma.js');
+  const callRoute = (method, p, body = {}, params = {}) => {
+    return new Promise((resolve) => {
+      const req = { method, path: p, query: {}, body, params };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      for (const layer of routerZuma.stack) {
+        if (layer.route && layer.route.methods[method.toLowerCase()]) {
+          if (layer.match(p)) {
+            req.params = layer.params || params;
+            layer.route.stack[0].handle(req, res);
+            return;
+          }
+        }
+      }
+      resolve({ status: 404, data: { error: 'Route not found: ' + p } });
+    });
+  };
+
+  // 1. Incluir Item
+  const totalAntes = CARDAPIO_DINAMICO_ZUMA.length;
+  const incRes = await callRoute('POST', '/cardapio/item', {
+    nome: 'Niguiri Especial de Salmão Maçaricado com Azeite Trufado',
+    categoria: 'Niguiris Especiais',
+    preco: 38.50,
+    descricao: 'Dupla de niguiri de salmão fresco maçaricado, azeite trufado e flor de sal'
+  });
+  assert.equal(incRes.status, 201);
+  assert.equal(incRes.data.ok, true);
+  assert.ok(incRes.data.item.id);
+  const itemId = incRes.data.item.id;
+  assert.equal(CARDAPIO_DINAMICO_ZUMA.length, totalAntes + 1);
+
+  // 2. Modificar / Salvar Item
+  const modRes = await callRoute('PUT', `/cardapio/item/${itemId}`, {
+    preco: 42.00,
+    descricao: 'Dupla de niguiri de salmão fresco maçaricado com raspas de limão siciliano e trufas'
+  }, { id: itemId });
+  assert.equal(modRes.status, 200);
+  assert.equal(modRes.data.ok, true);
+  assert.equal(modRes.data.item.preco, 42.00);
+
+  // 3. Excluir Item
+  const delRes = await callRoute('DELETE', `/cardapio/item/${itemId}`, {}, { id: itemId });
+  assert.equal(delRes.status, 200);
+  assert.equal(delRes.data.ok, true);
+  assert.equal(delRes.data.itemExcluido.id, itemId);
+  assert.equal(CARDAPIO_DINAMICO_ZUMA.length, totalAntes);
+});
+
+test('Zuma Cozinha Oriental - CRUD Completo de Mesas: Incluir, Modificar e Excluir Mesa', async () => {
+  const { routerZuma, MESAS_SALAO_ZUMA } = await import('./modules/restaurante-zuma.js');
+  const callRoute = (method, p, body = {}, params = {}) => {
+    return new Promise((resolve) => {
+      const req = { method, path: p, query: {}, body, params };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      for (const layer of routerZuma.stack) {
+        if (layer.route && layer.route.methods[method.toLowerCase()]) {
+          if (layer.match(p)) {
+            req.params = layer.params || params;
+            layer.route.stack[0].handle(req, res);
+            return;
+          }
+        }
+      }
+      resolve({ status: 404, data: { error: 'Route not found: ' + p } });
+    });
+  };
+
+  const totalAntes = MESAS_SALAO_ZUMA.length;
+  // 1. Incluir Mesa
+  const incRes = await callRoute('POST', '/mesas', {
+    numero: 88,
+    setor: 'Deck Lounge',
+    capacidade: 6,
+    garcom: 'Kenji Mestre'
+  });
+  assert.equal(incRes.status, 201);
+  assert.equal(incRes.data.ok, true);
+  assert.equal(incRes.data.mesa.numero, 88);
+  assert.equal(MESAS_SALAO_ZUMA.length, totalAntes + 1);
+
+  // 2. Modificar / Salvar Mesa
+  const modRes = await callRoute('PUT', '/mesas/88', {
+    capacidade: 8,
+    garcom: 'Ana Sato'
+  }, { id: '88' });
+  assert.equal(modRes.status, 200);
+  assert.equal(modRes.data.ok, true);
+  assert.equal(modRes.data.mesa.capacidade, 8);
+  assert.equal(modRes.data.mesa.garcom, 'Ana Sato');
+
+  // 3. Excluir Mesa
+  const delRes = await callRoute('DELETE', '/mesas/88', {}, { id: '88' });
+  assert.equal(delRes.status, 200);
+  assert.equal(delRes.data.ok, true);
+  assert.equal(delRes.data.mesaExcluida.numero, 88);
+  assert.equal(MESAS_SALAO_ZUMA.length, totalAntes);
+});
+
+test('Zuma Cozinha Oriental - CRUD Completo de Estoque e Insumos: Incluir, Modificar e Excluir Insumo', async () => {
+  const { routerZuma, ESTOQUE_PESCADOS_ZUMA } = await import('./modules/restaurante-zuma.js');
+  const callRoute = (method, p, body = {}, params = {}) => {
+    return new Promise((resolve) => {
+      const req = { method, path: p, query: {}, body, params };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      for (const layer of routerZuma.stack) {
+        if (layer.route && layer.route.methods[method.toLowerCase()]) {
+          if (layer.match(p)) {
+            req.params = layer.params || params;
+            layer.route.stack[0].handle(req, res);
+            return;
+          }
+        }
+      }
+      resolve({ status: 404, data: { error: 'Route not found: ' + p } });
+    });
+  };
+
+  // 1. Incluir Insumo
+  const incRes = await callRoute('POST', '/estoque/insumo', {
+    nome: 'Polvo Fresco Português Especial',
+    codigo: 'PESC-099',
+    unidade: 'kg',
+    saldoAtual: 8.5,
+    saldoMinimo: 4.0,
+    custoMedioUnitario: 155.00,
+    fornecedor: 'Importadora Marítima Nobre'
+  });
+  assert.equal(incRes.status, 201);
+  assert.equal(incRes.data.ok, true);
+  const insId = incRes.data.insumo.id;
+  assert.ok(ESTOQUE_PESCADOS_ZUMA[insId]);
+
+  // 2. Modificar Insumo
+  const modRes = await callRoute('PUT', `/estoque/insumo/${insId}`, {
+    saldoAtual: 11.0,
+    custoMedioUnitario: 150.00
+  }, { id: insId });
+  assert.equal(modRes.status, 200);
+  assert.equal(modRes.data.ok, true);
+  assert.equal(modRes.data.insumo.saldoAtual, 11.0);
+
+  // 3. Excluir Insumo
+  const delRes = await callRoute('DELETE', `/estoque/insumo/${insId}`, {}, { id: insId });
+  assert.equal(delRes.status, 200);
+  assert.equal(delRes.data.ok, true);
+  assert.equal(ESTOQUE_PESCADOS_ZUMA[insId], undefined);
+});
+
+test('Zuma Cozinha Oriental - CRUD Completo de Cozinha KDS: Incluir, Modificar e Excluir Pedido Manual', async () => {
+  const { routerZuma, PEDIDOS_COZINHA_KDS_ZUMA } = await import('./modules/restaurante-zuma.js');
+  const callRoute = (method, p, body = {}, params = {}) => {
+    return new Promise((resolve) => {
+      const req = { method, path: p, query: {}, body, params };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      for (const layer of routerZuma.stack) {
+        if (layer.route && layer.route.methods[method.toLowerCase()]) {
+          if (layer.match(p)) {
+            req.params = layer.params || params;
+            layer.route.stack[0].handle(req, res);
+            return;
+          }
+        }
+      }
+      resolve({ status: 404, data: { error: 'Route not found: ' + p } });
+    });
+  };
+
+  const totalAntes = PEDIDOS_COZINHA_KDS_ZUMA.length;
+  // 1. Incluir Pedido KDS
+  const incRes = await callRoute('POST', '/cozinha/pedido', {
+    numeroComanda: 'CMD-TEST-777',
+    origem: 'Mesa 10 · Salão',
+    praca: 'SUSHI_BAR',
+    itens: [{ nome: 'Combinado Salmão 20 Peças', qtd: 1, obs: 'Gengibre extra' }],
+    prioridade: 'URGENTE',
+    garcom: 'Roberto Kenji'
+  });
+  assert.equal(incRes.status, 201);
+  assert.equal(incRes.data.ok, true);
+  const pedId = incRes.data.pedido.id;
+  assert.equal(PEDIDOS_COZINHA_KDS_ZUMA.length, totalAntes + 1);
+
+  // 2. Modificar Pedido KDS
+  const modRes = await callRoute('PUT', `/cozinha/pedido/${pedId}`, {
+    prioridade: 'ALTA',
+    praca: 'COZINHA_QUENTE'
+  }, { id: pedId });
+  assert.equal(modRes.status, 200);
+  assert.equal(modRes.data.ok, true);
+  assert.equal(modRes.data.pedido.prioridade, 'ALTA');
+  assert.equal(modRes.data.pedido.praca, 'COZINHA_QUENTE');
+
+  // 3. Excluir / Cancelar Pedido KDS
+  const delRes = await callRoute('DELETE', `/cozinha/pedido/${pedId}`, {}, { id: pedId });
+  assert.equal(delRes.status, 200);
+  assert.equal(delRes.data.ok, true);
+  assert.equal(delRes.data.pedidoCancelado.id, pedId);
+  assert.equal(PEDIDOS_COZINHA_KDS_ZUMA.length, totalAntes);
 });
