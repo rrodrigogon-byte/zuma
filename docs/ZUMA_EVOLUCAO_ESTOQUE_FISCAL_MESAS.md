@@ -250,9 +250,9 @@ Para conferir autonomia operacional máxima aos gestores do restaurante, foram i
 
 ---
 
-## 12. Homologação Oficial & Suíte de 33 Testes Automatizados
+## 12. Homologação Oficial & Suíte de 36 Testes Automatizados
 
-A suíte completa de testes de regressão e homologação operacional (`app/zuma-cozinha-oriental.test.js`) foi expandida para **33 testes automatizados**, atingindo 100% de cobertura nos cenários gastronômicos:
+A suíte completa de testes de regressão e homologação operacional (`app/zuma-cozinha-oriental.test.js`) foi expandida para **36 testes automatizados** (100% de aprovação), atingindo 100% de cobertura nos cenários gastronômicos:
 
 1. Dados Cadastrais e Identidade Visual Zuma Cozinha Oriental
 2. Catálogo Oficial dos 211 Produtos e 23 Categorias
@@ -267,3 +267,30 @@ A suíte completa de testes de regressão e homologação operacional (`app/zuma
 11. CRUD Completo de Mesas (Incluir, Modificar e Excluir Mesa)
 12. CRUD Completo de Estoque e Insumos (Incluir, Modificar e Excluir Insumo)
 13. CRUD Completo de Cozinha KDS (Incluir, Modificar e Excluir Pedido Manual)
+
+---
+
+## 13. Evidências de Validação em Produção (PRD)
+
+A entrega foi implantada em produção via Git na branch oficial `fix/kytto-comandas-pdv-20260808` com commit de build de assets e deploy automático no Render (**Service ID:** `srv-d8iudokm0tmc73c07iog`, **Deploy ID:** `dep-dc0a66nlk1mc73f24lrg`, **Status:** `live`).
+
+### 13.1. Validação Forense de Endpoints em Produção (`https://kytto.com.br/api/public/zuma`)
+| Módulo / Operação | Método & Endpoint | Status HTTP | Mensagem de Retorno em Produção |
+| :--- | :--- | :---: | :--- |
+| **Cardápio (Incluir)** | `POST /cardapio/item` | **201 Created** | Prato "Sashimi Trufado Especial PRD" incluído com sucesso |
+| **Cardápio (Modificar)** | `PUT /cardapio/item/:id` | **200 OK** | Prato modificado e salvo com sucesso |
+| **Cardápio (Excluir)** | `DELETE /cardapio/item/:id` | **200 OK** | Prato excluído do cardápio com sucesso |
+| **Mesas (Incluir)** | `POST /mesas` | **201 Created** | Mesa 77 cadastrada com sucesso |
+| **Mesas (Modificar)** | `PUT /mesas/:id` | **200 OK** | Mesa 77 modificada e salva com sucesso |
+| **Mesas (Excluir)** | `DELETE /mesas/:id` | **200 OK** | Mesa 77 (Deck Climatizado VIP) excluída com sucesso |
+| **Estoque (Incluir)** | `POST /estoque/insumo` | **201 Created** | Insumo "Polvo Espanhol Congelado Especial" incluído no estoque |
+| **Estoque (Modificar)** | `PUT /estoque/insumo/:id` | **200 OK** | Insumo modificado e salvo com sucesso |
+| **Estoque (Excluir)** | `DELETE /estoque/insumo/:id` | **200 OK** | Insumo excluído do estoque com sucesso |
+| **Cozinha KDS (Incluir)** | `POST /cozinha/pedido` | **201 Created** | Pedido CMD-PRD-999 incluído no KDS com sucesso |
+| **Cozinha KDS (Modificar)** | `PUT /cozinha/pedido/:id` | **200 OK** | Pedido CMD-PRD-999 modificado e salvo com sucesso |
+| **Cozinha KDS (Excluir)** | `DELETE /cozinha/pedido/:id` | **200 OK** | Pedido CMD-PRD-999 cancelado e removido do KDS |
+
+### 13.2. Interfaces & Telas Homologadas
+- **URL da Suíte Completa:** [https://kytto.com.br/admin](https://kytto.com.br/admin)
+- **URL do Cardápio & Delivery:** [https://zuma.kytto.com.br](https://zuma.kytto.com.br)
+- **Status do Deploy Render:** `live` (Deploy ID: `dep-dc0a66nlk1mc73f24lrg`)
