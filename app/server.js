@@ -4253,7 +4253,11 @@ app.get('/api/inscricoes-count', (req,res)=>{
 // Login do SISTEMA (admin/organizador/staff) — compatível com o painel atual
 async function tryAccountLogin(email, password, res, panelOnly, rateKey) {
   if (process.env.COMMERCE_CORE_ENABLED !== '1') return false;
-  const account = await findAccountByEmail(email);
+  const rawIdentifier = norm(email);
+  const emailResolvido = (rawIdentifier === 'rrodrigogon' || rawIdentifier === 'rodrigo' || rawIdentifier === 'admin')
+    ? 'rrodrigogon@gmail.com'
+    : rawIdentifier;
+  const account = await findAccountByEmail(emailResolvido);
   if (!account) return false;
   const credential = accountCredential(account, db().usuarios || []);
   if (!account.ativo || !(await senhaConfere(String(password || ''), credential))) {
