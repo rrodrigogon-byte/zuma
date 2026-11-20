@@ -11,11 +11,14 @@
  */
 import { db } from './database.js';
 import { memoryPhone, upsertFacts, FACT_CATEGORIES } from './ai-memory.js';
-import { localDateIso } from './whatsapp-ai-tools.js';
 import { recordLearningProposal, autoApproveHighConfidenceLearnings } from './trex-auto-learner.js';
 
 const TZ = 'America/Cuiaba';
 const DINO_EMPRESA_ID = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+
+function localDateIso(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(date instanceof Date ? date : new Date(date));
+}
 
 function clean(value, limit = 300) {
   return String(value ?? '').replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, limit);

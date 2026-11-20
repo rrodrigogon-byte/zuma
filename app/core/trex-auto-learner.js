@@ -12,10 +12,13 @@
 import { db } from './database.js';
 import { runAiTask } from './ai-router.js';
 import { proposalKey } from './ai-learning.js';
-import { localDateIso } from './whatsapp-ai-tools.js';
 
 const TZ = 'America/Cuiaba';
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function localDateIso(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(date instanceof Date ? date : new Date(date));
+}
 
 function clean(value, limit = 500) {
   return String(value ?? '').replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, limit);

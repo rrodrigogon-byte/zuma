@@ -13819,6 +13819,15 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
     .then(({ consolidateLearnedProposals }) => consolidateLearnedProposals('d0d0ac01-8e50-4b61-8c79-de4aaa916da6'))
     .then((res) => console.log('[T-Rex Auto-Learner] Diretrizes consolidadas no boot:', res))
     .catch((err) => console.warn('[T-Rex Auto-Learner] Aviso de inicialização:', err?.message));
+  // Reanálise e consolidação histórica profunda do T-Rex (Motor KyttoIA) no boot
+  import('./core/trex-historical-learner.js')
+    .then(({ runFullHistoricalAnalysis }) => runFullHistoricalAnalysis({
+      empresaId: 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
+      query: commerceDb.query.bind(commerceDb),
+      log: (msg) => console.log('[T-Rex Historical Learner]', msg),
+    }))
+    .then((res) => console.log('[T-Rex Historical Learner] Reanálise histórica concluída no boot:', res))
+    .catch((err) => console.warn('[T-Rex Historical Learner] Aviso na reanálise histórica:', err?.message));
   // Cobranças da barbearia: sinal vencido libera o horário (e avisa a lista de
   // espera); a cobrança do clube é gerada e enviada uma vez por hora.
   setInterval(async () => {
