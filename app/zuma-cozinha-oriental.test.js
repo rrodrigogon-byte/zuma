@@ -448,3 +448,170 @@ test('Zuma Cozinha Oriental - Módulos de Diferenciação Japonesa no Cardápio 
   assert.ok(html.includes('abrirModalCustomizacao'), 'Deve conter função de abertura do modal');
 });
 
+test('Zuma Cozinha Oriental - ERP Completo Gastronômico 360° e Isolamento de Empresa Única', async () => {
+  const { routerZuma } = await import('./modules/restaurante-zuma.js');
+  const { listarEmpresas, EMPRESA_ZUMA_ID } = await import('./modules/empresas/servico.js');
+
+  // 1. Isolamento de Empresa Única: apenas Zuma Cozinha Oriental ativa no sistema
+  const empresas = await listarEmpresas(null, { empresaIdFiltro: EMPRESA_ZUMA_ID });
+  assert.equal(empresas.length, 1, 'Deve retornar apenas 1 empresa ativa no sistema');
+  assert.equal(empresas[0].id, 'c3c3ac01-8e50-4b61-8c79-de4aaa916da3');
+  assert.equal(empresas[0].razaoSocial, 'Zuma Cozinha Oriental LTDA');
+
+  // Helper para chamar routerZuma com suporte a rotas parametrizadas
+  const callRoute = (method, p, body = {}, query = {}) => {
+    return new Promise((resolve) => {
+      let matchedLayer = null;
+      let params = {};
+      for (const layer of routerZuma.stack) {
+        if (layer.route && layer.route.methods[method.toLowerCase()]) {
+          const match = layer.match(p);
+          if (match) {
+            matchedLayer = layer;
+            params = layer.params || {};
+            break;
+          }
+        }
+      }
+
+      if (!matchedLayer) {
+        return resolve({ status: 404, data: { error: 'Route not found: ' + p } });
+      }
+
+      const req = { method, url: p, path: p, body, query, params };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      matchedLayer.route.stack[0].handle(req, res);
+    });
+  };
+
+  // 2. Caixa & Fechamento de Turno
+  const abrirTurno = await callRoute('POST', '/caixa/abrir-turno', { fundoTroco: 450.00, operador: 'Carlos Operador' });
+  assert.equal(abrirTurno.status, 200);
+  assert.equal(abrirTurno.data.ok, true);
+  assert.equal(abrirTurno.data.turno.fundoTrocoInicial, 450.00);
+
+  const sangria = await callRoute('POST', '/caixa/sangria', { valor: 200.00, motivo: 'Depósito cofre', operador: 'Carlos Operador' });
+  assert.equal(sangria.status, 200);
+  assert.equal(sangria.data.ok, true);
+  assert.equal(sangria.data.sangria.valor, 200.00);
+
+  const suprimento = await callRoute('POST', '/caixa/suprimento', { valor: 50.00, motivo: 'Troco moedas', operador: 'Carlos Operador' });
+  assert.equal(suprimento.status, 200);
+  assert.equal(suprimento.data.ok, true);
+
+  const relCaixa = await callRoute('GET', '/caixa/relatorio-fechamento');
+  assert.equal(relCaixa.status, 200);
+  assert.equal(relCaixa.data.ok, true);
+  assert.ok(relCaixa.data.turno);
+
+  const confCaixa = await callRoute('GET', '/caixa/conferencia');
+  assert.equal(confCaixa.status, 200);
+  assert.equal(confCaixa.data.ok, true);
+  assert.ok(confCaixa.data.vendasTotaisPorForma);
+
+  // 3. Estoque Especializado de Pescados & Fichas Técnicas / CMV
+  const pescados = await callRoute('GET', '/estoque/pescados');
+  assert.equal(pescados.status, 200);
+  assert.equal(pescados.data.ok, true);
+  assert.ok(pescados.data.itens.length >= 4);
+  const salmao = pescados.data.itens.find(p => p.nome.toLowerCase().includes('salmão'));
+  assert.ok(salmao, 'Deve monitorar estoque de salmão');
+  assert.equal(salmao.rendimentoMedioFilePct, 58.0);
+
+  const perdaPeixe = await callRoute('POST', '/estoque/perda-peixe', {
+    codigoInsumo: 'INS-001',
+    qtdKg: 0.85,
+    motivo: 'Apara excessiva de tosa',
+    sushiman: 'Sushiman Chefe'
+  });
+  assert.equal(perdaPeixe.status, 200);
+  assert.equal(perdaPeixe.data.ok, true);
+
+  const fichas = await callRoute('GET', '/estoque/fichas-tecnicas');
+  assert.equal(fichas.status, 200);
+  assert.equal(fichas.data.ok, true);
+  assert.ok(fichas.data.fichas.length >= 3);
+  assert.ok(fichas.data.fichas[0].cmvPercentual);
+
+  // 4. Gestão Financeira & DRE Gerencial
+  const dre = await callRoute('GET', '/financeiro/dre');
+  assert.equal(dre.status, 200);
+  assert.equal(dre.data.ok, true);
+  assert.ok(dre.data.dre.receitaBrutaVendas > 0);
+  assert.ok(dre.data.dre.lucroLiquidoReal > 0);
+  assert.ok(dre.data.dre.lucroLiquidoPercentual);
+
+  const cp = await callRoute('GET', '/financeiro/contas-pagar');
+  assert.equal(cp.status, 200);
+  assert.equal(cp.data.ok, true);
+  assert.ok(cp.data.titulos.length >= 3);
+
+  const cr = await callRoute('GET', '/financeiro/contas-receber');
+  assert.equal(cr.status, 200);
+  assert.equal(cr.data.ok, true);
+  assert.ok(cr.data.titulos.length >= 2);
+
+  // 5. Mesas, Salão & Rodízio Tangará
+  const mesa4 = await callRoute('GET', '/mesas/detalhe/4');
+  assert.equal(mesa4.status, 200);
+  assert.equal(mesa4.data.ok, true);
+  assert.equal(mesa4.data.mesa.numero, 4);
+
+  const addMesa = await callRoute('POST', '/mesas/adicionar-item', {
+    mesaNumero: 4,
+    itemNome: 'Promo Combo Grelhado',
+    precoUnit: 82.00,
+    qtd: 1
+  });
+  assert.equal(addMesa.status, 200);
+  assert.equal(addMesa.data.ok, true);
+
+  const divConta = await callRoute('POST', '/mesas/dividir-conta', { valorTotal: 598.07, qtdPessoas: 3 });
+  assert.equal(divConta.status, 200);
+  assert.equal(divConta.data.ok, true);
+  assert.ok(divConta.data.valorPorPessoa > 0);
+
+  // 6. Central de Delivery & Motoboys por Bairros de Tangará da Serra
+  const bairros = await callRoute('GET', '/delivery/taxas-bairros');
+  assert.equal(bairros.status, 200);
+  assert.equal(bairros.data.ok, true);
+  assert.ok(bairros.data.bairros.length >= 6);
+
+  const despachar = await callRoute('POST', '/delivery/despachar', {
+    pedidoId: 'DEL-TG-01',
+    motoboyNome: 'Carlos Ninja'
+  });
+  assert.equal(despachar.status, 200);
+  assert.equal(despachar.data.ok, true);
+
+  // 7. CRM & Clube Zumi
+  const crm = await callRoute('GET', '/crm/clientes');
+  assert.equal(crm.status, 200);
+  assert.equal(crm.data.ok, true);
+  assert.ok(crm.data.clientes.length >= 5);
+
+  const aniv = await callRoute('POST', '/crm/disparar-aniversariantes', { mes: 11 });
+  assert.equal(aniv.status, 200);
+  assert.equal(aniv.data.ok, true);
+  assert.ok(aniv.data.totalDisparados >= 1);
+
+  // 8. Arquivo erp.html
+  const erpHtmlPath = path.join(__dirname, 'public', 'zuma', 'erp.html');
+  assert.ok(fs.existsSync(erpHtmlPath), 'erp.html deve existir em app/public/zuma');
+  const erpHtml = fs.readFileSync(erpHtmlPath, 'utf8');
+  assert.ok(erpHtml.includes('Zuma ERP 360°'), 'Deve conter título do ERP');
+  assert.ok(erpHtml.includes('aba-visao-geral'), 'Deve conter aba Visão Geral');
+  assert.ok(erpHtml.includes('aba-caixa-fechamento'), 'Deve conter aba Caixa');
+  assert.ok(erpHtml.includes('aba-mesas-salao'), 'Deve conter aba Mesas e Salão');
+  assert.ok(erpHtml.includes('aba-kds-producao'), 'Deve conter aba KDS e Produção');
+  assert.ok(erpHtml.includes('aba-estoque-pescados'), 'Deve conter aba Estoque Pescados e Fichas');
+  assert.ok(erpHtml.includes('aba-financeiro-dre'), 'Deve conter aba Financeiro e DRE');
+  assert.ok(erpHtml.includes('aba-delivery-motoboys'), 'Deve conter aba Delivery e Motoboys');
+  assert.ok(erpHtml.includes('aba-crm-clube-zumi'), 'Deve conter aba CRM e Clube Zumi');
+  assert.ok(erpHtml.includes('aba-empresa-cadastros'), 'Deve conter aba Empresa Cadastros');
+});

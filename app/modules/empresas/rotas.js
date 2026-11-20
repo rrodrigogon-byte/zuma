@@ -85,6 +85,20 @@ export function createEmpresasAdminRouter({ db, isPlatformAdmin = () => false, o
     const ehAdminPlataforma = Boolean(isPlatformAdmin(req.user));
     let empresaIdFiltro = null;
 
+    const hostReq = String(req.headers.host || "").toLowerCase();
+    const isZumaHostOrReq = hostReq.includes("zuma") ||
+                            req.query.marca === "zuma" ||
+                            req.query.slug === "zuma" ||
+                            req.query.empresa === "zuma" ||
+                            req.headers["x-empresa-id"] === "c3c3ac01-8e50-4b61-8c79-de4aaa916da3" ||
+                            req.headers["x-empresa-exclusiva"] === "zuma" ||
+                            process.env.APP_EMPRESA_EXCLUSIVA === "zuma" ||
+                            process.env.EXCLUSIVA_ZUMA === "true";
+
+    if (isZumaHostOrReq) {
+      empresaIdFiltro = ["c3c3ac01-8e50-4b61-8c79-de4aaa916da3"];
+    }
+
     if (ehAdminPlataforma) {
       if (req.query.empresaId || req.query.empresa_id) {
         empresaIdFiltro = req.query.empresaId || req.query.empresa_id;

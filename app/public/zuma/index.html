@@ -92,6 +92,9 @@
       <a href="operacao.html" class="px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 border border-white/10">
         <span>⚡</span><span>Central 360° (PDV/KDS)</span>
       </a>
+      <a href="erp.html" class="px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 border border-white/10">
+        <span>💼</span><span>ERP Zuma 360°</span>
+      </a>
       <a href="pilot.html" class="px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 border border-white/10">
         <span>📊</span><span>Pilot 360 (Gestão)</span>
       </a>
@@ -225,6 +228,9 @@
         </button>
         <a href="operacao.html" class="px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap bg-zuma-salmon hover:bg-orange-600 text-white shadow-md">
           <span>⚡</span><span>Central Operacional 360° (PDV, KDS, Garçom, Motoboy)</span>
+        </a>
+        <a href="erp.html" class="px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap bg-purple-600/30 text-purple-300 border border-purple-500/40 hover:bg-purple-600 hover:text-white">
+          <span>💼</span><span>ERP Zuma 360° (Caixa, DRE, Pescados)</span>
         </a>
         <a href="pilot.html" target="_blank" class="px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-600 hover:text-white">
           <span>🚀</span><span>Zuma Pilot (Tela Cheia)</span>
@@ -3517,6 +3523,9 @@
           el.removeAttribute("target");
         } else if (href.startsWith("pilot.html") || href === "pilot.html" || href === "pilot") {
           el.setAttribute("href", `${basePath}/pilot.html${window.location.search}`);
+          el.removeAttribute("target");
+        } else if (href.startsWith("erp.html") || href === "erp.html" || href === "erp") {
+          el.setAttribute("href", `${basePath}/erp.html${window.location.search}`);
           el.removeAttribute("target");
         } else if (href.startsWith("index.html") || href === "index.html" || href === "index") {
           el.setAttribute("href", `${basePath}/index.html${window.location.search}`);
