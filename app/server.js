@@ -1357,7 +1357,7 @@ const isGuilhermeUser = (user) => {
     (user.nome || "") + " " +
     (user.id || "")
   );
-  return em.includes("guilherme") || em.includes("guicunha") || em.includes("dino") || em.includes("gui");
+  return em.includes("guilherme") || em.includes("guicunha") || em.includes("dino") || em.includes("gui") || em.includes("jhenyffer") || em.includes("jhe");
 };
 const isAgroOpenUser = (user) => {
   if (!user) return false;

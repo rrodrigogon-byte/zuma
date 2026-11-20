@@ -100,7 +100,8 @@ function filtrarEmpresasPorUsuario(empresas, user) {
     ]
   }
 
-  const isDino = ident.includes('dino') || ident.includes('guicunha') ||
+  const isDino = ident.includes('dino') || ident.includes('guicunha') || ident.includes('guilherme') ||
+    ident.includes('jhenyffer') || ident.includes('jhe') ||
     ['bruno', 'natani', 'nati', 'ester', 'david', 'joao', 'amanda', 'jhenyffer'].includes(String(user.username || '').toLowerCase())
   if (isDino) {
     const dinoOnly = lista.filter((e) => {
@@ -139,8 +140,9 @@ function garantirEmpresasCanonicas(empresas) {
     return [ZUMA_COMPANY];
   }
   let lista = Array.isArray(empresas) ? [...empresas] : []
-  if (!lista.some((empresa) => isDinoBrandContext(empresa) || String(empresa?.id || '').toLowerCase() === DINO_COMPANY.id.toLowerCase())) {
-    lista.push(DINO_COMPANY)
+  // Garante SEMPRE a Barbearia Dino como empresa canônica
+  if (!lista.some((empresa) => isDinoBrandContext(empresa) || String(empresa?.id || '').toLowerCase() === String(DINO_COMPANY.id).toLowerCase())) {
+    lista.push(DINO_COMPANY);
   }
   // Garante SEMPRE as 3 empresas canônicas do Grupo Palatare
   for (const empGp of GRUPO_PALATARE_EMPRESAS) {
@@ -157,8 +159,9 @@ function garantirLojasCanonicas(lojas) {
   }
   // Entradas antigas da loja Dino gravadas sem vínculo de empresa são reparadas aqui.
   let lista = repararLojasSemEmpresa(Array.isArray(lojas) ? lojas : [], [DINO_STORE])
-  if (!lista.some((loja) => String(loja?.id || '').toLowerCase() === DINO_STORE.id.toLowerCase())) {
-    lista.push(DINO_STORE)
+  // Garante SEMPRE a loja canônica da Barbearia Dino
+  if (!lista.some((loja) => String(loja?.id || '').toLowerCase() === String(DINO_STORE.id).toLowerCase())) {
+    lista.push(DINO_STORE);
   }
   for (const lojaGp of GRUPO_PALATARE_LOJAS) {
     lista.push(lojaGp);

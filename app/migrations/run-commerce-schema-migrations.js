@@ -116,6 +116,7 @@ const migrationFiles = [
   '127_dino_influencer_daily_metrics_and_stallone_club.sql',
   '128_zuma_cozinha_oriental_completo.sql',
   '129_usuario_exclusivo_rrodrigogon.sql',
+  '131_restaurar_acessos_dino_guilherme_jhenyffer.sql',
 ];
 const advisoryLockKey = 825410732;
 

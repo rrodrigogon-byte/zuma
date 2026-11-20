@@ -235,6 +235,42 @@ export async function sincronizarTenantsEquipes(commerceDb) {
               );
             }
           }
+
+          // Garante conta unificada em commerce_accounts e commerce_account_users para gestores/proprietários
+          if (userId && (u.isOwner || u.pgRole === 'gerente' || u.pgRole === 'admin')) {
+            try {
+              const accRes = await commerceDb.query(
+                `SELECT id FROM commerce_accounts WHERE email = $1 LIMIT 1`,
+                [emailPrincipal]
+              );
+              let accountId = accRes.rows?.[0]?.id;
+              if (!accountId) {
+                const insAcc = await commerceDb.query(
+                  `INSERT INTO commerce_accounts (id, email, nome, senha_hash, ativo, origem, origem_id, criado_em, atualizado_em)
+                   VALUES (gen_random_uuid(), $1, $2, $3, true, 'commerce', $4, NOW(), NOW())
+                   ON CONFLICT (email) DO UPDATE SET ativo = true, atualizado_em = NOW()
+                   RETURNING id`,
+                  [emailPrincipal, u.nome, SENHA_PADRAO_HASH, String(userId)]
+                );
+                accountId = insAcc.rows?.[0]?.id;
+              } else {
+                await commerceDb.query(
+                  `UPDATE commerce_accounts SET ativo = true, nome = $1, atualizado_em = NOW() WHERE id = $2`,
+                  [u.nome, accountId]
+                );
+              }
+              if (accountId) {
+                await commerceDb.query(
+                  `INSERT INTO commerce_account_users (account_id, empresa_id, usuario_id, criado_em)
+                   VALUES ($1, $2, $3, NOW())
+                   ON CONFLICT (account_id, empresa_id) DO UPDATE SET usuario_id = EXCLUDED.usuario_id`,
+                  [accountId, userEmpresaId, userId]
+                );
+              }
+            } catch (accErr) {
+              console.warn(`[tenant-provisioning] Aviso ao garantir commerce_accounts para ${emailPrincipal}:`, accErr.message);
+            }
+          }
         } catch (dbErr) {
           console.warn(`[tenant-provisioning] Aviso ao sincronizar usuário ${u.username} no PostgreSQL:`, dbErr.message);
         }
