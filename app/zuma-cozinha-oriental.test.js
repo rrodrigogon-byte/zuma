@@ -893,3 +893,187 @@ test('Zuma Cozinha Oriental - Módulo Fiscal Completo com Emissão SEFAZ-MT (NFC
   assert.ok(emissaoRes.data.notaFiscal.protocoloSEFAZ.startsWith('1512600'), 'Protocolo SEFAZ-MT');
   assert.ok(emissaoRes.data.notaFiscal.qrcodeUrl.includes('sefaz.mt.gov.br'), 'URL de QR Code oficial SEFAZ-MT');
 });
+
+
+test('Zuma Cozinha Oriental - PDV de Caixa Completo: Venda Rápida, Baixa Ficha Técnica e NFC-e', async () => {
+  const { routerZuma, CAIXA_TURNO_ATUAL_ZUMA } = await import('./modules/restaurante-zuma.js');
+  const callRoute = (method, p, body = {}) => {
+    return new Promise((resolve) => {
+      const req = { method, path: p, query: {}, body, params: {} };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      const layer = routerZuma.stack.find(l => l.route && l.route.path === p && l.route.methods[method.toLowerCase()]);
+      if (layer) layer.route.stack[0].handle(req, res);
+      else resolve({ status: 404, data: { error: 'Route not found: ' + p } });
+    });
+  };
+
+  // 1. Status do Caixa
+  const statusRes = await callRoute('GET', '/pdv/status-caixa');
+  assert.equal(statusRes.status, 200);
+  assert.equal(statusRes.data.ok, true);
+  assert.equal(statusRes.data.caixa.status, 'ABERTO');
+
+  // 2. Venda Rápida no PDV com Baixa de Salmão e Emissão Fiscal
+  const vendaRes = await callRoute('POST', '/pdv/venda-rapida', {
+    itens: [
+      { id: 'comb-30', nome: 'Combinado Zuma 30 Peças', qtd: 2, precoUnit: 139.90, ncm: '2106.90.90' },
+      { id: 'coca', nome: 'Coca-Cola Zero 350ml', qtd: 2, precoUnit: 8.50, ncm: '2202.10.00' }
+    ],
+    formaPagamento: 'PIX',
+    cliente: 'Rodrigo Gonçalves VIP',
+    tipoVenda: 'BALCAO',
+    emitirNfce: true
+  });
+
+  assert.equal(vendaRes.status, 200);
+  assert.equal(vendaRes.data.ok, true);
+  assert.equal(vendaRes.data.total, 296.80);
+  assert.ok(vendaRes.data.salmaoBaixadoKg > 0, 'Deve baixar salmão da ficha técnica');
+  assert.ok(vendaRes.data.notaFiscal, 'NFC-e deve ser emitida');
+  assert.equal(vendaRes.data.notaFiscal.statusSEFAZ, '100_AUTORIZADA_PRODUCAO');
+  assert.ok(vendaRes.data.kdsId.startsWith('KDS-'), 'Pedido despachado para a Cozinha KDS');
+});
+
+test('Zuma Cozinha Oriental - KDS de Cozinha Multi-Praças e Transição de Etapas de Preparo', async () => {
+  const { routerZuma } = await import('./modules/restaurante-zuma.js');
+  const callRoute = (method, p, body = {}) => {
+    return new Promise((resolve) => {
+      const req = { method, path: p, query: {}, body, params: {} };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      const layer = routerZuma.stack.find(l => l.route && l.route.path === p && l.route.methods[method.toLowerCase()]);
+      if (layer) layer.route.stack[0].handle(req, res);
+      else resolve({ status: 404, data: { error: 'Route not found: ' + p } });
+    });
+  };
+
+  // 1. Obter pedidos ativos em preparo
+  const kdsRes = await callRoute('GET', '/cozinha/pedidos-ativos');
+  assert.equal(kdsRes.status, 200);
+  assert.equal(kdsRes.data.ok, true);
+  assert.ok(kdsRes.data.totalPedidos >= 3);
+  assert.ok(kdsRes.data.estatisticas.sushiBar >= 1);
+  assert.ok(kdsRes.data.estatisticas.cozinhaQuente >= 1);
+
+  // 2. Avançar etapa de preparo para PRONTO_CHAMADA
+  const avancaRes = await callRoute('POST', '/cozinha/avancar-etapa', {
+    pedidoId: 'KDS-101',
+    novoStatus: 'PRONTO_CHAMADA'
+  });
+  assert.equal(avancaRes.status, 200);
+  assert.equal(avancaRes.data.ok, true);
+  assert.equal(avancaRes.data.pedido.status, 'PRONTO_CHAMADA');
+});
+
+test('Zuma Cozinha Oriental - Kardex de Estoque: Entrada NF-e Fornecedor & Transferência Interna', async () => {
+  const { routerZuma, ESTOQUE_PESCADOS_ZUMA } = await import('./modules/restaurante-zuma.js');
+  const callRoute = (method, p, body = {}) => {
+    return new Promise((resolve) => {
+      const req = { method, path: p, query: {}, body, params: {} };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      const layer = routerZuma.stack.find(l => l.route && l.route.path === p && l.route.methods[method.toLowerCase()]);
+      if (layer) layer.route.stack[0].handle(req, res);
+      else resolve({ status: 404, data: { error: 'Route not found: ' + p } });
+    });
+  };
+
+  // 1. Entrada de Lote por NF-e de Fornecedor
+  const entradaRes = await callRoute('POST', '/estoque/entrada-nfe-xml', {
+    insumoId: 'ins-salmao-fresco',
+    quantidadeKg: 15.0,
+    custoUnitario: 88.50,
+    fornecedorNome: 'Frigorífico Pescados do Pantanal & Pacífico',
+    numeroNota: '8821',
+    temperaturaRecebimento: 0.2
+  });
+  assert.equal(entradaRes.status, 200);
+  assert.equal(entradaRes.data.ok, true);
+  assert.ok(entradaRes.data.novoSaldoKg >= 15.0);
+  assert.equal(entradaRes.data.kardex.tipoMovimento, 'ENTRADA_FORNECEDOR_NFE');
+
+  // 2. Transferência Interna (Câmara Fria 01 -> Bancada Sushi Bar)
+  const transfRes = await callRoute('POST', '/estoque/transferencia-interna', {
+    insumoId: 'ins-salmao-fresco',
+    quantidadeKg: 3.5,
+    origem: 'Câmara Fria 01',
+    destino: 'Bancada Sushi Bar',
+    responsável: 'Kenji Sushiman'
+  });
+  assert.equal(transfRes.status, 200);
+  assert.equal(transfRes.data.ok, true);
+  assert.equal(transfRes.data.kardex.tipoMovimento, 'TRANSFERENCIA_INTERNA');
+
+  // 3. Extrato Kardex
+  const kardexRes = await callRoute('GET', '/estoque/kardex');
+  assert.equal(kardexRes.status, 200);
+  assert.equal(kardexRes.data.ok, true);
+  assert.ok(kardexRes.data.totalMovimentacoes >= 4);
+});
+
+test('Zuma Cozinha Oriental - Gestão Fiscal Avançada: Cancelamento NFC-e, CC-e e Livro de Apuração MT', async () => {
+  const { routerZuma } = await import('./modules/restaurante-zuma.js');
+  const callRoute = (method, p, body = {}) => {
+    return new Promise((resolve) => {
+      const req = { method, path: p, query: {}, body, params: {} };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      const layer = routerZuma.stack.find(l => l.route && l.route.path === p && l.route.methods[method.toLowerCase()]);
+      if (layer) layer.route.stack[0].handle(req, res);
+      else resolve({ status: 404, data: { error: 'Route not found: ' + p } });
+    });
+  };
+
+  // 1. Cancelamento de NFC-e com Protocolo SEFAZ-MT
+  const cancRes = await callRoute('POST', '/fiscal/cancelar', {
+    chaveAcesso: '51261136296848000157650010000010411827364519',
+    numeroNota: 1041,
+    justificativa: 'Cancelamento por duplicidade de comanda no salão pelo garçom'
+  });
+  assert.equal(cancRes.status, 200);
+  assert.equal(cancRes.data.ok, true);
+  assert.ok(cancRes.data.evento.protocoloCancelamento.startsWith('1512600'));
+  assert.equal(cancRes.data.evento.statusSEFAZ, '135_EVENTO_VINCULADO_A_NF_HOMOLOGADO');
+
+  // 2. Carta de Correção Eletrônica (CC-e) para NF-e mod 55
+  const cceRes = await callRoute('POST', '/fiscal/carta-correcao', {
+    chaveAcesso: '51261136296848000157550010000055101827364519',
+    numeroNota: 5510,
+    correcao: 'Inclusão de número de ordem de compra OC-2026-AGRO no campo dados adicionais'
+  });
+  assert.equal(cceRes.status, 200);
+  assert.equal(cceRes.data.ok, true);
+  assert.ok(cceRes.data.evento.protocoloCCE.startsWith('1512600'));
+
+  // 3. Livro de Apuração Fiscal Simples Nacional MT
+  const apuracaoRes = await callRoute('GET', '/fiscal/livro-apuracao');
+  assert.equal(apuracaoRes.status, 200);
+  assert.equal(apuracaoRes.data.ok, true);
+  assert.equal(apuracaoRes.data.resumo.aliquotaEfetivaICMS, '3.85%');
+  assert.ok(apuracaoRes.data.resumo.icmsSimplesDevido > 0);
+  assert.ok(apuracaoRes.data.resumo.economiaTributariaMonofasica > 0);
+
+  // 4. Exportação de XMLs para Contabilidade
+  const exportRes = await callRoute('GET', '/fiscal/exportar-xmls');
+  assert.equal(exportRes.status, 200);
+  assert.equal(exportRes.data.ok, true);
+  assert.ok(exportRes.data.totalArquivosXml >= 3);
+  assert.ok(exportRes.data.downloadZipUrl.endsWith('.zip'));
+});

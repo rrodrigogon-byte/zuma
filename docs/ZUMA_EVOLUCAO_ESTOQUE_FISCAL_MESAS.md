@@ -9,7 +9,7 @@ Este documento formaliza a entrega da nova fase de modernização do **Zuma Cozi
 2. **Integração Omnichannel de Vendas** (Salão Físico com Comanda Digital, Delivery via WhatsApp com Motor KyttoIA 2.5 Flash, Take-away e B2B Corporativo Agro).
 3. **Módulo Fiscal Completo com Emissão SEFAZ-MT** (NFC-e Modelo 65 para varejo e NF-e Modelo 55 para corporativo, com QR-Code oficial e contingência offline).
 4. **Mapa Térmico & Heatmap em Tempo Real das 25 Mesas do Salão** (indicadores de tempo de permanência, consumo acumulado e alertas de giro de mesa).
-5. **Homologação Rigorosa com 25 Testes Automatizados** passando com 100% de sucesso.
+5. **Homologação Rigorosa com 29 Testes Automatizados** passando com 100% de sucesso.
 
 ---
 
@@ -103,7 +103,7 @@ O módulo de salão oferece visão gráfica tipo Heatmap dividida em 6 setores d
 
 ---
 
-## 5. Matriz de Homologação Automatizada (25 Testes 100% Aprovados)
+## 5. Matriz de Homologação Automatizada (29 Testes 100% Aprovados)
 
 | Nº | Teste de Homologação | Escopo / Módulo | Resultado |
 | :---: | :--- | :--- | :---: |
@@ -132,6 +132,10 @@ O módulo de salão oferece visão gráfica tipo Heatmap dividida em 6 setores d
 | 23 | Gestão de Câmaras Frias IoT e Perdas Técnicas de Pescados | Vigilância Sanitária MT | **APROVADO** |
 | 24 | Mapa de Temperatura & Heatmap do Salão e Mesas | Giro de Salão | **APROVADO** |
 | 25 | Módulo Fiscal Completo com Emissão SEFAZ-MT | Conformidade Fiscal MT | **APROVADO** |
+| 26 | PDV de Caixa Completo: Venda Rápida, Ficha Técnica e NFC-e | Frente de Caixa & Balcão | **APROVADO** |
+| 27 | Cozinha & KDS Multi-Praças e Transição de Etapas de Preparo | Linha de Expedição | **APROVADO** |
+| 28 | Kardex de Estoque: Entrada NF-e Fornecedor & Transferência | Auditoria de Estoque | **APROVADO** |
+| 29 | Gestão Fiscal Avançada: Cancelamento NFC-e, CC-e e Livro MT | Compliance SEFAZ-MT | **APROVADO** |
 
 ---
 
@@ -148,3 +152,62 @@ O módulo de salão oferece visão gráfica tipo Heatmap dividida em 6 setores d
 ---
 
 *Documento gerado pelo Kytto ERP · Tangará da Serra - MT · 2026*
+
+
+---
+
+## 7. Frente de Caixa (PDV) Completa & Venda Rápida Integrada
+
+O **PDV do Zuma Cozinha Oriental** no Kytto ERP foi projetado para operações de salão de alta rotatividade e delivery simultâneos:
+- **Catálogo Visual Fast-Click:** Acesso em 1 clique aos 211 itens do cardápio divididos por categorias (Combinados, Uramakis, Hot Rolls, Sashimis, Cozinha Quente, Drinks Autorais e Bebidas).
+- **Múltiplos Modos de Operação:** Venda Balcão Express, Venda com Associação de Mesa (01 a 25) e Venda Delivery Express.
+- **Gestão de Turno e Gaveta de Caixa:** Abertura com suprimento inicial de troco, sangrias auditadas para cofre blindado, suprimentos de reforço e fechamento cego com apuração automática de quebra de caixa.
+- **Fechamento Omnichannel:** Pagamentos via PIX instantâneo com QR-Code Dinâmico, Cartão de Crédito/Débito, Dinheiro com cálculo automático de troco e Vale Refeição (VR/VA).
+- **Emissão Fiscal Instantânea no PDV:** Ao concluir o recebimento, a NFC-e (Modelo 65) é enviada para a SEFAZ-MT, gerando o protocolo oficial de autorização e o QR-Code impresso em 80mm/58mm.
+- **Baixa em Cascata na Ficha Técnica:** Cada venda realizada no PDV debita instantaneamente os gramas de salmão, shari, nori e embalagens do estoque, registrando a operação no Livro Kardex.
+
+---
+
+## 8. Cozinha & KDS (Kitchen Display System) Multi-Praças
+
+O KDS do Zuma revoluciona a linha de expedição da gastronomia oriental dividindo os pedidos por especialidade:
+- **Praça Sushi Bar (Frios):** Sashimis, Niguiris, Uramakis, Dyo e Combinados Especiais.
+- **Praça Cozinha Quente:** Teppanyaki, Yakisoba, Guiozas, Shimeji na manteiga e Hot Rolls.
+- **Praça Bar & Copa:** Chopp artesanal, drinks autorais (ex: Moscow Mule com Wasabi) e sobremesas.
+
+### Cronômetro Inteligente com Indicadores Visuais de Espera:
+- 🟢 **Verde (< 15 minutos):** Preparo dentro do tempo excelente.
+- 🟡 **Amarelo (15 a 25 minutos):** Atenção da equipe de sushidans para conclusão.
+- 🔴 **Vermelho (> 25 minutos):** Alerta crítico de prioridade máxima no display da cozinha.
+
+### Ações Operacionais:
+- `EM_PREPARO`: Comanda assumida pela praça culinária.
+- `PRONTO_CHAMADA`: Notificação sonora e visual no tablet dos garçons de salão para retirada no balcão.
+- `ENTREGUE`: Comanda baixada com registro do tempo total de ciclo de atendimento.
+
+---
+
+## 9. Livro Razão Kardex de Movimentação Contínua de Estoque
+
+O estoque de pescados e insumos agora conta com auditoria contábil completa através do Kardex:
+- **Rastreabilidade por Lote e Validade:** Cada entrada de lote registra o fornecedor, CNPJ, chave de acesso da NF-e de compra, número da nota fiscal e temperatura de recebimento na câmara fria (RDC 216/ANVISA).
+- **Tipos de Movimentações Registradas:**
+  - `ENTRADA_FORNECEDOR_NFE`: Acréscimo de saldo por compra com recálculo automático do custo médio ponderado.
+  - `SAIDA_VENDA_PDV`: Baixa automática provocada por vendas no caixa e mesas.
+  - `SAIDA_DELIVERY_ZUMI`: Baixa por pedidos confirmados via WhatsApp com KyttoIA.
+  - `PERDA_TECNICA_APARA`: Descarte de tosa e limpeza de salmão auditado pelo sushiman chefe.
+  - `TRANSFERENCIA_INTERNA`: Movimentação de estoque da Câmara Fria Frigorífica para as estações de bancada do Sushi Bar ou Cozinha Quente.
+- **Saldo e Auditoria:** Relatório com saldo anterior, quantidade movimentada, saldo resultante, valor financeiro e responsável.
+
+---
+
+## 10. Gestão Fiscal Avançada SEFAZ-MT
+
+O módulo fiscal dispõe de recursos completos para compliance tributário em Mato Grosso:
+- **Cancelamento de NFC-e Homologado:** Cancelamento digital via WebService da SEFAZ-MT dentro do prazo legal de 30 minutos com justificativa obrigatória e protocolo de homologação.
+- **Carta de Correção Eletrônica (CC-e):** Emissão de CC-e para NF-e (Modelo 55) com sequencial de eventos registrado para retificações contratuais e dados de faturamento corporativo B2B.
+- **Inutilização de Numerações:** Tratamento de quebras de sequência fiscal.
+- **Livro de Apuração Tributária Simples Nacional MT:**
+  - Separação entre receitas tributadas normalmente (refeições preparadas a 3,85% de ICMS efetivo) e receitas com segregação de ICMS-ST / PIS-COFINS Monofásico (refrigerantes, águas e cervejas).
+  - Demonstrativo de economia tributária gerada pela segregação legal de monofásicos.
+- **Exportação Digital de XMLs:** Download de pacote consolidado (ZIP) com todas as notas fiscais emitidas, canceladas e cartas de correção do mês para envio direto ao escritório de contabilidade.

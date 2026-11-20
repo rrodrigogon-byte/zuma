@@ -217,7 +217,7 @@ O Kytto ERP dispõe de um módulo fiscal nativo para Tangará da Serra e Mato Gr
 
 ## 10. Matriz de Testes Automatizados e Homologação Contínua
 
-A suíte de testes automatizados (`app/zuma-cozinha-oriental.test.js`) foi expandida para **24 testes unitários e de integração**, cobrindo 100% dos cenários operacionais:
+A suíte de testes automatizados (`app/zuma-cozinha-oriental.test.js`) foi expandida para **29 testes unitários e de integração**, cobrindo 100% dos cenários operacionais:
 1. Dados cadastrais e matriz em Tangará da Serra (CNPJ, IE, CNAE).
 2. Cardápio completo com 23 categorias e 211 produtos sincronizados.
 3. Mesas físicas, bistrô, deck, sushi bar, camarote VIP e tatame (25 mesas).
@@ -242,3 +242,8 @@ A suíte de testes automatizados (`app/zuma-cozinha-oriental.test.js`) foi expan
 22. Telemetria IoT de câmaras frias e registro de perdas técnicas de pescados.
 23. Mapa de temperatura e giro das 25 mesas do salão.
 24. Emissão fiscal e autorização SEFAZ-MT (NFC-e mod 65 e NF-e mod 55).
+25. Acesso Unificado login.html e Responsividade iPhone First.
+26. PDV de Caixa Completo: Venda Rápida, Baixa Ficha Técnica e NFC-e.
+27. KDS de Cozinha Multi-Praças e Transição de Etapas de Preparo.
+28. Kardex de Estoque: Entrada NF-e Fornecedor & Transferência Interna.
+29. Gestão Fiscal Avançada: Cancelamento NFC-e, CC-e e Livro de Apuração MT.

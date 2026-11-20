@@ -2791,3 +2791,650 @@ routerZuma.post('/fiscal/emitir', (req, res) => {
     notaFiscal: novaNota
   });
 });
+
+
+// ============================================================================
+// 11. FRENTE DE CAIXA (PDV) INTEGRADA & FECHAMENTO DE TURNO
+// ============================================================================
+
+export let CAIXA_TURNO_ATUAL_ZUMA = {
+  id: "TURNO-20261120-01",
+  operador: "Rodrigo Gonçalves",
+  abertura: new Date().toISOString(),
+  fechamento: null,
+  status: "ABERTO",
+  saldoAbertura: 300.00,
+  totalVendas: 4850.00,
+  totalDinheiro: 650.00,
+  totalPix: 2480.00,
+  totalCartaoCredito: 1120.00,
+  totalCartaoDebito: 600.00,
+  totalVR: 0.00,
+  sangrias: [
+    { id: "SANG-01", valor: 200.00, motivo: "Recolhimento cofre blindado", hora: "16:30", operador: "Rodrigo Gonçalves" }
+  ],
+  suprimentos: [
+    { id: "SUPR-01", valor: 100.00, motivo: "Reforço troco moedas", hora: "14:15", operador: "Rodrigo Gonçalves" }
+  ],
+  saldoGavetaEsperado: 850.00
+};
+
+routerZuma.get("/pdv/status-caixa", (req, res) => {
+  res.json({
+    ok: true,
+    empresa: "Zuma Cozinha Oriental",
+    caixa: CAIXA_TURNO_ATUAL_ZUMA
+  });
+});
+
+routerZuma.post("/pdv/abrir-caixa", (req, res) => {
+  const { operador = "Operador Caixa", saldoAbertura = 300.00 } = req.body || {};
+  CAIXA_TURNO_ATUAL_ZUMA = {
+    id: `TURNO-${Date.now()}`,
+    operador,
+    abertura: new Date().toISOString(),
+    fechamento: null,
+    status: "ABERTO",
+    saldoAbertura: parseFloat(saldoAbertura),
+    totalVendas: 0.0,
+    totalDinheiro: 0.0,
+    totalPix: 0.0,
+    totalCartaoCredito: 0.0,
+    totalCartaoDebito: 0.0,
+    totalVR: 0.0,
+    sangrias: [],
+    suprimentos: [],
+    saldoGavetaEsperado: parseFloat(saldoAbertura)
+  };
+  res.json({ ok: true, mensagem: "Caixa aberto com sucesso!", caixa: CAIXA_TURNO_ATUAL_ZUMA });
+});
+
+routerZuma.post("/pdv/sangria", (req, res) => {
+  const { valor = 0, motivo = "Sangria de caixa", operador = CAIXA_TURNO_ATUAL_ZUMA.operador } = req.body || {};
+  const vlr = parseFloat(valor);
+  CAIXA_TURNO_ATUAL_ZUMA.sangrias.push({
+    id: `SANG-${Date.now()}`,
+    valor: vlr,
+    motivo,
+    hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    operador
+  });
+  CAIXA_TURNO_ATUAL_ZUMA.saldoGavetaEsperado -= vlr;
+  res.json({ ok: true, mensagem: `Sangria de R$ ${vlr.toFixed(2)} registrada!`, caixa: CAIXA_TURNO_ATUAL_ZUMA });
+});
+
+routerZuma.post("/pdv/suprimento", (req, res) => {
+  const { valor = 0, motivo = "Reforço de troco", operador = CAIXA_TURNO_ATUAL_ZUMA.operador } = req.body || {};
+  const vlr = parseFloat(valor);
+  CAIXA_TURNO_ATUAL_ZUMA.suprimentos.push({
+    id: `SUPR-${Date.now()}`,
+    valor: vlr,
+    motivo,
+    hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    operador
+  });
+  CAIXA_TURNO_ATUAL_ZUMA.saldoGavetaEsperado += vlr;
+  res.json({ ok: true, mensagem: `Suprimento de R$ ${vlr.toFixed(2)} registrado!`, caixa: CAIXA_TURNO_ATUAL_ZUMA });
+});
+
+routerZuma.post("/pdv/fechar-caixa", (req, res) => {
+  const { valorContado = CAIXA_TURNO_ATUAL_ZUMA.saldoGavetaEsperado } = req.body || {};
+  const contado = parseFloat(valorContado);
+  const diferenca = contado - CAIXA_TURNO_ATUAL_ZUMA.saldoGavetaEsperado;
+  CAIXA_TURNO_ATUAL_ZUMA.fechamento = new Date().toISOString();
+  CAIXA_TURNO_ATUAL_ZUMA.status = "FECHADO";
+  CAIXA_TURNO_ATUAL_ZUMA.valorContado = contado;
+  CAIXA_TURNO_ATUAL_ZUMA.diferenca = diferenca;
+  res.json({
+    ok: true,
+    mensagem: "Turno de caixa encerrado com sucesso!",
+    caixa: CAIXA_TURNO_ATUAL_ZUMA,
+    resumoFechamento: {
+      totalVendido: CAIXA_TURNO_ATUAL_ZUMA.totalVendas,
+      saldoGavetaEsperado: CAIXA_TURNO_ATUAL_ZUMA.saldoGavetaEsperado,
+      valorContado: contado,
+      diferenca
+    }
+  });
+});
+
+// ============================================================================
+// 12. KARDEX DETALHADO DE MOVIMENTAÇÃO DE ESTOQUE
+// ============================================================================
+
+export let HISTORICO_KARDEX_ESTOQUE_ZUMA = [
+  {
+    id: "KARD-01",
+    dataHora: "2026-11-20T10:15:00.000Z",
+    tipoMovimento: "ENTRADA_FORNECEDOR_NFE",
+    insumoId: "ins-salmao-fresco",
+    insumoNome: "Salmão Fresco Chileno (Filé Nobre)",
+    quantidade: +25.0,
+    saldoAnterior: 17.5,
+    saldoAtual: 42.5,
+    unidade: "kg",
+    custoUnitario: 89.90,
+    valorTotal: 2247.50,
+    documentoOrigem: "NF-e 55 · Chave 51261108234892000188550010000045211029384751",
+    responsável: "Rodrigo Gonçalves",
+    lote: "LOTE-SAL-20261120"
+  },
+  {
+    id: "KARD-02",
+    dataHora: "2026-11-20T12:30:00.000Z",
+    tipoMovimento: "SAIDA_VENDA_PDV",
+    insumoId: "ins-salmao-fresco",
+    insumoNome: "Salmão Fresco Chileno (Filé Nobre)",
+    quantidade: -2.850,
+    saldoAnterior: 42.5,
+    saldoAtual: 39.65,
+    unidade: "kg",
+    custoUnitario: 89.90,
+    valorTotal: 256.21,
+    documentoOrigem: "NFC-e 65 #1040 (Mesa 04 e Mesa 08)",
+    responsável: "Caixa PDV Salão",
+    lote: "LOTE-SAL-20261120"
+  },
+  {
+    id: "KARD-03",
+    dataHora: "2026-11-20T14:00:00.000Z",
+    tipoMovimento: "PERDA_TECNICA_APARA",
+    insumoId: "ins-salmao-fresco",
+    insumoNome: "Salmão Fresco Chileno (Filé Nobre)",
+    quantidade: -0.500,
+    saldoAnterior: 39.65,
+    saldoAtual: 39.15,
+    unidade: "kg",
+    custoUnitario: 89.90,
+    valorTotal: 44.95,
+    documentoOrigem: "Apara técnica de sushiman (tosa limpa)",
+    responsável: "Kenji Mestre Sushiman",
+    lote: "LOTE-SAL-20261120"
+  },
+  {
+    id: "KARD-04",
+    dataHora: "2026-11-20T15:00:00.000Z",
+    tipoMovimento: "TRANSFERENCIA_INTERNA",
+    insumoId: "ins-salmao-fresco",
+    insumoNome: "Salmão Fresco Chileno (Filé Nobre)",
+    quantidade: -5.000,
+    saldoAnterior: 39.15,
+    saldoAtual: 34.15,
+    unidade: "kg",
+    custoUnitario: 89.90,
+    valorTotal: 449.50,
+    documentoOrigem: "Câmara Fria 01 -> Bancada Sushi Bar",
+    responsável: "Kenji Mestre Sushiman",
+    lote: "LOTE-SAL-20261120"
+  }
+];
+
+routerZuma.get("/estoque/kardex", (req, res) => {
+  const { insumoId, tipoMovimento } = req.query || {};
+  let lista = [...HISTORICO_KARDEX_ESTOQUE_ZUMA];
+  if (insumoId) {
+    lista = lista.filter(k => k.insumoId === insumoId);
+  }
+  if (tipoMovimento) {
+    lista = lista.filter(k => k.tipoMovimento === tipoMovimento);
+  }
+  res.json({
+    ok: true,
+    totalMovimentacoes: lista.length,
+    kardex: lista
+  });
+});
+
+routerZuma.post("/estoque/entrada-nfe-xml", (req, res) => {
+  const {
+    insumoId = "ins-salmao-fresco",
+    quantidadeKg = 10.0,
+    custoUnitario = 89.90,
+    fornecedorNome = "Pescados do Pacífico Importadora LTDA",
+    cnpjFornecedor = "08.234.892/0001-88",
+    chaveNfe = "51261108234892000188550010000045211029384751",
+    numeroNota = "4521",
+    lote = `LOTE-REC-${Date.now()}`,
+    temperaturaRecebimento = 0.5
+  } = req.body || {};
+
+  const qtd = parseFloat(quantidadeKg);
+  const custo = parseFloat(custoUnitario);
+  const insumo = ESTOQUE_PESCADOS_ZUMA[insumoId] || {
+    nome: "Pescado Nobre",
+    quantidadeAtualKg: 20.0,
+    unidade: "kg",
+    custoPorKg: custo
+  };
+
+  const saldoAnterior = typeof insumo.saldoAtual === 'number' ? insumo.saldoAtual : (insumo.quantidadeAtualKg || 25.0);
+  const novoSaldo = parseFloat((saldoAnterior + qtd).toFixed(3));
+  insumo.saldoAtual = novoSaldo;
+  insumo.quantidadeAtualKg = novoSaldo;
+  insumo.custoPorKgInteiro = custo;
+  insumo.custoEfetivoPorKgLimpo = parseFloat((custo / 0.82).toFixed(2));
+  ESTOQUE_PESCADOS_ZUMA[insumoId] = insumo;
+
+  const novoKardex = {
+    id: `KARD-${Date.now()}`,
+    dataHora: new Date().toISOString(),
+    tipoMovimento: "ENTRADA_FORNECEDOR_NFE",
+    insumoId,
+    insumoNome: insumo.nome,
+    quantidade: +qtd,
+    saldoAnterior,
+    saldoAtual: novoSaldo,
+    unidade: insumo.unidade || "kg",
+    custoUnitario: custo,
+    valorTotal: parseFloat((qtd * custo).toFixed(2)),
+    documentoOrigem: `NF-e ${numeroNota} · Fornecedor: ${fornecedorNome}`,
+    responsável: "Conferente Almoxarifado Zuma",
+    lote,
+    temperaturaRecebimento
+  };
+
+  HISTORICO_KARDEX_ESTOQUE_ZUMA.unshift(novoKardex);
+
+  res.json({
+    ok: true,
+    mensagem: `Entrada de ${qtd} kg de ${insumo.nome} registrada com sucesso via NF-e #${numeroNota}!`,
+    novoSaldoKg: insumo.saldoAtual,
+    custoMedioAtualizado: insumo.custoPorKgInteiro,
+    kardex: novoKardex
+  });
+});
+
+routerZuma.post("/estoque/transferencia-interna", (req, res) => {
+  const {
+    insumoId = "ins-salmao-fresco",
+    quantidadeKg = 2.0,
+    origem = "Câmara Fria 01",
+    destino = "Bancada Sushi Bar",
+    responsável = "Kenji Mestre Sushiman"
+  } = req.body || {};
+
+  const qtd = parseFloat(quantidadeKg);
+  const insumo = ESTOQUE_PESCADOS_ZUMA[insumoId] || { nome: "Salmão", saldoAtual: 20.0, custoPorKgInteiro: 89.90 };
+  const saldoAnterior = typeof insumo.saldoAtual === 'number' ? insumo.saldoAtual : 20.0;
+
+  const novoKardex = {
+    id: `KARD-${Date.now()}`,
+    dataHora: new Date().toISOString(),
+    tipoMovimento: "TRANSFERENCIA_INTERNA",
+    insumoId,
+    insumoNome: insumo.nome,
+    quantidade: -qtd,
+    saldoAnterior,
+    saldoAtual: saldoAnterior, // Saldo global não altera, é transferência interna
+    unidade: "kg",
+    custoUnitario: insumo.custoPorKg,
+    valorTotal: parseFloat((qtd * insumo.custoPorKg).toFixed(2)),
+    documentoOrigem: `${origem} -> ${destino}`,
+    responsável,
+    lote: "LOTE-TRANSF"
+  };
+
+  HISTORICO_KARDEX_ESTOQUE_ZUMA.unshift(novoKardex);
+
+  res.json({
+    ok: true,
+    mensagem: `Transferência de ${qtd} kg transferida com sucesso de ${origem} para ${destino}!`,
+    kardex: novoKardex
+  });
+});
+
+// ============================================================================
+// 13. COZINHA & KDS (KITCHEN DISPLAY SYSTEM POR PRAÇA)
+// ============================================================================
+
+export let PEDIDOS_COZINHA_KDS_ZUMA = [
+  {
+    id: "KDS-101",
+    numeroComanda: "CMD-2026-101",
+    origem: "Mesa 03 · Sushi Bar",
+    praca: "SUSHI_BAR",
+    itens: [
+      { id: "p1", nome: "Combinado Zuma Casal 40 Peças", qtd: 1, obs: "Sem wasabi no niguiri" },
+      { id: "p2", nome: "Sashimi Salmão Trufado (10 fatias)", qtd: 1, obs: "Com raspas de limão siciliano" }
+    ],
+    horaPedido: new Date(Date.now() - 8 * 60000).toISOString(),
+    minutosEmEspera: 8,
+    status: "EM_PREPARO",
+    prioridade: "NORMAL",
+    garcom: "Roberto Kenji"
+  },
+  {
+    id: "KDS-102",
+    numeroComanda: "CMD-2026-102",
+    origem: "Mesa 12 · Salão Principal",
+    praca: "COZINHA_QUENTE",
+    itens: [
+      { id: "p3", nome: "Yakisoba Especial Camarão & Mignon", qtd: 1, obs: "Molho bem encorpado" },
+      { id: "p4", nome: "Guioza de Carne Suína Grelhado (6 un)", qtd: 1, obs: "Crocante" }
+    ],
+    horaPedido: new Date(Date.now() - 14 * 60000).toISOString(),
+    minutosEmEspera: 14,
+    status: "EM_PREPARO",
+    prioridade: "ALTA",
+    garcom: "Ana Sato"
+  },
+  {
+    id: "KDS-103",
+    numeroComanda: "CMD-2026-103",
+    origem: "Mesa 07 · Deck Externo",
+    praca: "BAR_BEBIDAS",
+    itens: [
+      { id: "p5", nome: "Moscow Mule Oriental com Wasabi", qtd: 2, obs: "Gelo e espuma extra" },
+      { id: "p6", nome: "Chopp Stella Artois 500ml", qtd: 1, obs: "Caneca ultracongelada" }
+    ],
+    horaPedido: new Date(Date.now() - 3 * 60000).toISOString(),
+    minutosEmEspera: 3,
+    status: "PRONTO_CHAMADA",
+    prioridade: "URGENTE",
+    garcom: "Lucas Mori"
+  },
+  {
+    id: "KDS-104",
+    numeroComanda: "CMD-2026-104",
+    origem: "Delivery Zumi WhatsApp (Jardim Europa)",
+    praca: "SUSHI_BAR",
+    itens: [
+      { id: "p7", nome: "Combinado Zuma 30 Peças", qtd: 1, obs: "Embalagem premium selada" },
+      { id: "p8", nome: "Hot Roll Filadélfia Especial (10 un)", qtd: 1, obs: "Tarê à parte" }
+    ],
+    horaPedido: new Date(Date.now() - 21 * 60000).toISOString(),
+    minutosEmEspera: 21,
+    status: "EM_PREPARO",
+    prioridade: "ALTA",
+    garcom: "Zumi Atende (IA)"
+  }
+];
+
+routerZuma.get("/cozinha/pedidos-ativos", (req, res) => {
+  const { praca } = req.query || {};
+  let lista = [...PEDIDOS_COZINHA_KDS_ZUMA];
+  if (praca && praca !== "TODAS") {
+    lista = lista.filter(p => p.praca === praca);
+  }
+  res.json({
+    ok: true,
+    totalPedidos: lista.length,
+    pedidos: lista,
+    estatisticas: {
+      emPreparo: lista.filter(p => p.status === "EM_PREPARO").length,
+      prontoChamada: lista.filter(p => p.status === "PRONTO_CHAMADA").length,
+      sushiBar: lista.filter(p => p.praca === "SUSHI_BAR").length,
+      cozinhaQuente: lista.filter(p => p.praca === "COZINHA_QUENTE").length,
+      barBebidas: lista.filter(p => p.praca === "BAR_BEBIDAS").length
+    }
+  });
+});
+
+routerZuma.post("/cozinha/avancar-etapa", (req, res) => {
+  const { pedidoId, novoStatus } = req.body || {};
+  const ped = PEDIDOS_COZINHA_KDS_ZUMA.find(p => p.id === pedidoId);
+  if (!ped) {
+    return res.status(404).json({ ok: false, error: "Pedido KDS não encontrado" });
+  }
+
+  const statusAnterior = ped.status;
+  ped.status = novoStatus || (statusAnterior === "EM_PREPARO" ? "PRONTO_CHAMADA" : "ENTREGUE");
+  if (ped.status === "ENTREGUE") {
+    ped.horaEntrega = new Date().toISOString();
+  }
+
+  res.json({
+    ok: true,
+    mensagem: `Pedido ${ped.id} avançou de ${statusAnterior} para ${ped.status}!`,
+    pedido: ped
+  });
+});
+
+// ============================================================================
+// 14. VENDA RÁPIDA NO PDV COM EMISSÃO NFC-e & BAIXA COMPLETA
+// ============================================================================
+
+routerZuma.post("/pdv/venda-rapida", (req, res) => {
+  const {
+    itens = [
+      { id: "prod-comb-30", nome: "Combinado Zuma 30 Peças", qtd: 1, precoUnit: 139.90, ncm: "2106.90.90" }
+    ],
+    formaPagamento = "PIX",
+    cliente = "Consumidor Final Tangará",
+    cpfCliente = null,
+    mesaNumero = null,
+    tipoVenda = "BALCAO", // BALCAO, MESA, DELIVERY
+    emitirNfce = true
+  } = req.body || {};
+
+  const total = itens.reduce((acc, it) => acc + ((it.qtd || 1) * (it.precoUnit || 0)), 0);
+
+  // 1. Atualizar Faturamento do Caixa
+  CAIXA_TURNO_ATUAL_ZUMA.totalVendas += total;
+  if (formaPagamento === "DINHEIRO") {
+    CAIXA_TURNO_ATUAL_ZUMA.totalDinheiro += total;
+    CAIXA_TURNO_ATUAL_ZUMA.saldoGavetaEsperado += total;
+  } else if (formaPagamento === "PIX") {
+    CAIXA_TURNO_ATUAL_ZUMA.totalPix += total;
+  } else if (formaPagamento === "CARTAO_CREDITO") {
+    CAIXA_TURNO_ATUAL_ZUMA.totalCartaoCredito += total;
+  } else if (formaPagamento === "CARTAO_DEBITO") {
+    CAIXA_TURNO_ATUAL_ZUMA.totalCartaoDebito += total;
+  }
+
+  // 2. Baixar Ficha Técnica no Estoque e Kardex
+  let totalSalmaoBaixadoKg = 0;
+  itens.forEach(it => {
+    if (it.nome.toLowerCase().includes("combinado") || it.nome.toLowerCase().includes("salmão")) {
+      const baixaKg = 0.350 * (it.qtd || 1);
+      totalSalmaoBaixadoKg += baixaKg;
+      if (ESTOQUE_PESCADOS_ZUMA["ins-salmao-fresco"]) {
+        const insSalmao = ESTOQUE_PESCADOS_ZUMA["ins-salmao-fresco"];
+        const saldoAnt = typeof insSalmao.saldoAtual === 'number' ? insSalmao.saldoAtual : (insSalmao.quantidadeAtualKg || 35.0);
+        const novoSaldo = parseFloat((saldoAnt - baixaKg).toFixed(3));
+        insSalmao.saldoAtual = novoSaldo;
+        insSalmao.quantidadeAtualKg = novoSaldo;
+        HISTORICO_KARDEX_ESTOQUE_ZUMA.unshift({
+          id: `KARD-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          dataHora: new Date().toISOString(),
+          tipoMovimento: "SAIDA_VENDA_PDV",
+          insumoId: "ins-salmao-fresco",
+          insumoNome: "Salmão Fresco Chileno (Filé Nobre)",
+          quantidade: -baixaKg,
+          saldoAnterior: saldoAnt,
+          saldoAtual: ESTOQUE_PESCADOS_ZUMA["ins-salmao-fresco"].saldoAtual,
+          unidade: "kg",
+          custoUnitario: 89.90,
+          valorTotal: parseFloat((baixaKg * 89.90).toFixed(2)),
+          documentoOrigem: `Venda PDV Caixa (${tipoVenda})`,
+          responsável: CAIXA_TURNO_ATUAL_ZUMA.operador,
+          lote: "LOTE-PDV-AUTO"
+        });
+      }
+    }
+  });
+
+  // 3. Emitir NFC-e se solicitado
+  let notaFiscal = null;
+  if (emitirNfce) {
+    const proxNumero = (HISTORICO_NOTAS_FISCAIS_ZUMA[0]?.numeroNota || 1045) + 1;
+    const chave = `5126113629684800015765001${String(proxNumero).padStart(9, '0')}1${Math.floor(10000000 + Math.random() * 90000000)}1`;
+    const protocolo = `1512600${Math.floor(100000000 + Math.random() * 900000000)}`;
+    notaFiscal = {
+      numeroNota: proxNumero,
+      serie: 1,
+      modelo: "NFC-e (65)",
+      chaveAcesso: chave,
+      protocoloSEFAZ: protocolo,
+      dataEmissao: new Date().toISOString(),
+      cliente: cpfCliente ? `${cliente} (CPF: ${cpfCliente})` : cliente,
+      origemVenda: mesaNumero ? `Mesa ${mesaNumero}` : `Balcão PDV`,
+      formaPagamento,
+      valorTotal: parseFloat(total.toFixed(2)),
+      icmsValor: parseFloat((total * 0.0385).toFixed(2)),
+      statusSEFAZ: "100_AUTORIZADA_PRODUCAO",
+      qrcodeUrl: `http://sefaz.mt.gov.br/nfce/qrcode?p=${chave}|2|1|1|${Math.floor(100000 + Math.random() * 900000)}`
+    };
+    HISTORICO_NOTAS_FISCAIS_ZUMA.unshift(notaFiscal);
+  }
+
+  // 4. Injetar Pedido na Cozinha KDS
+  const novoKds = {
+    id: `KDS-${Date.now()}`,
+    numeroComanda: `CMD-${Math.floor(1000 + Math.random() * 9000)}`,
+    origem: mesaNumero ? `Mesa ${mesaNumero}` : `Balcão PDV`,
+    praca: "SUSHI_BAR",
+    itens: itens.map(i => ({ id: i.id || "prod", nome: i.nome, qtd: i.qtd || 1, obs: "Preparo imediato PDV" })),
+    horaPedido: new Date().toISOString(),
+    minutosEmEspera: 0,
+    status: "EM_PREPARO",
+    prioridade: "ALTA",
+    garcom: CAIXA_TURNO_ATUAL_ZUMA.operador
+  };
+  PEDIDOS_COZINHA_KDS_ZUMA.unshift(novoKds);
+
+  res.json({
+    ok: true,
+    mensagem: `Venda de R$ ${total.toFixed(2)} processada com sucesso no PDV!`,
+    total,
+    formaPagamento,
+    notaFiscal,
+    kdsId: novoKds.id,
+    salmaoBaixadoKg: totalSalmaoBaixadoKg,
+    caixaAtualizado: {
+      totalVendas: CAIXA_TURNO_ATUAL_ZUMA.totalVendas,
+      saldoGavetaEsperado: CAIXA_TURNO_ATUAL_ZUMA.saldoGavetaEsperado
+    }
+  });
+});
+
+// ============================================================================
+// 15. GESTÃO FISCAL AVANÇADA (CANCELAMENTO, INUTILIZAÇÃO, CC-e & APURAÇÃO)
+// ============================================================================
+
+export let CANCELAMENTOS_E_EVENTOS_FISCAIS_ZUMA = [
+  {
+    id: "EVT-CANC-01",
+    tipoEvento: "CANCELAMENTO_NFCE",
+    chaveAcesso: "51261136296848000157650010000010201827364519",
+    numeroNota: 1020,
+    dataHora: "2026-11-19T22:15:00.000Z",
+    protocoloCancelamento: "1512600812984712",
+    justificativa: "Cliente desistiu da compra antes da saída dos pratos do balcão",
+    statusSEFAZ: "135_EVENTO_VINCULADO_A_NF_HOMOLOGADO"
+  }
+];
+
+routerZuma.post("/fiscal/cancelar", (req, res) => {
+  const {
+    chaveAcesso,
+    numeroNota,
+    justificativa = "Cancelamento por solicitação do cliente dentro do prazo legal de 30 minutos"
+  } = req.body || {};
+
+  if (!justificativa || justificativa.length < 15) {
+    return res.status(400).json({ ok: false, error: "Justificativa de cancelamento deve conter no mínimo 15 caracteres" });
+  }
+
+  const protocolo = `1512600${Math.floor(100000000 + Math.random() * 900000000)}`;
+  const novoEvento = {
+    id: `EVT-CANC-${Date.now()}`,
+    tipoEvento: "CANCELAMENTO_NFCE",
+    chaveAcesso: chaveAcesso || "51261136296848000157650010000010411827364519",
+    numeroNota: numeroNota || 1041,
+    dataHora: new Date().toISOString(),
+    protocoloCancelamento: protocolo,
+    justificativa,
+    statusSEFAZ: "135_EVENTO_VINCULADO_A_NF_HOMOLOGADO"
+  };
+
+  CANCELAMENTOS_E_EVENTOS_FISCAIS_ZUMA.unshift(novoEvento);
+
+  // Atualizar status na lista de notas fiscais
+  const nota = HISTORICO_NOTAS_FISCAIS_ZUMA.find(n => n.chaveAcesso === chaveAcesso || n.numeroNota === numeroNota);
+  if (nota) {
+    nota.statusSEFAZ = "101_CANCELADA_HOMOLOGADA_SEFAZ";
+  }
+
+  res.json({
+    ok: true,
+    mensagem: `Nota Fiscal cancelada com sucesso perante a SEFAZ-MT! Protocolo: ${protocolo}`,
+    evento: novoEvento
+  });
+});
+
+routerZuma.post("/fiscal/carta-correcao", (req, res) => {
+  const {
+    chaveAcesso,
+    numeroNota = 5510,
+    correcao = "Correção do endereço de cobrança do cliente corporativo PJ"
+  } = req.body || {};
+
+  const protocolo = `1512600${Math.floor(100000000 + Math.random() * 900000000)}`;
+  const novoEvento = {
+    id: `EVT-CCE-${Date.now()}`,
+    tipoEvento: "CARTA_CORRECAO_NFE",
+    chaveAcesso: chaveAcesso || "51261136296848000157550010000055101827364519",
+    numeroNota,
+    dataHora: new Date().toISOString(),
+    protocoloCCE: protocolo,
+    sequencialEvento: 1,
+    textoCorrecao: correcao,
+    statusSEFAZ: "135_CCE_VINCULADA_A_NFE_HOMOLOGADO"
+  };
+
+  CANCELAMENTOS_E_EVENTOS_FISCAIS_ZUMA.unshift(novoEvento);
+
+  res.json({
+    ok: true,
+    mensagem: `Carta de Correção Eletrônica (CC-e) registrada com sucesso na SEFAZ-MT!`,
+    evento: novoEvento
+  });
+});
+
+routerZuma.get("/fiscal/livro-apuracao", (req, res) => {
+  const { mesAno = "11/2026" } = req.query || {};
+
+  const faturamentoTotal = 152840.00;
+  const faturamentoRefeicaoComercio = 138500.00; // Alíquota normal Simples Nacional
+  const faturamentoBebidasMonofasicas = 14340.00; // Segregação PIS/COFINS e ICMS-ST
+
+  const aliquotaEfetivaSimples = 0.0385; // 3.85%
+  const icmsDevido = parseFloat((faturamentoRefeicaoComercio * aliquotaEfetivaSimples).toFixed(2));
+  const pisCofinsEconomizado = parseFloat((faturamentoBebidasMonofasicas * 0.0365).toFixed(2));
+
+  res.json({
+    ok: true,
+    empresa: "Zuma Cozinha Oriental LTDA",
+    cnpj: "36.296.848/0001-57",
+    mesApuracao: mesAno,
+    regimeTributario: "Simples Nacional - Anexo I (Alimentação e Bebidas)",
+    resumo: {
+      faturamentoTotal,
+      faturamentoTributavelNormal: faturamentoRefeicaoComercio,
+      faturamentoMonofasicoSegregado: faturamentoBebidasMonofasicas,
+      aliquotaEfetivaICMS: "3.85%",
+      icmsSimplesDevido: icmsDevido,
+      economiaTributariaMonofasica: pisCofinsEconomizado,
+      statusGuiaDAS: "PRONTA_PARA_GERACAO"
+    }
+  });
+});
+
+routerZuma.get("/fiscal/exportar-xmls", (req, res) => {
+  res.json({
+    ok: true,
+    empresa: "Zuma Cozinha Oriental",
+    totalArquivosXml: HISTORICO_NOTAS_FISCAIS_ZUMA.length,
+    periodo: "Novembro/2026",
+    downloadZipUrl: "/api/public/zuma/fiscal/exportar/xml-novembro-2026.zip",
+    arquivos: HISTORICO_NOTAS_FISCAIS_ZUMA.map(n => ({
+      chave: n.chaveAcesso,
+      modelo: n.modelo,
+      numero: n.numeroNota,
+      valor: n.valorTotal,
+      data: n.dataEmissao,
+      status: n.statusSEFAZ
+    }))
+  });
+});
