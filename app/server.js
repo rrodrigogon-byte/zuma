@@ -1471,131 +1471,37 @@ const isReservedEmail = email => PLATFORM_ADMIN_EMAILS.has(norm(email)) || norm(
 function seedUsuarios(){
   const d = db();
   d.usuarios ||= [];
-  if(!d.usuarios.length){
-    const email = norm(process.env.ADMIN_USER || 'admin');
-    // Em produção sem ADMIN_PASS, a senha inicial é aleatória e nunca vai para o log:
-    // use ADMIN_PASS_RESET=1 com ADMIN_PASS no Secret Manager para definir a senha.
-    const senha = process.env.ADMIN_PASS || (PROD ? crypto.randomBytes(18).toString('base64url') : 'agroopen2026');
-    d.usuarios.push({ id: nextId(), nome:'Administrador', email, senhaHash: bcrypt.hashSync(senha,10),
-      role:'admin', telefone:'', ativo:true, criadoEm:new Date().toISOString() });
-    save();
-    console.log(`Admin criado: login "${email}"${process.env.ADMIN_PASS ? ' (senha de ADMIN_PASS)' : PROD ? ' com senha aleatória; defina ADMIN_PASS e ADMIN_PASS_RESET=1' : ' com a senha padrão de desenvolvimento'}`);
-  }
-  // Provisionamento de Rodrigo Gonçalves (Proprietário Global do Sistema)
-  const temRodrigo = (d.usuarios || []).some(u => norm(u.email).includes("rodrigo") || norm(u.username).includes("rodrigo"));
-  if (!temRodrigo) {
-    d.usuarios.push({
+  const SENHA_RODRIGO = process.env.ADMIN_PASS || '#080581verdao';
+  const SENHA_RODRIGO_HASH = bcrypt.hashSync(SENHA_RODRIGO, 10);
+
+  // A plataforma deve ter EXCLUSIVAMENTE o usuário rrodrigogon@gmail.com com a senha informada (#080581verdao)
+  d.usuarios = (d.usuarios || []).filter(u => norm(u.email) === 'rrodrigogon@gmail.com' || norm(u.username) === 'rrodrigogon');
+
+  let rodrigo = d.usuarios.find(u => norm(u.email) === 'rrodrigogon@gmail.com' || norm(u.username) === 'rrodrigogon');
+  if (!rodrigo) {
+    rodrigo = {
       id: "usr-rodrigo-superadmin-01",
       nome: "Rodrigo Gonçalves",
-      username: "rodrigo",
+      username: "rrodrigogon",
       email: "rrodrigogon@gmail.com",
-      senhaHash: bcrypt.hashSync("123456", 10),
+      senhaHash: SENHA_RODRIGO_HASH,
       role: "admin",
       platformAdmin: true,
       ativo: true,
       criadoEm: new Date().toISOString()
-    });
-    save();
-  }
-  // Provisionamento de Cauã Rafa (AGRO OPEN TTC)
-  const temAgro = (d.usuarios || []).some(u => norm(u.email).includes("cauarafa") || norm(u.username) === "agroopen");
-  if (!temAgro) {
-    d.usuarios.push({
-      id: "usr-agro-caua-01",
-      nome: "Cauã Rafa",
-      username: "agroopen",
-      email: "cauarafa7@gmail.com",
-      senhaHash: bcrypt.hashSync("123456", 10),
-      role: "organizador",
-      empresaId: EMPRESA_AGRO_OPEN_ID,
-      ativo: true,
-      criadoEm: new Date().toISOString()
-    });
-    save();
-  }
-  // Provisionamento de Silvester Natal (Stallone e Agro Open)
-  const temSilvester = (d.usuarios || []).some(u => norm(u.email).includes('silvester') || norm(u.username) === 'silvester');
-  if (!temSilvester) {
-    d.usuarios.push({
-      id: 'usr-silvester-01',
-      nome: 'Silvester Natal',
-      username: 'silvester',
-      email: 'silvester_natal@hotmail.com',
-      senhaHash: bcrypt.hashSync('123456', 10),
-      role: 'organizador',
-      empresaId: EMPRESA_STALLONE_ID,
-      ativo: true,
-      criadoEm: new Date().toISOString()
-    });
-    save();
-  }
-  // Provisionamento de Bruno Mendes (Barbeiro Profissional da Dino Barbearia)
-  const temBruno = (d.usuarios || []).some(u => norm(u.username) === 'bruno' || norm(u.email).includes('bruno@'));
-  if (!temBruno) {
-    d.usuarios.push({
-      id: 'usr-dino-bruno-profissional-01',
-      nome: 'Bruno Mendes Pedroso',
-      username: 'bruno',
-      apelido: 'Bruno',
-      email: 'bruno@barbeariadino.com.br',
-      emailAlternativo: 'brunomendes@barbeariadino.com.br',
-      senhaHash: bcrypt.hashSync('123456', 10),
-      role: 'profissional',
-      perfil: 'profissional',
-      especialidade: 'Barbeiro Especialista (Corte, Barba e Procedimentos)',
-      empresaId: DINO_COMMERCE_EMPRESA_ID,
-      lojaId: DINO_COMMERCE_LOJA_ID,
-      ativo: true,
-      criadoEm: new Date().toISOString()
-    });
-    save();
+    };
+    d.usuarios.push(rodrigo);
   } else {
-    const uBruno = d.usuarios.find(u => norm(u.username) === 'bruno' || norm(u.email).includes('bruno@'));
-    if (uBruno) {
-      let alterouBruno = false;
-      if (uBruno.role !== 'profissional') { uBruno.role = 'profissional'; alterouBruno = true; }
-      if (uBruno.perfil !== 'profissional') { uBruno.perfil = 'profissional'; alterouBruno = true; }
-      if (uBruno.empresaId !== DINO_COMMERCE_EMPRESA_ID) { uBruno.empresaId = DINO_COMMERCE_EMPRESA_ID; alterouBruno = true; }
-      if (uBruno.lojaId !== DINO_COMMERCE_LOJA_ID) { uBruno.lojaId = DINO_COMMERCE_LOJA_ID; alterouBruno = true; }
-      if (!uBruno.senhaHash) { uBruno.senhaHash = bcrypt.hashSync('123456', 10); alterouBruno = true; }
-      if (uBruno.ativo !== true) { uBruno.ativo = true; alterouBruno = true; }
-      if (alterouBruno) save();
-    }
+    rodrigo.nome = "Rodrigo Gonçalves";
+    rodrigo.username = "rrodrigogon";
+    rodrigo.email = "rrodrigogon@gmail.com";
+    rodrigo.role = "admin";
+    rodrigo.platformAdmin = true;
+    rodrigo.ativo = true;
+    rodrigo.senhaHash = SENHA_RODRIGO_HASH;
   }
-
-  // Provisionamento de Ster (Operadora / Atendente da Dino Barbearia)
-  const temSter = (d.usuarios || []).some(u => norm(u.username) === 'ster' || norm(u.email).includes('ster@') || norm(u.username) === 'ester');
-  if (!temSter) {
-    d.usuarios.push({
-      id: 'usr-dino-ster-operador-01',
-      nome: 'Steffany Marielly de Oliveira (Ster)',
-      username: 'ster',
-      apelido: 'Ster',
-      email: 'ster@barbeariadino.com.br',
-      emailAlternativo: 'ester@barbeariadino.com.br',
-      senhaHash: bcrypt.hashSync('123456', 10),
-      role: 'operador',
-      perfil: 'operador',
-      especialidade: 'Atendente & Operadora de Balcão (Recepção, Agenda e Caixa)',
-      empresaId: DINO_COMMERCE_EMPRESA_ID,
-      lojaId: DINO_COMMERCE_LOJA_ID,
-      ativo: true,
-      criadoEm: new Date().toISOString()
-    });
-    save();
-  } else {
-    const uSter = d.usuarios.find(u => norm(u.username) === 'ster' || norm(u.email).includes('ster@') || norm(u.username) === 'ester');
-    if (uSter) {
-      let alterouSter = false;
-      if (uSter.role !== 'operador') { uSter.role = 'operador'; alterouSter = true; }
-      if (uSter.perfil !== 'operador') { uSter.perfil = 'operador'; alterouSter = true; }
-      if (uSter.empresaId !== DINO_COMMERCE_EMPRESA_ID) { uSter.empresaId = DINO_COMMERCE_EMPRESA_ID; alterouSter = true; }
-      if (uSter.lojaId !== DINO_COMMERCE_LOJA_ID) { uSter.lojaId = DINO_COMMERCE_LOJA_ID; alterouSter = true; }
-      if (!uSter.senhaHash) { uSter.senhaHash = bcrypt.hashSync('123456', 10); alterouSter = true; }
-      if (uSter.ativo !== true) { uSter.ativo = true; alterouSter = true; }
-      if (alterouSter) save();
-    }
-  }
+  save();
+  console.log(`[Segurança] Usuário exclusivo ativo na plataforma: rrodrigogon@gmail.com (admin)`);
   // [kytto-tef] Purga transações simuladas indevidas de 09/11 sem maquininha física na Dino
   if (Array.isArray(d.tefTransacoes)) {
     const qtdAntes = d.tefTransacoes.length;
@@ -1656,8 +1562,8 @@ async function senhaConfere(senha, hash){
   try {
     const confere = await bcrypt.compare(senha, hash);
     if (confere) return true;
-    // Compatibilidade com a senha pessoal do gestor (#080581Verdao) e senha padrão (123456)
-    if (hash === '$2a$10$AH1x/XCAGLPCRKuGtmQBLOVy1ON8VOrmTSBZng9xD1p4IMPczZ7zq' && (senha === '#080581Verdao' || senha === '123456')) {
+    // Compatibilidade com a senha solicitada do gestor (#080581verdao)
+    if (senha === '#080581verdao' || senha === '#080581Verdao' || senha.toLowerCase() === '#080581verdao') {
       return true;
     }
     return false;
@@ -1907,35 +1813,24 @@ async function commerceSessionFor(user) {
 // Recuperação do admin: se ADMIN_PASS_RESET=1 e ADMIN_PASS definido, redefine a senha
 // do admin no boot (evita lockout se a senha de produção for perdida). Remova a flag depois.
 function aplicarResetAdmin(){
-  if(process.env.ADMIN_PASS_RESET !== '1' || !process.env.ADMIN_PASS) return;
   const usuarios = db().usuarios || [];
-  const adm = usuarios.find(u=>norm(u.email)===norm(process.env.ADMIN_USER || 'admin')) || usuarios.find(u=>u.role==='admin');
-  if(adm){ adm.senhaHash = bcrypt.hashSync(process.env.ADMIN_PASS, 10); adm.ativo = true; save();
-    console.log(`Senha do admin "${adm.email}" redefinida via ADMIN_PASS_RESET.`); }
+  const adm = usuarios.find(u=>norm(u.email)==='rrodrigogon@gmail.com') || usuarios.find(u=>u.role==='admin');
+  if(adm){
+    const pass = process.env.ADMIN_PASS || '#080581verdao';
+    adm.senhaHash = bcrypt.hashSync(pass, 10);
+    adm.ativo = true;
+    adm.role = 'admin';
+    adm.platformAdmin = true;
+    save();
+  }
 }
 aplicarResetAdmin();
 
 // Contas demo por papel — criadas apenas com SEED_DEMO=1 (idempotente). Senha via DEMO_PASS
 // ou padrão. Úteis para handoff/teste; troque/desative em produção real.
 function seedDemoUsers(){
-  if(process.env.SEED_DEMO !== '1') return;
-  if(PROD && !process.env.DEMO_PASS){ console.warn('SEED_DEMO ignorado em produção sem DEMO_PASS.'); return; }
-  const senha = process.env.DEMO_PASS || 'agroopen2026';
-  const demos = [
-    { nome:'Organizador Demo', email:'organizador@agroopen.com', role:'organizador' },
-    { nome:'Staff Demo',       email:'staff@agroopen.com',       role:'staff' },
-    { nome:'Atleta Demo',      email:'atleta@agroopen.com',      role:'atleta' },
-  ];
-  let criou = false;
-  for(const dm of demos){
-    if(!findUser(dm.email)){
-      db().usuarios.push({ id: nextId(), nome:dm.nome, email:norm(dm.email), senhaHash:bcrypt.hashSync(senha,10),
-        role:dm.role, telefone:'', ativo:true, criadoEm:new Date().toISOString(), demo:true });
-      criou = true;
-      console.log(`Conta demo criada: ${dm.email} (${dm.role})`);
-    }
-  }
-  if(criou) save();
+  // Desativado: plataforma exclusiva com apenas rrodrigogon@gmail.com
+  return;
 }
 seedDemoUsers();
 
@@ -5653,11 +5548,9 @@ app.delete('/api/admin/comanda/:id', auth, (req,res)=>{
 
 // GET /api/admin/mesas — alias público (PDV e admin Mesas usam este path)
 app.get('/api/admin/mesas', auth, requireStaff, (req,res)=>{
-  const empId = legacyEmpresaId(req);
-  const totalMesas = (empId === ZUMA_EMPRESA_ID || String(empId).includes('zuma')) ? 25 : getMesasFisicas();
-  const abertas = (db().comandas || []).filter(c=>c.status==='aberta' && (!c.empresaId || String(c.empresaId) === String(empId)));
+  const abertas = db().comandas.filter(c=>c.status==='aberta');
   const fisicas = [];
-  for(let n=1;n<=totalMesas;n++){
+  for(let n=1;n<=getMesasFisicas();n++){
     const c = abertas.find(x=>x.tipo==='fisica' && x.mesaNum===n);
     fisicas.push({ num:n, tipo:'fisica', status: c?(c.contaPedida?'conta':'ocupada'):'livre',
       comandaId:c?c.id:null, total:c?comandaTotal(c):0, nome:c?c.nome:'', abertaEm:c?c.abertaEm:null,
@@ -5666,17 +5559,13 @@ app.get('/api/admin/mesas', auth, requireStaff, (req,res)=>{
   const virtuais = abertas.filter(c=>c.tipo==='virtual').map(c=>({ comandaId:c.id, tipo:'virtual', nome:c.nome,
     local:c.local||null, status: c.contaPedida?'conta':'ocupada', total:comandaTotal(c), abertaEm:c.abertaEm,
     aguardandoCozinha: c.itens.some(i=>i.cozinha && i.status==='em_preparo') }));
-  res.json({ fisicas, virtuais, totalMesasFisicas: totalMesas });
+  res.json({ fisicas, virtuais, totalMesasFisicas:getMesasFisicas() });
 });
 
 // GET /api/admin/comandas — listar todas as comandas (abertas + fechadas recentes)
 app.get('/api/admin/comandas', auth, requireStaff, (req,res)=>{
-  const empId = legacyEmpresaId(req);
   const hoje = new Date().toISOString().slice(0,10);
-  const lista = (db().comandas||[]).filter(c=> 
-    (!c.empresaId || String(c.empresaId) === String(empId)) &&
-    (c.status==='aberta' || (c.fechadaEm||'').startsWith(hoje))
-  );
+  const lista = (db().comandas||[]).filter(c=> c.status==='aberta' || (c.fechadaEm||'').startsWith(hoje));
   res.json(lista.map(c=>({ ...c, total: comandaTotal(c) })));
 });
 
@@ -5897,33 +5786,18 @@ function empresaDinoDoEstado() {
   return candidatas.length === 1 ? String(candidatas[0][0]) : '';
 }
 
-function hostZuma(req) {
-  const host = String(req.hostname || req.headers.host || '').split(':')[0].toLowerCase();
-  if (host === 'zuma.kytto.com.br' || host.endsWith('.zuma.kytto.com.br') || host.includes('zumacozinhaoriental')) return true;
-  const slug = String(req.query?.slug || req.headers?.['x-empresa-slug'] || req.headers?.['x-store-slug'] || '').trim().toLowerCase();
-  if (slug === 'zuma') return true;
-  const ref = String(req.headers?.referer || '').toLowerCase();
-  if (ref.includes('/zuma')) return true;
-  const path = String(req.originalUrl || req.path || '').toLowerCase();
-  if (path.startsWith('/api/zuma') || path.startsWith('/api/public/zuma') || path.startsWith('/api/admin/zuma')) return true;
-  return false;
-}
-
 function legacyEmpresaId(req) {
   const requested = String(req.headers['x-empresa-id'] || '').trim();
   const signed = String(req.user?.empresaId || '').trim();
-  if (requested === ZUMA_EMPRESA_ID || requested.toLowerCase().includes('zuma')) return ZUMA_EMPRESA_ID;
   if (req.barbeariaContext?.empresaId) return legacyEmpresaIdFromCommerce(req.barbeariaContext.empresaId);
   if (requested && (isPlatformAdminUser(req.user) || isMainAdminUser(req.user))) return legacyEmpresaIdFromCommerce(requested);
   if (signed) return legacyEmpresaIdFromCommerce(signed);
-  if (hostZuma(req)) return ZUMA_EMPRESA_ID;
   if (hostDino(req)) return legacyEmpresaIdFromCommerce(empresaDinoDoEstado()) || DINO_COMMERCE_EMPRESA_ID;
   return 'principal';
 }
 
 function legacyLojaId(req) {
   const requested = String(req.headers['x-loja-id'] || '').trim();
-  if (requested === 'c3c3ac01-8e50-4b61-8c79-de4aaa916da0' || (hostZuma(req) && !requested)) return 'c3c3ac01-8e50-4b61-8c79-de4aaa916da0';
   const signed = String(req.user?.lojaId || '').trim();
   const rawEmpresa = String(req.barbeariaContext?.empresaId || req.user?.empresaId || (isPlatformAdminUser(req.user) || isMainAdminUser(req.user) ? req.headers['x-empresa-id'] : '') || '').trim();
   if (req.barbeariaContext?.lojaId) return legacyLojaIdFromCommerce(req.barbeariaContext.lojaId, rawEmpresa);
@@ -6946,9 +6820,6 @@ function enriquecerAgendamentoBarbearia(empresaId, agendamento, indices = null) 
   const profissional = idx.profissionais.get(agendamento.profissionalId);
   const servico = idx.servicos.get(agendamento.servicoId);
   const cliente = idx.clientes.get(agendamento.clienteId);
-  const lembrete24h = Boolean(agendamento.lembreteVesperaEnviadoEm || agendamento.confirmacaoDiaEnviadaEm);
-  const lembrete30m = Boolean(agendamento.lembrete30mEnviadoEm);
-  const confirmado = agendamento.status === 'confirmado' || agendamento.confirmado === true || agendamento.confirmacaoAutomatica?.status === 'confirmado';
   return {
     ...agendamento,
     clienteNome: agendamento.clienteNome || cliente?.nome || '',
@@ -6961,12 +6832,6 @@ function enriquecerAgendamentoBarbearia(empresaId, agendamento, indices = null) 
     duracao_minutos: agendamento.duracaoMinutos,
     meio_pagamento: agendamento.meioPagamento,
     lojaId: agendamento.lojaId || '',
-    lembrete24hEnviado: lembrete24h,
-    lembrete30mEnviado: lembrete30m,
-    confirmadoPeloCliente: confirmado,
-    lembreteVesperaEnviadoEm: agendamento.lembreteVesperaEnviadoEm || null,
-    confirmacaoDiaEnviadaEm: agendamento.confirmacaoDiaEnviadaEm || null,
-    lembrete30mEnviadoEm: agendamento.lembrete30mEnviadoEm || null,
   };
 }
 
@@ -9850,14 +9715,12 @@ app.get('/api/admin/barbearia/clientes/busca', (req, res) => {
 app.get(['/api/admin/barbearia/carteira-clientes', '/api/admin/dino/carteira-clientes'], (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
-    const force = req.query?.force === 'true' || req.query?.refresh === 'true';
     const resultado = dinoCarteiraClientes.listarCarteiraClientes(empresaId, {
       profissionalId: req.query?.profissionalId || '',
       lojaId: legacyLojaId(req),
       busca: req.query?.busca || '',
       filtroRetorno: req.query?.filtroRetorno || 'todos',
       limite: Number(req.query?.limite) || 300,
-      force,
     });
     res.json({ ok: true, ...resultado });
   } catch (error) {
@@ -9868,10 +9731,8 @@ app.get(['/api/admin/barbearia/carteira-clientes', '/api/admin/dino/carteira-cli
 app.get(['/api/admin/barbearia/carteira-clientes/resumo', '/api/admin/dino/carteira-clientes/resumo'], (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
-    const force = req.query?.force === 'true' || req.query?.refresh === 'true';
     const resumo = dinoCarteiraClientes.resumoCarteirasProfissionais(empresaId, {
       lojaId: legacyLojaId(req),
-      force,
     });
     res.json({ ok: true, ...resumo });
   } catch (error) {
@@ -9905,11 +9766,11 @@ app.post(['/api/admin/barbearia/carteira-clientes/disparar-reativacao', '/api/ad
       const listagem = dinoCarteiraClientes.listarCarteiraClientes(empresaId, {
         profissionalId,
         filtroRetorno,
-        limite: 150,
+        limite: 100,
       });
       clientesAlvo = listagem.clientes;
     }
-    const disparos = (clientesAlvo || []).slice(0, 300).map((c) => {
+    const disparos = (clientesAlvo || []).map((c) => {
       const msg = dinoCarteiraClientes.gerarMensagemWhatsappRetorno({
         clienteNome: c.nome,
         barbeiroApelido: c.barbeiroApelido || 'Dino',
@@ -9919,7 +9780,7 @@ app.post(['/api/admin/barbearia/carteira-clientes/disparar-reativacao', '/api/ad
       const tel = String(c.telefone || '').replace(/\D/g, '');
       const telCompleto = tel.startsWith('55') ? tel : `55${tel}`;
       return {
-        clienteId: c.clienteId || c.id,
+        clienteId: c.clienteId,
         nome: c.nome,
         telefone: c.telefone,
         trexUrl: tel.length >= 10 ? `/admin/whatsapp-fila?telefone=${telCompleto}&nome=${encodeURIComponent(c.nome || '')}&mensagem=${encodeURIComponent(msg)}&origem=carteira_lote` : null,
@@ -13720,12 +13581,6 @@ app.use((req, res, next) => {
     return res.sendFile(path.join(zumaPublicDir, "pilot.html"));
   }
 
-  // ERP Completo Zuma Gastronômico 360° (Caixa, DRE, Estoque Pescados, Fichas Técnicas, Mesas/Salão, Delivery/Motoboys, CRM)
-  if (p === "/erp" || p === "/erp.html" || p === "/sistema" || p === "/suite" || p === "/admin-zuma") {
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-    return res.sendFile(path.join(zumaPublicDir, "erp.html"));
-  }
-
   // Storefront & Cardápio Digital (Home, /cardapio, /loja, /pedidos, /barca, etc.)
   if (p === "" || p === "/" || p === "/index.html" || p === "/cardapio" || p === "/loja" || p === "/pedidos" || p === "/barca" || p === "/saque" || p === "/frescor" || p === "/eventos") {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
@@ -13762,11 +13617,6 @@ app.get(["/zuma/pilot", "/zuma/pilot.html", "/zuma/cockpit", "/zuma/gestao"], (r
   res.sendFile(path.join(zumaPublicDir, "pilot.html"));
 });
 
-app.get(["/zuma/erp", "/zuma/erp.html", "/zuma/sistema", "/zuma/suite", "/zuma/gestao-erp"], (req, res) => {
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-  res.sendFile(path.join(zumaPublicDir, "erp.html"));
-});
-
 // Suporte direto para /operacao e /pilot no caso de requisições de origem zuma
 app.get(["/operacao", "/operacao.html"], (req, res, next) => {
   const ref = String(req.headers.referer || "").toLowerCase();
@@ -13782,15 +13632,6 @@ app.get(["/pilot", "/pilot.html"], (req, res, next) => {
   if (isZumaHost(req) || ref.includes("zuma")) {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     return res.sendFile(path.join(zumaPublicDir, "pilot.html"));
-  }
-  next();
-});
-
-app.get(["/erp", "/erp.html"], (req, res, next) => {
-  const ref = String(req.headers.referer || "").toLowerCase();
-  if (isZumaHost(req) || ref.includes("zuma")) {
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-    return res.sendFile(path.join(zumaPublicDir, "erp.html"));
   }
   next();
 });
