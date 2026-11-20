@@ -336,6 +336,7 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
       const estado = barbeariaErpKytto.estadoEmpresa(empId, false);
       if (estado) {
         sanearProfissionaisEAgendamentosDino(estado, empId);
+        barbeariaErpKytto.garantirDuracoesServicosBarbearia(empId);
       }
 
       const profissionaisAtuais = barbeariaErpKytto.listarProfissionais(empId, { incluirInativos: true });

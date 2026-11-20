@@ -8857,14 +8857,14 @@ export default function BarbeariaERP({ tabInicial } = {}) {
               <Field
                 label="Tempo por atendimento (min)"
                 full
-                hint="Duração desejada para este profissional. Dino ou qualquer barbeiro pode ter tempo próprio (ex.: 15, 30, 45 ou 60 min). Deixe vazio para usar a duração do serviço."
+                hint="Duração desejada para este profissional em serviços simples. Deixe vazio para usar rigorosamente a duração individual de cada serviço do Catálogo (ex: Corte 40 min, Barba 30 min, Combo Corte e Barba 60 min). Procedimentos combo nunca são encolhidos para menos de 60 min."
               >
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                   <input
                     type="number"
                     min="5"
                     max="480"
-                    placeholder="Padrão do serviço (30 min)"
+                    placeholder="Padrão do serviço (Catálogo ERP)"
                     value={formProf.duracaoAtendimentoMinutos || ""}
                     onChange={(event) =>
                       setFormProf((atual) => ({
@@ -8875,7 +8875,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                     style={inputStyle}
                   />
                   <div style={{ display: "flex", gap: 4 }}>
-                    {[15, 30, 45, 60].map((t) => (
+                    {[30, 40, 45, 60].map((t) => (
                       <button
                         key={t}
                         type="button"

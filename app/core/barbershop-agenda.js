@@ -368,7 +368,7 @@ export async function listServices(scope) {
         descricao: item.descricao || '',
         categoria: item.categoria || 'Geral',
         grupoServico: item.grupoServico || 'nao_classificado',
-        duracaoMinutos: Number(item.duracaoMinutos || 30),
+        duracaoMinutos: Number(item.duracaoMinutos || barbearia.estimarDuracaoPorNomeServico?.(item.nome) || 30),
         preco: Number(item.preco || 0),
         tipoPreco: item.tipoPreco || 'fixo',
         precoTexto: isDinoService ? 'R$ 300,00 (R$ 600,00 após as 18h09)' : barbearia.rotuloPrecoServico(item),
