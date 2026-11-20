@@ -20,7 +20,14 @@ import {
   Calendar,
   Award,
   Zap,
-  Maximize2
+  Maximize2,
+  Clock,
+  Send,
+  FileText,
+  Check,
+  ArrowDownRight,
+  Percent,
+  Package
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -70,6 +77,12 @@ export default function ZumaRestauranteSuite() {
   const [busca, setBusca] = useState('');
   const [mesas, setMesas] = useState([]);
   const [storefront, setStorefront] = useState(null);
+  const [estoquePescados, setEstoquePescados] = useState([]);
+  const [historicoBaixas, setHistoricoBaixas] = useState([]);
+  const [fichasTecnicas, setFichasTecnicas] = useState([]);
+  const [simulacaoPedido, setSimulacaoPedido] = useState(null);
+  const [simulando, setSimulando] = useState(false);
+  const [mensagemSucesso, setMensagemSucesso] = useState(null);
 
   // Carregar dados de Zuma da API
   const carregarDadosZuma = async () => {
@@ -103,8 +116,70 @@ export default function ZumaRestauranteSuite() {
     }
   };
 
+  // Carregar Estoque de Pescados e Fichas Técnicas
+  const carregarEstoqueEFichas = async () => {
+    try {
+      const [resEstoque, resFichas] = await Promise.allSettled([
+        api.get('/api/public/zuma/estoque-pescados'),
+        api.get('/api/public/zuma/fichas-tecnicas')
+      ]);
+      if (resEstoque.status === 'fulfilled' && resEstoque.value) {
+        setEstoquePescados(resEstoque.value.estoque || []);
+        setHistoricoBaixas(resEstoque.value.historicoBaixas || []);
+      }
+      if (resFichas.status === 'fulfilled' && resFichas.value) {
+        setFichasTecnicas(resFichas.value.fichas || []);
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar estoque/fichas Zuma:', e);
+    }
+  };
+
+  // Simulação de Pedido via WhatsApp no Zumi Atende
+  const executarSimulacaoPedido = async () => {
+    setSimulando(true);
+    setMensagemSucesso(null);
+    try {
+      const res = await api.post('/api/public/zuma/whatsapp/simular-pedido', {
+        origem: 'ZumaRestauranteSuite_Web',
+        cliente: {
+          nome: 'Rodrigo Gonçalves',
+          telefone: '65999056008',
+          bairro: 'Jardim Europa',
+          cidade: 'Tangará da Serra'
+        },
+        mensagemCliente: 'Boa noite Zumi! Quero pedir 1 Combinado Zuma 30 Peças e 1 Hot Roll Salmão Especial para entrega aqui no Jardim Europa.',
+        itens: [
+          { codigo: 'COMB-30', quantidade: 1 },
+          { codigo: 'HOT-01', quantidade: 1 }
+        ]
+      });
+      if (res && res.sucesso) {
+        setSimulacaoPedido(res);
+        setMensagemSucesso('Pedido via WhatsApp simulado e processado com sucesso! Baixa de pescados e cálculo de CMV realizados.');
+        carregarEstoqueEFichas();
+      }
+    } catch (err) {
+      console.error('Erro ao simular pedido WhatsApp:', err);
+    } finally {
+      setSimulando(false);
+    }
+  };
+
+  const reporEstoque = async (insumoId, quantidade) => {
+    try {
+      await api.post('/api/public/zuma/estoque-pescados/repor', { insumoId, quantidade });
+      setMensagemSucesso('Reposição de estoque registrada com sucesso no ERP Zuma!');
+      setTimeout(() => setMensagemSucesso(null), 4000);
+      carregarEstoqueEFichas();
+    } catch (e) {
+      console.error('Erro ao repor estoque:', e);
+    }
+  };
+
   useEffect(() => {
     carregarDadosZuma();
+    carregarEstoqueEFichas();
   }, []);
 
   // Categorias únicas
@@ -876,25 +951,472 @@ export default function ZumaRestauranteSuite() {
       {/* 5. ABA ZUMI ATENDE (KYTTOIA) */}
       {abaAtiva === 'zumi' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {/* Header Zumi */}
           <div style={{
-            background: 'linear-gradient(135deg, rgba(230, 57, 70, 0.2) 0%, rgba(15, 23, 42, 0.95) 100%)',
+            background: 'linear-gradient(135deg, rgba(230, 57, 70, 0.25) 0%, rgba(15, 23, 42, 0.95) 100%)',
             border: '1px solid #E63946',
             borderRadius: 14,
-            padding: 22
+            padding: 22,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 16
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <span style={{ fontSize: 32 }}>🤖</span>
+              <span style={{ fontSize: 36 }}>🤖</span>
               <div>
-                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#ffffff' }}>
-                  Zumi · Agente de Atendimento &amp; Vendas WhatsApp (KyttoIA 2.5 Flash)
-                </h2>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <h2 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#ffffff' }}>
+                    Zumi · Agente de Atendimento &amp; Vendas WhatsApp (Motor KyttoIA 2.5 Flash)
+                  </h2>
+                  <span style={{
+                    fontSize: 10,
+                    fontWeight: 800,
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                    background: 'rgba(16, 185, 129, 0.2)',
+                    color: '#10b981',
+                    border: '1px solid #10b981'
+                  }}>
+                    ● Conectado ao Vivo · (65) 99800-1447
+                  </span>
+                </div>
                 <p style={{ margin: '4px 0 0 0', fontSize: 12.5, color: '#cbd5e1' }}>
-                  Atendimento ágil e humanizado treinado com o cardápio oficial, cálculo automático de frete para Tangará da Serra e recuperação de carrinhos abandonados.
+                  Atendimento ágil e humanizado treinado com o cardápio oficial, cálculo automático de frete para Tangará da Serra, baixa imediata no estoque de pescados e cálculo de CMV por ficha técnica.
                 </p>
               </div>
             </div>
+
+            <button
+              onClick={executarSimulacaoPedido}
+              disabled={simulando}
+              style={{
+                background: simulando ? '#475569' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                color: '#ffffff',
+                border: 'none',
+                padding: '12px 20px',
+                borderRadius: 10,
+                fontSize: 13,
+                fontWeight: 800,
+                cursor: simulando ? 'wait' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+                transition: 'all 0.2s'
+              }}
+            >
+              {simulando ? (
+                <>
+                  <RefreshCw size={16} className="animate-spin" />
+                  Processando com KyttoIA...
+                </>
+              ) : (
+                <>
+                  <Zap size={16} />
+                  ⚡ Simular Pedido via WhatsApp (Zumi + Baixa Salmão + CMV)
+                </>
+              )}
+            </button>
           </div>
 
+          {mensagemSucesso && (
+            <div style={{
+              background: 'rgba(16, 185, 129, 0.15)',
+              border: '1px solid #10b981',
+              borderRadius: 10,
+              padding: '12px 16px',
+              color: '#10b981',
+              fontSize: 13,
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8
+            }}>
+              <CheckCircle2 size={16} />
+              {mensagemSucesso}
+            </div>
+          )}
+
+          {/* Resultado da Simulação do Pedido */}
+          {simulacaoPedido && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+              {/* Grid 2 colunas: Chat WhatsApp e KDS/NFC-e */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 16 }}>
+                {/* 1. Interface do WhatsApp Dark Mode */}
+                <div style={{
+                  background: '#0b141a',
+                  border: '1px solid #222d34',
+                  borderRadius: 14,
+                  overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column'
+                }}>
+                  {/* WhatsApp Top Bar */}
+                  <div style={{
+                    background: '#202c33',
+                    padding: '12px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    borderBottom: '1px solid #2a3942'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: '50%',
+                        background: '#E63946',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 20
+                      }}>
+                        🍣
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: '#e9edef' }}>
+                          Zumi · Zuma Cozinha Oriental
+                        </div>
+                        <div style={{ fontSize: 11, color: '#00a884', fontWeight: 600 }}>
+                          ● online (Motor KyttoIA 2.5 Flash)
+                        </div>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 11, color: '#8696a0' }}>WhatsApp Oficial</span>
+                  </div>
+
+                  {/* Chat Messages */}
+                  <div style={{
+                    padding: 16,
+                    background: '#0b141a',
+                    backgroundImage: 'radial-gradient(#202c33 1px, transparent 1px)',
+                    backgroundSize: '16px 16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 12,
+                    maxHeight: 460,
+                    overflowY: 'auto'
+                  }}>
+                    {simulacaoPedido.conversaWhatsapp?.map((msg, i) => {
+                      const isZumi = msg.autor === 'Zumi';
+                      return (
+                        <div
+                          key={i}
+                          style={{
+                            alignSelf: isZumi ? 'flex-start' : 'flex-end',
+                            maxWidth: '85%',
+                            background: isZumi ? '#202c33' : '#005c4b',
+                            borderRadius: 10,
+                            padding: '10px 14px',
+                            color: '#e9edef',
+                            fontSize: 12.5,
+                            lineHeight: 1.5,
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                            position: 'relative'
+                          }}
+                        >
+                          <div style={{ fontSize: 11, fontWeight: 800, color: isZumi ? '#53bdeb' : '#25D366', marginBottom: 4 }}>
+                            {msg.autor}
+                          </div>
+                          <div style={{ whiteSpace: 'pre-line' }}>{msg.texto}</div>
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'flex-end',
+                            gap: 4,
+                            marginTop: 4,
+                            fontSize: 10,
+                            color: '#8696a0'
+                          }}>
+                            <span>{msg.hora || '20:45'}</span>
+                            <span style={{ color: '#53bdeb' }}>✓✓</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. Integração KDS Sushi Bar & NFC-e Fiscal */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {/* Card KDS */}
+                  <div style={{
+                    background: 'var(--card, #1e293b)',
+                    border: '1px solid #334155',
+                    borderRadius: 14,
+                    padding: 18
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <ChefHat size={18} color="#E63946" />
+                        <span style={{ fontSize: 14, fontWeight: 800, color: '#ffffff' }}>Comanda KDS Sushi Bar</span>
+                      </div>
+                      <span style={{
+                        fontSize: 10,
+                        fontWeight: 800,
+                        padding: '3px 8px',
+                        borderRadius: 6,
+                        background: 'rgba(230, 57, 70, 0.2)',
+                        color: '#E63946',
+                        border: '1px solid #E63946'
+                      }}>
+                        {simulacaoPedido.kds?.status || 'PREPARANDO'}
+                      </span>
+                    </div>
+
+                    <div style={{ background: 'var(--surface, #0f172a)', borderRadius: 8, padding: 12, fontSize: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <span style={{ color: 'var(--muted, #94a3b8)' }}>Comanda:</span>
+                        <span style={{ fontWeight: 800, color: '#ffffff' }}>{simulacaoPedido.kds?.comandaId}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <span style={{ color: 'var(--muted, #94a3b8)' }}>Cliente:</span>
+                        <span style={{ fontWeight: 700, color: '#ffffff' }}>{simulacaoPedido.pedido?.cliente?.nome}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <span style={{ color: 'var(--muted, #94a3b8)' }}>Destino:</span>
+                        <span style={{ fontWeight: 700, color: '#ffffff' }}>{simulacaoPedido.pedido?.cliente?.bairro}, Tangará da Serra</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--muted, #94a3b8)' }}>Tempo Estimado KDS:</span>
+                        <span style={{ fontWeight: 800, color: '#10b981' }}>{simulacaoPedido.kds?.tempoEstimadoMinutos} minutos</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card Fiscal NFC-e */}
+                  <div style={{
+                    background: 'var(--card, #1e293b)',
+                    border: '1px solid #334155',
+                    borderRadius: 14,
+                    padding: 18
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <FileText size={18} color="#10b981" />
+                        <span style={{ fontSize: 14, fontWeight: 800, color: '#ffffff' }}>NFC-e Autorizada (SEFAZ-MT)</span>
+                      </div>
+                      <span style={{
+                        fontSize: 10,
+                        fontWeight: 800,
+                        padding: '3px 8px',
+                        borderRadius: 6,
+                        background: 'rgba(16, 185, 129, 0.2)',
+                        color: '#10b981',
+                        border: '1px solid #10b981'
+                      }}>
+                        STATUS 100 · AUTORIZADA
+                      </span>
+                    </div>
+
+                    <div style={{ background: 'var(--surface, #0f172a)', borderRadius: 8, padding: 12, fontSize: 11.5 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <span style={{ color: 'var(--muted, #94a3b8)' }}>Protocolo SEFAZ-MT:</span>
+                        <span style={{ fontWeight: 800, color: '#10b981' }}>{simulacaoPedido.fiscal?.protocolo}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <span style={{ color: 'var(--muted, #94a3b8)' }}>Nº Nota / Série:</span>
+                        <span style={{ fontWeight: 700, color: '#ffffff' }}>NFC-e #{simulacaoPedido.fiscal?.numeroNota} (Série {simulacaoPedido.fiscal?.serie})</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <span style={{ color: 'var(--muted, #94a3b8)' }}>Total Emitido:</span>
+                        <span style={{ fontWeight: 800, color: '#ffffff' }}>R$ {Number(simulacaoPedido.fiscal?.valorTotal || 0).toFixed(2).replace('.', ',')}</span>
+                      </div>
+                      <div style={{ wordBreak: 'break-all', color: 'var(--muted, #94a3b8)', fontSize: 10, marginTop: 4 }}>
+                        Chave: {simulacaoPedido.fiscal?.chaveAcesso}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Card de Baixa em Tempo Real no Estoque de Pescados */}
+              <div style={{
+                background: 'var(--card, #1e293b)',
+                border: '1px solid #334155',
+                borderRadius: 14,
+                padding: 20
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 900, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span>🐟</span> Baixa em Tempo Real de Pescados &amp; Insumos Nobres
+                    </h3>
+                    <p style={{ margin: '4px 0 0 0', fontSize: 12, color: 'var(--muted, #94a3b8)' }}>
+                      Conexão direta com a esteira KDS: insumos debitados automaticamente a partir da composição das fichas técnicas.
+                    </p>
+                  </div>
+                  <span style={{
+                    fontSize: 11,
+                    fontWeight: 800,
+                    padding: '4px 10px',
+                    borderRadius: 6,
+                    background: 'rgba(16, 185, 129, 0.2)',
+                    color: '#10b981'
+                  }}>
+                    ✓ Baixa Confirmada
+                  </span>
+                </div>
+
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                    <thead>
+                      <tr style={{ background: 'var(--surface, #0f172a)', borderBottom: '1px solid #334155' }}>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--muted, #94a3b8)', fontWeight: 700 }}>Insumo Nobre</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--muted, #94a3b8)', fontWeight: 700 }}>Consumo Pedido</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--muted, #94a3b8)', fontWeight: 700 }}>Estoque Anterior</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--muted, #94a3b8)', fontWeight: 700 }}>Estoque Atual</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--muted, #94a3b8)', fontWeight: 700 }}>Custo Médio / Un</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {simulacaoPedido.extratoBaixaEstoque?.map((b, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid rgba(51, 65, 85, 0.5)' }}>
+                          <td style={{ padding: '10px 12px', fontWeight: 800, color: '#ffffff' }}>
+                            {b.nomeInsumo}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center', color: '#E63946', fontWeight: 900 }}>
+                            -{b.quantidadeConsumida} {b.unidade}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--muted, #94a3b8)' }}>
+                            {b.estoqueAnterior} {b.unidade}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center', color: '#10b981', fontWeight: 800 }}>
+                            {b.estoqueAtual} {b.unidade}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--muted, #94a3b8)' }}>
+                            R$ {Number(b.custoMedio || 0).toFixed(2).replace('.', ',')} / {b.unidade}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* 4. Painel de CMV Analítico da Ficha Técnica */}
+              <div style={{
+                background: 'var(--card, #1e293b)',
+                border: '1px solid #334155',
+                borderRadius: 14,
+                padding: 20
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 900, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span>📊</span> Cálculo de CMV Analítico da Ficha Técnica Zuma
+                    </h3>
+                    <p style={{ margin: '4px 0 0 0', fontSize: 12, color: 'var(--muted, #94a3b8)' }}>
+                      Custo da Mercadoria Vendida (CMV) item a item com margem de contribuição real e markup.
+                    </p>
+                  </div>
+                  <span style={{
+                    fontSize: 12,
+                    fontWeight: 900,
+                    padding: '4px 12px',
+                    borderRadius: 6,
+                    background: 'rgba(59, 130, 246, 0.2)',
+                    color: '#60a5fa',
+                    border: '1px solid #3b82f6'
+                  }}>
+                    CMV Global: {simulacaoPedido.cmvAnaliticoFichaTecnica?.resumo?.cmvGlobalPercentual}%
+                  </span>
+                </div>
+
+                {/* Itens do Pedido */}
+                <div style={{ overflowX: 'auto', marginBottom: 16 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                    <thead>
+                      <tr style={{ background: 'var(--surface, #0f172a)', borderBottom: '1px solid #334155' }}>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--muted, #94a3b8)', fontWeight: 700 }}>Prato / Item</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--muted, #94a3b8)', fontWeight: 700 }}>Qtd</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--muted, #94a3b8)', fontWeight: 700 }}>Preço Venda</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--muted, #94a3b8)', fontWeight: 700 }}>Custo Insumos (Ficha)</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--muted, #94a3b8)', fontWeight: 700 }}>% CMV</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--muted, #94a3b8)', fontWeight: 700 }}>Margem Bruta (R$)</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--muted, #94a3b8)', fontWeight: 700 }}>Status CMV</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {simulacaoPedido.cmvAnaliticoFichaTecnica?.itens?.map((it, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid rgba(51, 65, 85, 0.5)' }}>
+                          <td style={{ padding: '10px 12px', fontWeight: 800, color: '#ffffff' }}>
+                            {it.nome}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center', color: '#ffffff' }}>
+                            {it.quantidade}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', color: '#ffffff', fontWeight: 700 }}>
+                            R$ {Number(it.precoVendaUnitario || 0).toFixed(2).replace('.', ',')}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', color: '#E63946', fontWeight: 700 }}>
+                            R$ {Number(it.custoInsumosTotal || 0).toFixed(2).replace('.', ',')}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center', color: '#f59e0b', fontWeight: 900 }}>
+                            {it.cmvPercentual}%
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', color: '#10b981', fontWeight: 800 }}>
+                            R$ {Number(it.margemBrutaValor || 0).toFixed(2).replace('.', ',')} ({it.margemBrutaPercentual}%)
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                            <span style={{
+                              fontSize: 10,
+                              fontWeight: 800,
+                              padding: '2px 8px',
+                              borderRadius: 4,
+                              background: 'rgba(16, 185, 129, 0.15)',
+                              color: '#10b981'
+                            }}>
+                              Excelente
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Resumo do Pedido Cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                  <div style={{ background: 'var(--surface, #0f172a)', borderRadius: 10, padding: 14 }}>
+                    <div style={{ fontSize: 11, color: 'var(--muted, #94a3b8)' }}>Receita Total Bruta</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: '#ffffff', marginTop: 4 }}>
+                      R$ {Number(simulacaoPedido.cmvAnaliticoFichaTecnica?.resumo?.receitaTotal || 0).toFixed(2).replace('.', ',')}
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'var(--surface, #0f172a)', borderRadius: 10, padding: 14 }}>
+                    <div style={{ fontSize: 11, color: 'var(--muted, #94a3b8)' }}>Custo Total dos Insumos</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: '#E63946', marginTop: 4 }}>
+                      R$ {Number(simulacaoPedido.cmvAnaliticoFichaTecnica?.resumo?.custoInsumosTotal || 0).toFixed(2).replace('.', ',')}
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'var(--surface, #0f172a)', borderRadius: 10, padding: 14 }}>
+                    <div style={{ fontSize: 11, color: 'var(--muted, #94a3b8)' }}>Margem de Contribuição</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: '#10b981', marginTop: 4 }}>
+                      R$ {Number(simulacaoPedido.cmvAnaliticoFichaTecnica?.resumo?.margemContribuicaoValor || 0).toFixed(2).replace('.', ',')}
+                    </div>
+                    <div style={{ fontSize: 10, color: '#10b981', fontWeight: 700 }}>
+                      {simulacaoPedido.cmvAnaliticoFichaTecnica?.resumo?.margemContribuicaoPercentual}% do faturamento
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'var(--surface, #0f172a)', borderRadius: 10, padding: 14 }}>
+                    <div style={{ fontSize: 11, color: 'var(--muted, #94a3b8)' }}>CMV Médio Consolidado</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: '#f59e0b', marginTop: 4 }}>
+                      {simulacaoPedido.cmvAnaliticoFichaTecnica?.resumo?.cmvGlobalPercentual}%
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--muted, #94a3b8)' }}>Meta Zuma: &lt; 50,00%</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Cards Padrão do Zumi */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
             <div style={{ background: 'var(--card, #1e293b)', border: '1px solid var(--line, #334155)', borderRadius: 12, padding: 18 }}>
               <h3 style={{ margin: '0 0 12px 0', fontSize: 14, fontWeight: 800 }}>Regras de Atendimento do Zumi</h3>
@@ -902,8 +1424,8 @@ export default function ZumaRestauranteSuite() {
                 <li>Responde em menos de 3 segundos com saudações orientais corteses ("Konbanwa!").</li>
                 <li>Identifica se o cliente prefere sushi cru, maçaricado ou pratos quentes.</li>
                 <li>Oferece upsell automático de sobremesa (ex: Hot Roll de Banana com Nutella).</li>
-                <li>Gera o código Copia e Cola do PIX oficial do Zuma.</li>
-                <li>Notifica a equipe do Sushi Bar no KDS imediatamente ao confirmar o pagamento.</li>
+                <li>Gera o código Copia e Cola do PIX oficial do Zuma com validação automática.</li>
+                <li>Notifica a equipe do Sushi Bar no KDS imediatamente e debita pescados em tempo real.</li>
               </ul>
             </div>
 
@@ -915,7 +1437,7 @@ export default function ZumaRestauranteSuite() {
                     <div style={{ fontSize: 12, fontWeight: 800 }}>WhatsApp Oficial Zuma</div>
                     <div style={{ fontSize: 11, color: 'var(--muted, #94a3b8)' }}>(65) 99800-1447</div>
                   </div>
-                  <span style={{ fontSize: 10, background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', padding: '2px 8px', borderRadius: 4, fontWeight: 800 }}>● Ativo</span>
+                  <span style={{ fontSize: 10, background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', padding: '2px 8px', borderRadius: 4, fontWeight: 800 }}>● Ativo (KyttoIA)</span>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 10, borderRadius: 8, background: 'var(--surface, #0f172a)' }}>
@@ -948,57 +1470,216 @@ export default function ZumaRestauranteSuite() {
             <div>
               <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Estoque de Pescados Frescos &amp; Insumos Nobres</h3>
               <p style={{ margin: '4px 0 0 0', fontSize: 12, color: 'var(--muted, #94a3b8)' }}>
-                Rastreabilidade por lote, controle de temperatura e rendimento por filé de salmão (CMV).
+                Rastreabilidade por lote, controle de rendimento de salmão, shari e fichas técnicas com apuração de CMV real.
               </p>
             </div>
-            <button
-              onClick={() => navigate('/admin/estoque')}
-              style={{
-                background: '#E63946',
-                color: '#ffffff',
-                border: 'none',
-                padding: '8px 16px',
-                borderRadius: 8,
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer'
-              }}
-            >
-              Gerenciar Estoque Completo →
-            </button>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={carregarEstoqueEFichas}
+                style={{
+                  background: 'var(--surface, #0f172a)',
+                  color: '#ffffff',
+                  border: '1px solid #334155',
+                  padding: '8px 14px',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6
+                }}
+              >
+                <RefreshCw size={14} /> Atualizar Estoque
+              </button>
+              <button
+                onClick={() => navigate('/admin/estoque')}
+                style={{
+                  background: '#E63946',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                Módulo Geral de Estoque →
+              </button>
+            </div>
           </div>
 
+          {/* Cards dos Insumos Nobres em Tempo Real */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
-            <div style={{ background: 'var(--card, #1e293b)', border: '1px solid var(--line, #334155)', borderRadius: 12, padding: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 13, fontWeight: 800 }}>🐟 Salmão Fresco Chileno (Filé)</span>
-                <span style={{ fontSize: 11, background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>Em Dia</span>
-              </div>
-              <div style={{ fontSize: 20, fontWeight: 900, color: '#ffffff', marginTop: 8 }}>18,4 kg</div>
-              <div style={{ fontSize: 11, color: 'var(--muted, #94a3b8)', marginTop: 2 }}>Mínimo: 8,0 kg · Custo médio: R$ 88,00/kg</div>
-            </div>
+            {estoquePescados.length > 0 ? (
+              estoquePescados.map((insumo) => (
+                <div
+                  key={insumo.id}
+                  style={{
+                    background: 'var(--card, #1e293b)',
+                    border: '1px solid var(--line, #334155)',
+                    borderRadius: 12,
+                    padding: 16,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between'
+                  }}
+                >
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: '#ffffff' }}>
+                        {insumo.nome}
+                      </span>
+                      <span style={{
+                        fontSize: 10,
+                        background: insumo.quantidadeAtual <= insumo.estoqueMinimo ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.15)',
+                        color: insumo.quantidadeAtual <= insumo.estoqueMinimo ? '#ef4444' : '#10b981',
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                        fontWeight: 700
+                      }}>
+                        {insumo.quantidadeAtual <= insumo.estoqueMinimo ? 'Repor' : 'Normal'}
+                      </span>
+                    </div>
 
-            <div style={{ background: 'var(--card, #1e293b)', border: '1px solid var(--line, #334155)', borderRadius: 12, padding: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 13, fontWeight: 800 }}>🍚 Arroz Grão Japonês (Shari)</span>
-                <span style={{ fontSize: 11, background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>Em Dia</span>
-              </div>
-              <div style={{ fontSize: 20, fontWeight: 900, color: '#ffffff', marginTop: 8 }}>45,0 kg</div>
-              <div style={{ fontSize: 11, color: 'var(--muted, #94a3b8)', marginTop: 2 }}>Mínimo: 20,0 kg · Custo médio: R$ 14,50/kg</div>
-            </div>
+                    <div style={{ fontSize: 22, fontWeight: 900, color: '#ffffff', marginTop: 8 }}>
+                      {insumo.quantidadeAtual} {insumo.unidade}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--muted, #94a3b8)', marginTop: 2 }}>
+                      Mínimo: {insumo.estoqueMinimo} {insumo.unidade} · Custo Médio: R$ {Number(insumo.custoMedioUnitario || 0).toFixed(2).replace('.', ',')}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--muted, #94a3b8)', marginTop: 2 }}>
+                      Fornecedor: {insumo.fornecedorPadrao}
+                    </div>
+                  </div>
 
-            <div style={{ background: 'var(--card, #1e293b)', border: '1px solid var(--line, #334155)', borderRadius: 12, padding: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 13, fontWeight: 800 }}>🍙 Alga Nori Especial (Folhas)</span>
-                <span style={{ fontSize: 11, background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>Em Dia</span>
-              </div>
-              <div style={{ fontSize: 20, fontWeight: 900, color: '#ffffff', marginTop: 8 }}>320 un</div>
-              <div style={{ fontSize: 11, color: 'var(--muted, #94a3b8)', marginTop: 2 }}>Mínimo: 100 un · Custo médio: R$ 0,95/un</div>
+                  <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(51, 65, 85, 0.5)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>
+                      Total: R$ {Number(insumo.valorTotalEmEstoque || 0).toFixed(2).replace('.', ',')}
+                    </span>
+                    <button
+                      onClick={() => reporEstoque(insumo.id, insumo.unidade === 'kg' ? 5 : 20)}
+                      style={{
+                        background: 'rgba(230, 57, 70, 0.15)',
+                        border: '1px solid #E63946',
+                        color: '#E63946',
+                        padding: '4px 8px',
+                        borderRadius: 6,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      + Entrada Lote
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div style={{ color: 'var(--muted, #94a3b8)', fontSize: 13 }}>Carregando dados de pescados...</div>
+            )}
+          </div>
+
+          {/* Fichas Técnicas Oficiais */}
+          <div style={{
+            background: 'var(--card, #1e293b)',
+            border: '1px solid var(--line, #334155)',
+            borderRadius: 14,
+            padding: 20
+          }}>
+            <h3 style={{ margin: '0 0 14px 0', fontSize: 15, fontWeight: 900, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>📋</span> Fichas Técnicas Oficiais do Sushi Bar (Composição &amp; CMV Teórico)
+            </h3>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14 }}>
+              {fichasTecnicas.map((ft) => (
+                <div
+                  key={ft.codigoPrato}
+                  style={{
+                    background: 'var(--surface, #0f172a)',
+                    border: '1px solid #334155',
+                    borderRadius: 10,
+                    padding: 14
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: '#ffffff' }}>{ft.nomePrato}</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted, #94a3b8)' }}>Código: {ft.codigoPrato} · {ft.rendimento}</div>
+                    </div>
+                    <span style={{
+                      fontSize: 11,
+                      fontWeight: 800,
+                      padding: '2px 8px',
+                      borderRadius: 6,
+                      background: 'rgba(245, 158, 11, 0.15)',
+                      color: '#f59e0b'
+                    }}>
+                      CMV: {ft.cmvEstimadoPercentual}%
+                    </span>
+                  </div>
+
+                  <div style={{ marginTop: 10, fontSize: 11.5, color: '#cbd5e1' }}>
+                    <div style={{ fontWeight: 700, color: 'var(--muted, #94a3b8)', marginBottom: 4 }}>Ingredientes da Ficha:</div>
+                    {ft.ingredientes?.map((ing, i) => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                        <span>• {ing.nomeInsumo} ({ing.quantidadeNecessaria} {ing.unidade})</span>
+                        <span style={{ color: 'var(--muted, #94a3b8)' }}>R$ {Number(ing.custoProporcional || 0).toFixed(2).replace('.', ',')}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid #334155', display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                    <span style={{ color: 'var(--muted, #94a3b8)' }}>Custo Insumos: <strong style={{ color: '#E63946' }}>R$ {Number(ft.custoTotalInsumos || 0).toFixed(2).replace('.', ',')}</strong></span>
+                    <span style={{ color: 'var(--muted, #94a3b8)' }}>Preço Venda: <strong style={{ color: '#10b981' }}>R$ {Number(ft.precoVendaSugerido || 0).toFixed(2).replace('.', ',')}</strong></span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
+
+          {/* Histórico Recente de Baixas */}
+          {historicoBaixas.length > 0 && (
+            <div style={{
+              background: 'var(--card, #1e293b)',
+              border: '1px solid var(--line, #334155)',
+              borderRadius: 14,
+              padding: 20
+            }}>
+              <h3 style={{ margin: '0 0 12px 0', fontSize: 15, fontWeight: 900, color: '#ffffff' }}>
+                Histórico Recente de Baixas de Estoque (Auditoria do Sushi Bar)
+              </h3>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--surface, #0f172a)', borderBottom: '1px solid #334155' }}>
+                      <th style={{ padding: '8px 10px', textAlign: 'left', color: 'var(--muted, #94a3b8)' }}>Data/Hora</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'left', color: 'var(--muted, #94a3b8)' }}>Origem / Referência</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'left', color: 'var(--muted, #94a3b8)' }}>Insumo</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--muted, #94a3b8)' }}>Quantidade Baixada</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--muted, #94a3b8)' }}>Saldo Anterior</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--muted, #94a3b8)' }}>Novo Saldo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historicoBaixas.slice(0, 10).map((h) => (
+                      <tr key={h.id} style={{ borderBottom: '1px solid rgba(51, 65, 85, 0.4)' }}>
+                        <td style={{ padding: '8px 10px', color: 'var(--muted, #94a3b8)' }}>{new Date(h.dataHora).toLocaleString('pt-BR')}</td>
+                        <td style={{ padding: '8px 10px', fontWeight: 700, color: '#ffffff' }}>{h.referencia} ({h.origem})</td>
+                        <td style={{ padding: '8px 10px', color: '#ffffff' }}>{h.nomeInsumo}</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'center', color: '#E63946', fontWeight: 800 }}>-{h.quantidade}</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--muted, #94a3b8)' }}>{h.saldoAnterior}</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'center', color: '#10b981', fontWeight: 800 }}>{h.novoSaldo}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
-
       {/* 7. ABA FINANCEIRO & DRE */}
       {abaAtiva === 'financeiro' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>

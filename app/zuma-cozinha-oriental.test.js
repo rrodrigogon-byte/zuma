@@ -642,3 +642,82 @@ test('Zuma Cozinha Oriental - Catálogo 100% Real Sincronizado com zumacozinhaor
   assert.ok(indexHtml.includes('id="modal-fotos-galeria"'), 'Modal deve conter galeria multi-fotos');
   assert.ok(indexHtml.includes('setFiltroRapido'), 'PWA deve conter função de filtros rápidos');
 });
+
+
+test('Zuma Cozinha Oriental - Fluxo Completo Zumi Atende via WhatsApp: Baixa em Tempo Real de Pescados & CMV da Ficha Técnica', async () => {
+  const { routerZuma, ESTOQUE_PESCADOS_ZUMA } = await import('./modules/restaurante-zuma.js');
+  const callRoute = (method, p, body = {}) => {
+    return new Promise((resolve) => {
+      const req = { method, path: p, query: {}, body, params: {} };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      const layer = routerZuma.stack.find(l => l.route && l.route.path === p && l.route.methods[method.toLowerCase()]);
+      if (layer) {
+        layer.route.stack[0].handle(req, res);
+      } else {
+        resolve({ status: 404, data: { error: 'Route not found: ' + p } });
+      }
+    });
+  };
+
+  // 1. Verificar catálogo de fichas técnicas
+  const fichasRes = await callRoute('GET', '/fichas-tecnicas');
+  assert.equal(fichasRes.status, 200);
+  assert.equal(fichasRes.data.ok, true);
+  assert.ok(fichasRes.data.totalFichas >= 4);
+  const ftCombo = fichasRes.data.fichas.find(f => f.codigoPdv === 'ZUM-003');
+  assert.ok(ftCombo, 'Ficha do Combinado 30 Peças deve existir');
+  assert.equal(ftCombo.precoVenda, 89.90);
+  assert.ok(ftCombo.cmvTeorico > 0, 'CMV deve ser positivo');
+  assert.ok(ftCombo.cmvPercentual <= 50.0, 'CMV deve estar dentro da margem saudável (<50%)');
+
+  // 2. Saldo inicial do salmão fresco
+  const estoqueInicialRes = await callRoute('GET', '/estoque-pescados');
+  assert.equal(estoqueInicialRes.status, 200);
+  const salmaoAntes = estoqueInicialRes.data.itens.find(i => i.id === 'ins-salmao-fresco');
+  assert.ok(salmaoAntes, 'Insumo salmão fresco chileno deve existir');
+  const saldoSalmaoInicial = salmaoAntes.saldoAtual;
+
+  // 3. Simular pedido completo via WhatsApp com o Zumi (Motor KyttoIA 2.5 Flash)
+  const pedidoRes = await callRoute('POST', '/whatsapp/simular-pedido', {
+    clienteNome: 'Rodrigo Ribeiro Gonçalves',
+    clienteTelefone: '(65) 99988-1234',
+    enderecoEntrega: 'Av. Tancredo Neves, 850 - Centro, Tangará da Serra - MT',
+    formaPagamento: 'PIX',
+    mensagem: 'Olá Zumi! Quero pedir 1x Combinado Especial 30 Peças Salmão Fresco e 1x Hot Roll Filadélfia Especial para entrega no Centro.',
+    itensCustomizados: [
+      { codigoPdv: 'ZUM-003', nome: 'Combinado Especial 30 Peças Salmão Fresco', qtd: 1, precoUnitario: 89.90 },
+      { codigoPdv: 'ZUM-HOT', nome: 'Hot Roll Filadélfia Especial (10 un)', qtd: 1, precoUnitario: 42.00 }
+    ]
+  });
+
+  assert.equal(pedidoRes.status, 200);
+  assert.equal(pedidoRes.data.ok, true);
+  assert.equal(pedidoRes.data.motorIa, 'KyttoIA 2.5 Flash');
+  assert.ok(pedidoRes.data.comanda.id.startsWith('ZUM-WPP-'));
+  assert.equal(pedidoRes.data.comanda.subtotalProdutos, 131.90);
+  assert.equal(pedidoRes.data.comanda.total, 141.90);
+
+  // Validar Diálogo de WhatsApp
+  assert.equal(pedidoRes.data.dialogoWhatsApp.length, 4);
+  assert.ok(pedidoRes.data.dialogoWhatsApp[1].texto.includes('36.296.848/0001-57'), 'Deve conter chave PIX CNPJ do Zuma');
+  assert.ok(pedidoRes.data.dialogoWhatsApp[3].texto.includes('PAGAMENTO CONFIRMADO'), 'Zumi deve confirmar o pagamento');
+
+  // Validar Cálculo de CMV da Ficha Técnica
+  assert.ok(pedidoRes.data.analiseCmvFichaTecnica.cmvTotalInsumos > 0);
+  assert.ok(pedidoRes.data.analiseCmvFichaTecnica.cmvPercentualGlobal < 50.0);
+  assert.ok(pedidoRes.data.analiseCmvFichaTecnica.margemBrutaValor > 60.0);
+  assert.equal(pedidoRes.data.analiseCmvFichaTecnica.detalhamentoPorItem.length, 2);
+
+  // Validar Baixa em Tempo Real de Pescados
+  assert.ok(pedidoRes.data.baixaEstoquePescadosEmTempoReal.totalInsumosBaixados >= 2);
+  const salmaoConsolidado = pedidoRes.data.baixaEstoquePescadosEmTempoReal.consumoConsolidadoPorInsumo.find(m => m.insumoId === 'ins-salmao-fresco');
+  assert.ok(salmaoConsolidado, 'Deve haver consumo consolidado de salmão fresco');
+  assert.equal(salmaoConsolidado.consumoTotal, 0.530, 'Deve consumir exatamente 530g de salmão (380g do combo + 150g do hot)');
+  assert.equal(salmaoConsolidado.saldoFinal, parseFloat((saldoSalmaoInicial - 0.530).toFixed(3)));
+  assert.ok(pedidoRes.data.reciboFiscalNFCe.chaveAcesso.startsWith('51261136296848000157'), 'Chave NFC-e com CNPJ de Zuma e UF 51 MT');
+});

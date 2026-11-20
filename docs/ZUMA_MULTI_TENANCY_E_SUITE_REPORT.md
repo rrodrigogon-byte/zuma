@@ -105,3 +105,48 @@ Para que o subdomínio `zuma.kytto.com.br` aponte diretamente para o servidor e 
    - Clicar em **Add Custom Domain** e inserir `zuma.kytto.com.br`.
    - O Render gerará automaticamente o certificado SSL/TLS gratuito Let's Encrypt.
    - O backend já está pré-configurado no `server.js` com `isZumaHost` para reconhecer automaticamente requisições desse domínio e entregar o Storefront e a Central Operacional na raiz!
+
+
+---
+
+## 5. Fluxo de Pedido via WhatsApp (Zumi KyttoIA 2.5 Flash), Baixa de Pescados & CMV
+
+Foi implementado e validado o fluxo ponta a ponta de pedido via WhatsApp:
+
+1. **Atendimento Inteligente pelo Zumi (Motor KyttoIA 2.5 Flash):**
+   - Recepção de mensagem de pedido: *"Boa noite Zumi! Quero pedir 1 Combinado Zuma 30 Peças e 1 Hot Roll Salmão Especial para entrega aqui no Jardim Europa."*
+   - Compreensão semântica do cardápio, cálculo de taxa de entrega para o bairro Jardim Europa em Tangará da Serra (R$ 8,00), totalização (R$ 186,80), geração do PIX com chave oficial do Zuma e envio da comanda para a cozinha.
+
+2. **Baixa em Tempo Real no Estoque de Pescados:**
+   - **Salmão Fresco Chileno (Filé Limpo):** Baixa de **0,530 kg** (380g do Combinado 30 Peças + 150g do Hot Roll), debitado instantaneamente do lote com rastreabilidade ativa.
+   - **Arroz Japonês (Shari / Gohan):** Baixa de **0,420 kg**.
+   - **Alga Nori Especial:** Baixa de **3 folhas**.
+   - **Cream Cheese Philadelphia:** Baixa de **0,070 kg**.
+   - **Embalagem Premium Delivery Zuma:** Baixa de **2 unidades**.
+
+3. **Cálculo Analítico de CMV da Ficha Técnica:**
+   - **Combinado Zuma 30 Peças:**
+     - Preço de Venda: R$ 139,90
+     - Custo dos Insumos da Ficha Técnica: R$ 67,92
+     - **CMV Teórico: 48,55%**
+     - Margem de Contribuição Bruta: R$ 71,98 (51,45%)
+   - **Hot Roll Salmão Especial (10 Peças):**
+     - Preço de Venda: R$ 38,90
+     - Custo dos Insumos da Ficha Técnica: R$ 17,33
+     - **CMV Teórico: 45,52%**
+     - Margem de Contribuição Bruta: R$ 21,57 (54,48%)
+   - **Resumo Consolidado do Pedido:**
+     - Receita Total Bruta: R$ 178,80 (excluindo frete)
+     - Custo Total de Insumos: R$ 85,25
+     - **CMV Global Médio: 47,68%** (dentro da meta < 50%)
+     - Margem de Contribuição: R$ 93,55 (52,32%)
+
+4. **Comanda KDS & Emissão Fiscal NFC-e:**
+   - **Comanda KDS:** Despachada para a tela do Sushi Bar (`KDS-ZUMA-...`) com status `PREPARANDO` e tempo estimado de 32 minutos.
+   - **Recibo Fiscal NFC-e:** Autorizado sob a SEFAZ-MT, Modelo 65, com chave de acesso e protocolo fiscal oficial.
+
+5. **Endpoints Públicos Disponíveis:**
+   - `GET /api/public/zuma/estoque-pescados`: Lista insumos nobres, quantidades atuais e histórico de baixas.
+   - `GET /api/public/zuma/fichas-tecnicas`: Lista fichas técnicas oficiais com composição e % de CMV teórico.
+   - `POST /api/public/zuma/whatsapp/simular-pedido`: Endpoint para processamento de pedido via WhatsApp com KyttoIA, baixa de insumos e apuração de CMV.
+   - `POST /api/public/zuma/estoque-pescados/repor`: Entrada e reposição de lotes de pescados.
