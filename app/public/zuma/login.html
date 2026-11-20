@@ -78,9 +78,14 @@
           </p>
         </div>
       </div>
-      <a href="index.html" class="text-xs text-zuma-muted hover:text-white px-2.5 py-1.5 rounded-lg border border-zuma-border bg-zuma-card transition-colors touch-btn">
-        <span>🏪</span><span class="ml-1 hidden sm:inline">Ver</span> Loja
-      </a>
+      <div class="flex items-center space-x-1.5">
+        <a href="apps.html" class="text-xs text-zuma-muted hover:text-white px-2.5 py-1.5 rounded-lg border border-zuma-border bg-zuma-card transition-colors touch-btn">
+          <span>📲</span><span class="ml-1 hidden sm:inline">Apps</span>
+        </a>
+        <a href="index.html" class="text-xs text-zuma-muted hover:text-white px-2.5 py-1.5 rounded-lg border border-zuma-border bg-zuma-card transition-colors touch-btn">
+          <span>🏪</span><span class="ml-1 hidden sm:inline">Ver</span> Loja
+        </a>
+      </div>
     </div>
   </header>
 
@@ -207,6 +212,10 @@
           <select id="login-destino" class="w-full bg-zuma-card border border-zuma-border rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-zuma-salmon touch-btn">
             <option value="pilot.html" selected>🚀 Zuma Pilot (Cockpit com 18 Módulos)</option>
             <option value="operacao.html">⚡ Central 360° (PDV, KDS, Garçom &amp; Motoboy)</option>
+            <option value="garcom.html">📱 App do Garçom (27 Mesas &amp; Cozinha)</option>
+            <option value="entregador.html">🛵 App do Entregador (GPS &amp; Mapa Tangará)</option>
+            <option value="pagamentos.html">💳 Módulo de Pagamentos (KyttoPay)</option>
+            <option value="apps.html">📲 Central de Apps &amp; Instalação PWA/APK</option>
             <option value="operacao.html#caixa">🖥️ Frente de Caixa (PDV Touch)</option>
             <option value="operacao.html#kds">👨‍🍳 Painel KDS Cozinha</option>
             <option value="operacao.html#garcom">📱 Comanda do Garçom (27 Mesas)</option>
@@ -266,13 +275,13 @@
       garcom: {
         email: 'atendimento@zumacozinhaoriental.com.br',
         senha: '123456',
-        destino: 'operacao.html#garcom',
+        destino: 'garcom.html',
         nome: 'Garçom Salão 27 Mesas'
       },
       motoboy: {
         email: 'atendimento@zumacozinhaoriental.com.br',
         senha: '123456',
-        destino: 'operacao.html#motoboy',
+        destino: 'entregador.html',
         nome: 'Carlos Ninja Motoboy'
       },
       admin: {

@@ -1,0 +1,20 @@
+{
+  "name": "Zuma Garçom · Comanda Mobile & Rastreabilidade",
+  "short_name": "Zuma Garçom",
+  "description": "App oficial de salão e comanda do garçom com rastreabilidade de pratos na cozinha e divisão de conta",
+  "start_url": "./garcom.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B0C10",
+  "theme_color": "#EA580C",
+  "icons": [
+    {
+      "src": "zumi-mascote.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["food", "business"]
+}

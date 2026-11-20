@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Zuma Pagamentos · Módulo KyttoPay (PIX, Cartão & Split)</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="zumi-mascote.svg">
+  <meta name="theme-color" content="#7C3AED">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Zuma Pay">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            zuma: {
+              bg: '#0B0C10',
+              surface: '#15171E',
+              card: '#1F222E',
+              border: '#2E3446',
+              salmon: '#F97316',
+              violet: '#7C3AED',
+              emerald: '#10B981',
+              muted: '#94A3B8'
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    body {
+      background-color: #0B0C10;
+      color: #F8FAFC;
+      -webkit-tap-highlight-color: transparent;
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 70px);
+    }
+    .touch-btn {
+      min-height: 46px;
+      min-width: 46px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: manipulation;
+    }
+  </style>
+</head>
+<body class="selection:bg-violet-600 selection:text-white font-sans">
+
+  <!-- ================= HEADER TOP FIXO ================= -->
+  <header class="sticky top-0 z-40 bg-zuma-surface/95 backdrop-blur-md border-b border-zuma-border px-4 py-3">
+    <div class="max-w-5xl mx-auto flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-700 flex items-center justify-center text-xl shadow-lg">
+          💳
+        </div>
+        <div>
+          <h1 class="font-extrabold text-white text-base leading-tight flex items-center space-x-1.5">
+            <span>Módulo de Pagamentos</span>
+            <span class="text-[10px] bg-violet-500/20 text-violet-300 px-2 py-0.5 rounded-full font-bold border border-violet-500/30">KyttoPay</span>
+          </h1>
+          <p class="text-xs text-zuma-muted">PIX Dinâmico, Cartões, Vales & Split Instantâneo</p>
+        </div>
+      </div>
+
+      <!-- Atalhos -->
+      <div class="flex items-center space-x-2">
+        <a href="caixa.html" class="text-xs text-slate-300 hover:text-white bg-zuma-card px-2.5 py-1.5 rounded-lg border border-zuma-border touch-btn">
+          <span>🖥️ PDV</span>
+        </a>
+        <a href="apps.html" class="text-xs text-zuma-muted hover:text-white bg-zuma-card px-2.5 py-1.5 rounded-lg border border-zuma-border touch-btn">
+          <span>📲 Apps</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= CONTEÚDO PRINCIPAL ================= -->
+  <main class="max-w-5xl mx-auto p-4 sm:p-6 space-y-6">
+
+    <!-- Resumo Financeiro de Pagamentos do Dia -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div class="bg-zuma-surface border border-zuma-border rounded-xl p-3.5 space-y-1">
+        <span class="text-[11px] text-zuma-muted uppercase font-bold block">Total Recebido Hoje</span>
+        <div class="text-2xl font-black text-emerald-400" id="resumo-total-geral">R$ 5.480,50</div>
+        <div class="text-[10px] text-emerald-400 font-semibold">100% conciliado</div>
+      </div>
+
+      <div class="bg-zuma-surface border border-zuma-border rounded-xl p-3.5 space-y-1">
+        <span class="text-[11px] text-zuma-muted uppercase font-bold block">PIX Instantâneo</span>
+        <div class="text-2xl font-black text-violet-400" id="resumo-total-pix">R$ 3.120,00</div>
+        <div class="text-[10px] text-slate-400">57% das transações</div>
+      </div>
+
+      <div class="bg-zuma-surface border border-zuma-border rounded-xl p-3.5 space-y-1">
+        <span class="text-[11px] text-zuma-muted uppercase font-bold block">Cartão Crédito/Débito</span>
+        <div class="text-2xl font-black text-sky-400" id="resumo-total-cartao">R$ 1.940,50</div>
+        <div class="text-[10px] text-slate-400">TEF Stone / POS</div>
+      </div>
+
+      <div class="bg-zuma-surface border border-zuma-border rounded-xl p-3.5 space-y-1">
+        <span class="text-[11px] text-zuma-muted uppercase font-bold block">Dinheiro & Vales</span>
+        <div class="text-2xl font-black text-amber-400" id="resumo-total-dinheiro">R$ 420,00</div>
+        <div class="text-[10px] text-slate-400">Gaveta conferida</div>
+      </div>
+    </div>
+
+    <!-- ================= TERMINAL DE COBRANÇA EM TEMPO REAL ================= -->
+    <div class="bg-zuma-surface border-2 border-violet-500/40 rounded-2xl p-4 sm:p-6 space-y-5 shadow-2xl">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zuma-border pb-3">
+        <div>
+          <h2 class="font-black text-white text-base sm:text-lg flex items-center space-x-2">
+            <span>⚡</span><span>Terminal de Cobrança Instantânea</span>
+          </h2>
+          <p class="text-xs text-zuma-muted">Digite o valor ou selecione a comanda para receber em qualquer forma de pagamento.</p>
+        </div>
+        <span class="text-xs bg-emerald-500/20 text-emerald-400 font-bold px-3 py-1 rounded-full border border-emerald-500/30">
+          Chave PIX: 44.629.832/0001-90
+        </span>
+      </div>
+
+      <!-- Campo de Valor & Origem -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div class="space-y-1 sm:col-span-1">
+          <label class="text-xs text-slate-300 font-bold">Valor a Cobrar (R$):</label>
+          <div class="relative">
+            <span class="absolute left-3.5 top-3 text-slate-400 font-bold text-sm">R$</span>
+            <input type="number" step="0.01" id="input-valor-cobranca" value="89.90" class="w-full bg-zuma-card border-2 border-violet-500/60 rounded-xl pl-11 pr-3 py-2.5 text-xl font-black text-white focus:outline-none focus:border-violet-400">
+          </div>
+        </div>
+
+        <div class="space-y-1 sm:col-span-1">
+          <label class="text-xs text-slate-300 font-bold">Origem / Canal:</label>
+          <select id="select-origem-cobranca" class="w-full bg-zuma-card border border-zuma-border rounded-xl px-3 py-3 text-xs text-white focus:outline-none">
+            <option value="Mesa 04">Mesa 04 (Salão Principal)</option>
+            <option value="Mesa 07">Mesa 07 (Deck Externo)</option>
+            <option value="Mesa 12">Mesa 12 (Mezanino VIP)</option>
+            <option value="Delivery Web">Delivery Web / WhatsApp</option>
+            <option value="Balcão / Takeaway">Balcão / Retirada</option>
+          </select>
+        </div>
+
+        <div class="space-y-1 sm:col-span-1">
+          <label class="text-xs text-slate-300 font-bold">Nome do Cliente:</label>
+          <input type="text" id="input-cliente-cobranca" value="Marcos Vinícius" class="w-full bg-zuma-card border border-zuma-border rounded-xl px-3 py-3 text-xs text-white focus:outline-none">
+        </div>
+      </div>
+
+      <!-- Seletor de Formas de Pagamento -->
+      <div class="space-y-2">
+        <label class="text-xs text-slate-300 font-bold block">Forma de Pagamento:</label>
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          <button onclick="selecionarForma('PIX')" id="btn-forma-PIX" class="btn-forma active touch-btn bg-violet-600 text-white font-extrabold text-xs rounded-xl shadow-md border border-violet-500 flex flex-col items-center justify-center py-2.5">
+            <span class="text-base">⚡</span>
+            <span>PIX Instantâneo</span>
+          </button>
+          <button onclick="selecionarForma('CARTAO_CREDITO')" id="btn-forma-CARTAO_CREDITO" class="btn-forma touch-btn bg-zuma-card text-slate-300 font-bold text-xs rounded-xl border border-zuma-border flex flex-col items-center justify-center py-2.5">
+            <span class="text-base">💳</span>
+            <span>Cartão Crédito</span>
+          </button>
+          <button onclick="selecionarForma('CARTAO_DEBITO')" id="btn-forma-CARTAO_DEBITO" class="btn-forma touch-btn bg-zuma-card text-slate-300 font-bold text-xs rounded-xl border border-zuma-border flex flex-col items-center justify-center py-2.5">
+            <span class="text-base">🏧</span>
+            <span>Cartão Débito</span>
+          </button>
+          <button onclick="selecionarForma('DINHEIRO')" id="btn-forma-DINHEIRO" class="btn-forma touch-btn bg-zuma-card text-slate-300 font-bold text-xs rounded-xl border border-zuma-border flex flex-col items-center justify-center py-2.5">
+            <span class="text-base">💵</span>
+            <span>Dinheiro</span>
+          </button>
+          <button onclick="selecionarForma('SPLIT')" id="btn-forma-SPLIT" class="btn-forma touch-btn bg-zuma-card text-slate-300 font-bold text-xs rounded-xl border border-zuma-border flex flex-col items-center justify-center py-2.5">
+            <span class="text-base">🔄</span>
+            <span>Dividir (Split)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ================= ÁREA DINÂMICA DA FORMA SELECIONADA ================= -->
+      
+      <!-- 1. Painel PIX -->
+      <div id="painel-pix" class="bg-zuma-card border border-violet-500/30 rounded-xl p-4 sm:p-5 space-y-4">
+        <div class="flex flex-col sm:flex-row items-center gap-5">
+          <div class="bg-white p-3 rounded-xl shadow-md shrink-0">
+            <img id="img-qrcode-dinamico" src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=00020126580014br.gov.bcb.pix0136446298320001905204000053039865489.905802BR5925ZUMA%20COZINHA%20ORIENTAL6016TANGARA%20DA%20SERRA62070503***6304C102" alt="QR Code PIX" class="w-36 h-36">
+          </div>
+
+          <div class="space-y-3 flex-1 text-xs">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-white text-sm">QR Code PIX Dinâmico Gerado</span>
+              <span class="text-emerald-400 font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Aguardando Webhook...</span>
+            </div>
+            <div class="text-slate-300">
+              O cliente pode escanear o código na tela do tablet ou você pode copiar o código PIX Copia-e-Cola abaixo para enviar no WhatsApp:
+            </div>
+            <div class="flex items-center space-x-2">
+              <input type="text" readonly id="input-payload-emv" value="00020126580014br.gov.bcb.pix0136446298320001905204000053039865489.905802BR5925ZUMA COZINHA ORIENTAL6016TANGARA DA SERRA62070503***6304C102" class="w-full font-mono text-[11px] bg-zuma-bg p-2 rounded-lg border border-zuma-border text-slate-300">
+              <button onclick="copiarPixEmv()" class="touch-btn px-3 bg-violet-600 hover:bg-violet-500 text-white font-bold rounded-lg shrink-0">
+                Copiar
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="pt-2 border-t border-zuma-border flex flex-col sm:flex-row gap-2">
+          <button onclick="gerarNovoPix()" class="flex-1 touch-btn bg-zinc-800 hover:bg-zinc-700 text-slate-200 font-bold text-xs rounded-xl border border-zuma-border">
+            🔄 Gerar Novo QR Code
+          </button>
+          <button onclick="simularWebhookPixPago()" class="flex-1 touch-btn bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl shadow-lg">
+            ⚡ Simular Pagamento Recebido (Webhook Instantâneo)
+          </button>
+        </div>
+      </div>
+
+      <!-- 2. Painel Cartão -->
+      <div id="painel-cartao" class="bg-zuma-card border border-zuma-border rounded-xl p-4 sm:p-5 space-y-4 hidden">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div class="space-y-1">
+            <label class="text-slate-300 font-bold">Maquininha / Provedor TEF:</label>
+            <select id="select-maquininha" class="w-full bg-zuma-bg border border-zuma-border rounded-lg p-2.5 text-white">
+              <option value="Stone">Stone Smart POS (Terminal Balcão 01)</option>
+              <option value="Cielo">Cielo LIO (Terminal Salão 02)</option>
+              <option value="KyttoPay">KyttoPay Link de Pagamento WhatsApp</option>
+            </select>
+          </div>
+          <div class="space-y-1">
+            <label class="text-slate-300 font-bold">Parcelas (Crédito):</label>
+            <select id="select-parcelas" class="w-full bg-zuma-bg border border-zuma-border rounded-lg p-2.5 text-white">
+              <option value="1">1x à Vista (Sem Juros)</option>
+              <option value="2">2x Sem Juros</option>
+              <option value="3">3x Sem Juros</option>
+            </select>
+          </div>
+        </div>
+
+        <button onclick="confirmarPagamentoCartao()" class="w-full touch-btn bg-sky-600 hover:bg-sky-500 text-white font-black text-xs rounded-xl shadow-lg">
+          💳 Processar Transação no Terminal TEF
+        </button>
+      </div>
+
+      <!-- 3. Painel Dinheiro -->
+      <div id="painel-dinheiro" class="bg-zuma-card border border-zuma-border rounded-xl p-4 sm:p-5 space-y-4 hidden text-xs">
+        <div class="space-y-2">
+          <label class="text-slate-300 font-bold">Troco Para Quanto?</label>
+          <div class="grid grid-cols-4 gap-2">
+            <button onclick="setTroco(100)" class="touch-btn bg-zuma-bg border border-zuma-border text-white font-bold rounded-lg">R$ 100</button>
+            <button onclick="setTroco(150)" class="touch-btn bg-zuma-bg border border-zuma-border text-white font-bold rounded-lg">R$ 150</button>
+            <button onclick="setTroco(200)" class="touch-btn bg-zuma-bg border border-zuma-border text-white font-bold rounded-lg">R$ 200</button>
+            <button onclick="setTroco(0)" class="touch-btn bg-zuma-bg border border-zuma-border text-emerald-400 font-bold rounded-lg">Exato</button>
+          </div>
+          <input type="number" id="input-troco-manual" placeholder="Outro valor para troco..." class="w-full bg-zuma-bg border border-zuma-border rounded-lg p-2.5 text-white">
+          <div class="text-emerald-400 font-bold text-sm pt-1" id="label-troco-devolver">
+            Troco a devolver: R$ 0,00
+          </div>
+        </div>
+
+        <button onclick="confirmarPagamentoDinheiro()" class="w-full touch-btn bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl shadow-lg">
+          💵 Confirmar Recebimento em Dinheiro & Abrir Gaveta
+        </button>
+      </div>
+
+      <!-- 4. Painel Split (Divisão) -->
+      <div id="painel-split" class="bg-zuma-card border border-zuma-border rounded-xl p-4 sm:p-5 space-y-4 hidden text-xs">
+        <div class="space-y-2">
+          <div class="text-slate-300 leading-relaxed">
+            Permite fracionar o total do pedido entre diferentes pagadores e formas de pagamento.
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <div class="bg-zuma-bg p-3 rounded-lg border border-zuma-border space-y-1">
+              <span class="font-bold text-violet-400">Parte 1 (PIX):</span>
+              <input type="number" value="45.00" class="w-full bg-zuma-card border border-zuma-border rounded p-1.5 text-white font-bold">
+            </div>
+            <div class="bg-zuma-bg p-3 rounded-lg border border-zuma-border space-y-1">
+              <span class="font-bold text-sky-400">Parte 2 (Cartão Débito):</span>
+              <input type="number" value="44.90" class="w-full bg-zuma-card border border-zuma-border rounded p-1.5 text-white font-bold">
+            </div>
+          </div>
+        </div>
+
+        <button onclick="confirmarPagamentoSplit()" class="w-full touch-btn bg-violet-600 hover:bg-violet-500 text-white font-black text-xs rounded-xl shadow-lg">
+          🔄 Confirmar Pagamento Fracionado
+        </button>
+      </div>
+
+    </div>
+
+    <!-- ================= HISTÓRICO DE TRANSAÇÕES RECENTES ================= -->
+    <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-4 sm:p-5 space-y-4 shadow-xl">
+      <div class="flex items-center justify-between border-b border-zuma-border pb-3">
+        <div>
+          <h3 class="font-black text-white text-base flex items-center space-x-2">
+            <span>📜</span><span>Últimas Transações Confirmadas (KyttoPay Core)</span>
+          </h3>
+          <p class="text-xs text-zuma-muted">Auditoria em tempo real de todas as entradas financeiras.</p>
+        </div>
+        <button onclick="carregarHistorico()" class="text-xs font-bold text-slate-300 hover:text-white bg-zuma-card px-2.5 py-1.5 rounded-lg border border-zuma-border touch-btn">
+          🔄 Atualizar
+        </button>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead>
+            <tr class="border-b border-zuma-border text-zuma-muted font-bold">
+              <th class="py-2.5 px-3">Data/Hora</th>
+              <th class="py-2.5 px-3">Origem</th>
+              <th class="py-2.5 px-3">Cliente</th>
+              <th class="py-2.5 px-3">Forma</th>
+              <th class="py-2.5 px-3">Valor</th>
+              <th class="py-2.5 px-3">Status</th>
+              <th class="py-2.5 px-3">Recibo</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-zuma-border/60" id="tabela-transacoes-body">
+            <!-- Renderizado via JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ================= BARRA INFERIOR IOS (BOTTOM TABBAR) ================= -->
+  <nav class="fixed bottom-0 left-0 right-0 z-50 bg-zuma-surface/95 backdrop-blur-lg border-t border-zuma-border/80 flex items-center justify-around px-2 py-1.5" style="padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);">
+    <a href="index.html" class="flex flex-col items-center justify-center w-14 py-1 text-zuma-muted hover:text-white transition-colors">
+      <span class="text-lg">🏪</span>
+      <span class="text-[10px] font-semibold mt-0.5">Loja</span>
+    </a>
+    <a href="garcom.html" class="flex flex-col items-center justify-center w-14 py-1 text-zuma-muted hover:text-orange-400 transition-colors">
+      <span class="text-lg">📱</span>
+      <span class="text-[10px] font-semibold mt-0.5">Garçom</span>
+    </a>
+    <a href="entregador.html" class="flex flex-col items-center justify-center w-14 py-1 text-zuma-muted hover:text-sky-400 transition-colors">
+      <span class="text-lg">🛵</span>
+      <span class="text-[10px] font-semibold mt-0.5">Entregador</span>
+    </a>
+    <a href="pagamentos.html" class="flex flex-col items-center justify-center w-14 py-1 text-violet-400 font-bold transition-colors">
+      <span class="text-lg">💳</span>
+      <span class="text-[10px] font-bold mt-0.5">Pagar</span>
+    </a>
+    <a href="apps.html" class="flex flex-col items-center justify-center w-14 py-1 text-zuma-muted hover:text-white transition-colors">
+      <span class="text-lg">📲</span>
+      <span class="text-[10px] font-semibold mt-0.5">Apps</span>
+    </a>
+    <a href="login.html" class="flex flex-col items-center justify-center w-14 py-1 text-zuma-muted hover:text-white transition-colors">
+      <span class="text-lg">🔐</span>
+      <span class="text-[10px] font-semibold mt-0.5">Login</span>
+    </a>
+  </nav>
+
+  <!-- ================= JAVASCRIPT DO MÓDULO DE PAGAMENTOS ================= -->
+  <script>
+    let formaAtual = 'PIX';
+
+    document.addEventListener('DOMContentLoaded', () => {
+      carregarHistorico();
+    });
+
+    function selecionarForma(forma) {
+      formaAtual = forma;
+      document.querySelectorAll('.btn-forma').forEach(b => {
+        b.classList.remove('active', 'bg-violet-600', 'text-white', 'border-violet-500');
+        b.classList.add('bg-zuma-card', 'text-slate-300', 'border-zuma-border');
+      });
+
+      const btn = document.getElementById(`btn-forma-${forma}`);
+      if (btn) {
+        btn.classList.add('active', 'bg-violet-600', 'text-white', 'border-violet-500');
+        btn.classList.remove('bg-zuma-card', 'text-slate-300', 'border-zuma-border');
+      }
+
+      document.getElementById('painel-pix').classList.add('hidden');
+      document.getElementById('painel-cartao').classList.add('hidden');
+      document.getElementById('painel-dinheiro').classList.add('hidden');
+      document.getElementById('painel-split').classList.add('hidden');
+
+      if (forma === 'PIX') {
+        document.getElementById('painel-pix').classList.remove('hidden');
+      } else if (forma.includes('CARTAO')) {
+        document.getElementById('painel-cartao').classList.remove('hidden');
+      } else if (forma === 'DINHEIRO') {
+        document.getElementById('painel-dinheiro').classList.remove('hidden');
+      } else if (forma === 'SPLIT') {
+        document.getElementById('painel-split').classList.remove('hidden');
+      }
+    }
+
+    async function carregarHistorico() {
+      try {
+        const res = await fetch('/api/public/zuma/pagamentos/historico');
+        const data = await res.json();
+        if (data.ok) {
+          if (data.resumo) {
+            document.getElementById('resumo-total-geral').innerText = `R$ ${data.resumo.totalGeral.toFixed(2)}`;
+            document.getElementById('resumo-total-pix').innerText = `R$ ${data.resumo.totalPix.toFixed(2)}`;
+            document.getElementById('resumo-total-cartao').innerText = `R$ ${data.resumo.totalCartao.toFixed(2)}`;
+            document.getElementById('resumo-total-dinheiro').innerText = `R$ ${(data.resumo.totalDinheiro + data.resumo.totalVR).toFixed(2)}`;
+          }
+
+          renderizarTabela(data.transacoes || []);
+        }
+      } catch (err) {
+        console.error('Erro ao carregar historico:', err);
+      }
+    }
+
+    function renderizarTabela(lista) {
+      const tbody = document.getElementById('tabela-transacoes-body');
+      tbody.innerHTML = lista.map(p => `
+        <tr class="hover:bg-zuma-card/50 transition-colors">
+          <td class="py-3 px-3 text-slate-400 font-mono">${new Date(p.dataHora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</td>
+          <td class="py-3 px-3 font-semibold text-white">${p.canal}</td>
+          <td class="py-3 px-3 text-slate-300">${p.cliente}</td>
+          <td class="py-3 px-3 font-bold text-violet-400">${p.forma}</td>
+          <td class="py-3 px-3 font-black text-emerald-400">R$ ${p.valor.toFixed(2)}</td>
+          <td class="py-3 px-3">
+            <span class="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-bold text-[10px] border border-emerald-500/30">
+              ${p.status}
+            </span>
+          </td>
+          <td class="py-3 px-3">
+            <button onclick="verComprovante('${p.id}', '${p.nsu}', ${p.valor})" class="text-[11px] text-sky-400 hover:underline font-bold">
+              Ver Recibo
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function gerarNovoPix() {
+      const val = parseFloat(document.getElementById('input-valor-cobranca').value) || 89.90;
+      const cliente = document.getElementById('input-cliente-cobranca').value || 'Cliente Zuma';
+      try {
+        const res = await fetch('/api/public/zuma/pagamentos/pix-gerar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ valor: val, clienteNome: cliente })
+        });
+        const data = await res.json();
+        if (data.ok && data.pix) {
+          document.getElementById('img-qrcode-dinamico').src = data.pix.qrcodeUrl;
+          document.getElementById('input-payload-emv').value = data.pix.pixPayloadEmv;
+          alert('Novo QR Code PIX gerado com sucesso!');
+        }
+      } catch (err) {
+        alert('Erro ao gerar PIX');
+      }
+    }
+
+    async function simularWebhookPixPago() {
+      const val = parseFloat(document.getElementById('input-valor-cobranca').value) || 89.90;
+      try {
+        const res = await fetch('/api/public/zuma/pagamentos/confirmar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ forma: 'PIX', valor: val })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          alert(`🎉 Pagamento de R$ ${val.toFixed(2)} confirmado via Webhook KyttoPay Instantâneo! NSU: ${data.comprovanteDigital.nsu}`);
+          carregarHistorico();
+        }
+      } catch (err) {
+        alert('Erro ao confirmar pagamento');
+      }
+    }
+
+    async function confirmarPagamentoCartao() {
+      const val = parseFloat(document.getElementById('input-valor-cobranca').value) || 89.90;
+      const maq = document.getElementById('select-maquininha').value;
+      const res = await fetch('/api/public/zuma/pagamentos/confirmar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ forma: formaAtual, valor: val, bandeira: 'Mastercard' })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        alert(`Transação no cartão aprovada via terminal ${maq}!`);
+        carregarHistorico();
+      }
+    }
+
+    function setTroco(valorTroco) {
+      const val = parseFloat(document.getElementById('input-valor-cobranca').value) || 89.90;
+      if (valorTroco === 0) {
+        document.getElementById('label-troco-devolver').innerText = 'Pagamento exato, sem troco.';
+      } else {
+        const troco = Math.max(0, valorTroco - val);
+        document.getElementById('label-troco-devolver').innerText = `Troco a devolver: R$ ${troco.toFixed(2)}`;
+      }
+    }
+
+    async function confirmarPagamentoDinheiro() {
+      const val = parseFloat(document.getElementById('input-valor-cobranca').value) || 89.90;
+      const res = await fetch('/api/public/zuma/pagamentos/confirmar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ forma: 'DINHEIRO', valor: val })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        alert('Pagamento em dinheiro registrado no caixa com sucesso!');
+        carregarHistorico();
+      }
+    }
+
+    async function confirmarPagamentoSplit() {
+      const val = parseFloat(document.getElementById('input-valor-cobranca').value) || 89.90;
+      const res = await fetch('/api/public/zuma/pagamentos/confirmar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ forma: 'SPLIT_MULTIPLO', valor: val })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        alert('Pagamento fracionado registrado com sucesso!');
+        carregarHistorico();
+      }
+    }
+
+    function copiarPixEmv() {
+      const copyText = document.getElementById('input-payload-emv');
+      copyText.select();
+      navigator.clipboard.writeText(copyText.value);
+      alert('Código PIX Copia-e-Cola copiado para a área de transferência!');
+    }
+
+    function verComprovante(id, nsu, valor) {
+      alert(`COMPROVANTE FISCAL DIGITAL KYTTOPAY\n\nEstabelecimento: Zuma Cozinha Oriental LTDA\nCNPJ: 44.629.832/0001-90\nTangará da Serra - MT\n\nTransação: ${id}\nNSU Autorização: ${nsu}\nValor: R$ ${valor.toFixed(2)}\nStatus: APROVADO\n\nRecibo enviado para o WhatsApp do cliente.`);
+    }
+  </script>
+
+</body>
+</html>

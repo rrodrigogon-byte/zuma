@@ -1,0 +1,20 @@
+{
+  "name": "Zuma Entregador · Logística, GPS & Mapa de Tangará",
+  "short_name": "Zuma Motoboy",
+  "description": "App oficial de entregas do Zuma com mapa de Tangará da Serra, rotas Waze/Google Maps e comprovante digital",
+  "start_url": "./entregador.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B0C10",
+  "theme_color": "#0284C7",
+  "icons": [
+    {
+      "src": "zumi-mascote.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["maps", "navigation", "business"]
+}

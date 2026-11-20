@@ -893,3 +893,235 @@ test('Zuma Cozinha Oriental - Módulo Fiscal Completo com Emissão SEFAZ-MT (NFC
   assert.ok(emissaoRes.data.notaFiscal.protocoloSEFAZ.startsWith('1512600'), 'Protocolo SEFAZ-MT');
   assert.ok(emissaoRes.data.notaFiscal.qrcodeUrl.includes('sefaz.mt.gov.br'), 'URL de QR Code oficial SEFAZ-MT');
 });
+
+test('Zuma Cozinha Oriental - Módulo de Pagamentos KyttoPay (PIX Dinâmico, Cartões e Histórico)', async () => {
+  const { routerZuma } = await import('./modules/restaurante-zuma.js');
+  const callRoute = (method, p, body = {}) => {
+    return new Promise((resolve) => {
+      const req = { method, path: p, query: {}, body, params: {} };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      const layer = routerZuma.stack.find(l => l.route && l.route.path === p && l.route.methods[method.toLowerCase()]);
+      if (layer) {
+        layer.route.stack[0].handle(req, res);
+      } else {
+        resolve({ status: 404, data: { error: 'Route not found: ' + p } });
+      }
+    });
+  };
+
+  // 1. Gerar PIX Dinâmico
+  const pixRes = await callRoute('POST', '/pagamentos/pix-gerar', {
+    valor: 147.50,
+    pedidoId: 'ZUM-TEST-01',
+    clienteNome: 'Rodrigo Teste',
+    descricao: 'Combinado 30 Pçs + Temaki'
+  });
+  assert.equal(pixRes.status, 200);
+  assert.equal(pixRes.data.ok, true);
+  assert.equal(pixRes.data.pix.valor, 147.50);
+  assert.equal(pixRes.data.pix.status, 'AGUARDANDO_PAGAMENTO');
+  assert.ok(pixRes.data.pix.pixPayloadEmv.includes('br.gov.bcb.pix'));
+  assert.ok(pixRes.data.pix.qrcodeUrl.includes('create-qr-code'));
+
+  // 2. Confirmar Pagamento com Sucesso
+  const confRes = await callRoute('POST', '/pagamentos/confirmar', {
+    txid: pixRes.data.pix.txid,
+    pedidoId: 'ZUM-TEST-01',
+    forma: 'PIX',
+    valor: 147.50
+  });
+  assert.equal(confRes.status, 200);
+  assert.equal(confRes.data.ok, true);
+  assert.equal(confRes.data.transacao.status, 'CONFIRMADO');
+  assert.ok(confRes.data.comprovanteDigital.nsu);
+
+  // 3. Consultar Histórico e Totais
+  const histRes = await callRoute('GET', '/pagamentos/historico');
+  assert.equal(histRes.status, 200);
+  assert.equal(histRes.data.ok, true);
+  assert.ok(histRes.data.resumo.totalGeral > 0);
+  assert.ok(histRes.data.transacoes.length >= 3);
+});
+
+test('Zuma Cozinha Oriental - App do Entregador com Rastreabilidade, GPS e Mapa de Tangará da Serra', async () => {
+  const { routerZuma } = await import('./modules/restaurante-zuma.js');
+  const callRoute = (method, p, body = {}) => {
+    return new Promise((resolve) => {
+      const req = { method, path: p, query: {}, body, params: {} };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      const layer = routerZuma.stack.find(l => l.route && l.route.path === p && l.route.methods[method.toLowerCase()]);
+      if (layer) {
+        layer.route.stack[0].handle(req, res);
+      } else {
+        resolve({ status: 404, data: { error: 'Route not found: ' + p } });
+      }
+    });
+  };
+
+  // 1. Obter Corridas e Posição do Entregador
+  const corridasRes = await callRoute('GET', '/entregador/corridas');
+  assert.equal(corridasRes.status, 200);
+  assert.equal(corridasRes.data.ok, true);
+  assert.ok(corridasRes.data.corridas.length >= 3);
+  assert.equal(corridasRes.data.sedeZuma.cidade, undefined); // está no endereço
+  assert.ok(corridasRes.data.sedeZuma.endereco.includes('Tangará da Serra'));
+  assert.ok(corridasRes.data.posicaoEntregador.nome.includes('Carlos'));
+
+  // 2. Atualizar Posição GPS do Entregador
+  const gpsRes = await callRoute('POST', '/entregador/atualizar-posicao', {
+    lat: -14.626500,
+    lng: -57.489000,
+    velocidadeKmH: 42,
+    bateriaPct: 95
+  });
+  assert.equal(gpsRes.status, 200);
+  assert.equal(gpsRes.data.ok, true);
+  assert.equal(gpsRes.data.posicao.lat, -14.626500);
+  assert.equal(gpsRes.data.posicao.velocidadeKmH, 42);
+
+  // 3. Mudar Status da Corrida com Validação de Código OTP
+  const mudancaRes = await callRoute('POST', '/entregador/mudar-status-corrida', {
+    corridaId: 'CORR-701',
+    novoStatus: 'chegou_destino'
+  });
+  assert.equal(mudancaRes.status, 200);
+  assert.equal(mudancaRes.data.ok, true);
+  assert.equal(mudancaRes.data.corrida.status, 'chegou_destino');
+
+  // 4. Mapa e Bairros de Tangará da Serra
+  const mapaRes = await callRoute('GET', '/entregador/mapa-pontos');
+  assert.equal(mapaRes.status, 200);
+  assert.equal(mapaRes.data.ok, true);
+  assert.equal(mapaRes.data.cidade, 'Tangará da Serra - MT');
+  assert.ok(mapaRes.data.bairros.length >= 6);
+});
+
+test('Zuma Cozinha Oriental - App do Garçom com Rastreabilidade de Cozinha (27 Mesas & Divisão de Contas)', async () => {
+  const { routerZuma } = await import('./modules/restaurante-zuma.js');
+  const callRoute = (method, p, body = {}) => {
+    return new Promise((resolve) => {
+      const req = { method, path: p, query: {}, body, params: {} };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      const layer = routerZuma.stack.find(l => l.route && l.route.path === p && l.route.methods[method.toLowerCase()]);
+      if (layer) {
+        layer.route.stack[0].handle(req, res);
+      } else {
+        resolve({ status: 404, data: { error: 'Route not found: ' + p } });
+      }
+    });
+  };
+
+  // 1. Rastreabilidade de Itens em Tempo Real no Salão
+  const rastreioRes = await callRoute('GET', '/garcom/rastreamento-pedidos');
+  assert.equal(rastreioRes.status, 200);
+  assert.equal(rastreioRes.data.ok, true);
+  assert.ok(rastreioRes.data.itens.length >= 3);
+
+  // 2. Marcar Item Servido na Mesa
+  const servidoRes = await callRoute('POST', '/garcom/item-servido', {
+    itemId: 'ITEM-901',
+    garcomNome: 'Marcos Salão'
+  });
+  assert.equal(servidoRes.status, 200);
+  assert.equal(servidoRes.data.ok, true);
+  assert.equal(servidoRes.data.item.statusRastreio, 'servido_mesa');
+
+  // 3. Fechar Conta com Divisão por Pessoas e PIX na Mesa
+  const contaRes = await callRoute('POST', '/garcom/pedir-conta', {
+    mesaNumero: 4,
+    qtdPessoas: 3,
+    incluirTaxaServico: true
+  });
+  assert.equal(contaRes.status, 200);
+  assert.equal(contaRes.data.ok, true);
+  assert.equal(contaRes.data.conta.qtdPessoas, 3);
+  assert.ok(contaRes.data.conta.valorPorPessoa > 0);
+  assert.ok(contaRes.data.conta.pixPayloadEmv.includes('br.gov.bcb.pix'));
+});
+
+test('Zuma Cozinha Oriental - Central de Apps, Esclarecimento de Logins Garçom vs Entregador e APKs', async () => {
+  const { routerZuma } = await import('./modules/restaurante-zuma.js');
+  const callRoute = (method, p, body = {}) => {
+    return new Promise((resolve) => {
+      const req = { method, path: p, query: {}, body, params: {} };
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(data) { resolve({ status: this.statusCode, data }); },
+        send(data) { resolve({ status: this.statusCode, data }); }
+      };
+      const layer = routerZuma.stack.find(l => l.route && l.route.path === p && l.route.methods[method.toLowerCase()]);
+      if (layer) {
+        layer.route.stack[0].handle(req, res);
+      } else {
+        resolve({ status: 404, data: { error: 'Route not found: ' + p } });
+      }
+    });
+  };
+
+  // 1. Endpoint /apps/info
+  const appsRes = await callRoute('GET', '/apps/info');
+  assert.equal(appsRes.status, 200);
+  assert.equal(appsRes.data.ok, true);
+  assert.equal(appsRes.data.info.empresa, 'Zuma Cozinha Oriental');
+  assert.ok(appsRes.data.info.loginEsclarecimento.unificado, 'Login deve suportar unificado com separação por app');
+  assert.ok(appsRes.data.info.apps.length >= 5);
+
+  // 2. Existência física dos arquivos HTML dos novos apps
+  const appsHtmlPath = path.join(__dirname, 'public', 'zuma', 'apps.html');
+  const entregadorHtmlPath = path.join(__dirname, 'public', 'zuma', 'entregador.html');
+  const garcomHtmlPath = path.join(__dirname, 'public', 'zuma', 'garcom.html');
+  const pagamentosHtmlPath = path.join(__dirname, 'public', 'zuma', 'pagamentos.html');
+  const caixaHtmlPath = path.join(__dirname, 'public', 'zuma', 'caixa.html');
+
+  assert.ok(fs.existsSync(appsHtmlPath), 'apps.html deve existir');
+  assert.ok(fs.existsSync(entregadorHtmlPath), 'entregador.html deve existir');
+  assert.ok(fs.existsSync(garcomHtmlPath), 'garcom.html deve existir');
+  assert.ok(fs.existsSync(pagamentosHtmlPath), 'pagamentos.html deve existir');
+  assert.ok(fs.existsSync(caixaHtmlPath), 'caixa.html deve existir');
+
+  // 3. Validação do conteúdo de apps.html e mapa no entregador
+  const entregadorContent = fs.readFileSync(entregadorHtmlPath, 'utf8');
+  assert.ok(entregadorContent.includes('leaflet'), 'App do entregador deve conter Leaflet para mapas de Tangará da Serra');
+  assert.ok(entregadorContent.includes('waze'), 'Deve conter integração com Waze');
+  assert.ok(entregadorContent.includes('google.com/maps'), 'Deve conter integração com Google Maps');
+  assert.ok(entregadorContent.includes('maps.apple.com'), 'Deve conter integração com Apple Maps');
+
+  // 4. Existência dos APKs para download Android
+  const downloadsDir = path.join(__dirname, 'public', 'zuma', 'downloads');
+  assert.ok(fs.existsSync(path.join(downloadsDir, 'zuma-garcom.apk')), 'zuma-garcom.apk deve existir');
+  assert.ok(fs.existsSync(path.join(downloadsDir, 'zuma-entregador.apk')), 'zuma-entregador.apk deve existir');
+  assert.ok(fs.existsSync(path.join(downloadsDir, 'zuma-caixa.apk')), 'zuma-caixa.apk deve existir');
+});
+
+test('Zuma Cozinha Oriental - Manifestos PWA Dedicados e Service Worker v3', () => {
+  const garcomManifest = path.join(__dirname, 'public', 'zuma', 'manifest-garcom.json');
+  const entregadorManifest = path.join(__dirname, 'public', 'zuma', 'manifest-entregador.json');
+  const caixaManifest = path.join(__dirname, 'public', 'zuma', 'manifest-caixa.json');
+  const swPath = path.join(__dirname, 'public', 'zuma', 'sw.js');
+
+  assert.ok(fs.existsSync(garcomManifest), 'manifest-garcom.json deve existir');
+  assert.ok(fs.existsSync(entregadorManifest), 'manifest-entregador.json deve existir');
+  assert.ok(fs.existsSync(caixaManifest), 'manifest-caixa.json deve existir');
+
+  const swContent = fs.readFileSync(swPath, 'utf8');
+  assert.ok(swContent.includes('zuma-kytto-v3'), 'Service Worker deve estar na versão v3');
+  assert.ok(swContent.includes('apps.html'), 'Cache do SW deve conter apps.html');
+  assert.ok(swContent.includes('entregador.html'), 'Cache do SW deve conter entregador.html');
+  assert.ok(swContent.includes('garcom.html'), 'Cache do SW deve conter garcom.html');
+});

@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Zuma Apps · Central de Aplicativos & Instalação (PWA & APK)</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="zumi-mascote.svg">
+  <meta name="theme-color" content="#F97316">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Zuma Apps">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            zuma: {
+              bg: '#0B0C10',
+              surface: '#15171E',
+              card: '#1F222E',
+              border: '#2E3446',
+              salmon: '#F97316',
+              gold: '#F59E0B',
+              muted: '#94A3B8'
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    body {
+      background-color: #0B0C10;
+      color: #F8FAFC;
+      -webkit-tap-highlight-color: transparent;
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 70px);
+    }
+    .touch-btn {
+      min-height: 46px;
+      min-width: 46px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: manipulation;
+    }
+  </style>
+</head>
+<body class="selection:bg-zuma-salmon selection:text-white font-sans">
+
+  <!-- ================= HEADER TOP FIXO ================= -->
+  <header class="sticky top-0 z-40 bg-zuma-surface/90 backdrop-blur-md border-b border-zuma-border px-4 py-3">
+    <div class="max-w-6xl mx-auto flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <a href="index.html" class="w-10 h-10 rounded-xl bg-gradient-to-br from-zuma-salmon to-orange-600 flex items-center justify-center text-xl shadow-lg">
+          🍣
+        </a>
+        <div>
+          <h1 class="font-extrabold text-white text-base leading-tight flex items-center space-x-1.5">
+            <span>Zuma Cozinha Oriental</span>
+            <span class="text-[10px] bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded-full font-bold border border-orange-500/30">Apps & PWA</span>
+          </h1>
+          <p class="text-xs text-zuma-muted">Central Oficial de Aplicativos & Downloads Kytto</p>
+        </div>
+      </div>
+
+      <!-- Links Rápidos -->
+      <nav class="hidden md:flex items-center space-x-2">
+        <a href="index.html" class="text-xs font-semibold px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-zuma-card transition-colors">🏪 Loja & Delivery</a>
+        <a href="operacao.html" class="text-xs font-semibold px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-zuma-card transition-colors">⚡ Central 360°</a>
+        <a href="pilot.html" class="text-xs font-semibold px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-zuma-card transition-colors">🚀 Zuma Pilot</a>
+        <a href="pagamentos.html" class="text-xs font-semibold px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-zuma-card transition-colors">💳 Pagamentos</a>
+        <a href="login.html" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-zuma-salmon text-white hover:bg-orange-600 transition-colors shadow-sm">🔐 Login</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ================= CONTEÚDO PRINCIPAL ================= -->
+  <main class="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
+
+    <!-- Hero / Destaque -->
+    <div class="bg-gradient-to-r from-orange-950/40 via-zuma-surface to-slate-900 border border-orange-500/30 rounded-2xl p-5 sm:p-8 relative overflow-hidden shadow-2xl">
+      <div class="relative z-10 max-w-2xl space-y-3">
+        <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-orange-500/10 border border-orange-500/30 text-orange-400 text-xs font-bold">
+          <span>📲</span><span>Instalação PWA & Arquivos APK Android</span>
+        </div>
+        <h2 class="text-2xl sm:text-3xl font-black text-white leading-tight">
+          Aplicativos Especializados para Cada Profissional do Zuma
+        </h2>
+        <p class="text-sm text-slate-300 leading-relaxed">
+          Instale os aplicativos nativos do Zuma no seu iPhone ou Android. Cada profissional possui uma interface dedicada para sua função, garantindo agilidade no salão, rastreabilidade na cozinha e precisão nas entregas com mapas da cidade de Tangará da Serra.
+        </p>
+      </div>
+      <div class="absolute right-4 bottom-4 opacity-15 text-8xl pointer-events-none select-none">
+        📱
+      </div>
+    </div>
+
+    <!-- ================= ESCLARECIMENTO OPERACIONAL DE LOGIN ================= -->
+    <div class="bg-zuma-surface border-2 border-amber-500/40 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xl">
+      <div class="flex items-start space-x-3.5">
+        <div class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-xl shrink-0 mt-0.5 border border-amber-500/30">
+          💡
+        </div>
+        <div class="space-y-1.5">
+          <h3 class="font-extrabold text-white text-base sm:text-lg flex items-center space-x-2">
+            <span>Dúvida Operacional: O que separa o Garçom do Entregador? O login é o mesmo?</span>
+          </h3>
+          <p class="text-xs sm:text-sm text-slate-300 leading-relaxed">
+            <strong class="text-amber-400">Sim! O Garçom e o Entregador podem usar exatamente o mesmo usuário e senha de atendimento:</strong>
+            <span class="inline-block bg-zuma-card px-2 py-0.5 rounded font-mono text-xs text-white border border-zuma-border ml-1">atendimento@zumacozinhaoriental.com.br</span> / <span class="inline-block bg-zuma-card px-2 py-0.5 rounded font-mono text-xs text-white border border-zuma-border">123456</span>
+            (ou seus códigos PIN individuais de 4 dígitos: <span class="text-orange-400 font-bold">1001</span> para Garçom e <span class="text-sky-400 font-bold">2001</span> para Entregador).
+          </p>
+        </div>
+      </div>
+
+      <!-- Grid de Comparação Visual -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+        <div class="bg-zuma-card border border-orange-500/30 rounded-xl p-4 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-orange-400 text-sm flex items-center space-x-1.5">
+              <span>📱</span><span>App do Garçom (garcom.html)</span>
+            </span>
+            <span class="text-[10px] bg-orange-500/20 text-orange-300 font-bold px-2 py-0.5 rounded-full">Exclusivo Salão</span>
+          </div>
+          <p class="text-xs text-slate-300">
+            Abre direto nas <strong>27 mesas físicas</strong>, comanda eletrônica de pedidos dos 211 itens, rastreamento de preparo na cozinha (KDS) e divisão de contas na mesa. <strong>Não tem acesso à rua nem a rotas de entregas.</strong>
+          </p>
+        </div>
+
+        <div class="bg-zuma-card border border-sky-500/30 rounded-xl p-4 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-sky-400 text-sm flex items-center space-x-1.5">
+              <span>🛵</span><span>App do Entregador (entregador.html)</span>
+            </span>
+            <span class="text-[10px] bg-sky-500/20 text-sky-300 font-bold px-2 py-0.5 rounded-full">Exclusivo Delivery</span>
+          </div>
+          <p class="text-xs text-slate-300">
+            Abre direto na <strong>expedição de pedidos prontos</strong>, mapa interativo de Tangará da Serra com GPS, rotas com 1 toque no Waze/Google Maps/Apple Maps e comprovante com código OTP. <strong>Não tem acesso a mesas de salão.</strong>
+          </p>
+        </div>
+      </div>
+      <div class="text-xs text-slate-400 bg-zuma-bg/60 p-3 rounded-lg border border-zuma-border">
+        ✨ <strong>Conclusão:</strong> O que separa a função de cada profissional é o <strong>aplicativo instalado em seu aparelho</strong>. Cada colaborador instala o seu respectivo app na tela inicial do celular, garantindo foco total e zero risco de interferência entre o salão e a entrega!
+      </div>
+    </div>
+
+    <!-- ================= GRID DOS APLICATIVOS (CARDS DETALHADOS) ================= -->
+    <div class="space-y-4">
+      <h3 class="font-black text-xl text-white flex items-center space-x-2">
+        <span>📦</span><span>Escolha o Aplicativo para Instalar</span>
+      </h3>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+
+        <!-- CARD 1: APP DO GARÇOM -->
+        <div class="bg-zuma-surface border border-orange-500/30 hover:border-orange-500 rounded-2xl p-5 space-y-4 flex flex-col justify-between transition-all shadow-lg hover:shadow-orange-500/10">
+          <div class="space-y-3">
+            <div class="flex items-start justify-between">
+              <div class="w-12 h-12 rounded-xl bg-orange-500/20 text-orange-400 flex items-center justify-center text-2xl border border-orange-500/30">
+                📱
+              </div>
+              <span class="text-[11px] bg-orange-500/10 text-orange-400 font-bold px-2.5 py-1 rounded-full border border-orange-500/20">
+                PWA & APK · 4.8 MB
+              </span>
+            </div>
+            <div>
+              <h4 class="font-extrabold text-white text-lg">App do Garçom</h4>
+              <p class="text-xs text-orange-300 font-semibold">Comanda Digital & Rastreabilidade de Cozinha</p>
+            </div>
+            <p class="text-xs text-slate-300 leading-relaxed">
+              Feito para garçons atenderem com velocidade. Lançamento dos 211 itens do cardápio, acompanhamento do status do prato no sushiman em tempo real, divisão de conta por assento e emissão de PIX na mesa.
+            </p>
+            <ul class="text-xs text-slate-400 space-y-1.5 pt-1 border-t border-zuma-border">
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>Controle visual das 27 mesas físicas</span></li>
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>Rastreabilidade de pratos na cozinha</span></li>
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>Divisão de conta e QR Code PIX</span></li>
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>Funciona offline caso o Wi-Fi oscile</span></li>
+            </ul>
+          </div>
+
+          <div class="space-y-2 pt-3 border-t border-zuma-border">
+            <a href="garcom.html" class="w-full touch-btn bg-orange-600 hover:bg-orange-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center space-x-2">
+              <span>🚀</span><span>Abrir / Instalar App PWA</span>
+            </a>
+            <a href="downloads/zuma-garcom.apk" download="zuma-garcom.apk" class="w-full touch-btn bg-zuma-card hover:bg-zinc-800 text-slate-200 hover:text-white font-bold text-xs rounded-xl border border-zuma-border transition-colors flex items-center justify-center space-x-2">
+              <span>📥</span><span>Baixar Instalador APK (Android)</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- CARD 2: APP DO ENTREGADOR (MOTOBOY) -->
+        <div class="bg-zuma-surface border border-sky-500/30 hover:border-sky-500 rounded-2xl p-5 space-y-4 flex flex-col justify-between transition-all shadow-lg hover:shadow-sky-500/10">
+          <div class="space-y-3">
+            <div class="flex items-start justify-between">
+              <div class="w-12 h-12 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center text-2xl border border-sky-500/30">
+                🛵
+              </div>
+              <span class="text-[11px] bg-sky-500/10 text-sky-400 font-bold px-2.5 py-1 rounded-full border border-sky-500/20">
+                PWA & APK · 5.2 MB
+              </span>
+            </div>
+            <div>
+              <h4 class="font-extrabold text-white text-lg">App do Entregador</h4>
+              <p class="text-xs text-sky-300 font-semibold">Logística, GPS & Mapa de Tangará da Serra</p>
+            </div>
+            <p class="text-xs text-slate-300 leading-relaxed">
+              Aplicativo dedicado ao motoboy com mapa interativo da cidade de Tangará da Serra, integração direta com Waze, Google Maps e Apple Maps, rastreamento de rota, validação por código OTP e acerto de diária.
+            </p>
+            <ul class="text-xs text-slate-400 space-y-1.5 pt-1 border-t border-zuma-border">
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>Mapa interativo de Tangará da Serra (MT)</span></li>
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>Atalhos 1 toque: Waze, Google & Apple Maps</span></li>
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>Confirmação segura com código OTP de 4 dígitos</span></li>
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>Painel de corridas e taxas acumuladas</span></li>
+            </ul>
+          </div>
+
+          <div class="space-y-2 pt-3 border-t border-zuma-border">
+            <a href="entregador.html" class="w-full touch-btn bg-sky-600 hover:bg-sky-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center space-x-2">
+              <span>🚀</span><span>Abrir / Instalar App PWA</span>
+            </a>
+            <a href="downloads/zuma-entregador.apk" download="zuma-entregador.apk" class="w-full touch-btn bg-zuma-card hover:bg-zinc-800 text-slate-200 hover:text-white font-bold text-xs rounded-xl border border-zuma-border transition-colors flex items-center justify-center space-x-2">
+              <span>📥</span><span>Baixar Instalador APK (Android)</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- CARD 3: APP PDV CAIXA & PAGAMENTOS -->
+        <div class="bg-zuma-surface border border-emerald-500/30 hover:border-emerald-500 rounded-2xl p-5 space-y-4 flex flex-col justify-between transition-all shadow-lg hover:shadow-emerald-500/10">
+          <div class="space-y-3">
+            <div class="flex items-start justify-between">
+              <div class="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-2xl border border-emerald-500/30">
+                🖥️
+              </div>
+              <span class="text-[11px] bg-emerald-500/10 text-emerald-400 font-bold px-2.5 py-1 rounded-full border border-emerald-500/20">
+                PWA & APK · 6.1 MB
+              </span>
+            </div>
+            <div>
+              <h4 class="font-extrabold text-white text-lg">PDV Caixa Touch</h4>
+              <p class="text-xs text-emerald-300 font-semibold">Vendas, Pagamentos KyttoPay & Fiscal SEFAZ</p>
+            </div>
+            <p class="text-xs text-slate-300 leading-relaxed">
+              Terminal de balcão e tablets touch com emissão imediata de NFC-e SEFAZ-MT, módulo completo de pagamentos (PIX Dinâmico, Cartões, Split), controle de sangria e fechamento de turno cego.
+            </p>
+            <ul class="text-xs text-slate-400 space-y-1.5 pt-1 border-t border-zuma-border">
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>Venda rápida touch com 211 SKUs</span></li>
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>Módulo KyttoPay (PIX QR Code, TEF, Split)</span></li>
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>Emissão NFC-e SEFAZ-MT instantânea</span></li>
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>Abertura, suprimento, sangria e fechamento</span></li>
+            </ul>
+          </div>
+
+          <div class="space-y-2 pt-3 border-t border-zuma-border">
+            <a href="caixa.html" class="w-full touch-btn bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center space-x-2">
+              <span>🚀</span><span>Abrir / Instalar App PWA</span>
+            </a>
+            <a href="downloads/zuma-caixa.apk" download="zuma-caixa.apk" class="w-full touch-btn bg-zuma-card hover:bg-zinc-800 text-slate-200 hover:text-white font-bold text-xs rounded-xl border border-zuma-border transition-colors flex items-center justify-center space-x-2">
+              <span>📥</span><span>Baixar Instalador APK (Android)</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- CARD 4: APP KDS COZINHA -->
+        <div class="bg-zuma-surface border border-red-500/30 hover:border-red-500 rounded-2xl p-5 space-y-4 flex flex-col justify-between transition-all shadow-lg hover:shadow-red-500/10">
+          <div class="space-y-3">
+            <div class="flex items-start justify-between">
+              <div class="w-12 h-12 rounded-xl bg-red-500/20 text-red-400 flex items-center justify-center text-2xl border border-red-500/30">
+                👨‍🍳
+              </div>
+              <span class="text-[11px] bg-red-500/10 text-red-400 font-bold px-2.5 py-1 rounded-full border border-red-500/20">
+                PWA · Smart TV / Tablet
+              </span>
+            </div>
+            <div>
+              <h4 class="font-extrabold text-white text-lg">KDS Cozinha & Sushiman</h4>
+              <p class="text-xs text-red-300 font-semibold">Painel de Produção nas 4 Praças</p>
+            </div>
+            <p class="text-xs text-slate-300 leading-relaxed">
+              Projetado para telas grandes de cozinha, tablets de bancada e Smart TVs. Divide pedidos automaticamente entre Sushiman, Cozinha Quente, Fritura/Wok e Bar, com alertas sonoros e cronômetro.
+            </p>
+            <ul class="text-xs text-slate-400 space-y-1.5 pt-1 border-t border-zuma-border">
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>4 Praças de produção separadas</span></li>
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>Alertas sonoros com sintetizador Web Audio</span></li>
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>Priorização visual por tempo de espera</span></li>
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>Integração imediata com comanda do garçom</span></li>
+            </ul>
+          </div>
+
+          <div class="space-y-2 pt-3 border-t border-zuma-border">
+            <a href="operacao.html#cozinha" class="w-full touch-btn bg-red-600 hover:bg-red-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center space-x-2">
+              <span>🚀</span><span>Abrir Monitor KDS Cozinha</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- CARD 5: CARDÁPIO DIGITAL DO CLIENTE -->
+        <div class="bg-zuma-surface border border-amber-500/30 hover:border-amber-500 rounded-2xl p-5 space-y-4 flex flex-col justify-between transition-all shadow-lg hover:shadow-amber-500/10">
+          <div class="space-y-3">
+            <div class="flex items-start justify-between">
+              <div class="w-12 h-12 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-2xl border border-amber-500/30">
+                🍣
+              </div>
+              <span class="text-[11px] bg-amber-500/10 text-amber-400 font-bold px-2.5 py-1 rounded-full border border-amber-500/20">
+                PWA & APK · 4.5 MB
+              </span>
+            </div>
+            <div>
+              <h4 class="font-extrabold text-white text-lg">Cardápio do Cliente</h4>
+              <p class="text-xs text-amber-300 font-semibold">Autoatendimento, Delivery & Fidelidade</p>
+            </div>
+            <p class="text-xs text-slate-300 leading-relaxed">
+              Experiência de compra completa para os clientes do Zuma em Tangará da Serra. Catálogo real de 211 produtos com fotos, carrinho rápido, cashback Indique & Ganhe e pedidos no WhatsApp.
+            </p>
+            <ul class="text-xs text-slate-400 space-y-1.5 pt-1 border-t border-zuma-border">
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>211 SKUs reais com fotos oficiais CDN</span></li>
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>Módulo Indique & Ganhe com Cashback</span></li>
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>Gatilhos de clima e raspadinha de desconto</span></li>
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>Envio automatizado no WhatsApp da loja</span></li>
+            </ul>
+          </div>
+
+          <div class="space-y-2 pt-3 border-t border-zuma-border">
+            <a href="index.html" class="w-full touch-btn bg-amber-600 hover:bg-amber-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center space-x-2">
+              <span>🚀</span><span>Abrir Loja / Instalar PWA</span>
+            </a>
+            <a href="downloads/zuma-cliente.apk" download="zuma-cliente.apk" class="w-full touch-btn bg-zuma-card hover:bg-zinc-800 text-slate-200 hover:text-white font-bold text-xs rounded-xl border border-zuma-border transition-colors flex items-center justify-center space-x-2">
+              <span>📥</span><span>Baixar Instalador APK (Android)</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- CARD 6: MÓDULO DE PAGAMENTOS KYTTOPAY -->
+        <div class="bg-zuma-surface border border-violet-500/30 hover:border-violet-500 rounded-2xl p-5 space-y-4 flex flex-col justify-between transition-all shadow-lg hover:shadow-violet-500/10">
+          <div class="space-y-3">
+            <div class="flex items-start justify-between">
+              <div class="w-12 h-12 rounded-xl bg-violet-500/20 text-violet-400 flex items-center justify-center text-2xl border border-violet-500/30">
+                💳
+              </div>
+              <span class="text-[11px] bg-violet-500/10 text-violet-400 font-bold px-2.5 py-1 rounded-full border border-violet-500/20">
+                Web & Mobile Hub
+              </span>
+            </div>
+            <div>
+              <h4 class="font-extrabold text-white text-lg">Módulo de Pagamentos</h4>
+              <p class="text-xs text-violet-300 font-semibold">KyttoPay Instantâneo & Conciliação</p>
+            </div>
+            <p class="text-xs text-slate-300 leading-relaxed">
+              Painel unificado para gerar cobranças PIX dinâmicas com QR Code, conciliação automática, simulação de maquininhas TEF, cálculo de troco em dinheiro e pagamentos múltiplos divididos.
+            </p>
+            <ul class="text-xs text-slate-400 space-y-1.5 pt-1 border-t border-zuma-border">
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>PIX Dinâmico Instantâneo com QR Code</span></li>
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>Crédito, Débito, Dinheiro e Vales (VR)</span></li>
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>Comprovante digital para WhatsApp</span></li>
+              <li class="flex items-center space-x-1.5"><span class="text-emerald-400">✓</span><span>Histórico financeiro em tempo real</span></li>
+            </ul>
+          </div>
+
+          <div class="space-y-2 pt-3 border-t border-zuma-border">
+            <a href="pagamentos.html" class="w-full touch-btn bg-violet-600 hover:bg-violet-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center space-x-2">
+              <span>🚀</span><span>Abrir Central de Pagamentos</span>
+            </a>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ================= GUIA PASSO A PASSO PARA IPHONE E ANDROID ================= -->
+    <div class="bg-zuma-surface border border-zuma-border rounded-2xl p-5 sm:p-7 space-y-5 shadow-xl">
+      <div>
+        <h3 class="font-black text-xl text-white flex items-center space-x-2">
+          <span>📲</span><span>Como Instalar na Tela de Início do seu Celular</span>
+        </h3>
+        <p class="text-xs text-zuma-muted">Instale qualquer um dos apps acima para usar em tela cheia como se fosse baixado da App Store ou Play Store.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        <!-- No iPhone (iOS / Safari) -->
+        <div class="bg-zuma-card border border-zuma-border rounded-xl p-5 space-y-3">
+          <div class="flex items-center space-x-2.5">
+            <span class="text-2xl">🍎</span>
+            <div>
+              <h4 class="font-bold text-white text-base">No iPhone (Apple Safari)</h4>
+              <p class="text-xs text-zuma-muted">Compatível com iOS 16, 17, 18+</p>
+            </div>
+          </div>
+          <ol class="text-xs text-slate-300 space-y-2.5 list-decimal list-inside leading-relaxed">
+            <li>Abra o link do aplicativo desejado no navegador <strong>Safari</strong> do iPhone.</li>
+            <li>Toque no botão <strong>Compartilhar</strong> (ícone de um quadrado com seta para cima, na barra inferior do Safari).</li>
+            <li>Role a tela para baixo e toque em <strong>"Adicionar à Tela de Início"</strong>.</li>
+            <li>Confirme tocando em <strong>"Adicionar"</strong> no canto superior direito.</li>
+            <li>Pronto! O ícone do app aparecerá na tela de início do seu iPhone e abrirá em <strong>tela cheia sem barra de navegador</strong>.</li>
+          </ol>
+        </div>
+
+        <!-- No Android (Google Chrome) -->
+        <div class="bg-zuma-card border border-zuma-border rounded-xl p-5 space-y-3">
+          <div class="flex items-center space-x-2.5">
+            <span class="text-2xl">🤖</span>
+            <div>
+              <h4 class="font-bold text-white text-base">No Android (Google Chrome / APK)</h4>
+              <p class="text-xs text-zuma-muted">Samsung, Motorola, Xiaomi, etc.</p>
+            </div>
+          </div>
+          <ol class="text-xs text-slate-300 space-y-2.5 list-decimal list-inside leading-relaxed">
+            <li><strong>Opção 1 (PWA Direto):</strong> Abra o link no Chrome e toque no banner <em>"Adicionar à tela inicial"</em> ou no menu (3 pontinhos) &gt; <em>"Instalar aplicativo"</em>.</li>
+            <li><strong>Opção 2 (Arquivo APK):</strong> Toque no botão <em>"Baixar Instalador APK"</em> no card acima.</li>
+            <li>Quando o download terminar, abra o arquivo baixado e toque em <em>"Instalar"</em>.</li>
+            <li>O aplicativo estará instalado com suporte nativo a notificações e funcionamento offline!</li>
+          </ol>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ================= BARRA INFERIOR IOS (BOTTOM TABBAR) ================= -->
+  <nav class="fixed bottom-0 left-0 right-0 z-50 bg-zuma-surface/95 backdrop-blur-lg border-t border-zuma-border/80 flex items-center justify-around px-2 py-1.5" style="padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);">
+    <a href="index.html" class="flex flex-col items-center justify-center w-14 py-1 text-zuma-muted hover:text-white transition-colors">
+      <span class="text-lg">🏪</span>
+      <span class="text-[10px] font-semibold mt-0.5">Loja</span>
+    </a>
+    <a href="garcom.html" class="flex flex-col items-center justify-center w-14 py-1 text-zuma-muted hover:text-orange-400 transition-colors">
+      <span class="text-lg">📱</span>
+      <span class="text-[10px] font-semibold mt-0.5">Garçom</span>
+    </a>
+    <a href="entregador.html" class="flex flex-col items-center justify-center w-14 py-1 text-zuma-muted hover:text-sky-400 transition-colors">
+      <span class="text-lg">🛵</span>
+      <span class="text-[10px] font-semibold mt-0.5">Entregador</span>
+    </a>
+    <a href="operacao.html" class="flex flex-col items-center justify-center w-14 py-1 text-zuma-muted hover:text-white transition-colors">
+      <span class="text-lg">⚡</span>
+      <span class="text-[10px] font-semibold mt-0.5">Central</span>
+    </a>
+    <a href="apps.html" class="flex flex-col items-center justify-center w-14 py-1 text-zuma-salmon font-bold transition-colors">
+      <span class="text-lg">📲</span>
+      <span class="text-[10px] font-bold mt-0.5">Apps</span>
+    </a>
+    <a href="login.html" class="flex flex-col items-center justify-center w-14 py-1 text-zuma-muted hover:text-white transition-colors">
+      <span class="text-lg">🔐</span>
+      <span class="text-[10px] font-semibold mt-0.5">Login</span>
+    </a>
+  </nav>
+
+</body>
+</html>

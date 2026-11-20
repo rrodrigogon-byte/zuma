@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Zuma PDV · Frente de Caixa Touch &amp; Fiscal SEFAZ-MT</title>
+  <link rel="manifest" href="manifest-caixa.json">
+  <link rel="icon" type="image/svg+xml" href="zumi-mascote.svg">
+  <meta name="theme-color" content="#059669">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Zuma PDV">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            zuma: {
+              bg: '#0B0C10',
+              surface: '#15171E',
+              card: '#1F222E',
+              border: '#2E3446',
+              salmon: '#F97316',
+              emerald: '#059669',
+              muted: '#94A3B8'
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    body {
+      background-color: #0B0C10;
+      color: #F8FAFC;
+      -webkit-tap-highlight-color: transparent;
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 70px);
+    }
+    .touch-btn {
+      min-height: 46px;
+      min-width: 46px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: manipulation;
+    }
+  </style>
+</head>
+<body class="selection:bg-emerald-600 selection:text-white font-sans">
+
+  <!-- ================= HEADER TOP FIXO ================= -->
+  <header class="sticky top-0 z-40 bg-zuma-surface/95 backdrop-blur-md border-b border-zuma-border px-4 py-3">
+    <div class="max-w-6xl mx-auto flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center text-xl shadow-lg">
+          🖥️
+        </div>
+        <div>
+          <h1 class="font-extrabold text-white text-base leading-tight flex items-center space-x-1.5">
+            <span>PDV Frente de Caixa Touch</span>
+            <span class="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-bold border border-emerald-500/30">NFC-e MT</span>
+          </h1>
+          <p class="text-xs text-zuma-muted">Operador: Caixa Balcão 01 · Turno Aberto</p>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-2">
+        <a href="pagamentos.html" class="touch-btn bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-sm">
+          <span>💳 KyttoPay</span>
+        </a>
+        <a href="apps.html" class="touch-btn bg-zuma-card text-slate-300 hover:text-white text-xs px-2.5 py-1.5 rounded-lg border border-zuma-border">
+          <span>📲 Apps</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= CONTEÚDO PRINCIPAL (PDV SPLIT VIEW) ================= -->
+  <main class="max-w-6xl mx-auto p-3 sm:p-5 grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+    <!-- Coluna Esquerda: Catálogo dos 211 SKUs (7 cols) -->
+    <div class="lg:col-span-7 bg-zuma-surface border border-zuma-border rounded-2xl p-4 space-y-3 flex flex-col justify-between shadow-xl">
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <input type="text" id="busca-pdv" oninput="filtrarProdutosPdv(this.value)" placeholder="Buscar produto ou bipar código de barras..." class="w-full bg-zuma-bg border border-zuma-border rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500">
+        </div>
+
+        <!-- Categorias Rápidas -->
+        <div class="flex items-center space-x-1.5 overflow-x-auto pb-1 text-xs" id="chips-categorias-pdv">
+          <button onclick="carregarPorCategoria('TODOS')" class="px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-bold whitespace-nowrap">Todos (211)</button>
+          <button onclick="carregarPorCategoria('PROMOÇÕES')" class="px-2.5 py-1 rounded-lg bg-zuma-card text-slate-300 font-semibold whitespace-nowrap">Promoções</button>
+          <button onclick="carregarPorCategoria('COMBOS')" class="px-2.5 py-1 rounded-lg bg-zuma-card text-slate-300 font-semibold whitespace-nowrap">Combos</button>
+          <button onclick="carregarPorCategoria('SUSHI NO TUBO')" class="px-2.5 py-1 rounded-lg bg-zuma-card text-slate-300 font-semibold whitespace-nowrap">No Tubo</button>
+          <button onclick="carregarPorCategoria('TEMAKIS')" class="px-2.5 py-1 rounded-lg bg-zuma-card text-slate-300 font-semibold whitespace-nowrap">Temakis</button>
+          <button onclick="carregarPorCategoria('BEBIDAS')" class="px-2.5 py-1 rounded-lg bg-zuma-card text-slate-300 font-semibold whitespace-nowrap">Bebidas</button>
+        </div>
+
+        <!-- Grid de Produtos Touch -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[58vh] overflow-y-auto pr-1" id="grid-produtos-pdv">
+          <!-- Renderizado via JS -->
+        </div>
+      </div>
+
+      <div class="pt-2 border-t border-zuma-border text-xs text-slate-400 flex items-center justify-between">
+        <span>Catálogo Oficial Zuma Cozinha Oriental</span>
+        <span class="text-emerald-400 font-mono font-bold">211 SKUs Sincronizados</span>
+      </div>
+    </div>
+
+    <!-- Coluna Direita: Carrinho / Venda Atual (5 cols) -->
+    <div class="lg:col-span-5 bg-zuma-surface border-2 border-emerald-500/40 rounded-2xl p-4 sm:p-5 space-y-4 flex flex-col justify-between shadow-2xl">
+      <div class="space-y-3">
+        <div class="flex items-center justify-between border-b border-zuma-border pb-3">
+          <div class="flex items-center space-x-2">
+            <span class="text-lg">🧾</span>
+            <h3 class="font-extrabold text-white text-base">Venda Atual</h3>
+          </div>
+          <button onclick="limparCarrinhoPdv()" class="text-xs text-red-400 hover:text-red-300 font-semibold">
+            Limpar
+          </button>
+        </div>
+
+        <!-- Lista de Itens no Cupom -->
+        <div class="divide-y divide-zuma-border/60 max-h-[36vh] overflow-y-auto space-y-1 text-xs" id="lista-carrinho-pdv">
+          <!-- Renderizado dinamicamente -->
+        </div>
+      </div>
+
+      <!-- Totais & Emissão Fiscal -->
+      <div class="space-y-3 pt-3 border-t border-zuma-border">
+        <div class="space-y-1.5 text-xs">
+          <div class="flex justify-between text-slate-400">
+            <span>Subtotal:</span>
+            <span class="text-white font-bold" id="pdv-subtotal-txt">R$ 0,00</span>
+          </div>
+          <div class="flex justify-between text-slate-400">
+            <span>Desconto / Cashback:</span>
+            <span class="text-emerald-400 font-bold" id="pdv-desconto-txt">R$ 0,00</span>
+          </div>
+          <div class="flex justify-between text-white font-black text-xl border-t border-zuma-border pt-1.5">
+            <span>TOTAL:</span>
+            <span class="text-emerald-400" id="pdv-total-txt">R$ 0,00</span>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <button onclick="finalizarVendaPdv('PIX')" class="w-full touch-btn bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm rounded-xl shadow-lg transition-colors flex items-center justify-center space-x-2">
+            <span>⚡</span><span>Pagar via PIX Instantâneo</span>
+          </button>
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="finalizarVendaPdv('CARTAO')" class="touch-btn bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center space-x-1.5">
+              <span>💳</span><span>Cartão TEF</span>
+            </button>
+            <button onclick="finalizarVendaPdv('DINHEIRO')" class="touch-btn bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center space-x-1.5">
+              <span>💵</span><span>Dinheiro</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Botão NFC-e SEFAZ -->
+        <div class="pt-1">
+          <button onclick="emitirNfceSefaz()" class="w-full touch-btn bg-zuma-card hover:bg-zinc-800 text-slate-300 hover:text-white font-bold text-xs rounded-xl border border-zuma-border transition-colors flex items-center justify-center space-x-1.5">
+            <span>🏛️</span><span>Emitir NFC-e Oficial SEFAZ-MT (Modelo 65)</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ================= BARRA INFERIOR IOS (BOTTOM TABBAR) ================= -->
+  <nav class="fixed bottom-0 left-0 right-0 z-50 bg-zuma-surface/95 backdrop-blur-lg border-t border-zuma-border/80 flex items-center justify-around px-2 py-1.5" style="padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);">
+    <a href="index.html" class="flex flex-col items-center justify-center w-14 py-1 text-zuma-muted hover:text-white transition-colors">
+      <span class="text-lg">🏪</span>
+      <span class="text-[10px] font-semibold mt-0.5">Loja</span>
+    </a>
+    <a href="garcom.html" class="flex flex-col items-center justify-center w-14 py-1 text-zuma-muted hover:text-orange-400 transition-colors">
+      <span class="text-lg">📱</span>
+      <span class="text-[10px] font-semibold mt-0.5">Garçom</span>
+    </a>
+    <a href="entregador.html" class="flex flex-col items-center justify-center w-14 py-1 text-zuma-muted hover:text-sky-400 transition-colors">
+      <span class="text-lg">🛵</span>
+      <span class="text-[10px] font-semibold mt-0.5">Entregador</span>
+    </a>
+    <a href="caixa.html" class="flex flex-col items-center justify-center w-14 py-1 text-emerald-400 font-bold transition-colors">
+      <span class="text-lg">🖥️</span>
+      <span class="text-[10px] font-bold mt-0.5">PDV</span>
+    </a>
+    <a href="apps.html" class="flex flex-col items-center justify-center w-14 py-1 text-zuma-muted hover:text-white transition-colors">
+      <span class="text-lg">📲</span>
+      <span class="text-[10px] font-semibold mt-0.5">Apps</span>
+    </a>
+    <a href="login.html" class="flex flex-col items-center justify-center w-14 py-1 text-zuma-muted hover:text-white transition-colors">
+      <span class="text-lg">🔐</span>
+      <span class="text-[10px] font-semibold mt-0.5">Login</span>
+    </a>
+  </nav>
+
+  <!-- ================= JAVASCRIPT DO PDV TOUCH ================= -->
+  <script>
+    let produtosPdv = [];
+    let carrinhoPdv = [];
+
+    document.addEventListener('DOMContentLoaded', () => {
+      carregarProdutosPdv();
+    });
+
+    async function carregarProdutosPdv() {
+      try {
+        const res = await fetch('/api/public/zuma/cardapio');
+        const data = await res.json();
+        if (data.ok) {
+          produtosPdv = data.itens || [];
+          renderizarProdutosPdv(produtosPdv);
+        }
+      } catch (err) {
+        console.error('Erro ao buscar produtos PDV:', err);
+      }
+    }
+
+    function renderizarProdutosPdv(lista) {
+      const grid = document.getElementById('grid-produtos-pdv');
+      grid.innerHTML = lista.map(p => `
+        <div onclick="adicionarAoCarrinho(${p.id})" class="bg-zuma-card hover:bg-zinc-800 border border-zuma-border hover:border-emerald-500/60 rounded-xl p-3 flex flex-col justify-between cursor-pointer transition-all space-y-2 touch-btn">
+          <div>
+            <div class="text-[10px] font-mono text-emerald-400 font-bold">${p.codigo_pdv || 'ZUM'}</div>
+            <div class="font-extrabold text-white text-xs line-clamp-2 leading-tight">${p.nome}</div>
+          </div>
+          <div class="flex items-center justify-between text-xs pt-1 border-t border-zuma-border/60">
+            <span class="font-bold text-emerald-400">R$ ${parseFloat(p.preco).toFixed(2)}</span>
+            <span class="text-[11px] bg-emerald-500/20 text-emerald-300 w-5 h-5 rounded flex items-center justify-center font-bold">+</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function filtrarProdutosPdv(termo) {
+      const t = termo.toLowerCase().trim();
+      const filtrados = produtosPdv.filter(p => 
+        p.nome.toLowerCase().includes(t) ||
+        (p.codigo_pdv && p.codigo_pdv.toLowerCase().includes(t)) ||
+        (p.categoria_nome && p.categoria_nome.toLowerCase().includes(t))
+      );
+      renderizarProdutosPdv(filtrados);
+    }
+
+    function carregarPorCategoria(cat) {
+      if (cat === 'TODOS') {
+        renderizarProdutosPdv(produtosPdv);
+      } else {
+        renderizarProdutosPdv(produtosPdv.filter(p => p.categoria_nome && p.categoria_nome.toUpperCase().includes(cat)));
+      }
+    }
+
+    function adicionarAoCarrinho(prodId) {
+      const prod = produtosPdv.find(p => p.id === prodId);
+      if (!prod) return;
+
+      const itemExistente = carrinhoPdv.find(it => it.id === prodId);
+      if (itemExistente) {
+        itemExistente.qtd += 1;
+      } else {
+        carrinhoPdv.push({
+          id: prod.id,
+          nome: prod.nome,
+          preco: parseFloat(prod.preco),
+          qtd: 1,
+          codigo_pdv: prod.codigo_pdv
+        });
+      }
+      atualizarCarrinhoVisual();
+    }
+
+    function alterarQtd(prodId, delta) {
+      const item = carrinhoPdv.find(it => it.id === prodId);
+      if (!item) return;
+      item.qtd += delta;
+      if (item.qtd <= 0) {
+        carrinhoPdv = carrinhoPdv.filter(it => it.id !== prodId);
+      }
+      atualizarCarrinhoVisual();
+    }
+
+    function limparCarrinhoPdv() {
+      carrinhoPdv = [];
+      atualizarCarrinhoVisual();
+    }
+
+    function atualizarCarrinhoVisual() {
+      const lista = document.getElementById('lista-carrinho-pdv');
+      if (carrinhoPdv.length === 0) {
+        lista.innerHTML = '<div class="text-xs text-slate-400 p-6 text-center">Nenhum item na venda. Toque nos produtos ao lado para adicionar.</div>';
+        document.getElementById('pdv-subtotal-txt').innerText = 'R$ 0,00';
+        document.getElementById('pdv-total-txt').innerText = 'R$ 0,00';
+        return;
+      }
+
+      let subtotal = 0;
+      lista.innerHTML = carrinhoPdv.map(it => {
+        const itemTotal = it.preco * it.qtd;
+        subtotal += itemTotal;
+        return `
+          <div class="py-2.5 flex items-center justify-between">
+            <div class="space-y-0.5">
+              <div class="font-bold text-white text-xs">${it.nome}</div>
+              <div class="text-[11px] text-slate-400">R$ ${it.preco.toFixed(2)} un</div>
+            </div>
+            <div class="flex items-center space-x-2">
+              <button onclick="alterarQtd(${it.id}, -1)" class="w-6 h-6 rounded bg-zuma-card text-white font-bold flex items-center justify-center">-</button>
+              <span class="font-bold text-white text-xs w-4 text-center">${it.qtd}</span>
+              <button onclick="alterarQtd(${it.id}, 1)" class="w-6 h-6 rounded bg-zuma-card text-white font-bold flex items-center justify-center">+</button>
+              <span class="font-black text-emerald-400 text-xs w-16 text-right">R$ ${itemTotal.toFixed(2)}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      document.getElementById('pdv-subtotal-txt').innerText = `R$ ${subtotal.toFixed(2)}`;
+      document.getElementById('pdv-total-txt').innerText = `R$ ${subtotal.toFixed(2)}`;
+    }
+
+    async function finalizarVendaPdv(forma) {
+      if (carrinhoPdv.length === 0) {
+        alert('Adicione pelo menos um produto ao carrinho para fechar a venda.');
+        return;
+      }
+      const total = carrinhoPdv.reduce((acc, it) => acc + (it.preco * it.qtd), 0);
+      try {
+        const res = await fetch('/api/public/zuma/pagamentos/confirmar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            forma,
+            valor: total,
+            operador: 'Caixa Balcão 01'
+          })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          alert(`🎉 Venda finalizada com sucesso via ${forma}! NSU: ${data.comprovanteDigital.nsu}. Cupom emitido.`);
+          limparCarrinhoPdv();
+        }
+      } catch (err) {
+        alert('Erro ao finalizar venda');
+      }
+    }
+
+    async function emitirNfceSefaz() {
+      if (carrinhoPdv.length === 0) {
+        alert('Adicione produtos à venda para emitir o cupom fiscal.');
+        return;
+      }
+      try {
+        const res = await fetch('/api/public/zuma/fiscal/emitir', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            modelo: 'NFC-e (65)',
+            itens: carrinhoPdv.map(it => ({
+              descricao: it.nome,
+              qtd: it.qtd,
+              precoUnit: it.preco
+            }))
+          })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          alert(`🏛️ NFC-e #${data.notaFiscal.numeroNota} autorizada em produção pela SEFAZ-MT!\nChave: ${data.notaFiscal.chaveAcesso}`);
+        }
+      } catch (err) {
+        alert('Erro na emissão fiscal');
+      }
+    }
+  </script>
+
+</body>
+</html>
